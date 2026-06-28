@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "12"
+EXPECTED_VERSION = "14"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_ICON_SIZES = {
     "icons/icon-192.png": (192, 192),
@@ -177,8 +177,21 @@ def audit_index(errors: list[str]) -> None:
     if ".inp" not in html or "font-size: 16px" not in html:
         fail(errors, "text inputs must keep a 16px font-size floor for mobile")
     open_form = re.search(r"function\s+openForm\(\)\s*\{(?P<body>.*?)\n\s*\}", html, re.DOTALL)
-    if open_form and ".focus(" in open_form.group("body"):
-        fail(errors, "opening the add form must not auto-focus the text input")
+    if open_form and "openFormSheet({ mode: 'new' })" not in open_form.group("body"):
+        fail(errors, "opening the add form must use the unified form sheet")
+    if "--footer-space" in html:
+        fail(errors, "footer must stay in document flow; do not restore manual --footer-space padding")
+    if not re.search(r"\.footer\s*\{[^}]*position:\s*sticky", html, re.DOTALL):
+        fail(errors, "footer must use sticky positioning in document flow")
+    if not re.search(r"\.view-tabs\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)", html, re.DOTALL):
+        fail(errors, "view tabs must use a stable four-column grid")
+    if "container-type: inline-size" not in html or "@container (max-width: 390px)" not in html:
+        fail(errors, "header/footer responsive behavior must be protected by container queries")
+    if "@media (min-width: 720px) and (pointer:" in html:
+        fail(errors, "form sheet layout must be width-driven, not pointer-driven")
+    picker = re.search(r"function\s+useCompactTimePicker\(\)\s*\{(?P<body>.*?)\n\s*\}", html, re.DOTALL)
+    if not picker or "clientWidth < 720" not in picker.group("body") or "pointer" in picker.group("body"):
+        fail(errors, "time picker mode must be width-driven and remount across the 720px breakpoint")
 
 
 def audit_docs(errors: list[str]) -> None:

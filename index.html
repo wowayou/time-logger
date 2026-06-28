@@ -29,7 +29,7 @@
       --muted: #7878a0;
       --danger: #e05c6c;
       --control-h: 44px;
-      --icon-btn: 36px;
+      --icon-btn: 44px;
     }
     /* === 亮色（跟随系统）=== */
     @media (prefers-color-scheme: light) {
@@ -87,24 +87,84 @@
       font-size: 16px;
       line-height: 1.5;
       min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
       overflow-x: hidden;
     }
     button { touch-action: manipulation; }
     .app {
+      width: 100%;
+      flex: 1 0 auto;
       max-width: 600px;
       margin: 0 auto;
-      padding: 0 16px calc(72px + env(safe-area-inset-bottom));
+      padding: 0 clamp(12px, 4vw, 16px) 18px;
+      container-type: inline-size;
     }
 
     /* Header */
     .hdr {
       padding: 20px 0 16px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto 44px;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .hdr-brand {
+      min-width: 0;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
-    .hdr h1 { font-size: 22px; font-weight: 700; letter-spacing: 0; }
-    .hdr-date { font-size: 13px; color: var(--muted); }
+    .hdr-icon-link,
+    .github-link {
+      width: 44px;
+      height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 44px;
+      border-radius: 10px;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .hdr-icon-link:active,
+    .github-link:active { background: var(--input); }
+    .hdr-icon {
+      display: block;
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+    }
+    .hdr-title {
+      flex: 0 0 auto;
+      color: var(--text);
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+    .github-link {
+      opacity: 0.72;
+      transition: opacity 0.2s ease, background 0.2s ease;
+    }
+    .github-link:hover,
+    .github-link:focus-visible { opacity: 1; }
+    .github-icon {
+      display: block;
+      width: 20px;
+      height: 20px;
+    }
+    .hdr-date {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.25;
+    }
     .seg {
       display: inline-flex;
       align-items: center;
@@ -132,7 +192,19 @@
       color: var(--text);
       box-shadow: 0 1px 2px rgba(0,0,0,0.08);
     }
-    .theme-seg { margin-left: auto; }
+    .theme-seg {
+      flex: 0 0 auto;
+      margin-left: 0;
+      min-width: 0;
+    }
+    .theme-seg button { padding: 7px 8px; }
+    @container (max-width: 390px) {
+      .hdr-date { display: none; }
+    }
+    @container (max-width: 330px) {
+      .hdr-title { display: none; }
+      .theme-seg button { padding-left: 7px; padding-right: 7px; }
+    }
     /* Add button */
     .add-btn {
       width: 100%;
@@ -219,16 +291,25 @@
       gap: 10px;
       margin-bottom: 12px;
     }
-    .view-tabs { width: 100%; }
-    .view-tabs button { flex: 1; font-size: 13px; }
-    .date-nav {
+    .view-tabs {
+      width: 100%;
       display: grid;
-      grid-template-columns: 42px 1fr 42px 76px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .view-tabs button {
+      min-width: 0;
+      font-size: 13px;
+    }
+    .date-nav {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) 44px minmax(76px, auto);
       gap: 8px;
       align-items: center;
     }
     .nav-btn {
-      height: 40px;
+      min-width: 44px;
+      height: 44px;
       background: var(--card);
       color: var(--text);
       border: 1px solid var(--border);
@@ -236,11 +317,12 @@
       font-size: 14px;
       font-family: inherit;
       cursor: pointer;
+      white-space: nowrap;
     }
     .nav-btn:active { opacity: 0.75; }
     .period-label {
       min-width: 0;
-      height: 40px;
+      height: 44px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -257,14 +339,6 @@
     }
 
     /* Form */
-    .form-box {
-      display: none;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 16px;
-      margin-bottom: 12px;
-    }
     .fl { margin-bottom: 11px; }
     .fl-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
     .inp {
@@ -287,7 +361,8 @@
     /* Chips */
     .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 7px; }
     .chip {
-      padding: 6px 11px;
+      min-height: 44px;
+      padding: 8px 14px;
       border-radius: 20px;
       border: 1px solid var(--border);
       background: transparent;
@@ -631,6 +706,7 @@
       align-items: flex-start;
       gap: 10px;
       border: 1px solid transparent;
+      min-width: 0;
     }
     .entry.editing { border-color: var(--accent); }
     .entry.sheet-editing { border-color: var(--accent); }
@@ -689,13 +765,10 @@
     }
     .edit-actions {
       justify-content: flex-end;
-      min-height: 40px;
+      min-height: var(--icon-btn);
       margin-top: 8px;
     }
     .edit-actions .icon-btn {
-      width: 40px;
-      height: 40px;
-      flex-basis: 40px;
       border: 1px solid var(--border);
     }
     .edit-actions .save-btn {
@@ -737,13 +810,11 @@
 
     /* Update prompt */
     .update-banner {
-      position: fixed;
-      left: 12px;
-      right: 12px;
-      bottom: calc(70px + env(safe-area-inset-bottom));
+      position: sticky;
+      bottom: calc(12px + env(safe-area-inset-bottom));
       z-index: 60;
-      max-width: 600px;
-      margin: 0 auto;
+      width: min(600px, calc(100% - 24px));
+      margin: 0 auto 12px;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -776,21 +847,21 @@
       white-space: nowrap;
     }
 
-    /* Mobile edit sheet */
-    .edit-sheet {
+    /* Form sheet */
+    .form-sheet {
       position: fixed;
       inset: 0;
       z-index: 80;
       display: grid;
       align-items: end;
     }
-    .edit-sheet[hidden] { display: none; }
-    .edit-sheet-backdrop {
+    .form-sheet[hidden] { display: none; }
+    .form-sheet-backdrop {
       position: absolute;
       inset: 0;
       background: rgba(0,0,0,0.42);
     }
-    .edit-sheet-panel {
+    .form-sheet-panel {
       position: relative;
       max-height: min(92dvh, 720px);
       width: 100%;
@@ -804,8 +875,9 @@
       padding: 0 16px calc(16px + env(safe-area-inset-bottom));
       box-shadow: 0 -16px 42px rgba(0,0,0,0.32);
       -webkit-overflow-scrolling: touch;
+      transition: transform 0.25s ease-out, opacity 0.2s ease;
     }
-    .edit-sheet-head {
+    .form-sheet-head {
       position: sticky;
       top: 0;
       z-index: 1;
@@ -817,42 +889,50 @@
       background: var(--card);
       border-bottom: 1px solid var(--border);
     }
-    .edit-sheet-summary {
+    .form-sheet-summary {
       min-width: 0;
       flex: 1;
     }
-    .edit-sheet-title {
+    .form-sheet-title {
       color: var(--muted);
       font-size: 12px;
       font-weight: 500;
     }
-    .edit-sheet-what {
+    .form-sheet-what {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       color: var(--text);
       font-size: 15px;
     }
-    .edit-sheet-actions {
+    .form-sheet-actions {
       display: flex;
       gap: 8px;
       flex: 0 0 auto;
     }
-    .edit-sheet-actions .icon-btn {
-      width: 40px;
-      height: 40px;
-      flex-basis: 40px;
-      border: 1px solid var(--border);
-    }
-    .edit-sheet-actions .save-btn {
+    .form-sheet-actions .icon-btn { border: 1px solid var(--border); }
+    .form-sheet-actions .save-btn {
       border-color: var(--accent);
       background: var(--accent);
       color: #fff;
     }
-    .edit-sheet-body {
+    .form-sheet-body {
       display: grid;
       gap: 12px;
       padding-top: 14px;
+    }
+    @media (min-width: 720px) {
+      .form-sheet {
+        align-items: center;
+        padding: 24px;
+      }
+      .form-sheet-panel {
+        max-width: 520px;
+        border-bottom: 1px solid var(--border);
+        border-radius: 16px;
+        padding-bottom: 16px;
+        box-shadow: 0 18px 54px rgba(0,0,0,0.34);
+      }
     }
     body.sheet-open {
       overflow: hidden;
@@ -882,6 +962,7 @@
       font-family: inherit;
       text-align: left;
       cursor: pointer;
+      min-width: 0;
     }
     .sum-row:active { border-color: var(--accent); }
     .sum-top {
@@ -890,9 +971,22 @@
       align-items: baseline;
       gap: 10px;
       margin-bottom: 8px;
+      min-width: 0;
     }
-    .sum-name { font-size: 15px; font-weight: 600; }
-    .sum-total { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .sum-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .sum-total {
+      flex: 0 0 auto;
+      font-size: 12px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
     .sum-meta {
       display: flex;
       gap: 12px;
@@ -901,30 +995,38 @@
       font-size: 12px;
     }
 
-    @media (max-width: 420px) {
-      .app { padding-left: 12px; padding-right: 12px; }
-      .hdr { flex-wrap: wrap; }
-      .theme-seg { margin-left: 0; width: 100%; }
-      .theme-seg button { flex: 1; }
-      .date-nav { grid-template-columns: 40px 1fr 40px 72px; }
+    @container (max-width: 420px) {
       .entry { padding: 12px; gap: 8px; }
     }
 
     /* Footer */
     .footer {
-      position: fixed;
-      bottom: 0; left: 0; right: 0;
+      position: sticky;
+      bottom: 0;
+      flex: 0 0 auto;
+      z-index: 50;
       background: var(--bg);
       border-top: 1px solid var(--border);
-      padding: 10px 16px;
+      padding: 10px clamp(12px, 4vw, 16px);
       padding-bottom: calc(10px + env(safe-area-inset-bottom));
     }
-    .footer-inner { max-width: 600px; margin: 0 auto; }
-    .footer-btns { display: flex; gap: 7px; }
+    .footer-inner {
+      max-width: 600px;
+      margin: 0 auto;
+      container-type: inline-size;
+    }
+    .footer-btns {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+      gap: 7px;
+    }
     .copy-btn {
-      flex: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       min-width: 0;
-      padding: 11px 4px;
+      min-height: 44px;
+      padding: 0 8px;
       background: transparent;
       color: var(--muted);
       border: 1px solid var(--border);
@@ -933,6 +1035,9 @@
       font-family: inherit;
       cursor: pointer;
       white-space: nowrap;
+    }
+    @container (max-width: 430px) {
+      .footer-btns { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
     .copy-btn.copied { color: var(--accent); border-color: var(--accent); }
     .copy-btn:active { opacity: 0.7; }
@@ -947,13 +1052,23 @@
 <body>
 <div class="app">
   <div class="hdr">
-    <h1>时间尺</h1>
-    <span class="hdr-date" id="hdr-date"></span>
+    <div class="hdr-brand">
+      <a href="https://github.com/wowayou/time-logger" target="_blank" rel="noopener" class="hdr-icon-link" aria-label="时间尺 GitHub 仓库">
+        <img src="icon.svg" alt="时间尺" class="hdr-icon" width="32" height="32">
+      </a>
+      <h1 class="hdr-title">时间尺</h1>
+      <span class="hdr-date" id="hdr-date"></span>
+    </div>
     <div class="seg theme-seg" id="theme-seg" role="group" aria-label="主题">
       <button type="button" data-action="theme" data-theme="auto" data-tip="跟随系统亮暗色设置。" data-tip-pos="bottom" aria-label="主题：自动">自动</button>
       <button type="button" data-action="theme" data-theme="light" data-tip="切换到亮色主题。" data-tip-pos="bottom" aria-label="主题：亮色">亮色</button>
       <button type="button" data-action="theme" data-theme="dark" data-tip="切换到暗色主题。" data-tip-pos="bottom" aria-label="主题：暗色">暗色</button>
     </div>
+    <a href="https://github.com/wowayou/time-logger" target="_blank" rel="noopener" class="github-link" aria-label="GitHub 仓库">
+      <svg class="github-icon" width="20" height="20" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+      </svg>
+    </a>
   </div>
 
   <div class="view-box">
@@ -973,32 +1088,6 @@
 
   <button class="add-btn" id="add-btn" type="button" data-action="open-form" data-tip="打开表单，记录一条新的时间去向。" aria-label="记一条新的时间记录">+ 记一条</button>
 
-  <div class="form-box" id="form-box">
-    <div class="fl">
-      <div class="fl-label">时间（可改，补录用）</div>
-      <input type="hidden" id="form-ts">
-      <div id="form-wheel-mount"></div>
-    </div>
-    <div class="fl">
-      <div class="fl-label">做了什么</div>
-      <input type="text" class="inp" id="form-what" placeholder="写邮件 / 刷手机 / 准备面试…">
-    </div>
-    <div class="fl">
-      <div class="fl-label">标签</div>
-      <div class="chips" id="form-chips">
-        <button class="chip" type="button" data-action="pick-form-tag" data-tag="求职推进" aria-label="选择标签：求职推进">求职推进</button>
-        <button class="chip" type="button" data-action="pick-form-tag" data-tag="研究·学工具·逃避" aria-label="选择标签：研究、学工具、逃避">研究·学工具·逃避</button>
-        <button class="chip" type="button" data-action="pick-form-tag" data-tag="未知" aria-label="选择标签：未知">未知</button>
-        <button class="chip" type="button" data-action="pick-form-tag" data-tag="杂" aria-label="选择标签：杂">杂</button>
-      </div>
-      <input type="text" class="inp" id="form-ctag" placeholder="自定义标签（可选，留空用上面选的）">
-    </div>
-    <div class="form-btns">
-      <button class="btn-pri" type="button" data-action="save-entry" data-tip="保存当前表单为一条记录。" aria-label="保存时间记录">记下来</button>
-      <button class="btn-sec" type="button" data-action="close-form" data-tip="关闭表单，不保存这次输入。" aria-label="取消新增记录">取消</button>
-    </div>
-  </div>
-
   <div class="ruler" id="ruler">
     <p style="color:var(--muted);font-size:13px">今天还没有记录</p>
   </div>
@@ -1014,9 +1103,9 @@
   <button class="update-btn" type="button" data-action="update-app" data-tip="刷新并加载新版应用。" aria-label="更新应用">更新应用</button>
 </div>
 
-<div class="edit-sheet" id="edit-sheet" hidden>
-  <div class="edit-sheet-backdrop" data-action="cancel-edit" aria-hidden="true"></div>
-  <section class="edit-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="edit-sheet-title"></section>
+<div class="form-sheet" id="form-sheet" hidden>
+  <div class="form-sheet-backdrop" data-action="close-form" aria-hidden="true"></div>
+  <section class="form-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="form-sheet-title"></section>
 </div>
 
 <div class="footer">
@@ -1026,7 +1115,7 @@
       <button class="copy-btn" id="copy-btn" type="button" data-action="copy-json" data-tip="复制完整 JSON 备份到剪贴板，包含所有本机记录。" aria-label="复制完整 JSON 备份">复制</button>
       <button class="copy-btn" type="button" data-action="download-json" data-tip="下载完整 JSON 备份文件，用于手动备份或迁移。" aria-label="下载 JSON 备份">下载</button>
       <button class="copy-btn" type="button" data-action="import-json" data-tip="导入 JSON 备份，按 id 合并去重，不静默覆盖本机新增记录。" aria-label="导入 JSON 备份">导入</button>
-      <button class="copy-btn" id="share-btn" type="button" data-action="share-json" data-tip="打开系统分享面板，优先分享 JSON 文件。" aria-label="分享 JSON 备份">分享</button>
+      <button class="copy-btn" id="share-btn" type="button" data-action="share-json" data-tip="打开系统分享面板，优先分享 JSON 文件。" aria-label="分享 JSON 备份" hidden>分享</button>
     </div>
   </div>
 </div>
@@ -1049,6 +1138,9 @@
   let sheetEditId = null;
   let sheetScrollY = 0;
   let sheetTimeMounted = false;
+  let sheetLastFocus = null;
+  let sheetTrapController = null;
+  let sheetResizeTimer = null;
   let pendingUpdateRegistration = null;
   let updateReloading = false;
   let formTag = '';
@@ -1241,8 +1333,13 @@
     return items;
   }
 
+  function useCompactTimePicker() {
+    return document.documentElement.clientWidth < 720;
+  }
+
   function mountTimePicker(mountEl, initialValue, onChangeCb) {
-    const coarse = window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 720;
+    const coarse = useCompactTimePicker();
+    if (mountEl) mountEl.dataset.pickerCompact = coarse ? '1' : '0';
     if (coarse) mountWheel(mountEl, initialValue, onChangeCb);
     else mountDesktopTimePicker(mountEl, initialValue, onChangeCb);
   }
@@ -2050,68 +2147,202 @@
       </div>
     </div>`;
   }
-  function renderEditSheet(e) {
-    const tag = (e.tags || [])[0] || '';
+  function renderFormSheet(opts) {
+    const mode = opts && opts.mode === 'edit' ? 'edit' : 'new';
+    const e = opts && opts.entry;
+    const isEdit = mode === 'edit';
+    const tag = isEdit ? ((e.tags || [])[0] || '') : '';
     const isSeed = SEEDS.includes(tag);
+    const chipAction = isEdit ? 'pick-edit-tag' : 'pick-form-tag';
     const chips = SEEDS.map(t =>
-      `<button class="chip${t === tag ? ' sel' : ''}" type="button" data-action="pick-edit-tag" data-tag="${esc(t)}" aria-label="选择标签：${esc(t)}">${esc(t)}</button>`
+      `<button class="chip${t === tag ? ' sel' : ''}" type="button" data-action="${chipAction}" data-tag="${esc(t)}" aria-label="选择标签：${esc(t)}">${esc(t)}</button>`
     ).join('');
+    const title = isEdit ? '编辑' : '记一条';
+    const summary = isEdit
+      ? `${hhmm(e.ts)}${tag ? ` · #${esc(tag)}` : ''}`
+      : '记录新的时间去向';
+    const whatText = isEdit ? (esc(e.what) || '未填写') : '补录或记录当前时刻';
+    const saveAction = isEdit ? 'commit-edit' : 'save-entry';
+    const saveId = isEdit ? ` data-id="${esc(e.id)}"` : '';
+    const saveTip = isEdit ? '保存修改' : '保存记录';
+    const saveLabel = isEdit ? '保存修改' : '保存时间记录';
+    const tsInput = isEdit
+      ? `<input type="hidden" data-role="edit-ts" value="${esc(e.ts)}">`
+      : '<input type="hidden" id="form-ts">';
+    const wheelMount = isEdit ? '<div data-role="edit-wheel"></div>' : '<div id="form-wheel-mount"></div>';
+    const whatInput = isEdit
+      ? `<input type="text" class="inp edit-what-input" data-role="edit-what" value="${esc(e.what)}" placeholder="做了什么">`
+      : '<input type="text" class="inp" id="form-what" placeholder="写邮件 / 刷手机 / 准备面试…">';
+    const chipWrap = isEdit
+      ? `<div class="chips" data-role="edit-chips">${chips}</div>`
+      : `<div class="chips" id="form-chips">${chips}</div>`;
+    const customInput = isEdit
+      ? `<input type="text" class="inp edit-tag-input" data-role="edit-custom-tag" value="${isSeed ? '' : esc(tag)}" placeholder="自定义标签">`
+      : '<input type="text" class="inp" id="form-ctag" placeholder="自定义标签（可选，留空用上面选的）">';
     return `
-      <div class="edit-sheet-head">
-        <div class="edit-sheet-summary">
-          <div class="edit-sheet-title" id="edit-sheet-title">${hhmm(e.ts)}${tag ? ` · #${esc(tag)}` : ''}</div>
-          <div class="edit-sheet-what">${esc(e.what) || '未填写'}</div>
+      <div class="form-sheet-head">
+        <div class="form-sheet-summary">
+          <div class="form-sheet-title" id="form-sheet-title">${title} · ${summary}</div>
+          <div class="form-sheet-what">${whatText}</div>
         </div>
-        <div class="edit-sheet-actions">
-          <button class="icon-btn cancel-btn" type="button" data-action="cancel-edit" data-tip="取消编辑" aria-label="取消编辑">${iconSvg('undo')}</button>
-          <button class="icon-btn save-btn" type="button" data-action="commit-edit" data-id="${esc(e.id)}" data-tip="保存修改" aria-label="保存修改">${iconSvg('check')}</button>
+        <div class="form-sheet-actions">
+          <button class="icon-btn cancel-btn" type="button" data-action="${isEdit ? 'cancel-edit' : 'close-form'}" data-tip="${isEdit ? '取消编辑' : '取消记录'}" aria-label="${isEdit ? '取消编辑' : '取消新增记录'}">${iconSvg('undo')}</button>
+          <button class="icon-btn save-btn" type="button" data-action="${saveAction}"${saveId} data-tip="${saveTip}" aria-label="${saveLabel}">${iconSvg('check')}</button>
         </div>
       </div>
-      <div class="edit-sheet-body">
+      <div class="form-sheet-body">
+        <div class="fl">
+          <div class="fl-label">时间（可改，补录用）</div>
+          ${tsInput}
+          ${wheelMount}
+        </div>
         <div class="fl">
           <div class="fl-label">做了什么</div>
-          <input type="text" class="inp edit-what-input" data-role="edit-what" value="${esc(e.what)}" placeholder="做了什么">
+          ${whatInput}
         </div>
         <div class="fl">
           <div class="fl-label">标签</div>
-          <div class="chips" data-role="edit-chips">${chips}</div>
+          ${chipWrap}
         </div>
         <div class="fl">
           <div class="fl-label">自定义标签</div>
-          <input type="text" class="inp edit-tag-input" data-role="edit-custom-tag" value="${isSeed ? '' : esc(tag)}" placeholder="自定义标签">
-        </div>
-        <div class="fl">
-          <input type="hidden" data-role="edit-ts" value="${esc(e.ts)}">
-          <button class="time-toggle" type="button" data-action="toggle-edit-time" aria-expanded="false">修改时间</button>
-          <div class="time-collapse" data-role="edit-time-section" hidden>
-            <div data-role="edit-wheel"></div>
-          </div>
+          ${customInput}
         </div>
       </div>`;
   }
 
   // --- Form ---
   function openForm() {
-    state.view = 'day';
-    persistState();
-    const box = document.getElementById('form-box');
-    box.style.display = 'block';
-    const ts = defaultFormTs();
-    document.getElementById('form-ts').value = ts;
-    mountTimePicker(document.getElementById('form-wheel-mount'), ts, v => {
-      document.getElementById('form-ts').value = v;
-    });
-    document.getElementById('form-what').value = '';
-    document.getElementById('form-ctag').value = '';
-    formTag = '';
-    document.querySelectorAll('#form-chips .chip').forEach(c => c.classList.remove('sel'));
-    renderChrome();
+    openFormSheet({ mode: 'new' });
   }
   function isFormOpen() {
-    return document.getElementById('form-box').style.display === 'block';
+    const sheet = document.getElementById('form-sheet');
+    const panel = sheet ? sheet.querySelector('.form-sheet-panel') : null;
+    return Boolean(sheet && panel && !sheet.hidden && panel.dataset.mode === 'new');
+  }
+  function getSheetMode() {
+    const sheet = document.getElementById('form-sheet');
+    const panel = sheet ? sheet.querySelector('.form-sheet-panel') : null;
+    return sheet && panel && !sheet.hidden ? panel.dataset.mode || '' : '';
+  }
+  function openFormSheet(opts) {
+    const mode = opts && opts.mode === 'edit' ? 'edit' : 'new';
+    const id = opts && opts.id;
+    const entry = mode === 'edit' ? load().entries.find(e => e.id === id) : null;
+    if (mode === 'edit' && !entry) return;
+    sheetLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (mode === 'new') {
+      state.view = 'day';
+      persistState();
+      editingId = null;
+      sheetEditId = null;
+      formTag = '';
+    } else {
+      editingId = null;
+      sheetEditId = id;
+      sheetTimeMounted = false;
+      render();
+    }
+    const sheet = document.getElementById('form-sheet');
+    const panel = sheet.querySelector('.form-sheet-panel');
+    const ts = mode === 'edit' ? entry.ts : defaultFormTs();
+    panel.dataset.mode = mode;
+    if (mode === 'edit') panel.dataset.id = id;
+    else delete panel.dataset.id;
+    panel.innerHTML = renderFormSheet({ mode, entry });
+    sheet.hidden = false;
+    lockBodyForSheet();
+    if (mode === 'edit') {
+      const tsEl = panel.querySelector('[data-role="edit-ts"]');
+      mountTimePicker(panel.querySelector('[data-role="edit-wheel"]'), ts, v => {
+        tsEl.value = v;
+      });
+      sheetTimeMounted = true;
+    } else {
+      document.getElementById('form-ts').value = ts;
+      mountTimePicker(document.getElementById('form-wheel-mount'), ts, v => {
+        document.getElementById('form-ts').value = v;
+      });
+      document.getElementById('form-what').value = '';
+      document.getElementById('form-ctag').value = '';
+      document.querySelectorAll('#form-chips .chip').forEach(c => c.classList.remove('sel'));
+      renderChrome();
+    }
+    trapFocus(sheet);
+    requestAnimationFrame(() => {
+      const focusEl = sheet.querySelector('[data-role="date"], [data-role="text"], .inp, button');
+      if (focusEl) focusEl.focus();
+    });
+  }
+  function trapFocus(container) {
+    if (sheetTrapController) sheetTrapController.abort();
+    sheetTrapController = new AbortController();
+    container.addEventListener('keydown', e => {
+      if (e.key !== 'Tab') return;
+      const focusable = Array.from(container.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+        .filter(el => el.offsetParent !== null || el === document.activeElement);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }, { signal: sheetTrapController.signal });
+  }
+  function closeFormSheet(opts = {}) {
+    const restoreFocus = opts.restoreFocus !== false;
+    const sheet = document.getElementById('form-sheet');
+    const panel = sheet ? sheet.querySelector('.form-sheet-panel') : null;
+    const wasOpen = Boolean(sheet && panel && !sheet.hidden);
+    const mode = wasOpen ? panel.dataset.mode || '' : '';
+    if (sheetTrapController) {
+      sheetTrapController.abort();
+      sheetTrapController = null;
+    }
+    if (sheet && panel) {
+      sheet.hidden = true;
+      panel.innerHTML = '';
+      delete panel.dataset.id;
+      delete panel.dataset.mode;
+    }
+    sheetEditId = null;
+    sheetTimeMounted = false;
+    if (wasOpen) unlockBodyForSheet();
+    if (restoreFocus && sheetLastFocus && document.contains(sheetLastFocus)) {
+      sheetLastFocus.focus();
+    }
+    sheetLastFocus = null;
+    return mode;
+  }
+  function remountOpenSheetTimePickerIfNeeded() {
+    const sheet = document.getElementById('form-sheet');
+    const panel = sheet ? sheet.querySelector('.form-sheet-panel') : null;
+    if (!sheet || !panel || sheet.hidden) return;
+    const compact = useCompactTimePicker() ? '1' : '0';
+    const mode = panel.dataset.mode || '';
+    const mountEl = mode === 'edit'
+      ? panel.querySelector('[data-role="edit-wheel"]')
+      : document.getElementById('form-wheel-mount');
+    if (!mountEl || mountEl.dataset.pickerCompact === compact) return;
+    const tsEl = mode === 'edit'
+      ? panel.querySelector('[data-role="edit-ts"]')
+      : document.getElementById('form-ts');
+    if (!tsEl) return;
+    mountTimePicker(mountEl, tsEl.value, v => {
+      tsEl.value = v;
+    });
+  }
+  function handleResponsiveResize() {
+    clearTimeout(sheetResizeTimer);
+    sheetResizeTimer = setTimeout(remountOpenSheetTimePickerIfNeeded, 120);
   }
   function closeForm() {
-    document.getElementById('form-box').style.display = 'none';
+    const mode = closeFormSheet();
+    if (mode === 'edit') render();
   }
   function pickTag(el) {
     const wasSelected = el.classList.contains('sel');
@@ -2148,11 +2379,8 @@
 
   // --- Edit ---
   function getEditingBox(id = editingId) {
-    return Array.from(document.querySelectorAll('.entry.editing, .edit-sheet-panel'))
+    return Array.from(document.querySelectorAll('.entry.editing, .form-sheet-panel'))
       .find(el => el.dataset.id === String(id));
-  }
-  function useEditSheet() {
-    return window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 720;
   }
   function lockBodyForSheet() {
     sheetScrollY = window.scrollY || document.documentElement.scrollTop || 0;
@@ -2173,53 +2401,22 @@
     window.scrollTo(0, sheetScrollY);
   }
   function openEditSheet(id) {
-    const entry = load().entries.find(e => e.id === id);
-    if (!entry) return;
-    editingId = null;
-    sheetEditId = id;
-    sheetTimeMounted = false;
-    closeForm();
-    render();
-    const sheet = document.getElementById('edit-sheet');
-    const panel = sheet.querySelector('.edit-sheet-panel');
-    panel.dataset.id = id;
-    panel.innerHTML = renderEditSheet(entry);
-    sheet.hidden = false;
-    lockBodyForSheet();
+    openFormSheet({ mode: 'edit', id });
   }
-  function closeEditSheet() {
-    const sheet = document.getElementById('edit-sheet');
-    const wasOpen = sheet && !sheet.hidden;
-    if (sheet) {
-      sheet.hidden = true;
-      const panel = sheet.querySelector('.edit-sheet-panel');
-      if (panel) {
-        panel.innerHTML = '';
-        delete panel.dataset.id;
-      }
-    }
-    sheetEditId = null;
-    sheetTimeMounted = false;
-    if (wasOpen) unlockBodyForSheet();
+  function closeEditSheet(opts = {}) {
+    return closeFormSheet({ restoreFocus: opts.restoreFocus !== false });
   }
   function startEdit(id) {
-    if (useEditSheet()) {
-      openEditSheet(id);
-      return;
-    }
-    closeEditSheet();
-    editingId = id;
-    closeForm();
-    render();
+    openEditSheet(id);
   }
   function cancelEdit() {
-    const changed = Boolean(editingId || sheetEditId);
+    const changed = Boolean(editingId || sheetEditId || getSheetMode() === 'edit');
     closeEditSheet();
     editingId = null;
     if (changed) render();
   }
   function pickEditTag(el) {
-    const box = el.closest('.entry.editing, .edit-sheet-panel');
+    const box = el.closest('.entry.editing, .form-sheet-panel');
     const chipBox = box ? box.querySelector('[data-role="edit-chips"]') : null;
     if (!chipBox) return;
     const wasSelected = el.classList.contains('sel');
@@ -2230,7 +2427,7 @@
     if (custom) custom.value = '';
   }
   function toggleEditTime(el) {
-    const box = el.closest('.entry.editing, .edit-sheet-panel');
+    const box = el.closest('.entry.editing, .form-sheet-panel');
     if (!box) return;
     const section = box.querySelector('[data-role="edit-time-section"]');
     const mountEl = box.querySelector('[data-role="edit-wheel"]');
@@ -2571,11 +2768,25 @@
 
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') { cancelEdit(); closeForm(); }
+      if (e.key === 'Enter' && !e.isComposing && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) {
+        const target = e.target;
+        const canSaveNew = target instanceof HTMLElement
+          && isFormOpen()
+          && target.closest('.form-sheet-panel')
+          && (target.id === 'form-what' || target.id === 'form-ctag');
+        if (canSaveNew) {
+          e.preventDefault();
+          saveEntry();
+          return;
+        }
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         if (editingId || sheetEditId) { commitEdit(editingId || sheetEditId); return; }
-        if (document.getElementById('form-box').style.display === 'block') saveEntry();
+        if (isFormOpen()) saveEntry();
       }
     });
+    window.addEventListener('resize', handleResponsiveResize, { passive: true });
+    window.addEventListener('orientationchange', handleResponsiveResize, { passive: true });
   }
 
   // --- Register SW ---
