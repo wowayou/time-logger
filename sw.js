@@ -1,9 +1,16 @@
-const CACHE = 'timelog-v14';
+const CACHE = 'timelog-v15';
 const FILES = [
   './',
   './index.html',
+  './styles.css',
   './manifest.webmanifest',
   './sw.js',
+  './src/app.js',
+  './src/time.js',
+  './src/storage.js',
+  './src/stats.js',
+  './src/pickers.js',
+  './src/ui.js',
   './icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',

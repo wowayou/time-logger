@@ -1,6 +1,8 @@
 # Exported time-log data stays private.
 *.json
 !manifest.webmanifest
+!package.json
+!package-lock.json
 timelog-*.json
 
 # Screenshots and local review artifacts can expose real records.
@@ -26,3 +28,7 @@ Thumbs.db
 *.swo
 .idea/
 .vscode/
+node_modules/
+test-results/
+playwright-report/
+__pycache__/

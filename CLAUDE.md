@@ -2,20 +2,50 @@
 
 ## 项目性质
 
-时间尺是**单页静态零依赖 PWA**。运行时结构只包括：
+时间尺是**单页静态零运行时依赖 PWA**。运行时结构只包括：
 
-- `index.html`：全部 UI + JS
+- `index.html`：DOM 壳、PWA/meta 引用、`styles.css` 和 `src/app.js` 模块入口
+- `styles.css`：全部样式
+- `src/time.js`：本地日期解析、格式化、周期范围
+- `src/storage.js`：`localStorage['timelog.v1']` 读写和导入合并
+- `src/stats.js`：纯统计逻辑、按日分段、长段确认绑定
+- `src/pickers.js`：移动滚轮与桌面时间选择器
+- `src/ui.js`：渲染模板、图标、tooltip helper 和 DOM 更新
 - `sw.js`：Service Worker 离线缓存
 - `manifest.webmanifest`：PWA 清单
 - `icon.svg` 与 `icons/*.png`：运行时图标资产
 
-允许的开发期工具只有 `scripts/project_audit.py` 和 `scripts/confirm_logic_smoke.py`。它们使用 Python 标准库；确认逻辑 smoke 会调用本机 `node` 执行 `index.html` 的真实内联 JS 测试入口。二者不属于运行时依赖，也不引入 npm、package.json 或构建流程。
+允许的开发期工具包括 `scripts/project_audit.py`、`scripts/confirm_logic_smoke.py` 和 Playwright UI smoke。Python 脚本使用标准库；确认逻辑 smoke 会调用本机 `node` 导入真实 ES modules；Playwright 只用于开发期响应式验证。
 
-**铁律：无运行时依赖 / 无构建 / 不拆分应用代码。** 不引入 npm、打包器、框架、账号、云同步或后端。
+**铁律：无运行时依赖 / 无构建 / 原生 ES modules。** npm 只允许作为开发期测试依赖；不引入打包器、框架、账号、云同步或后端。
+
+## 开发与维护红线
+
+- `package.json` 必须保持 `"private": true` 和 `"type": "module"`；禁止新增 `dependencies`，只能在 `devDependencies` 中放开发期测试工具。
+- 改动开发期 npm 依赖时必须提交 `package-lock.json`；不得提交 `node_modules/`、`test-results/`、`playwright-report/`。
+- 运行时文件禁止从 npm 包导入代码；`src/*.js` 只能使用相对路径导入本项目模块。
+- 不新增构建命令、产物目录、压缩产物或框架初始化文件；GitHub Pages 继续从仓库根目录直接发布静态文件。
+- 新增任何运行时资产时，必须同步 `sw.js` 缓存列表；文档、测试、npm 元数据不进 Service Worker 缓存。
+- 本地开发必须通过 HTTP server 打开页面；不要用 `file://` 验证 ES modules 或 Service Worker。
+
+模块边界：
+
+- `src/time.js`：只放日期、时间、周期和格式化工具；不读写 DOM / localStorage。
+- `src/storage.js`：只负责 `localStorage['timelog.v1']`、导入校验和合并；不渲染 UI。
+- `src/stats.js`：保持纯统计逻辑；不访问 DOM / navigator / localStorage；日边界规则必须在这里测试。
+- `src/pickers.js`：只负责时间选择器 DOM；不直接保存业务数据。
+- `src/ui.js`：只负责模板、图标、tooltip helper 和 DOM 渲染；不做数据持久化。
+- `src/app.js`：只负责状态、事件委托、页面初始化、Service Worker、复制/下载/分享动作。
+
+提交与推送前红线：
+
+- 至少跑 `python3 scripts/project_audit.py`、`python3 scripts/confirm_logic_smoke.py`、`npm run test:ui`、`git diff --check`。
+- 推送前检查 `git status --short`，确认没有真实记录、真实截图、导出 JSON、Playwright 结果或本机临时文件。
+- 除非用户明确要求，不把无关重构、真实数据或工作区外文件混进同一个提交。
 
 ## 当前版本
 
-当前版本：`timelog-v14` / manifest `version: "14"`。
+当前版本：`timelog-v15` / manifest `version: "15"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -30,12 +60,13 @@
 - 响应式默认用 container query、CSS Grid/Flex 和 sticky 文档流布局；禁止按 iPhone/iPad/设备名堆叠 viewport 补丁。
 - Header 排版固定为三行信息架构：第一行站点标识、可选日期、紧凑主题切换、GitHub 链接；第二行天/周/月/年视图切换；第三行 `< 当前周期 >` 与回到今天按钮；不要把日期导航塞回第一行。
 - 窄屏第一行优先保留站点标识、主题切换和 GitHub；空间不足时可以隐藏日期文字。
+- 窄屏日期导航必须允许两行：上一段/周期/下一段一行，回到今天/本周/本月/今年独立一行；周视图窄屏周期标题可用短格式，完整日期保留在可访问标签中。
 - Footer 必须在文档流内 sticky 到底部，备份操作必须用响应式 grid，不得固定五按钮单行硬挤；分享按钮默认 hidden，由能力检测后再显示，避免首屏布局跳动。
 - 表单 sheet 只按宽度适配：`>=720px` 居中 dialog，`<720px` bottom sheet；不要用 `pointer:fine` 决定视觉布局。
 - 时间选择器只按宽度选择 wheel/desktop picker；打开表单后跨断点 resize 或旋转屏幕时，必须按当前宽度重挂载，不能停留在旧 picker。
 - 禁止 `title=`，避免原生 tooltip 与自定义 tooltip 叠加。
 - 可见文字按钮不强制 tooltip；图标按钮必须同时有短 `data-tip` 和 `aria-label`。
-- tooltip hover 延迟 800ms 后显示，移开立即隐藏；`focus-visible` 必须无延迟显示；触屏不能靠 hover 触发 tooltip。
+- tooltip 默认不能生成会撑宽页面的盒子；hover 延迟 800ms 后显示，移开立即隐藏；`focus-visible` 必须无延迟显示；触屏不能靠 hover 触发 tooltip。
 - 图标语义固定：编辑=铅笔，保存=对勾，删除=垃圾桶，取消=回退/撤销箭头。
 - 删除/取消禁用 x、`×`、`✕`，包括图标定义、按钮文本和渲染模板。
 - 时间轴记录操作和编辑态保存/取消使用图标；底部备份栏、添加表单按钮继续用文字。
@@ -52,12 +83,13 @@
 
 ## 代码约定
 
-- 纯原生 HTML/CSS/JS，不加 `type="module"`。
+- 纯原生 HTML/CSS/JS，使用浏览器原生 `type="module"`；不要引入打包步骤。
 - 日期值统一 `YYYY-MM-DDTHH:mm`。
 - 颜色走 CSS 变量；按钮白字 `#fff` 可保留。
 - 尺子未记录段用 `--track`，不用 `--border`。
 - 统计以分钟数为权威值：`job` / `other` / `unrecorded` / `pending` / `total` 先累加分钟；百分比只用于展示，不反向参与统计，不强行凑满 100%。
-- 超过 3h 的明确标签段确认只绑定 `longConfirm.startTs` 和 `longConfirm.endTs`；相邻时间变化或中间补录自动失效，改成另一个明确标签不自动失效。
+- 本地自然日 00:00 是统计硬边界；空日不继承前一天最后标签；有首条记录的日期从 00:00 到首条之间计为未记录；周/月/年汇总按每日独立统计累加。
+- 超过 3h 的明确标签段确认只绑定 `longConfirm.startTs` 和 `longConfirm.endTs`；相邻时间变化或中间补录自动失效，改成另一个明确标签不自动失效；跨日边界使用本地日边界作为段结束。
 - 数据只存在 `localStorage['timelog.v1']`。
 - 复制/下载/导入/分享都在浏览器本地完成，不上传。
 
@@ -79,6 +111,7 @@
 ```bash
 python3 scripts/project_audit.py
 python3 scripts/confirm_logic_smoke.py
+npm run test:ui
 git diff --check
 ```
 
@@ -93,7 +126,7 @@ git diff --check
 
 响应式手动矩阵：
 
-1. 320-375px：header 第一行不横向溢出，日期可隐藏；footer 3+2 或 3+1 换行不遮挡内容。
+1. 320-375px：header 第一行不横向溢出，日期可隐藏；date-nav 两行不溢出；footer 3+2 或 3+1 换行不遮挡内容。
 2. 360/390/412/430px：不刷新页面连续切换宽度，header/footer/date-nav 立即自适应。
 3. 768px：sheet 居中，footer 单行或自然列布局，内容不被底栏盖住。
 4. 横竖屏切换：打开新建/编辑 sheet 后切换宽度，时间 picker 使用当前宽度对应形态。
@@ -117,3 +150,4 @@ git diff --check
 | v12 | 2026-06-28 | tooltip hover 延迟 800ms、桌面自定义日期/时间 popover（保留精确输入文本框）、审计延迟/版本口径常量化 |
 | v13 | 2026-06-28 | 三行 header 信息架构、icon/GitHub 链接、四端统一表单 sheet、focus trap、Enter 新建保存、响应式 footer 和 44px 触控目标 |
 | v14 | 2026-06-28 | 响应式布局改为内容驱动：header/footer 容器查询、view/date 稳定网格、sticky footer、宽度驱动 sheet 与时间 picker |
+| v15 | 2026-06-29 | 原生 ES modules + 独立 CSS 分层；修复日边界统计继承、小屏横向滚动和周标题溢出；新增 Playwright UI smoke |

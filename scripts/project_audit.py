@@ -11,8 +11,21 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "14"
+EXPECTED_VERSION = "15"
 EXPECTED_TOOLTIP_DELAY = "800ms"
+REQUIRED_RUNTIME_ASSETS = [
+    "index.html",
+    "styles.css",
+    "manifest.webmanifest",
+    "sw.js",
+    "src/app.js",
+    "src/time.js",
+    "src/storage.js",
+    "src/stats.js",
+    "src/pickers.js",
+    "src/ui.js",
+    "icon.svg",
+]
 REQUIRED_ICON_SIZES = {
     "icons/icon-192.png": (192, 192),
     "icons/icon-512.png": (512, 512),
@@ -27,6 +40,8 @@ REQUIRED_DEMO_ASSETS = [
 REQUIRED_MAINTENANCE_COMMANDS = [
     "python3 scripts/project_audit.py",
     "python3 scripts/confirm_logic_smoke.py",
+    "npm run test:ui",
+    "git diff --check",
 ]
 
 
@@ -93,7 +108,7 @@ def audit_service_worker(errors: list[str]) -> None:
     elif match.group(1) != EXPECTED_VERSION:
         fail(errors, f"sw.js cache must be timelog-v{EXPECTED_VERSION}")
 
-    for src in ["./" + src for src in REQUIRED_ICON_SIZES]:
+    for src in ["./" + src for src in [*REQUIRED_RUNTIME_ASSETS, *REQUIRED_ICON_SIZES]]:
         if src not in sw:
             fail(errors, f"sw.js FILES must cache runtime asset {src}")
 
@@ -132,10 +147,51 @@ def audit_smoke_scripts(errors: list[str]) -> None:
         fail(errors, "scripts/confirm_logic_smoke.py is missing")
         return
     text = path.read_text(encoding="utf-8")
-    if "subprocess.run" not in text or '"node"' not in text:
-        fail(errors, "confirm_logic_smoke.py must execute the real inline JS through node")
-    if "__TIMELOG_TEST__" not in text or "__timelogTest" not in text:
-        fail(errors, "confirm_logic_smoke.py must use the guarded index.html test API")
+    if "subprocess.run" not in text or '"node"' not in text or "--input-type=module" not in text:
+        fail(errors, "confirm_logic_smoke.py must execute real ES modules through node")
+    if "from './src/stats.js'" not in text:
+        fail(errors, "confirm_logic_smoke.py must import the real stats module")
+
+
+def audit_npm_metadata(errors: list[str]) -> None:
+    try:
+        package = json.loads(read_text("package.json"))
+    except FileNotFoundError:
+        fail(errors, "package.json is missing for development UI smoke")
+        return
+    except json.JSONDecodeError as exc:
+        fail(errors, f"package.json is not valid JSON: {exc}")
+        return
+
+    if package.get("private") is not True:
+        fail(errors, "package.json must keep private: true")
+    if package.get("type") != "module":
+        fail(errors, "package.json must declare type: module for native ES module tooling")
+    if package.get("dependencies"):
+        fail(errors, "package.json must not declare runtime dependencies")
+    scripts = package.get("scripts") if isinstance(package.get("scripts"), dict) else {}
+    if scripts.get("test:ui") != "playwright test":
+        fail(errors, "package.json must keep test:ui = playwright test")
+    dev_deps = package.get("devDependencies") if isinstance(package.get("devDependencies"), dict) else {}
+    if "@playwright/test" not in dev_deps:
+        fail(errors, "package.json must keep @playwright/test as a dev dependency for UI smoke")
+    if not (ROOT / "package-lock.json").exists():
+        fail(errors, "package-lock.json must be committed when development npm dependencies exist")
+
+    gitignore = read_text(".gitignore")
+    for ignored in ("node_modules/", "test-results/", "playwright-report/"):
+        if ignored not in gitignore:
+            fail(errors, f".gitignore must ignore generated development artifact: {ignored}")
+
+
+def audit_runtime_imports(errors: list[str]) -> None:
+    import_re = re.compile(r"(?:import\s+(?:[^'\"]+?\s+from\s+)?|export\s+[^'\"]+?\s+from\s+|import\s*\()\s*['\"]([^'\"]+)['\"]")
+    for rel in ("src/app.js", "src/time.js", "src/storage.js", "src/stats.js", "src/pickers.js", "src/ui.js"):
+        text = read_text(rel)
+        for match in import_re.finditer(text):
+            spec = match.group(1)
+            if not spec.startswith(("./", "../")):
+                fail(errors, f"{rel} must not import runtime npm/bare module: {spec}")
 
 
 def button_attrs(tag: str) -> str:
@@ -144,26 +200,39 @@ def button_attrs(tag: str) -> str:
 
 def audit_index(errors: list[str]) -> None:
     html = read_text("index.html")
-    if "title=" in html:
-        fail(errors, "index.html must not use native title= tooltips")
-    if not re.search(r"button\[data-tip\]:hover::after,\s*\n\s*button\[data-tip\]:hover::before\s*\{[^}]*transition-delay:\s*" + re.escape(EXPECTED_TOOLTIP_DELAY), html, re.DOTALL):
+    css = read_text("styles.css")
+    app = read_text("src/app.js")
+    ui = read_text("src/ui.js")
+    pickers = read_text("src/pickers.js")
+    runtime = "\n".join([html, css, app, ui, pickers])
+
+    if "title=" in runtime:
+        fail(errors, "runtime files must not use native title= tooltips")
+    if '<link rel="stylesheet" href="styles.css">' not in html:
+        fail(errors, "index.html must load styles.css")
+    if '<script type="module" src="src/app.js"></script>' not in html:
+        fail(errors, "index.html must use src/app.js as the native module entry")
+    if "<style>" in html or re.search(r"<script>\s*", html):
+        fail(errors, "index.html must not contain inline style/script blocks")
+
+    if not re.search(r"button\[data-tip\]:hover::after,\s*\n\s*button\[data-tip\]:hover::before\s*\{[^}]*transition-delay:\s*" + re.escape(EXPECTED_TOOLTIP_DELAY), css, re.DOTALL):
         fail(errors, f"desktop hover tooltip must use a {EXPECTED_TOOLTIP_DELAY} show delay")
-    if not re.search(r"button\[data-tip\]:focus-visible::after,\s*\n\s*button\[data-tip\]:focus-visible::before\s*\{[^}]*transition-delay:\s*0s", html, re.DOTALL):
+    if not re.search(r"button\[data-tip\]:focus-visible::after,\s*\n\s*button\[data-tip\]:focus-visible::before\s*\{[^}]*transition-delay:\s*0s", css, re.DOTALL):
         fail(errors, "keyboard focus-visible tooltip must show without delay")
-    if "window.__timelogTest" not in html or "window.__TIMELOG_TEST__" not in html:
-        fail(errors, "index.html must expose test API only behind window.__TIMELOG_TEST__")
-    if not re.search(r"if\s*\(\s*window\.__TIMELOG_TEST__\s*\)\s*\{\s*exposeTestApi\(\);", html):
-        fail(errors, "index.html test API must be guarded by window.__TIMELOG_TEST__")
-    if "iconSvg('x')" in html or re.search(r"^\s*x\s*:", html, re.MULTILINE):
-        fail(errors, "index.html must not define or use the x icon")
-    if re.search(r'data-action="start-edit"[^>]*>\s*改\s*</button>', html):
+    if "window.__timelogTest" not in app or "window.__TIMELOG_TEST__" not in app:
+        fail(errors, "src/app.js must expose test API only behind window.__TIMELOG_TEST__")
+    if not re.search(r"if\s*\(\s*window\.__TIMELOG_TEST__\s*\)\s*\{\s*exposeTestApi\(\);", app):
+        fail(errors, "src/app.js test API must be guarded by window.__TIMELOG_TEST__")
+    if "iconSvg('x')" in runtime or re.search(r"^\s*x\s*:", ui, re.MULTILINE):
+        fail(errors, "runtime files must not define or use the x icon")
+    if re.search(r'data-action="start-edit"[^>]*>\s*改\s*</button>', runtime):
         fail(errors, "timeline edit action must be icon-only, not text 改")
-    if re.search(r'data-action="delete-entry"[^>]*>\s*(?:✕|×|x)\s*</button>', html, re.IGNORECASE):
+    if re.search(r'data-action="delete-entry"[^>]*>\s*(?:✕|×|x)\s*</button>', runtime, re.IGNORECASE):
         fail(errors, "delete action must not use x/×/✕")
-    if re.search(r'data-action="cancel-edit"[^>]*>\s*(?:✕|×|x)\s*</button>', html, re.IGNORECASE):
+    if re.search(r'data-action="cancel-edit"[^>]*>\s*(?:✕|×|x)\s*</button>', runtime, re.IGNORECASE):
         fail(errors, "cancel edit action must not use x/×/✕")
 
-    for match in re.finditer(r"<button\b[^>]*\bicon-btn\b[^>]*>", html):
+    for match in re.finditer(r"<button\b[^>]*\bicon-btn\b[^>]*>", runtime):
         attrs = button_attrs(match.group(0))
         if "aria-label=" not in attrs:
             fail(errors, f"icon button is missing aria-label near byte {match.start()}")
@@ -171,25 +240,25 @@ def audit_index(errors: list[str]) -> None:
             fail(errors, f"icon button is missing data-tip near byte {match.start()}")
 
     for tip in ("编辑记录", "删除记录", "保存修改", "取消编辑"):
-        if f'data-tip="{tip}"' not in html:
+        if f'data-tip="{tip}"' not in runtime:
             fail(errors, f"icon action tooltip is missing or not short: {tip}")
 
-    if ".inp" not in html or "font-size: 16px" not in html:
+    if ".inp" not in css or "font-size: 16px" not in css:
         fail(errors, "text inputs must keep a 16px font-size floor for mobile")
-    open_form = re.search(r"function\s+openForm\(\)\s*\{(?P<body>.*?)\n\s*\}", html, re.DOTALL)
+    open_form = re.search(r"function\s+openForm\(\)\s*\{(?P<body>.*?)\n\s*\}", app, re.DOTALL)
     if open_form and "openFormSheet({ mode: 'new' })" not in open_form.group("body"):
         fail(errors, "opening the add form must use the unified form sheet")
-    if "--footer-space" in html:
+    if "--footer-space" in runtime:
         fail(errors, "footer must stay in document flow; do not restore manual --footer-space padding")
-    if not re.search(r"\.footer\s*\{[^}]*position:\s*sticky", html, re.DOTALL):
+    if not re.search(r"\.footer\s*\{[^}]*position:\s*sticky", css, re.DOTALL):
         fail(errors, "footer must use sticky positioning in document flow")
-    if not re.search(r"\.view-tabs\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)", html, re.DOTALL):
+    if not re.search(r"\.view-tabs\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)", css, re.DOTALL):
         fail(errors, "view tabs must use a stable four-column grid")
-    if "container-type: inline-size" not in html or "@container (max-width: 390px)" not in html:
+    if "container-type: inline-size" not in css or "@container (max-width: 390px)" not in css:
         fail(errors, "header/footer responsive behavior must be protected by container queries")
-    if "@media (min-width: 720px) and (pointer:" in html:
+    if "@media (min-width: 720px) and (pointer:" in css:
         fail(errors, "form sheet layout must be width-driven, not pointer-driven")
-    picker = re.search(r"function\s+useCompactTimePicker\(\)\s*\{(?P<body>.*?)\n\s*\}", html, re.DOTALL)
+    picker = re.search(r"function\s+useCompactTimePicker\(\)\s*\{(?P<body>.*?)\n\s*\}", pickers, re.DOTALL)
     if not picker or "clientWidth < 720" not in picker.group("body") or "pointer" in picker.group("body"):
         fail(errors, "time picker mode must be width-driven and remount across the 720px breakpoint")
 
@@ -211,6 +280,11 @@ def audit_docs(errors: list[str]) -> None:
     claude = docs["CLAUDE.md"]
     required_claude_phrases = [
         f"timelog-v{EXPECTED_VERSION}",
+        "模块边界",
+        "提交与推送前红线",
+        "禁止新增 `dependencies`",
+        "运行时文件禁止从 npm 包导入代码",
+        "package-lock.json",
         "禁止 `title=`",
         f"tooltip hover 延迟 {EXPECTED_TOOLTIP_DELAY}",
         "删除/取消禁用 x",
@@ -234,6 +308,8 @@ def main() -> int:
     audit_service_worker(errors)
     audit_demo_assets(errors)
     audit_smoke_scripts(errors)
+    audit_npm_metadata(errors)
+    audit_runtime_imports(errors)
     audit_index(errors)
     audit_docs(errors)
 
