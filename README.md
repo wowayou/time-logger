@@ -21,9 +21,11 @@ python3 -m http.server 8080
 iOS Safari：打开页面 → 分享 → 添加到主屏幕。  
 Android Chrome：打开页面 → 菜单 → 添加到主屏幕。
 
+应用已包含 SVG 源图标、192/512 PNG、maskable PNG 和 Apple touch icon。Android Chrome 的安装入口仍由浏览器根据 manifest、Service Worker、HTTPS/Pages 访问环境综合判断。
+
 ## GitHub Pages 发布（隐私边界）
 
-只把 `time-logger/` 作为独立仓库发布，例如 `github.com/wowayou/time-logger`。不要把父目录 `/mnt/d/006-Overseas`、`toolkit/`、`archive/`、导出的 `timelog-*.json`、真实记录 JSON 或截图提交到 GitHub。
+只把 `time-logger/` 作为独立仓库发布，例如 `github.com/<your-name>/time-logger`。不要把父目录、`toolkit/`、`archive/`、导出的 `timelog-*.json`、真实记录 JSON、截图或具体个人线索提交到 GitHub。
 
 推荐发布方式：
 
@@ -39,6 +41,7 @@ Android Chrome：打开页面 → 菜单 → 添加到主屏幕。
 - 同一个 Pages URL 只是同一个应用入口，不是云同步。
 - 新设备首次打开时本地数据为空。
 - 迁移数据靠原设备「下载」JSON，再到新设备「导入」。
+- 「下载」使用浏览器原生下载能力，保存位置由浏览器或系统设置决定，网页不能强制指定路径或弹出原生位置选择器。
 - 不提交导出的备份 JSON，不提交真实记录截图。
 
 ## 文件地图
@@ -48,7 +51,17 @@ Android Chrome：打开页面 → 菜单 → 添加到主屏幕。
 | `index.html` | 全部 UI + JS，单文件零依赖 |
 | `sw.js` | Service Worker，离线缓存 |
 | `manifest.webmanifest` | PWA 清单（名称、图标、版本） |
-| `icon.svg` | 应用图标 |
+| `icon.svg` | 应用源图标 |
+| `icons/` | PWA、maskable 和 Apple touch PNG 图标 |
+| `scripts/project_audit.py` | 开发期红线审计脚本，零运行时依赖 |
+
+## 维护审计
+
+```bash
+python3 scripts/project_audit.py
+```
+
+脚本检查 PWA 版本、图标资源、Service Worker 缓存列表、tooltip/icon 红线和文档隐私红线。它只使用 Python 标准库，不引入构建流程。
 
 ## 数据模型
 
@@ -74,7 +87,7 @@ Android Chrome：打开页面 → 菜单 → 添加到主屏幕。
 - 桌面端日期与时分步进控件，支持 `YYYY-MM-DD HH:mm` 精确输入
 - 时间尺：求职推进 / 其他 / 未记录 占比可视化
 - 自动 / 亮色 / 暗色分段主题控件
-- 数据导出（复制 JSON / 下载文件 / 系统分享可用时分享）
+- 数据导出（复制 JSON / 下载文件 / 系统分享可用时分享；保存位置由浏览器或系统决定）
 - 当前视图摘要复制（Markdown，可直接贴给 AI）
 - 数据导入（按 id 合并去重，不静默覆盖）
 - 离线可用（Service Worker）

@@ -1,5 +1,16 @@
-const CACHE = 'timelog-v6';
-const FILES = ['./', './index.html', './manifest.webmanifest', './sw.js', './icon.svg'];
+const CACHE = 'timelog-v8';
+const FILES = [
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './sw.js',
+  './icon.svg',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/maskable-192.png',
+  './icons/maskable-512.png',
+  './icons/apple-touch-icon.png'
+];
 
 self.addEventListener('install', e => {
   e.waitUntil(
