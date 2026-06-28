@@ -1,4 +1,4 @@
-const CACHE = 'timelog-v8';
+const CACHE = 'timelog-v12';
 const FILES = [
   './',
   './index.html',
@@ -16,7 +16,6 @@ self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c => c.addAll(FILES).catch(() => {}))
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {
@@ -26,6 +25,10 @@ self.addEventListener('activate', e => {
     )
   );
   self.clients.claim();
+});
+
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('fetch', e => {

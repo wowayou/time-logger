@@ -11,7 +11,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "8"
+EXPECTED_VERSION = "12"
+EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_ICON_SIZES = {
     "icons/icon-192.png": (192, 192),
     "icons/icon-512.png": (512, 512),
@@ -19,6 +20,14 @@ REQUIRED_ICON_SIZES = {
     "icons/maskable-512.png": (512, 512),
     "icons/apple-touch-icon.png": (180, 180),
 }
+REQUIRED_DEMO_ASSETS = [
+    "docs/assets/demo-mobile-timeline.png",
+    "docs/assets/demo-mobile-edit-drawer.png",
+]
+REQUIRED_MAINTENANCE_COMMANDS = [
+    "python3 scripts/project_audit.py",
+    "python3 scripts/confirm_logic_smoke.py",
+]
 
 
 def read_text(rel: str) -> str:
@@ -89,6 +98,46 @@ def audit_service_worker(errors: list[str]) -> None:
             fail(errors, f"sw.js FILES must cache runtime asset {src}")
 
 
+def audit_demo_assets(errors: list[str]) -> None:
+    gitignore = read_text(".gitignore")
+    if "!docs/assets/*.png" not in gitignore:
+        fail(errors, ".gitignore must whitelist fixed README demo PNGs in docs/assets")
+
+    readme = read_text("README.md")
+    assets_dir = ROOT / "docs" / "assets"
+    actual_pngs = sorted(str(path.relative_to(ROOT)) for path in assets_dir.glob("*.png")) if assets_dir.exists() else []
+    for src in REQUIRED_DEMO_ASSETS:
+        path = ROOT / src
+        if not path.exists():
+            fail(errors, f"required README demo asset is missing: {src}")
+            continue
+        try:
+            width, height = png_size(path)
+        except ValueError as exc:
+            fail(errors, f"{src} is invalid: {exc}")
+            continue
+        if width < 320 or height < 500:
+            fail(errors, f"{src} should be a mobile-sized PNG, got {width}x{height}")
+        if src not in readme:
+            fail(errors, f"README.md must reference demo asset: {src}")
+
+    unexpected = [src for src in actual_pngs if src not in REQUIRED_DEMO_ASSETS]
+    if unexpected:
+        fail(errors, "docs/assets must contain only fixed demo PNGs: " + ", ".join(unexpected))
+
+
+def audit_smoke_scripts(errors: list[str]) -> None:
+    path = ROOT / "scripts" / "confirm_logic_smoke.py"
+    if not path.exists():
+        fail(errors, "scripts/confirm_logic_smoke.py is missing")
+        return
+    text = path.read_text(encoding="utf-8")
+    if "subprocess.run" not in text or '"node"' not in text:
+        fail(errors, "confirm_logic_smoke.py must execute the real inline JS through node")
+    if "__TIMELOG_TEST__" not in text or "__timelogTest" not in text:
+        fail(errors, "confirm_logic_smoke.py must use the guarded index.html test API")
+
+
 def button_attrs(tag: str) -> str:
     return tag.split(">", 1)[0]
 
@@ -97,6 +146,14 @@ def audit_index(errors: list[str]) -> None:
     html = read_text("index.html")
     if "title=" in html:
         fail(errors, "index.html must not use native title= tooltips")
+    if not re.search(r"button\[data-tip\]:hover::after,\s*\n\s*button\[data-tip\]:hover::before\s*\{[^}]*transition-delay:\s*" + re.escape(EXPECTED_TOOLTIP_DELAY), html, re.DOTALL):
+        fail(errors, f"desktop hover tooltip must use a {EXPECTED_TOOLTIP_DELAY} show delay")
+    if not re.search(r"button\[data-tip\]:focus-visible::after,\s*\n\s*button\[data-tip\]:focus-visible::before\s*\{[^}]*transition-delay:\s*0s", html, re.DOTALL):
+        fail(errors, "keyboard focus-visible tooltip must show without delay")
+    if "window.__timelogTest" not in html or "window.__TIMELOG_TEST__" not in html:
+        fail(errors, "index.html must expose test API only behind window.__TIMELOG_TEST__")
+    if not re.search(r"if\s*\(\s*window\.__TIMELOG_TEST__\s*\)\s*\{\s*exposeTestApi\(\);", html):
+        fail(errors, "index.html test API must be guarded by window.__TIMELOG_TEST__")
     if "iconSvg('x')" in html or re.search(r"^\s*x\s*:", html, re.MULTILINE):
         fail(errors, "index.html must not define or use the x icon")
     if re.search(r'data-action="start-edit"[^>]*>\s*改\s*</button>', html):
@@ -134,28 +191,36 @@ def audit_docs(errors: list[str]) -> None:
             fail(errors, f"documentation must not contain stale/private phrase: {forbidden}")
 
     readme = docs["README.md"]
-    if "python3 scripts/project_audit.py" not in readme:
-        fail(errors, "README.md must document the project audit command")
+    for command in REQUIRED_MAINTENANCE_COMMANDS:
+        if command not in readme:
+            fail(errors, f"README.md must document maintenance command: {command}")
 
     claude = docs["CLAUDE.md"]
     required_claude_phrases = [
-        "timelog-v8",
+        f"timelog-v{EXPECTED_VERSION}",
         "禁止 `title=`",
+        f"tooltip hover 延迟 {EXPECTED_TOOLTIP_DELAY}",
         "删除/取消禁用 x",
         "输入字号不低于 16px",
         "运行时资产必须进 SW 缓存",
-        "公开仓库不得含真实记录/截图/具体个人线索",
-        "| v8 |",
+        "公开仓库不得含真实记录/真实截图/具体个人线索",
+        "README 演示图只能来自 `docs/assets/` 的固定 demo 数据 PNG",
+        f"| v{EXPECTED_VERSION} |",
     ]
     for phrase in required_claude_phrases:
         if phrase not in claude:
             fail(errors, f"CLAUDE.md is missing maintenance rule/changelog phrase: {phrase}")
+    for command in REQUIRED_MAINTENANCE_COMMANDS:
+        if command not in claude:
+            fail(errors, f"CLAUDE.md must document maintenance command: {command}")
 
 
 def main() -> int:
     errors: list[str] = []
     audit_manifest(errors)
     audit_service_worker(errors)
+    audit_demo_assets(errors)
+    audit_smoke_scripts(errors)
     audit_index(errors)
     audit_docs(errors)
 

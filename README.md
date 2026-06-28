@@ -8,6 +8,10 @@
 
 求职主线时间记录仪 — 每天看清时间进了哪里。
 
+![固定演示数据的移动端时间轴](docs/assets/demo-mobile-timeline.png)
+
+![固定演示数据的移动端编辑抽屉](docs/assets/demo-mobile-edit-drawer.png)
+
 ## 本地运行
 
 ```bash
@@ -15,6 +19,15 @@ cd time-logger
 python3 -m http.server 8080
 # 浏览器打开 http://localhost:8080
 ```
+
+真机移动端验证不需要推送或部署。手机和电脑同 Wi-Fi 时，可在本机启动：
+
+```bash
+python3 -m http.server 8080 --bind 0.0.0.0
+# 手机尝试打开 http://192.168.101.101:8080/
+```
+
+若手机打不开，先检查服务是否绑定 `0.0.0.0`、Windows 防火墙、手机和电脑是否同网，以及 WSL2 端口隔离。
 
 ## 装到手机主屏（PWA）
 
@@ -25,7 +38,7 @@ Android Chrome：打开页面 → 菜单 → 添加到主屏幕。
 
 ## GitHub Pages 发布（隐私边界）
 
-只把 `time-logger/` 作为独立仓库发布，例如 `github.com/<your-name>/time-logger`。不要把父目录、`toolkit/`、`archive/`、导出的 `timelog-*.json`、真实记录 JSON、截图或具体个人线索提交到 GitHub。
+只把 `time-logger/` 作为独立仓库发布，例如 `github.com/<your-name>/time-logger`。不要把父目录、`toolkit/`、`archive/`、导出的 `timelog-*.json`、真实记录 JSON、真实截图或具体个人线索提交到 GitHub。README 展示图只允许使用 `docs/assets/` 中的固定演示数据 PNG。
 
 推荐发布方式：
 
@@ -53,15 +66,18 @@ Android Chrome：打开页面 → 菜单 → 添加到主屏幕。
 | `manifest.webmanifest` | PWA 清单（名称、图标、版本） |
 | `icon.svg` | 应用源图标 |
 | `icons/` | PWA、maskable 和 Apple touch PNG 图标 |
+| `docs/assets/` | README 固定演示数据截图，不放真实记录 |
 | `scripts/project_audit.py` | 开发期红线审计脚本，零运行时依赖 |
+| `scripts/confirm_logic_smoke.py` | 确认逻辑与百分比格式 smoke，调用本机 `node` 执行真实内联 JS |
 
 ## 维护审计
 
 ```bash
 python3 scripts/project_audit.py
+python3 scripts/confirm_logic_smoke.py
 ```
 
-脚本检查 PWA 版本、图标资源、Service Worker 缓存列表、tooltip/icon 红线和文档隐私红线。它只使用 Python 标准库，不引入构建流程。
+审计脚本检查 PWA 版本、图标资源、Service Worker 缓存列表、tooltip/icon 红线、README 演示截图白名单和文档隐私红线。确认逻辑 smoke 会抽取 `index.html` 内联脚本，在 `window.__TIMELOG_TEST__` 下暴露测试入口，再用本机 `node` 跑固定用例和随机压测。两者都只使用开发期标准工具，不引入运行时依赖、npm 或构建流程。
 
 ## 数据模型
 
@@ -71,21 +87,31 @@ python3 scripts/project_audit.py
 {
   "version": 1,
   "entries": [
-    { "id": "abc123", "ts": "2026-06-28T09:00", "what": "写简历", "tags": ["求职推进"] }
+    {
+      "id": "abc123",
+      "ts": "2026-06-28T09:00",
+      "what": "写简历",
+      "tags": ["求职推进"],
+      "longConfirm": { "startTs": "2026-06-28T09:00", "endTs": "2026-06-28T13:10" }
+    }
   ]
 }
 ```
 
-时长 = 当前条到下一条 ts 的间隔，渲染时实时算，不存储。  
-超过 3h 间隔或标签为"未知"的段落计为**未记录**。
+时长 = 当前条到下一条 ts 的间隔，渲染时实时算，不存储。统计以分钟数为权威值：`job` / `other` / `unrecorded` / `pending` / `total` 都先按分钟累加，条形图按分钟比例显示，百分比只用于展示，不反向参与统计，也不强行凑满 100%。
+
+标签为"未知"的段落计为**未记录**。有明确标签但超过 3h 的已关闭段落先显示为**待确认**并并入未记录；确认按钮会显示该段起止时间，确认后才按标签统计。确认状态只绑定起点记录时间和下一条记录时间，相邻时间变化或中间补录新记录后自动失效，必须按新形成的段逐段确认；如果只是把同一时间段改成另一个明确标签，确认仍对这段时间有效。最后一条进行中超长段不能确认，等下一条记录关闭后再确认。
 
 ## 功能清单
 
 - 记录 / 编辑 / 删除条目，标签分类
+- 超过 3h 的明确标签段需确认后才按标签统计
 - 天 / 周 / 月 / 年视图：天视图可编辑，周/月/年只读汇总并可下钻
 - 移动端日期滚轮选择器（补录用），支持触控、鼠标滚轮、方向键
-- 桌面端日期与时分步进控件，支持 `YYYY-MM-DD HH:mm` 精确输入
+- 桌面端自定义日期/时间选择器（popover 日历 + 时分步进），并保留 `YYYY-MM-DD HH:mm` 精确输入文本框
+- 文本时间输入接受 `2026/6/28 9:5`、`2026.6.28 9:05`、`2026-06-28T09:05` 等完整日期时间；不接受仅 `9:30` 这类省略日期输入
 - 时间尺：求职推进 / 其他 / 未记录 占比可视化
+- 桌面鼠标悬停 tooltip 延迟约 800ms 显示，移开立即隐藏；键盘 `focus-visible` 立即显示；触屏不显示 hover tooltip
 - 自动 / 亮色 / 暗色分段主题控件
 - 数据导出（复制 JSON / 下载文件 / 系统分享可用时分享；保存位置由浏览器或系统决定）
 - 当前视图摘要复制（Markdown，可直接贴给 AI）

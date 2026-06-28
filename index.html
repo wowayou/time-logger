@@ -152,57 +152,65 @@
 
     /* Unified command tooltip */
     button[data-tip] { position: relative; }
+    button[data-tip]::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 8px);
+      transform: translateX(-50%);
+      z-index: 40;
+      width: max-content;
+      max-width: min(260px, calc(100vw - 32px));
+      padding: 7px 9px;
+      border-radius: 8px;
+      background: var(--text);
+      color: var(--bg);
+      font-size: 12px;
+      line-height: 1.35;
+      font-weight: 500;
+      white-space: normal;
+      text-align: left;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.12s ease;
+      transition-delay: 0s;
+    }
+    button[data-tip]::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 3px);
+      transform: translateX(-50%);
+      z-index: 41;
+      border: 5px solid transparent;
+      border-top-color: var(--text);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.12s ease;
+      transition-delay: 0s;
+    }
+    button[data-tip][data-tip-pos="bottom"]::after {
+      top: calc(100% + 8px);
+      bottom: auto;
+    }
+    button[data-tip][data-tip-pos="bottom"]::before {
+      top: calc(100% + 3px);
+      bottom: auto;
+      border-top-color: transparent;
+      border-bottom-color: var(--text);
+    }
     @media (hover: hover) and (pointer: fine) {
-      button[data-tip]::after {
-        content: attr(data-tip);
-        position: absolute;
-        left: 50%;
-        bottom: calc(100% + 8px);
-        transform: translateX(-50%);
-        z-index: 40;
-        width: max-content;
-        max-width: min(260px, calc(100vw - 32px));
-        padding: 7px 9px;
-        border-radius: 8px;
-        background: var(--text);
-        color: var(--bg);
-        font-size: 12px;
-        line-height: 1.35;
-        font-weight: 500;
-        white-space: normal;
-        text-align: left;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.22);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.12s ease;
-      }
-      button[data-tip]::before {
-        content: "";
-        position: absolute;
-        left: 50%;
-        bottom: calc(100% + 3px);
-        transform: translateX(-50%);
-        z-index: 41;
-        border: 5px solid transparent;
-        border-top-color: var(--text);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.12s ease;
-      }
-      button[data-tip][data-tip-pos="bottom"]::after {
-        top: calc(100% + 8px);
-        bottom: auto;
-      }
-      button[data-tip][data-tip-pos="bottom"]::before {
-        top: calc(100% + 3px);
-        bottom: auto;
-        border-top-color: transparent;
-        border-bottom-color: var(--text);
-      }
-      button[data-tip]:is(:hover, :focus-visible)::after,
-      button[data-tip]:is(:hover, :focus-visible)::before {
+      button[data-tip]:hover::after,
+      button[data-tip]:hover::before {
         opacity: 1;
+        transition-delay: 800ms;
       }
+    }
+    button[data-tip]:focus-visible::after,
+    button[data-tip]:focus-visible::before {
+      opacity: 1;
+      transition-delay: 0s;
     }
 
     /* View controls */
@@ -408,47 +416,171 @@
     .dt-picker {
       display: grid;
       gap: 9px;
+      position: relative;
     }
-    .dt-row {
-      display: grid;
-      grid-template-columns: 42px 1fr 42px 64px;
-      gap: 8px;
+    .dt-trigger {
+      display: flex;
       align-items: center;
+      gap: 8px;
+      height: var(--control-h);
+      background: var(--input);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: inherit;
+      cursor: pointer;
+      padding: 0 12px;
+      width: 100%;
+      text-align: left;
+      white-space: nowrap;
     }
-    .dt-date {
-      height: 40px;
+    .dt-trigger:active { opacity: 0.75; }
+    .dt-cal-ico {
+      flex-shrink: 0;
+      margin-left: auto;
+      color: var(--muted);
+      width: 16px;
+      height: 16px;
+    }
+    .dt-pop {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      z-index: 100;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+      padding: 12px;
+      width: 280px;
+      max-width: calc(100vw - 24px);
+    }
+    .dt-pop.dt-pop-up {
+      top: auto;
+      bottom: calc(100% + 6px);
+    }
+    .dt-cal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .dt-nav {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 18px;
+      font-family: inherit;
+      cursor: pointer;
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+    .dt-nav:hover { background: var(--input); }
+    .dt-cal-dow {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .dt-cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 2px;
+    }
+    .dt-day {
+      aspect-ratio: 1;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      color: var(--text);
+      padding: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--input);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      color: var(--text);
-      font-size: 14px;
-      font-variant-numeric: tabular-nums;
     }
+    .dt-day:hover:not(:disabled) { background: var(--input); }
+    .dt-day.is-today { color: var(--accent); font-weight: 600; }
+    .dt-day.is-sel { background: var(--accent); color: #fff; }
+    .dt-day.is-sel:hover { background: var(--accent); }
+    .dt-blank { pointer-events: none; color: transparent; cursor: default; }
     .dt-time {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       gap: 8px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
     }
     .dt-step {
-      display: grid;
-      grid-template-columns: 38px 1fr 38px;
-      gap: 6px;
-      align-items: center;
-    }
-    .dt-value {
-      height: 38px;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      background: var(--input);
+      gap: 2px;
+    }
+    .dt-step-btn {
+      background: transparent;
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 6px;
       color: var(--text);
-      font-size: 15px;
-      font-variant-numeric: tabular-nums;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      padding: 2px 8px;
+      line-height: 1;
+    }
+    .dt-step-btn:hover { background: var(--input); }
+    .dt-step-inp {
+      width: 44px;
+      text-align: center;
+      font-size: 16px;
+      font-family: inherit;
+      background: var(--input);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 0;
+      -moz-appearance: textfield;
+    }
+    .dt-step-inp::-webkit-outer-spin-button,
+    .dt-step-inp::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .dt-colon {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      padding-bottom: 2px;
+    }
+    .dt-now {
+      margin-left: 4px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--accent);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      padding: 3px 10px;
+    }
+    .dt-now:hover { background: var(--accent-bg); }
+    .dt-precise { display: grid; gap: 4px; }
+    .dt-precise-label { font-size: 11px; color: var(--muted); }
+    .dt-error {
+      color: var(--danger);
+      font-size: 12px;
+      line-height: 1.35;
+      min-height: 16px;
+    }
+    .dt-error[hidden] {
+      display: none;
     }
 
     /* Ruler */
@@ -501,6 +633,7 @@
       border: 1px solid transparent;
     }
     .entry.editing { border-color: var(--accent); }
+    .entry.sheet-editing { border-color: var(--accent); }
     .e-body { flex: 1; min-width: 0; }
     .e-time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
     .e-what { font-size: 15px; color: var(--text); word-break: break-word; margin-bottom: 5px; }
@@ -574,6 +707,158 @@
       background: transparent;
       color: var(--muted);
     }
+    .mini-btn {
+      min-height: 26px;
+      padding: 0 10px;
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      background: var(--accent-bg);
+      color: var(--accent);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .mini-btn:active { opacity: 0.75; }
+    .time-toggle {
+      width: 100%;
+      min-height: 40px;
+      padding: 0 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text);
+      font-size: 15px;
+      font-family: inherit;
+      cursor: pointer;
+      text-align: left;
+    }
+    .time-collapse { margin-top: 8px; }
+    .time-collapse[hidden] { display: none; }
+
+    /* Update prompt */
+    .update-banner {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: calc(70px + env(safe-area-inset-bottom));
+      z-index: 60;
+      max-width: 600px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--card);
+      color: var(--text);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.28);
+    }
+    .update-banner[hidden] { display: none; }
+    .update-banner span {
+      min-width: 0;
+      flex: 1;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    .update-btn {
+      min-height: 36px;
+      padding: 0 12px;
+      border: none;
+      border-radius: 9px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* Mobile edit sheet */
+    .edit-sheet {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      display: grid;
+      align-items: end;
+    }
+    .edit-sheet[hidden] { display: none; }
+    .edit-sheet-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.42);
+    }
+    .edit-sheet-panel {
+      position: relative;
+      max-height: min(92dvh, 720px);
+      width: 100%;
+      max-width: 600px;
+      margin: 0 auto;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-radius: 16px 16px 0 0;
+      background: var(--card);
+      padding: 0 16px calc(16px + env(safe-area-inset-bottom));
+      box-shadow: 0 -16px 42px rgba(0,0,0,0.32);
+      -webkit-overflow-scrolling: touch;
+    }
+    .edit-sheet-head {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 64px;
+      padding: 12px 0 10px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+    }
+    .edit-sheet-summary {
+      min-width: 0;
+      flex: 1;
+    }
+    .edit-sheet-title {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .edit-sheet-what {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text);
+      font-size: 15px;
+    }
+    .edit-sheet-actions {
+      display: flex;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+    .edit-sheet-actions .icon-btn {
+      width: 40px;
+      height: 40px;
+      flex-basis: 40px;
+      border: 1px solid var(--border);
+    }
+    .edit-sheet-actions .save-btn {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+    .edit-sheet-body {
+      display: grid;
+      gap: 12px;
+      padding-top: 14px;
+    }
+    body.sheet-open {
+      overflow: hidden;
+    }
+    body.sheet-open .footer { display: none; }
+    body.sheet-open .update-banner { bottom: calc(12px + env(safe-area-inset-bottom)); }
 
     .empty-tip {
       text-align: center;
@@ -621,8 +906,7 @@
       .hdr { flex-wrap: wrap; }
       .theme-seg { margin-left: 0; width: 100%; }
       .theme-seg button { flex: 1; }
-      .date-nav, .dt-row { grid-template-columns: 40px 1fr 40px 72px; }
-      .dt-time { grid-template-columns: 1fr; }
+      .date-nav { grid-template-columns: 40px 1fr 40px 72px; }
       .entry { padding: 12px; gap: 8px; }
     }
 
@@ -725,6 +1009,16 @@
   </div>
 </div>
 
+<div class="update-banner" id="update-banner" hidden>
+  <span>发现新版。当前数据仍保存在本机。</span>
+  <button class="update-btn" type="button" data-action="update-app" data-tip="刷新并加载新版应用。" aria-label="更新应用">更新应用</button>
+</div>
+
+<div class="edit-sheet" id="edit-sheet" hidden>
+  <div class="edit-sheet-backdrop" data-action="cancel-edit" aria-hidden="true"></div>
+  <section class="edit-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="edit-sheet-title"></section>
+</div>
+
 <div class="footer">
   <div class="footer-inner">
     <div class="footer-btns">
@@ -752,6 +1046,11 @@
   const DAYS_FWD = 7;
 
   let editingId = null;
+  let sheetEditId = null;
+  let sheetScrollY = 0;
+  let sheetTimeMounted = false;
+  let pendingUpdateRegistration = null;
+  let updateReloading = false;
   let formTag = '';
   let state = { view: 'day', selectedDate: '' };
 
@@ -840,8 +1139,8 @@
     return value ? value.replace('T', ' ') : String(ts || '');
   }
   function normalizeTimestamp(raw) {
-    const value = String(raw || '').trim().replace('T', ' ');
-    const m = /^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/.exec(value);
+    const value = String(raw || '').trim();
+    const m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})[ T]+(\d{1,2}):(\d{1,2})$/.exec(value);
     if (!m) return '';
     const y = Number(m[1]), mo = Number(m[2]), da = Number(m[3]), h = Number(m[4]), mi = Number(m[5]);
     const d = new Date(y, mo - 1, da, h, mi);
@@ -850,9 +1149,22 @@
   }
   function validateTs(raw) {
     const ts = normalizeTimestamp(raw);
-    if (!ts) return { ok: false, msg: '时间格式应为 YYYY-MM-DD HH:mm。' };
+    if (!ts) return { ok: false, msg: '请输入完整日期和时间，例如 2026-06-28 09:05。' };
     if (new Date(ts) > new Date(Date.now() + 5 * 60000)) return { ok: false, msg: '不能记录明显未来的时间。' };
     return { ok: true, ts };
+  }
+  function setTimeInputError(scope, msg) {
+    if (!scope) return;
+    let err = scope.querySelector('[data-role="time-error"]');
+    if (!err && msg) {
+      err = document.createElement('div');
+      err.className = 'dt-error';
+      err.dataset.role = 'time-error';
+      scope.appendChild(err);
+    }
+    if (!err) return;
+    err.textContent = msg || '';
+    err.hidden = !msg;
   }
   function defaultFormTs() {
     const n = new Date();
@@ -1039,132 +1351,476 @@
     let value = normalizeTimestamp(initialValue) || nowStr();
     mountEl.innerHTML = '';
 
+    let viewY = parseInt(value.slice(0, 4));
+    let viewM0 = parseInt(value.slice(5, 7)) - 1;
+
     const wrap = document.createElement('div');
     wrap.className = 'dt-picker';
-    wrap.innerHTML = `
-      <div class="dt-row">
-        <button class="nav-btn" type="button" data-act="d-" data-tip="日期减一天。" aria-label="日期减一天">‹</button>
-        <div class="dt-date" data-role="date"></div>
-        <button class="nav-btn" type="button" data-act="d+" data-tip="日期加一天。" aria-label="日期加一天">›</button>
-        <button class="nav-btn" type="button" data-act="now" data-tip="重置为当前时间。" aria-label="重置为当前时间">现在</button>
-      </div>
-      <div class="dt-time">
-        <div class="dt-step">
-          <button class="nav-btn" type="button" data-act="h-" data-tip="小时减一。" aria-label="小时减一">−</button>
-          <div class="dt-value" data-role="hour"></div>
-          <button class="nav-btn" type="button" data-act="h+" data-tip="小时加一。" aria-label="小时加一">+</button>
-        </div>
-        <div class="dt-step">
-          <button class="nav-btn" type="button" data-act="m-" data-tip="分钟减一。" aria-label="分钟减一">−</button>
-          <div class="dt-value" data-role="minute"></div>
-          <button class="nav-btn" type="button" data-act="m+" data-tip="分钟加一。" aria-label="分钟加一">+</button>
-        </div>
-      </div>
-      <input type="text" class="inp" data-role="text" inputmode="numeric" placeholder="YYYY-MM-DD HH:mm">
-    `;
     mountEl.appendChild(wrap);
 
-    const dateEl = wrap.querySelector('[data-role="date"]');
-    const hourEl = wrap.querySelector('[data-role="hour"]');
-    const minuteEl = wrap.querySelector('[data-role="minute"]');
-    const textEl = wrap.querySelector('[data-role="text"]');
+    // Trigger button
+    const triggerBtn = document.createElement('button');
+    triggerBtn.type = 'button';
+    triggerBtn.className = 'dt-trigger';
+    triggerBtn.dataset.act = 'toggle';
+    triggerBtn.setAttribute('aria-label', '选择日期和时间');
+    triggerBtn.innerHTML =
+      '<span class="dt-trigger-text"></span>' +
+      '<svg class="dt-cal-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
+        '<rect x="1" y="2.5" width="14" height="12" rx="2"/>' +
+        '<line x1="5" y1="1" x2="5" y2="4"/>' +
+        '<line x1="11" y1="1" x2="11" y2="4"/>' +
+        '<line x1="1" y1="6.5" x2="15" y2="6.5"/>' +
+      '</svg>';
+    wrap.appendChild(triggerBtn);
+
+    // Popover
+    const popEl = document.createElement('div');
+    popEl.className = 'dt-pop';
+    popEl.setAttribute('role', 'dialog');
+    popEl.setAttribute('aria-label', '日期时间选择器');
+    popEl.hidden = true;
+    wrap.appendChild(popEl);
+
+    // Precise text input (secondary path for keyboard / a11y)
+    const preciseDiv = document.createElement('div');
+    preciseDiv.className = 'dt-precise';
+    const preciseLabel = document.createElement('span');
+    preciseLabel.className = 'dt-precise-label';
+    preciseLabel.textContent = '精确输入';
+    preciseDiv.appendChild(preciseLabel);
+    const textEl = document.createElement('input');
+    textEl.type = 'text';
+    textEl.className = 'inp';
+    textEl.dataset.role = 'text';
+    textEl.setAttribute('inputmode', 'numeric');
+    textEl.placeholder = 'YYYY-MM-DD HH:mm';
+    textEl.setAttribute('aria-label', '精确时间文本');
+    preciseDiv.appendChild(textEl);
+    wrap.appendChild(preciseDiv);
+
+    // Error display
+    const errEl = document.createElement('div');
+    errEl.className = 'dt-error';
+    errEl.dataset.role = 'time-error';
+    errEl.hidden = true;
+    wrap.appendChild(errEl);
+
+    // --- Calendar rendering (rebuilds popEl contents each call) ---
+    function renderCal() {
+      popEl.innerHTML = '';
+
+      // Header: ‹ year month ›
+      const head = document.createElement('div');
+      head.className = 'dt-cal-head';
+      const prevBtn = document.createElement('button');
+      prevBtn.type = 'button'; prevBtn.className = 'dt-nav';
+      prevBtn.setAttribute('aria-label', '上一月'); prevBtn.dataset.act = 'prev-month';
+      prevBtn.textContent = '‹';
+      const monthLabel = document.createElement('span');
+      monthLabel.textContent = viewY + ' 年 ' + (viewM0 + 1) + ' 月';
+      const nextBtn = document.createElement('button');
+      nextBtn.type = 'button'; nextBtn.className = 'dt-nav';
+      nextBtn.setAttribute('aria-label', '下一月'); nextBtn.dataset.act = 'next-month';
+      nextBtn.textContent = '›';
+      head.appendChild(prevBtn); head.appendChild(monthLabel); head.appendChild(nextBtn);
+      popEl.appendChild(head);
+
+      // Day-of-week header
+      const dow = document.createElement('div');
+      dow.className = 'dt-cal-dow';
+      ['日','一','二','三','四','五','六'].forEach(d => {
+        const s = document.createElement('span'); s.textContent = d; dow.appendChild(s);
+      });
+      popEl.appendChild(dow);
+
+      // Calendar grid
+      const grid = document.createElement('div');
+      grid.className = 'dt-cal-grid';
+      const firstDay = new Date(viewY, viewM0, 1).getDay();
+      const lastDate = new Date(viewY, viewM0 + 1, 0).getDate();
+      const td = new Date();
+      const todayY = td.getFullYear(), todayM0 = td.getMonth(), todayDate = td.getDate();
+      const selY = parseInt(value.slice(0, 4));
+      const selM0 = parseInt(value.slice(5, 7)) - 1;
+      const selDate = parseInt(value.slice(8, 10));
+
+      for (let i = 0; i < firstDay; i++) {
+        const blank = document.createElement('button');
+        blank.type = 'button'; blank.className = 'dt-day dt-blank';
+        blank.disabled = true; blank.setAttribute('aria-hidden', 'true'); blank.tabIndex = -1;
+        blank.textContent = '';
+        grid.appendChild(blank);
+      }
+      for (let d = 1; d <= lastDate; d++) {
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'dt-day';
+        btn.dataset.act = 'pick-day'; btn.dataset.day = String(d);
+        btn.setAttribute('aria-label', viewY + '年' + (viewM0 + 1) + '月' + d + '日');
+        btn.textContent = String(d);
+        if (viewY === todayY && viewM0 === todayM0 && d === todayDate) btn.classList.add('is-today');
+        if (viewY === selY && viewM0 === selM0 && d === selDate) btn.classList.add('is-sel');
+        grid.appendChild(btn);
+      }
+      popEl.appendChild(grid);
+
+      // Time stepper
+      const timeDiv = document.createElement('div');
+      timeDiv.className = 'dt-time';
+
+      function makeStep(role, label, upAct, dnAct, val, max) {
+        const step = document.createElement('div');
+        step.className = 'dt-step';
+        const upBtn = document.createElement('button');
+        upBtn.type = 'button'; upBtn.className = 'dt-step-btn';
+        upBtn.dataset.act = upAct; upBtn.setAttribute('aria-label', label + '+1');
+        upBtn.textContent = '▲';
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.className = 'dt-step-inp';
+        inp.min = '0'; inp.max = String(max);
+        inp.dataset.role = role; inp.setAttribute('aria-label', label);
+        inp.value = String(val);
+        const dnBtn = document.createElement('button');
+        dnBtn.type = 'button'; dnBtn.className = 'dt-step-btn';
+        dnBtn.dataset.act = dnAct; dnBtn.setAttribute('aria-label', label + '-1');
+        dnBtn.textContent = '▼';
+        step.appendChild(upBtn); step.appendChild(inp); step.appendChild(dnBtn);
+        return { step, inp };
+      }
+
+      const curH = parseInt(value.slice(11, 13));
+      const curM = parseInt(value.slice(14, 16));
+      const hParts = makeStep('hour-inp', '时', 'hour-up', 'hour-down', curH, 23);
+      const mParts = makeStep('min-inp',  '分', 'min-up',  'min-down',  curM, 59);
+
+      const colon = document.createElement('span');
+      colon.className = 'dt-colon'; colon.textContent = ':';
+
+      const nowBtn = document.createElement('button');
+      nowBtn.type = 'button'; nowBtn.className = 'dt-now';
+      nowBtn.dataset.act = 'now'; nowBtn.dataset.tip = '重置为当前时间';
+      nowBtn.setAttribute('aria-label', '重置为当前时间');
+      nowBtn.textContent = '现在';
+
+      timeDiv.appendChild(hParts.step); timeDiv.appendChild(colon);
+      timeDiv.appendChild(mParts.step); timeDiv.appendChild(nowBtn);
+      popEl.appendChild(timeDiv);
+
+      // Typed-number-input handlers (no re-render to keep focus)
+      hParts.inp.addEventListener('change', () => {
+        const h = Math.min(23, Math.max(0, parseInt(hParts.inp.value) || 0));
+        hParts.inp.value = String(h);
+        const nv = normalizeTimestamp(value.slice(0, 10) + 'T' + p2(h) + ':' + value.slice(14, 16));
+        if (nv) { value = nv; sync(); }
+      });
+      mParts.inp.addEventListener('change', () => {
+        const m = Math.min(59, Math.max(0, parseInt(mParts.inp.value) || 0));
+        mParts.inp.value = String(m);
+        const nv = normalizeTimestamp(value.slice(0, 10) + 'T' + value.slice(11, 13) + ':' + p2(m));
+        if (nv) { value = nv; sync(); }
+      });
+    }
 
     function sync(emit = true) {
-      const d = new Date(value);
-      dateEl.textContent = dateLabel(d);
-      hourEl.textContent = `${p2(d.getHours())} 时`;
-      minuteEl.textContent = `${p2(d.getMinutes())} 分`;
+      const parts = value.split('T');
+      const dp = parts[0].split('-');
+      triggerBtn.querySelector('.dt-trigger-text').textContent =
+        dp[0] + '/' + dp[1] + '/' + dp[2] + ' ' + parts[1];
       textEl.value = value.replace('T', ' ');
+      setTimeInputError(wrap, '');
       if (emit) onChangeCb(value);
     }
-    function step(mutator) {
-      const d = new Date(value);
-      mutator(d);
-      value = `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
-      sync();
+
+    // --- Popover lifecycle ---
+    let ac = null;
+
+    function reposition() {
+      if (popEl.hidden) return;
+      const rect = triggerBtn.getBoundingClientRect();
+      if (rect.bottom + 300 > window.innerHeight) {
+        popEl.classList.add('dt-pop-up');
+      } else {
+        popEl.classList.remove('dt-pop-up');
+      }
     }
+
+    function openPop() {
+      if (!popEl.hidden) return;
+      renderCal();
+      popEl.hidden = false;
+      ac = new AbortController();
+      const { signal } = ac;
+      document.addEventListener('keydown', e => {
+        if (popEl.hidden || !document.contains(wrap)) return;
+        if (e.key === 'Escape') { e.stopPropagation(); closePop(); }
+      }, { capture: true, signal });
+      document.addEventListener('pointerdown', e => {
+        if (popEl.hidden || !document.contains(wrap)) return;
+        if (!wrap.contains(e.target)) closePop();
+      }, { signal });
+      window.addEventListener('resize', reposition, { signal });
+      document.addEventListener('scroll', reposition, { signal, passive: true });
+      reposition();
+    }
+
+    function closePop() {
+      if (popEl.hidden) return;
+      popEl.hidden = true;
+      if (ac) { ac.abort(); ac = null; }
+      triggerBtn.focus();
+    }
+
+    // --- Delegated click for all data-act controls ---
     wrap.addEventListener('click', e => {
-      const act = e.target.dataset.act;
-      if (!act) return;
-      if (act === 'now') { value = nowStr(); sync(); return; }
-      if (act === 'd-') step(d => d.setDate(d.getDate() - 1));
-      if (act === 'd+') step(d => d.setDate(d.getDate() + 1));
-      if (act === 'h-') step(d => d.setHours(d.getHours() - 1));
-      if (act === 'h+') step(d => d.setHours(d.getHours() + 1));
-      if (act === 'm-') step(d => d.setMinutes(d.getMinutes() - 1));
-      if (act === 'm+') step(d => d.setMinutes(d.getMinutes() + 1));
+      const target = e.target.closest('[data-act]');
+      if (!target) return;
+      const act = target.dataset.act;
+      if (act === 'toggle') { if (popEl.hidden) openPop(); else closePop(); return; }
+      if (act === 'prev-month') {
+        viewM0--; if (viewM0 < 0) { viewM0 = 11; viewY--; }
+        renderCal(); return;
+      }
+      if (act === 'next-month') {
+        viewM0++; if (viewM0 > 11) { viewM0 = 0; viewY++; }
+        renderCal(); return;
+      }
+      if (act === 'pick-day') {
+        const d = parseInt(target.dataset.day || '0');
+        if (d > 0) {
+          const nv = normalizeTimestamp(viewY + '-' + p2(viewM0 + 1) + '-' + p2(d) + 'T' + value.slice(11));
+          if (nv) { value = nv; sync(); renderCal(); }
+        }
+        return;
+      }
+      if (act === 'hour-up') {
+        const h = parseInt(value.slice(11, 13));
+        if (h < 23) { const nv = normalizeTimestamp(value.slice(0, 10) + 'T' + p2(h + 1) + ':' + value.slice(14, 16)); if (nv) { value = nv; sync(); } }
+        renderCal(); return;
+      }
+      if (act === 'hour-down') {
+        const h = parseInt(value.slice(11, 13));
+        if (h > 0) { const nv = normalizeTimestamp(value.slice(0, 10) + 'T' + p2(h - 1) + ':' + value.slice(14, 16)); if (nv) { value = nv; sync(); } }
+        renderCal(); return;
+      }
+      if (act === 'min-up') {
+        const m = parseInt(value.slice(14, 16));
+        if (m < 59) { const nv = normalizeTimestamp(value.slice(0, 10) + 'T' + value.slice(11, 13) + ':' + p2(m + 1)); if (nv) { value = nv; sync(); } }
+        renderCal(); return;
+      }
+      if (act === 'min-down') {
+        const m = parseInt(value.slice(14, 16));
+        if (m > 0) { const nv = normalizeTimestamp(value.slice(0, 10) + 'T' + value.slice(11, 13) + ':' + p2(m - 1)); if (nv) { value = nv; sync(); } }
+        renderCal(); return;
+      }
+      if (act === 'now') {
+        value = nowStr();
+        const nd = new Date();
+        viewY = nd.getFullYear(); viewM0 = nd.getMonth();
+        sync(); renderCal(); return;
+      }
     });
-    textEl.addEventListener('change', () => {
+
+    // --- Text input (reused verbatim from previous implementation) ---
+    function commitText() {
       const ts = normalizeTimestamp(textEl.value);
-      if (!ts) { textEl.focus(); return; }
+      if (!ts) {
+        onChangeCb(textEl.value);
+        setTimeInputError(wrap, '请输入完整日期和时间，例如 2026-06-28 09:05。');
+        return;
+      }
       value = ts;
       sync();
+    }
+    textEl.addEventListener('input', () => {
+      onChangeCb(textEl.value);
+      const err = wrap.querySelector('[data-role="time-error"]');
+      if (err && !err.hidden) {
+        const ts = normalizeTimestamp(textEl.value);
+        if (ts) {
+          value = ts;
+          sync();
+        } else {
+          setTimeInputError(wrap, '请输入完整日期和时间，例如 2026-06-28 09:05。');
+        }
+      }
     });
-    sync();
+    textEl.addEventListener('change', commitText);
+    textEl.addEventListener('blur', commitText);
+
+    sync(false);
   }
 
   // --- Compute entries and summaries ---
-  function sortedEntries() {
-    return load().entries
+  function sortedEntriesFrom(entries) {
+    return (entries || [])
       .filter(e => normalizeTimestamp(e.ts))
       .sort((a, b) => a.ts < b.ts ? -1 : 1);
+  }
+  function sortedEntries() {
+    return sortedEntriesFrom(load().entries);
   }
   function firstEntryDate() {
     const entries = sortedEntries();
     return entries.length ? new Date(entries[0].ts) : null;
   }
-  function addBucket(totals, tag, mins, unrecorded) {
+  function emptyTotals() {
+    return { job: 0, other: 0, unrecorded: 0, pending: 0, total: 0 };
+  }
+  function primaryTag(entry) {
+    return ((entry && entry.tags || [])[0] || '未知') || '未知';
+  }
+  function isKnownTag(tag) {
+    return Boolean(tag && tag !== '未知');
+  }
+  function isSegmentConfirmed(entry, endTs) {
+    const mark = entry && entry.longConfirm;
+    return Boolean(mark && mark.startTs === entry.ts && mark.endTs === endTs);
+  }
+  function classifySegment(entry, rawMins, endTs, isOngoing) {
+    const tag = primaryTag(entry);
+    const needsConfirmation = isKnownTag(tag) && rawMins > GAP;
+    const confirmed = needsConfirmation && !isOngoing && isSegmentConfirmed(entry, endTs);
+    const pendingConfirm = needsConfirmation && !confirmed;
+    return {
+      tag,
+      unrecorded: tag === '未知' || pendingConfirm,
+      pendingConfirm,
+      confirmable: pendingConfirm && !isOngoing
+    };
+  }
+  function addBucket(totals, tag, mins, flags = {}) {
+    if (mins <= 0) return;
+    const unrecorded = typeof flags === 'boolean' ? flags : Boolean(flags.unrecorded);
+    const pending = typeof flags === 'object' && Boolean(flags.pending);
     totals.total += mins;
+    if (pending) totals.pending += mins;
     if (unrecorded) totals.unrecorded += mins;
     else if (tag === '求职推进') totals.job += mins;
     else totals.other += mins;
   }
-  function summarizeRange(start, end, opts = {}) {
+  function pushUnknownSegment(segments, start, end) {
+    const mins = minsBetweenDates(start, end);
+    if (mins <= 0) return;
+    segments.push({
+      e: null,
+      start,
+      end,
+      mins,
+      rawMins: mins,
+      endTs: '',
+      isLast: false,
+      isOngoing: false,
+      tag: '未知',
+      unrecorded: true,
+      pendingConfirm: false,
+      confirmable: false
+    });
+  }
+  function buildRangeSegmentsFromEntries(inputEntries, start, end, opts = {}) {
     let s = new Date(start);
     let e = clampEndToNow(new Date(end));
-    if (opts.clipToFirst) {
-      const first = firstEntryDate();
-      if (!first) return { job: 0, other: 0, unrecorded: 0, total: 0 };
-      if (s < first) s = first;
-    }
-    if (e <= s) return { job: 0, other: 0, unrecorded: 0, total: 0 };
-
-    const entries = sortedEntries().filter(en => {
-      const t = new Date(en.ts);
-      return t >= s && t < e;
-    });
-    const totals = { job: 0, other: 0, unrecorded: 0, total: 0 };
-    if (!entries.length) {
-      addBucket(totals, '未知', minsBetweenDates(s, e), true);
-      return totals;
-    }
+    const entries = sortedEntriesFrom(inputEntries);
+    if (!entries.length) return [];
     const first = new Date(entries[0].ts);
-    if (first > s) addBucket(totals, '未知', minsBetweenDates(s, first), true);
+    if (opts.clipToFirst) {
+      if (s < first) s = first;
+    } else if (e <= first) {
+      return [];
+    }
+    if (e <= s) return [];
+
+    const segments = [];
+    let cursor = new Date(s);
     entries.forEach((entry, i) => {
-      const nextDate = i < entries.length - 1 ? new Date(entries[i + 1].ts) : e;
-      const mins = minsBetweenDates(new Date(entry.ts), nextDate);
-      const tag = (entry.tags || [])[0] || '';
-      addBucket(totals, tag, mins, mins > GAP || tag === '未知');
+      const rawStart = new Date(entry.ts);
+      const next = entries[i + 1];
+      const rawEnd = next ? new Date(next.ts) : new Date();
+      if (rawEnd <= s || rawStart >= e) return;
+
+      if (rawStart > cursor) {
+        pushUnknownSegment(segments, new Date(cursor), new Date(Math.min(rawStart, e)));
+      }
+
+      const segStart = new Date(Math.max(rawStart, s));
+      const segEnd = new Date(Math.min(rawEnd, e));
+      const mins = minsBetweenDates(segStart, segEnd);
+      if (mins > 0) {
+        const endTs = next ? next.ts : '';
+        const rawMins = minsBetweenDates(rawStart, rawEnd);
+        segments.push({
+          e: entry,
+          start: segStart,
+          end: segEnd,
+          mins,
+          rawMins,
+          endTs,
+          isLast: !next,
+          isOngoing: !next,
+          ...classifySegment(entry, rawMins, endTs, !next)
+        });
+      }
+
+      if (rawEnd > cursor) cursor = new Date(Math.min(rawEnd, e));
+    });
+    return segments;
+  }
+  function buildRangeSegments(start, end, opts = {}) {
+    return buildRangeSegmentsFromEntries(load().entries, start, end, opts);
+  }
+  function summarizeEntries(entries, start, end, opts = {}) {
+    const totals = emptyTotals();
+    buildRangeSegmentsFromEntries(entries, start, end, opts).forEach(segment => {
+      addBucket(totals, segment.tag, segment.mins, {
+        unrecorded: segment.unrecorded,
+        pending: segment.pendingConfirm
+      });
     });
     return totals;
+  }
+  function summarizeRange(start, end, opts = {}) {
+    return summarizeEntries(load().entries, start, end, opts);
   }
   function computeDay() {
     const { start, end } = periodRange('day', state.selectedDate);
     const statEnd = state.selectedDate === todayStr() ? new Date() : end;
-    const entries = sortedEntries().filter(en => {
+    const allEntries = sortedEntries();
+    const entries = allEntries.filter(en => {
       const t = new Date(en.ts);
       return t >= start && t < end;
     });
     const timeline = entries.map((e, i) => {
-      const nextDate = i < entries.length - 1 ? new Date(entries[i + 1].ts) : clampEndToNow(statEnd);
-      const tag = (e.tags || [])[0] || '';
-      const mins = minsBetweenDates(new Date(e.ts), nextDate);
-      const unrecorded = mins > GAP || tag === '未知';
-      return { e, mins, isLast: i === entries.length - 1, unrecorded, tag };
-    });
-    return { timeline, totals: entries.length ? summarizeRange(start, statEnd, { clipToFirst: false }) : { job: 0, other: 0, unrecorded: 0, total: 0 } };
+      const globalIndex = allEntries.findIndex(en => en.id === e.id);
+      const next = globalIndex >= 0 ? allEntries[globalIndex + 1] : entries[i + 1];
+      const rawStart = new Date(e.ts);
+      const rawEnd = next ? new Date(next.ts) : new Date();
+      const clippedEnd = new Date(Math.min(rawEnd, clampEndToNow(new Date(statEnd))));
+      const mins = minsBetweenDates(rawStart, clippedEnd);
+      const endTs = next ? next.ts : '';
+      const rawMins = minsBetweenDates(rawStart, rawEnd);
+      return {
+        e,
+        mins,
+        rawMins,
+        endTs,
+        isLast: !next,
+        isOngoing: !next,
+        ...classifySegment(e, rawMins, endTs, !next)
+      };
+    }).filter(item => item.mins > 0);
+    return { timeline, totals: summarizeRange(start, statEnd, { clipToFirst: false }) };
   }
-  function percent(n, total) { return total > 0 ? Math.round(n / total * 100) : 0; }
+  function percentValue(n, total) {
+    if (total <= 0 || n <= 0) return 0;
+    return Math.min(100, Math.max(0, n / total * 100));
+  }
+  function formatPercent(n, total) {
+    const p = percentValue(n, total);
+    if (p === 0) return '0%';
+    if (p < 0.1) return '<0.1%';
+    if (p >= 99.95 && p < 100) return '>99.9%';
+    if (p < 100) return `${p.toFixed(1).replace(/\.0$/, '')}%`;
+    return '100%';
+  }
   function summaryRows() {
     const { start } = periodRange();
     if (state.view === 'week') {
@@ -1193,6 +1849,7 @@
   function setView(view) {
     state.view = view;
     editingId = null;
+    closeEditSheet();
     closeForm();
     persistState();
     render();
@@ -1208,12 +1865,14 @@
     if (state.view === 'month') setSelectedDate(localDateKey(addMonths(d, delta)));
     if (state.view === 'year') setSelectedDate(localDateKey(addYears(d, delta)));
     editingId = null;
+    closeEditSheet();
     closeForm();
     render();
   }
   function goToday() {
     setSelectedDate(todayStr());
     editingId = null;
+    closeEditSheet();
     closeForm();
     render();
   }
@@ -1221,6 +1880,7 @@
     state.view = view;
     setSelectedDate(dateKey);
     editingId = null;
+    closeEditSheet();
     closeForm();
     render();
   }
@@ -1230,7 +1890,7 @@
     renderChrome();
     if (state.view === 'day') {
       const day = computeDay();
-      renderRuler(day.totals, day.timeline.length);
+      renderRuler(day.totals, day.timeline.length || day.totals.total);
       renderTimeline(day.timeline);
       if (editingId) {
         const entry = load().entries.find(e => e.id === editingId);
@@ -1278,21 +1938,30 @@
       el.innerHTML = `<p style="color:var(--muted);font-size:13px">${state.view === 'day' ? '这一天还没有记录' : '这个范围还没有可统计记录'}</p>`;
       return;
     }
-    const jp = percent(totals.job, totals.total);
-    const op = percent(totals.other, totals.total);
-    const up = Math.max(0, 100 - jp - op);
+    const jp = formatPercent(totals.job, totals.total);
+    const op = formatPercent(totals.other, totals.total);
+    const up = formatPercent(totals.unrecorded, totals.total);
     el.innerHTML = `
       <div class="ruler-bar">
-        <div style="flex:${jp};background:var(--accent)"></div>
-        <div style="flex:${op};background:var(--green)"></div>
-        <div style="flex:${up};background:var(--track)"></div>
+        <div style="flex:${totals.job};background:var(--accent)"></div>
+        <div style="flex:${totals.other};background:var(--green)"></div>
+        <div style="flex:${totals.unrecorded};background:var(--track)"></div>
       </div>
       <div class="ruler-text">
-        <span><span class="dot" style="background:var(--accent)"></span>求职推进 ${jp}%</span>
-        <span><span class="dot" style="background:var(--green)"></span>其他 ${op}%</span>
-        <span><span class="dot" style="background:var(--track)"></span>未记录 ${up}%</span>
+        <span><span class="dot" style="background:var(--accent)"></span>求职推进 ${jp}</span>
+        <span><span class="dot" style="background:var(--green)"></span>其他 ${op}</span>
+        <span><span class="dot" style="background:var(--track)"></span>未记录 ${up}</span>
+        ${totals.pending ? `<span>待确认 ${fmtMins(totals.pending)}</span>` : ''}
         <span>${fmtMins(totals.total)}</span>
       </div>`;
+  }
+  function timelineDurationLabel(mins, isOngoing, unrecorded, pendingConfirm) {
+    if (pendingConfirm) return isOngoing ? `待确认 · 进行中 · ${fmtMins(mins)}` : `待确认 · ${fmtMins(mins)}`;
+    if (unrecorded) return isOngoing ? '未记录（进行中）' : '未记录';
+    return isOngoing ? `${fmtMins(mins)}（进行中）` : fmtMins(mins);
+  }
+  function confirmSegmentLabel(startTs, endTs) {
+    return normalizeTimestamp(startTs) && normalizeTimestamp(endTs) ? `确认 ${hhmm(startTs)}-${hhmm(endTs)}` : '确认这段';
   }
   function renderTimeline(items) {
     const el = document.getElementById('timeline');
@@ -1300,19 +1969,20 @@
       el.innerHTML = '<div class="empty-tip">点击上方「+ 记一条」开始记录，或切换日期查看历史。</div>';
       return;
     }
-    el.innerHTML = [...items].reverse().map(({ e, mins, isLast, unrecorded, tag }) => {
+    el.innerHTML = [...items].reverse().map(({ e, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs }) => {
       if (editingId === e.id) return renderEditForm(e);
       const tagClass = tag === '求职推进' ? '' : ' e-tag-g';
-      const durStr = isLast
-        ? (unrecorded ? '未记录' : fmtMins(mins) + '（进行中）')
-        : (unrecorded ? '未记录' : fmtMins(mins));
-      return `<div class="entry" data-id="${esc(e.id)}">
+      const entryClass = sheetEditId === e.id ? 'entry sheet-editing' : 'entry';
+      const durStr = timelineDurationLabel(mins, isOngoing, unrecorded, pendingConfirm);
+      const confirmText = confirmSegmentLabel(e.ts, endTs);
+      return `<div class="${entryClass}" data-id="${esc(e.id)}">
         <div class="e-body">
           <div class="e-time">${hhmm(e.ts)}</div>
           <div class="e-what">${esc(e.what)}</div>
           <div class="e-meta">
             ${tag ? `<span class="e-tag${tagClass}">#${esc(tag)}</span>` : ''}
             <span class="e-dur">${durStr}</span>
+            ${confirmable ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" data-tip="确认后按这个标签统计；相邻时间变化会自动失效。" aria-label="${esc(confirmText)}">${esc(confirmText)}</button>` : ''}
           </div>
         </div>
         <div class="e-btns">
@@ -1326,23 +1996,24 @@
     const el = document.getElementById('timeline');
     const rows = summaryRows().map(row => {
       const totals = summarizeRange(row.rangeStart, row.rangeEnd, { clipToFirst: true });
-      const jp = percent(totals.job, totals.total);
-      const op = percent(totals.other, totals.total);
-      const up = totals.total ? Math.max(0, 100 - jp - op) : 0;
+      const jp = formatPercent(totals.job, totals.total);
+      const op = formatPercent(totals.other, totals.total);
+      const up = formatPercent(totals.unrecorded, totals.total);
       return `<button class="sum-row" type="button" data-action="drill" data-date="${esc(row.key)}" data-view="${esc(row.targetView)}" data-tip="打开这一段的明细视图。" aria-label="打开 ${esc(row.label)} 明细">
         <div class="sum-top">
           <span class="sum-name">${esc(row.label)}</span>
           <span class="sum-total">${totals.total ? fmtMins(totals.total) : '无记录'}</span>
         </div>
         <div class="ruler-bar" style="margin-bottom:8px">
-          <div style="flex:${jp};background:var(--accent)"></div>
-          <div style="flex:${op};background:var(--green)"></div>
-          <div style="flex:${up};background:var(--track)"></div>
+          <div style="flex:${totals.job};background:var(--accent)"></div>
+          <div style="flex:${totals.other};background:var(--green)"></div>
+          <div style="flex:${totals.unrecorded};background:var(--track)"></div>
         </div>
         <div class="sum-meta">
-          <span>求职 ${jp}%</span>
-          <span>其他 ${op}%</span>
-          <span>未记录 ${up}%</span>
+          <span>求职 ${jp}</span>
+          <span>其他 ${op}</span>
+          <span>未记录 ${up}</span>
+          ${totals.pending ? `<span>待确认 ${fmtMins(totals.pending)}</span>` : ''}
         </div>
       </button>`;
     }).join('');
@@ -1378,6 +2049,45 @@
         </div>
       </div>
     </div>`;
+  }
+  function renderEditSheet(e) {
+    const tag = (e.tags || [])[0] || '';
+    const isSeed = SEEDS.includes(tag);
+    const chips = SEEDS.map(t =>
+      `<button class="chip${t === tag ? ' sel' : ''}" type="button" data-action="pick-edit-tag" data-tag="${esc(t)}" aria-label="选择标签：${esc(t)}">${esc(t)}</button>`
+    ).join('');
+    return `
+      <div class="edit-sheet-head">
+        <div class="edit-sheet-summary">
+          <div class="edit-sheet-title" id="edit-sheet-title">${hhmm(e.ts)}${tag ? ` · #${esc(tag)}` : ''}</div>
+          <div class="edit-sheet-what">${esc(e.what) || '未填写'}</div>
+        </div>
+        <div class="edit-sheet-actions">
+          <button class="icon-btn cancel-btn" type="button" data-action="cancel-edit" data-tip="取消编辑" aria-label="取消编辑">${iconSvg('undo')}</button>
+          <button class="icon-btn save-btn" type="button" data-action="commit-edit" data-id="${esc(e.id)}" data-tip="保存修改" aria-label="保存修改">${iconSvg('check')}</button>
+        </div>
+      </div>
+      <div class="edit-sheet-body">
+        <div class="fl">
+          <div class="fl-label">做了什么</div>
+          <input type="text" class="inp edit-what-input" data-role="edit-what" value="${esc(e.what)}" placeholder="做了什么">
+        </div>
+        <div class="fl">
+          <div class="fl-label">标签</div>
+          <div class="chips" data-role="edit-chips">${chips}</div>
+        </div>
+        <div class="fl">
+          <div class="fl-label">自定义标签</div>
+          <input type="text" class="inp edit-tag-input" data-role="edit-custom-tag" value="${isSeed ? '' : esc(tag)}" placeholder="自定义标签">
+        </div>
+        <div class="fl">
+          <input type="hidden" data-role="edit-ts" value="${esc(e.ts)}">
+          <button class="time-toggle" type="button" data-action="toggle-edit-time" aria-expanded="false">修改时间</button>
+          <div class="time-collapse" data-role="edit-time-section" hidden>
+            <div data-role="edit-wheel"></div>
+          </div>
+        </div>
+      </div>`;
   }
 
   // --- Form ---
@@ -1415,8 +2125,15 @@
     document.getElementById('form-ctag').value = '';
   }
   function saveEntry() {
+    const timeScope = document.getElementById('form-wheel-mount');
     const checked = validateTs(document.getElementById('form-ts').value);
-    if (!checked.ok) { alert(checked.msg); return; }
+    if (!checked.ok) {
+      setTimeInputError(timeScope, checked.msg);
+      const focusEl = timeScope.querySelector('[data-role="text"], [data-role="date"]');
+      if (focusEl) focusEl.focus();
+      return;
+    }
+    setTimeInputError(timeScope, '');
     const what = document.getElementById('form-what').value.trim();
     if (!what) { document.getElementById('form-what').focus(); return; }
     const ctag = document.getElementById('form-ctag').value.trim();
@@ -1431,17 +2148,78 @@
 
   // --- Edit ---
   function getEditingBox(id = editingId) {
-    return Array.from(document.querySelectorAll('.entry.editing'))
+    return Array.from(document.querySelectorAll('.entry.editing, .edit-sheet-panel'))
       .find(el => el.dataset.id === String(id));
   }
+  function useEditSheet() {
+    return window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 720;
+  }
+  function lockBodyForSheet() {
+    sheetScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${sheetScrollY}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+    document.body.classList.add('sheet-open');
+  }
+  function unlockBodyForSheet() {
+    document.body.classList.remove('sheet-open');
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    window.scrollTo(0, sheetScrollY);
+  }
+  function openEditSheet(id) {
+    const entry = load().entries.find(e => e.id === id);
+    if (!entry) return;
+    editingId = null;
+    sheetEditId = id;
+    sheetTimeMounted = false;
+    closeForm();
+    render();
+    const sheet = document.getElementById('edit-sheet');
+    const panel = sheet.querySelector('.edit-sheet-panel');
+    panel.dataset.id = id;
+    panel.innerHTML = renderEditSheet(entry);
+    sheet.hidden = false;
+    lockBodyForSheet();
+  }
+  function closeEditSheet() {
+    const sheet = document.getElementById('edit-sheet');
+    const wasOpen = sheet && !sheet.hidden;
+    if (sheet) {
+      sheet.hidden = true;
+      const panel = sheet.querySelector('.edit-sheet-panel');
+      if (panel) {
+        panel.innerHTML = '';
+        delete panel.dataset.id;
+      }
+    }
+    sheetEditId = null;
+    sheetTimeMounted = false;
+    if (wasOpen) unlockBodyForSheet();
+  }
   function startEdit(id) {
+    if (useEditSheet()) {
+      openEditSheet(id);
+      return;
+    }
+    closeEditSheet();
     editingId = id;
     closeForm();
     render();
   }
-  function cancelEdit() { editingId = null; render(); }
+  function cancelEdit() {
+    const changed = Boolean(editingId || sheetEditId);
+    closeEditSheet();
+    editingId = null;
+    if (changed) render();
+  }
   function pickEditTag(el) {
-    const box = el.closest('.entry.editing');
+    const box = el.closest('.entry.editing, .edit-sheet-panel');
     const chipBox = box ? box.querySelector('[data-role="edit-chips"]') : null;
     if (!chipBox) return;
     const wasSelected = el.classList.contains('sel');
@@ -1451,6 +2229,24 @@
     const custom = box.querySelector('[data-role="edit-custom-tag"]');
     if (custom) custom.value = '';
   }
+  function toggleEditTime(el) {
+    const box = el.closest('.entry.editing, .edit-sheet-panel');
+    if (!box) return;
+    const section = box.querySelector('[data-role="edit-time-section"]');
+    const mountEl = box.querySelector('[data-role="edit-wheel"]');
+    const tsEl = box.querySelector('[data-role="edit-ts"]');
+    if (!section || !mountEl || !tsEl) return;
+    const willOpen = section.hidden;
+    section.hidden = !willOpen;
+    el.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    el.textContent = willOpen ? '收起时间' : '修改时间';
+    if (willOpen && (!sheetTimeMounted || box.classList.contains('entry'))) {
+      mountTimePicker(mountEl, tsEl.value, v => {
+        tsEl.value = v;
+      });
+      sheetTimeMounted = true;
+    }
+  }
   function commitEdit(id) {
     const box = getEditingBox(id);
     if (!box) return;
@@ -1458,8 +2254,15 @@
     const whatEl = box.querySelector('[data-role="edit-what"]');
     const chipBox = box.querySelector('[data-role="edit-chips"]');
     const customEl = box.querySelector('[data-role="edit-custom-tag"]');
+    const timeScope = box.querySelector('[data-role="edit-wheel"]') || box;
     const checked = validateTs(tsEl ? tsEl.value : '');
-    if (!checked.ok) { alert(checked.msg); return; }
+    if (!checked.ok) {
+      setTimeInputError(timeScope, checked.msg);
+      const focusEl = timeScope.querySelector('[data-role="text"], [data-role="date"]');
+      if (focusEl) focusEl.focus();
+      return;
+    }
+    setTimeInputError(timeScope, '');
     const what = whatEl ? whatEl.value.trim() : '';
     if (!what) { if (whatEl) whatEl.focus(); return; }
     const sel = chipBox ? chipBox.querySelector('.chip.sel') : null;
@@ -1469,7 +2272,39 @@
     const entry = d.entries.find(e => e.id === id);
     if (entry) { entry.ts = checked.ts; entry.what = what; entry.tags = [tag]; save(d); }
     setSelectedDate(checked.ts.slice(0, 10));
+    closeEditSheet();
     editingId = null;
+    render();
+  }
+  function confirmSegmentInData(d, id, endTs) {
+    const entries = sortedEntriesFrom(d && d.entries);
+    const index = entries.findIndex(e => e.id === id);
+    const entry = entries[index];
+    const next = entries[index + 1];
+    if (!entry || !next || next.ts !== endTs) {
+      return { ok: false, reason: 'stale' };
+    }
+    const tag = primaryTag(entry);
+    const rawMins = minsBetweenDates(new Date(entry.ts), new Date(next.ts));
+    if (!isKnownTag(tag) || rawMins <= GAP) {
+      return { ok: false, reason: 'not-required' };
+    }
+    const stored = (d.entries || []).find(e => e.id === id);
+    if (!stored) return { ok: false, reason: 'missing' };
+    stored.longConfirm = { startTs: stored.ts, endTs };
+    return { ok: true, entry: stored };
+  }
+  function confirmSegment(id, endTs) {
+    const d = load();
+    const result = confirmSegmentInData(d, id, endTs);
+    if (!result.ok) {
+      if (result.reason === 'stale') {
+        alert('这段时间已经变化，请重新查看后再确认。');
+      }
+      render();
+      return;
+    }
+    save(d);
     render();
   }
 
@@ -1480,6 +2315,7 @@
     d.entries = d.entries.filter(e => e.id !== id);
     save(d);
     if (editingId === id) editingId = null;
+    if (sheetEditId === id) closeEditSheet();
     render();
   }
 
@@ -1493,9 +2329,9 @@
     return summarizeRange(start, end, { clipToFirst: true });
   }
   function statsParts(totals) {
-    const jp = percent(totals.job, totals.total);
-    const op = percent(totals.other, totals.total);
-    const up = totals.total ? Math.max(0, 100 - jp - op) : 0;
+    const jp = formatPercent(totals.job, totals.total);
+    const op = formatPercent(totals.other, totals.total);
+    const up = formatPercent(totals.unrecorded, totals.total);
     return { jp, op, up };
   }
   function dataDateRange() {
@@ -1503,21 +2339,22 @@
     if (!entries.length) return '无记录';
     return `${fmtTs(entries[0].ts)} - ${fmtTs(entries[entries.length - 1].ts)}`;
   }
-  function detailDurationLabel(mins, isLast, unrecorded) {
+  function detailDurationLabel(mins, isOngoing, unrecorded, pendingConfirm) {
     const label = fmtPlainMins(mins);
     const notes = [];
-    if (unrecorded) notes.push('未记录');
-    if (isLast && !unrecorded) notes.push('进行中');
+    if (pendingConfirm) notes.push('待确认');
+    else if (unrecorded) notes.push('未记录');
+    if (isOngoing) notes.push('进行中');
     return notes.length ? `${label}（${notes.join('，')}）` : label;
   }
   function currentViewDetailLines() {
     if (state.view === 'day') {
       const day = computeDay();
       if (!day.timeline.length) return ['- 无记录'];
-      return day.timeline.map(({ e, mins, isLast, unrecorded, tag }) => {
+      return day.timeline.map(({ e, mins, isOngoing, unrecorded, pendingConfirm, tag }) => {
         const safeWhat = mdInline(e.what) || '未填写';
         const safeTag = mdInline(tag || '未知');
-        return `- ${hhmm(e.ts)} | ${detailDurationLabel(mins, isLast, unrecorded)} | ${safeWhat} | #${safeTag}`;
+        return `- ${hhmm(e.ts)} | ${detailDurationLabel(mins, isOngoing, unrecorded, pendingConfirm)} | ${safeWhat} | #${safeTag}`;
       });
     }
     const rows = summaryRows();
@@ -1526,7 +2363,8 @@
       const totals = summarizeRange(row.rangeStart, row.rangeEnd, { clipToFirst: true });
       const { jp, op, up } = statsParts(totals);
       const totalText = totals.total ? fmtMins(totals.total) : '无记录';
-      return `- ${row.label}: ${totalText}；求职 ${jp}% / 其他 ${op}% / 未记录 ${up}%`;
+      const pendingText = totals.pending ? ` / 待确认 ${fmtPlainMins(totals.pending)}` : '';
+      return `- ${row.label}: ${totalText}；求职 ${jp} / 其他 ${op} / 未记录 ${up}${pendingText}`;
     });
   }
   function buildCurrentViewSummaryMarkdown() {
@@ -1545,9 +2383,10 @@
       '',
       '## 当前视图统计比例',
       `- 总计：${fmtPlainMins(totals.total)}`,
-      `- 求职推进：${jp}%（${fmtPlainMins(totals.job)}）`,
-      `- 其他：${op}%（${fmtPlainMins(totals.other)}）`,
-      `- 未记录：${up}%（${fmtPlainMins(totals.unrecorded)}）`,
+      `- 求职推进：${jp}（${fmtPlainMins(totals.job)}）`,
+      `- 其他：${op}（${fmtPlainMins(totals.other)}）`,
+      `- 未记录：${up}（${fmtPlainMins(totals.unrecorded)}）`,
+      `- 待确认：${fmtPlainMins(totals.pending || 0)}`,
       '',
       '## 当前视图明细',
       ...currentViewDetailLines(),
@@ -1662,49 +2501,103 @@
     navigator.share({ title: '时间尺备份', text: json }).catch(() => {});
   }
 
-  // --- Actions ---
-  document.addEventListener('click', e => {
-    const el = e.target.closest('[data-action]');
-    if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
-    const action = el.dataset.action;
-    if (action === 'theme') setThemePref(el.dataset.theme);
-    if (action === 'view') setView(el.dataset.view);
-    if (action === 'shift-period') shiftPeriod(Number(el.dataset.delta || 0));
-    if (action === 'today') goToday();
-    if (action === 'open-form') openForm();
-    if (action === 'pick-form-tag') pickTag(el);
-    if (action === 'save-entry') saveEntry();
-    if (action === 'close-form') closeForm();
-    if (action === 'start-edit') startEdit(el.dataset.id);
-    if (action === 'pick-edit-tag') pickEditTag(el);
-    if (action === 'commit-edit') commitEdit(el.dataset.id || editingId);
-    if (action === 'cancel-edit') cancelEdit();
-    if (action === 'delete-entry') delEntry(el.dataset.id);
-    if (action === 'drill') drill(el.dataset.date, el.dataset.view);
-    if (action === 'copy-summary') copyCurrentViewSummary();
-    if (action === 'copy-json') copyJSON();
-    if (action === 'download-json') downloadJSON();
-    if (action === 'import-json') importJSON();
-    if (action === 'share-json') shareJSON();
-  });
-  document.getElementById('import-file').addEventListener('change', handleImport);
-
-  // --- Keyboard ---
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { cancelEdit(); closeForm(); }
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      if (editingId) { commitEdit(editingId); return; }
-      if (document.getElementById('form-box').style.display === 'block') saveEntry();
+  // --- App update prompt ---
+  function showUpdatePrompt(registration) {
+    pendingUpdateRegistration = registration;
+    const banner = document.getElementById('update-banner');
+    if (banner) banner.hidden = false;
+  }
+  function applyUpdate() {
+    const worker = pendingUpdateRegistration && pendingUpdateRegistration.waiting;
+    if (!worker) {
+      window.location.reload();
+      return;
     }
-  });
+    updateReloading = true;
+    worker.postMessage({ type: 'SKIP_WAITING' });
+  }
+
+  // --- Test API ---
+  function exposeTestApi() {
+    window.__timelogTest = {
+      GAP,
+      addBucket,
+      buildRangeSegmentsFromEntries,
+      classifySegment,
+      confirmSegmentInData,
+      emptyTotals,
+      formatPercent,
+      isKnownTag,
+      isSegmentConfirmed,
+      minsBetweenDates,
+      normalizeTimestamp,
+      percentValue,
+      primaryTag,
+      sortedEntriesFrom,
+      summarizeEntries
+    };
+  }
+
+  // --- Actions ---
+  function registerActions() {
+    document.addEventListener('click', e => {
+      const el = e.target.closest('[data-action]');
+      if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
+      const action = el.dataset.action;
+      if (action === 'theme') setThemePref(el.dataset.theme);
+      if (action === 'view') setView(el.dataset.view);
+      if (action === 'shift-period') shiftPeriod(Number(el.dataset.delta || 0));
+      if (action === 'today') goToday();
+      if (action === 'open-form') openForm();
+      if (action === 'pick-form-tag') pickTag(el);
+      if (action === 'save-entry') saveEntry();
+      if (action === 'close-form') closeForm();
+      if (action === 'start-edit') startEdit(el.dataset.id);
+      if (action === 'pick-edit-tag') pickEditTag(el);
+      if (action === 'toggle-edit-time') toggleEditTime(el);
+      if (action === 'commit-edit') commitEdit(el.dataset.id || editingId);
+      if (action === 'cancel-edit') cancelEdit();
+      if (action === 'confirm-segment') confirmSegment(el.dataset.id, el.dataset.end);
+      if (action === 'delete-entry') delEntry(el.dataset.id);
+      if (action === 'drill') drill(el.dataset.date, el.dataset.view);
+      if (action === 'copy-summary') copyCurrentViewSummary();
+      if (action === 'copy-json') copyJSON();
+      if (action === 'download-json') downloadJSON();
+      if (action === 'import-json') importJSON();
+      if (action === 'share-json') shareJSON();
+      if (action === 'update-app') applyUpdate();
+    });
+    document.getElementById('import-file').addEventListener('change', handleImport);
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { cancelEdit(); closeForm(); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        if (editingId || sheetEditId) { commitEdit(editingId || sheetEditId); return; }
+        if (document.getElementById('form-box').style.display === 'block') saveEntry();
+      }
+    });
+  }
 
   // --- Register SW ---
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (updateReloading) window.location.reload();
+    });
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdatePrompt(reg);
+      reg.addEventListener('updatefound', () => {
+        const worker = reg.installing;
+        if (!worker) return;
+        worker.addEventListener('statechange', () => {
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdatePrompt(reg);
+        });
+      });
+    }).catch(() => {});
   }
 
   // --- Init ---
-  (function init() {
+  function init() {
     const today = todayStr();
     const lastOpen = localStorage.getItem(OPEN_DATE_KEY);
     const savedView = localStorage.getItem(VIEW_KEY);
@@ -1720,9 +2613,17 @@
     document.getElementById('hdr-date').textContent = dateLabel(new Date());
     render();
     setInterval(() => {
-      if (!editingId && !isFormOpen()) render();
+      if (!editingId && !sheetEditId && !isFormOpen()) render();
     }, 60000);
-  })();
+  }
+
+  if (window.__TIMELOG_TEST__) {
+    exposeTestApi();
+  } else {
+    registerActions();
+    registerServiceWorker();
+    init();
+  }
 </script>
 </body>
 </html>

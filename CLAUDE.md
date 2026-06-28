@@ -9,13 +9,13 @@
 - `manifest.webmanifest`：PWA 清单
 - `icon.svg` 与 `icons/*.png`：运行时图标资产
 
-允许的开发期工具只有 `scripts/project_audit.py`。它使用 Python 标准库，不属于运行时依赖，也不引入构建流程。
+允许的开发期工具只有 `scripts/project_audit.py` 和 `scripts/confirm_logic_smoke.py`。它们使用 Python 标准库；确认逻辑 smoke 会调用本机 `node` 执行 `index.html` 的真实内联 JS 测试入口。二者不属于运行时依赖，也不引入 npm、package.json 或构建流程。
 
 **铁律：无运行时依赖 / 无构建 / 不拆分应用代码。** 不引入 npm、打包器、框架、账号、云同步或后端。
 
 ## 当前版本
 
-当前版本：`timelog-v8` / manifest `version: "8"`。
+当前版本：`timelog-v12` / manifest `version: "12"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -29,6 +29,7 @@
 
 - 禁止 `title=`，避免原生 tooltip 与自定义 tooltip 叠加。
 - 可见文字按钮不强制 tooltip；图标按钮必须同时有短 `data-tip` 和 `aria-label`。
+- tooltip hover 延迟 800ms 后显示，移开立即隐藏；`focus-visible` 必须无延迟显示；触屏不能靠 hover 触发 tooltip。
 - 图标语义固定：编辑=铅笔，保存=对勾，删除=垃圾桶，取消=回退/撤销箭头。
 - 删除/取消禁用 x、`×`、`✕`，包括图标定义、按钮文本和渲染模板。
 - 时间轴记录操作和编辑态保存/取消使用图标；底部备份栏、添加表单按钮继续用文字。
@@ -37,10 +38,11 @@
 
 ## 隐私红线
 
-- 公开仓库不得含真实记录/截图/具体个人线索。
+- 公开仓库不得含真实记录/真实截图/具体个人线索。
 - 不提交导出的 `timelog-*.json` 或真实备份 JSON。
 - 只发布 `time-logger/` 独立仓库，不发布父目录、`toolkit/`、`archive/` 或本机路径。
 - README 和使用文档只能描述边界与用法，不写真实公司、个人进度或截图线索。
+- README 演示图只能来自 `docs/assets/` 的固定 demo 数据 PNG，不得用真实 `localStorage` 或真实个人记录截图。
 
 ## 代码约定
 
@@ -48,6 +50,8 @@
 - 日期值统一 `YYYY-MM-DDTHH:mm`。
 - 颜色走 CSS 变量；按钮白字 `#fff` 可保留。
 - 尺子未记录段用 `--track`，不用 `--border`。
+- 统计以分钟数为权威值：`job` / `other` / `unrecorded` / `pending` / `total` 先累加分钟；百分比只用于展示，不反向参与统计，不强行凑满 100%。
+- 超过 3h 的明确标签段确认只绑定 `longConfirm.startTs` 和 `longConfirm.endTs`；相邻时间变化或中间补录自动失效，改成另一个明确标签不自动失效。
 - 数据只存在 `localStorage['timelog.v1']`。
 - 复制/下载/导入/分享都在浏览器本地完成，不上传。
 
@@ -68,17 +72,18 @@
 
 ```bash
 python3 scripts/project_audit.py
+python3 scripts/confirm_logic_smoke.py
 git diff --check
 ```
 
 浏览器手动检查：
 
-1. 桌面 hover/focus 图标按钮只出现自定义 tooltip，不出现原生 title。
+1. 桌面鼠标 hover 图标按钮约 800ms 后只出现自定义 tooltip，移开立即隐藏；键盘 Tab 到图标按钮时 tooltip 立即出现，不出现原生 title。
 2. 编辑、删除、保存、取消均为图标；取消不是 x，删除不是 x。
 3. 移动端新增/编辑输入不自动放大；打开新增表单不自动聚焦。
 4. 新增或编辑时，定时刷新不打断输入。
 5. 下载、导入、分享、摘要、复制仍保持文字入口并可用。
-6. PWA 更新链路：改 `index.html` 后升 CACHE 号，刷新两次能看到新版。
+6. PWA 更新链路：改 `index.html` 后升 CACHE 号；旧页面应出现“更新应用”，点击后加载新版，本机 `localStorage['timelog.v1']` 保留。
 
 ## CHANGELOG
 
@@ -92,3 +97,7 @@ git diff --check
 | v6 | 2026-06-28 | 自定义 tooltip 不再叠加原生 title；无 Web Share 时隐藏分享按钮 |
 | v7 | 2026-06-28 | PWA PNG/maskable/Apple 图标资产、移动端 16px 输入、表单不自动聚焦、编辑态刷新保护 |
 | v8 | 2026-06-28 | 禁用 `title=`，记录操作图标语义收敛，取消改为撤销箭头，补充文档红线和 `scripts/project_audit.py` |
+| v9 | 2026-06-28 | 超长段待确认统计、移动端编辑抽屉、PWA 更新提示、README 固定演示截图 |
+| v10 | 2026-06-28 | 超长段逐段确认文案、桌面原生日期/时间输入、无效时间内联提示 |
+| v11 | 2026-06-28 | tooltip hover 延迟、确认逻辑 smoke、分钟统计口径和审计规则收敛 |
+| v12 | 2026-06-28 | tooltip hover 延迟 800ms、桌面自定义日期/时间 popover（保留精确输入文本框）、审计延迟/版本口径常量化 |

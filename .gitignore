@@ -6,6 +6,7 @@ timelog-*.json
 # Screenshots and local review artifacts can expose real records.
 *.png
 !icons/*.png
+!docs/assets/*.png
 *.jpg
 *.jpeg
 *.webp
