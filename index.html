@@ -1,0 +1,1634 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="时间尺">
+  <meta name="theme-color" content="#0d0d14" id="meta-theme-color">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <title>时间尺</title>
+  <style>
+    /* === 暗色（默认）=== */
+    :root {
+      --bg: #0d0d14;
+      --card: #1a1a28;
+      --input: #242438;
+      --border: #2d2d46;
+      --track: #2d2d46;
+      --accent: #7c6cfa;
+      --accent-bg: rgba(124,108,250,0.12);
+      --green: #4fa87a;
+      --green-bg: rgba(79,168,122,0.12);
+      --text: #e0e0ef;
+      --muted: #7878a0;
+      --danger: #e05c6c;
+    }
+    /* === 亮色（跟随系统）=== */
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f7f7fa;
+        --card: #ffffff;
+        --input: #eef0f4;
+        --border: #d8dae2;
+        --track: #c9ccd6;
+        --accent: #6c5cf0;
+        --accent-bg: rgba(108,92,240,0.12);
+        --green: #3e9e72;
+        --green-bg: rgba(62,158,114,0.12);
+        --text: #1c1c28;
+        --muted: #6b6b85;
+        --danger: #d6485a;
+      }
+    }
+    /* === 手动覆盖（优先级高于 media query）=== */
+    html[data-theme="light"] {
+      --bg: #f7f7fa;
+      --card: #ffffff;
+      --input: #eef0f4;
+      --border: #d8dae2;
+      --track: #c9ccd6;
+      --accent: #6c5cf0;
+      --accent-bg: rgba(108,92,240,0.12);
+      --green: #3e9e72;
+      --green-bg: rgba(62,158,114,0.12);
+      --text: #1c1c28;
+      --muted: #6b6b85;
+      --danger: #d6485a;
+    }
+    html[data-theme="dark"] {
+      --bg: #0d0d14;
+      --card: #1a1a28;
+      --input: #242438;
+      --border: #2d2d46;
+      --track: #2d2d46;
+      --accent: #7c6cfa;
+      --accent-bg: rgba(124,108,250,0.12);
+      --green: #4fa87a;
+      --green-bg: rgba(79,168,122,0.12);
+      --text: #e0e0ef;
+      --muted: #7878a0;
+      --danger: #e05c6c;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, 'Helvetica Neue', system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      min-height: 100dvh;
+    }
+    .app {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 0 16px calc(72px + env(safe-area-inset-bottom));
+    }
+
+    /* Header */
+    .hdr {
+      padding: 20px 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .hdr h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+    .hdr-date { font-size: 13px; color: var(--muted); }
+    .seg {
+      display: inline-flex;
+      align-items: center;
+      background: var(--input);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 2px;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .seg button {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1;
+      font-family: inherit;
+      padding: 7px 9px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .seg button.active {
+      background: var(--card);
+      color: var(--text);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    }
+    .theme-seg { margin-left: auto; }
+    /* Add button */
+    .add-btn {
+      width: 100%;
+      padding: 15px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 12px;
+      letter-spacing: 0.3px;
+    }
+    .add-btn:active { opacity: 0.8; }
+    .add-btn[hidden] { display: none; }
+
+    /* Unified command tooltip */
+    button[data-tip] { position: relative; }
+    @media (hover: hover) and (pointer: fine) {
+      button[data-tip]::after {
+        content: attr(data-tip);
+        position: absolute;
+        left: 50%;
+        bottom: calc(100% + 8px);
+        transform: translateX(-50%);
+        z-index: 40;
+        width: max-content;
+        max-width: min(260px, calc(100vw - 32px));
+        padding: 7px 9px;
+        border-radius: 8px;
+        background: var(--text);
+        color: var(--bg);
+        font-size: 12px;
+        line-height: 1.35;
+        font-weight: 500;
+        white-space: normal;
+        text-align: left;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.12s ease;
+      }
+      button[data-tip]::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: calc(100% + 3px);
+        transform: translateX(-50%);
+        z-index: 41;
+        border: 5px solid transparent;
+        border-top-color: var(--text);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.12s ease;
+      }
+      button[data-tip][data-tip-pos="bottom"]::after {
+        top: calc(100% + 8px);
+        bottom: auto;
+      }
+      button[data-tip][data-tip-pos="bottom"]::before {
+        top: calc(100% + 3px);
+        bottom: auto;
+        border-top-color: transparent;
+        border-bottom-color: var(--text);
+      }
+      button[data-tip]:is(:hover, :focus-visible)::after,
+      button[data-tip]:is(:hover, :focus-visible)::before {
+        opacity: 1;
+      }
+    }
+
+    /* View controls */
+    .view-box {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .view-tabs { width: 100%; }
+    .view-tabs button { flex: 1; font-size: 13px; }
+    .date-nav {
+      display: grid;
+      grid-template-columns: 42px 1fr 42px 76px;
+      gap: 8px;
+      align-items: center;
+    }
+    .nav-btn {
+      height: 40px;
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .nav-btn:active { opacity: 0.75; }
+    .period-label {
+      min-width: 0;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 14px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 0 10px;
+    }
+
+    /* Form */
+    .form-box {
+      display: none;
+      background: var(--card);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .fl { margin-bottom: 11px; }
+    .fl-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .inp {
+      width: 100%;
+      background: var(--input);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 15px;
+      font-family: inherit;
+      padding: 10px 12px;
+      outline: none;
+    }
+    .inp:focus { border-color: var(--accent); }
+
+    /* Chips */
+    .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 7px; }
+    .chip {
+      padding: 6px 11px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .chip.sel {
+      background: var(--accent-bg);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Form actions */
+    .form-btns { display: flex; gap: 8px; margin-top: 4px; }
+    .btn-pri {
+      flex: 1;
+      padding: 12px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .btn-pri:active { opacity: 0.8; }
+    .btn-sec {
+      padding: 12px 16px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    /* Wheel picker */
+    .wheel-picker {
+      display: flex;
+      height: 200px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--input);
+      position: relative;
+    }
+    .wheel-col {
+      flex: 1;
+      overflow-y: scroll;
+      scroll-snap-type: y mandatory;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      outline: none;
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 28%, black 72%, transparent 100%);
+      mask-image: linear-gradient(to bottom, transparent 0%, black 28%, black 72%, transparent 100%);
+    }
+    .wheel-col::-webkit-scrollbar { display: none; }
+    .wheel-col-date { flex: 1.8; }
+    .wheel-item {
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      scroll-snap-align: center;
+      font-size: 14px;
+      color: var(--text);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+      padding: 0 4px;
+    }
+    .wheel-col-date .wheel-item { font-size: 12px; }
+    .wheel-divider {
+      width: 1px;
+      background: var(--border);
+      flex-shrink: 0;
+      align-self: stretch;
+    }
+    .wheel-highlight {
+      position: absolute;
+      left: 0; right: 0;
+      top: 50%;
+      height: 40px;
+      transform: translateY(-50%);
+      border-top: 1px solid var(--accent);
+      border-bottom: 1px solid var(--accent);
+      background: var(--accent-bg);
+      pointer-events: none;
+      z-index: 1;
+    }
+    .wheel-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 6px;
+    }
+    .wheel-now-btn {
+      background: transparent;
+      border: none;
+      color: var(--accent);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      padding: 4px 0;
+    }
+    /* Desktop datetime picker */
+    .dt-picker {
+      display: grid;
+      gap: 9px;
+    }
+    .dt-row {
+      display: grid;
+      grid-template-columns: 42px 1fr 42px 64px;
+      gap: 8px;
+      align-items: center;
+    }
+    .dt-date {
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--input);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 14px;
+      font-variant-numeric: tabular-nums;
+    }
+    .dt-time {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .dt-step {
+      display: grid;
+      grid-template-columns: 38px 1fr 38px;
+      gap: 6px;
+      align-items: center;
+    }
+    .dt-value {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--input);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Ruler */
+    .ruler {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .ruler-bar {
+      height: 7px;
+      border-radius: 4px;
+      background: var(--input);
+      display: flex;
+      overflow: hidden;
+      margin-bottom: 9px;
+      gap: 1px;
+    }
+    .ruler-bar div { transition: flex 0.3s; }
+    .ruler-text {
+      font-size: 13px;
+      color: var(--muted);
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .ruler-text span { display: flex; align-items: center; gap: 5px; }
+    .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* Timeline */
+    .tl-label {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .entry {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      border: 1px solid transparent;
+    }
+    .entry.editing { border-color: var(--accent); }
+    .e-body { flex: 1; min-width: 0; }
+    .e-time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
+    .e-what { font-size: 15px; color: var(--text); word-break: break-word; margin-bottom: 5px; }
+    .e-meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+    .e-tag {
+      font-size: 12px;
+      padding: 2px 9px;
+      border-radius: 10px;
+      background: var(--accent-bg);
+      color: var(--accent);
+    }
+    .e-tag-g { background: var(--green-bg); color: var(--green); }
+    .e-dur { font-size: 12px; color: var(--muted); }
+    .e-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+    .e-btns button {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      padding: 4px 6px;
+      border-radius: 6px;
+      min-width: 28px;
+      text-align: center;
+    }
+    .e-btns button:active { background: var(--input); }
+    .e-btns .dbtn { color: var(--danger); }
+
+    .empty-tip {
+      text-align: center;
+      color: var(--muted);
+      padding: 36px 0;
+      font-size: 14px;
+    }
+
+    /* Summary */
+    .summary-list {
+      display: grid;
+      gap: 8px;
+    }
+    .sum-row {
+      width: 100%;
+      background: var(--card);
+      border: 1px solid transparent;
+      border-radius: 12px;
+      color: var(--text);
+      padding: 12px 14px;
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .sum-row:active { border-color: var(--accent); }
+    .sum-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .sum-name { font-size: 15px; font-weight: 600; }
+    .sum-total { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .sum-meta {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    @media (max-width: 420px) {
+      .app { padding-left: 12px; padding-right: 12px; }
+      .hdr { flex-wrap: wrap; }
+      .theme-seg { margin-left: 0; width: 100%; }
+      .theme-seg button { flex: 1; }
+      .date-nav, .dt-row { grid-template-columns: 40px 1fr 40px 72px; }
+      .dt-time { grid-template-columns: 1fr; }
+    }
+
+    /* Footer */
+    .footer {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: 10px 16px;
+      padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    }
+    .footer-inner { max-width: 600px; margin: 0 auto; }
+    .footer-btns { display: flex; gap: 7px; }
+    .copy-btn {
+      flex: 1;
+      min-width: 0;
+      padding: 11px 4px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .copy-btn.copied { color: var(--accent); border-color: var(--accent); }
+    .copy-btn:active { opacity: 0.7; }
+    .copy-btn[hidden] { display: none; }
+    .copy-btn[aria-disabled="true"] {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .copy-btn[aria-disabled="true"]:active { opacity: 0.45; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="hdr">
+    <h1>时间尺</h1>
+    <span class="hdr-date" id="hdr-date"></span>
+    <div class="seg theme-seg" id="theme-seg" role="group" aria-label="主题">
+      <button type="button" data-action="theme" data-theme="auto" data-tip="跟随系统亮暗色设置。" data-tip-pos="bottom" aria-label="主题：自动">自动</button>
+      <button type="button" data-action="theme" data-theme="light" data-tip="切换到亮色主题。" data-tip-pos="bottom" aria-label="主题：亮色">亮色</button>
+      <button type="button" data-action="theme" data-theme="dark" data-tip="切换到暗色主题。" data-tip-pos="bottom" aria-label="主题：暗色">暗色</button>
+    </div>
+  </div>
+
+  <div class="view-box">
+    <div class="seg view-tabs" id="view-tabs" role="group" aria-label="视图">
+      <button type="button" data-action="view" data-view="day" data-tip="查看单日时间轴，可编辑记录。" data-tip-pos="bottom" aria-label="天视图">天</button>
+      <button type="button" data-action="view" data-view="week" data-tip="查看本周每日汇总，可下钻到某天。" data-tip-pos="bottom" aria-label="周视图">周</button>
+      <button type="button" data-action="view" data-view="month" data-tip="查看本月每日汇总，可下钻到某天。" data-tip-pos="bottom" aria-label="月视图">月</button>
+      <button type="button" data-action="view" data-view="year" data-tip="查看全年每月汇总，可下钻到某月。" data-tip-pos="bottom" aria-label="年视图">年</button>
+    </div>
+    <div class="date-nav">
+      <button class="nav-btn" type="button" data-action="shift-period" data-delta="-1" aria-label="上一段" data-tip="切到上一段。">‹</button>
+      <div class="period-label" id="period-label"></div>
+      <button class="nav-btn" type="button" data-action="shift-period" data-delta="1" aria-label="下一段" data-tip="切到下一段。">›</button>
+      <button class="nav-btn" id="today-btn" type="button" data-action="today" data-tip="回到包含今天的当前周期。">回到今天</button>
+    </div>
+  </div>
+
+  <button class="add-btn" id="add-btn" type="button" data-action="open-form" data-tip="打开表单，记录一条新的时间去向。" aria-label="记一条新的时间记录">+ 记一条</button>
+
+  <div class="form-box" id="form-box">
+    <div class="fl">
+      <div class="fl-label">时间（可改，补录用）</div>
+      <input type="hidden" id="form-ts">
+      <div id="form-wheel-mount"></div>
+    </div>
+    <div class="fl">
+      <div class="fl-label">做了什么</div>
+      <input type="text" class="inp" id="form-what" placeholder="写邮件 / 刷手机 / 准备面试…">
+    </div>
+    <div class="fl">
+      <div class="fl-label">标签</div>
+      <div class="chips" id="form-chips">
+        <button class="chip" type="button" data-action="pick-form-tag" data-tag="求职推进" aria-label="选择标签：求职推进" title="选择标签：求职推进">求职推进</button>
+        <button class="chip" type="button" data-action="pick-form-tag" data-tag="研究·学工具·逃避" aria-label="选择标签：研究、学工具、逃避" title="选择标签：研究·学工具·逃避">研究·学工具·逃避</button>
+        <button class="chip" type="button" data-action="pick-form-tag" data-tag="未知" aria-label="选择标签：未知" title="选择标签：未知">未知</button>
+        <button class="chip" type="button" data-action="pick-form-tag" data-tag="杂" aria-label="选择标签：杂" title="选择标签：杂">杂</button>
+      </div>
+      <input type="text" class="inp" id="form-ctag" placeholder="自定义标签（可选，留空用上面选的）" style="font-size:13px">
+    </div>
+    <div class="form-btns">
+      <button class="btn-pri" type="button" data-action="save-entry" data-tip="保存当前表单为一条记录。" aria-label="保存时间记录">记下来</button>
+      <button class="btn-sec" type="button" data-action="close-form" data-tip="关闭表单，不保存这次输入。" aria-label="取消新增记录">取消</button>
+    </div>
+  </div>
+
+  <div class="ruler" id="ruler">
+    <p style="color:var(--muted);font-size:13px">今天还没有记录</p>
+  </div>
+
+  <div>
+    <div class="tl-label" id="list-label">今日时间轴</div>
+    <div id="timeline"></div>
+  </div>
+</div>
+
+<div class="footer">
+  <div class="footer-inner">
+    <div class="footer-btns">
+      <button class="copy-btn" id="summary-btn" type="button" data-action="copy-summary" data-tip="复制当前视图 Markdown，包含生成时间、周期、统计比例和明细，可贴给 AI；不导出完整历史、不包含内部 id。" aria-label="复制当前视图摘要">摘要</button>
+      <button class="copy-btn" id="copy-btn" type="button" data-action="copy-json" data-tip="复制完整 JSON 备份到剪贴板，包含所有本机记录。" aria-label="复制完整 JSON 备份">复制</button>
+      <button class="copy-btn" type="button" data-action="download-json" data-tip="下载完整 JSON 备份文件，用于手动备份或迁移。" aria-label="下载 JSON 备份">下载</button>
+      <button class="copy-btn" type="button" data-action="import-json" data-tip="导入 JSON 备份，按 id 合并去重，不静默覆盖本机新增记录。" aria-label="导入 JSON 备份">导入</button>
+      <button class="copy-btn" id="share-btn" type="button" data-action="share-json" data-tip="打开系统分享面板，优先分享 JSON 文件。" aria-label="分享 JSON 备份">分享</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="import-file" accept="application/json" style="display:none">
+
+<script>
+  const KEY = 'timelog.v1';
+  const THEME_KEY = 'timelog.theme';
+  const VIEW_KEY = 'timelog.view';
+  const SELECTED_DATE_KEY = 'timelog.selectedDate';
+  const OPEN_DATE_KEY = 'timelog.openDate';
+  const GAP = 180;
+  const SEEDS = ['求职推进', '研究·学工具·逃避', '未知', '杂'];
+  const ITEM_H = 40;
+  const PAD = 80;
+  const DAYS_BACK = 90;
+  const DAYS_FWD = 7;
+
+  let editingId = null;
+  let formTag = '';
+  let state = { view: 'day', selectedDate: '' };
+
+  // --- Storage ---
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || { version: 1, entries: [] }; }
+    catch { return { version: 1, entries: [] }; }
+  }
+  function save(d) { localStorage.setItem(KEY, JSON.stringify(d)); }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  // --- Date utils ---
+  function p2(n) { return String(n).padStart(2, '0'); }
+  function localDateKey(d) {
+    return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+  }
+  function nowStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  }
+  function todayStr() { return localDateKey(new Date()); }
+  function hhmm(ts) {
+    const d = new Date(ts);
+    return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  }
+  function parseDateKey(key) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key || '');
+    if (!m) return null;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    if (d.getFullYear() !== Number(m[1]) || d.getMonth() !== Number(m[2]) - 1 || d.getDate() !== Number(m[3])) return null;
+    return d;
+  }
+  function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function addMonths(d, n) { const x = new Date(d); x.setMonth(x.getMonth() + n); return x; }
+  function addYears(d, n) { const x = new Date(d); x.setFullYear(x.getFullYear() + n); return x; }
+  function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function startOfWeek(d) {
+    const x = startOfDay(d);
+    const day = x.getDay() || 7;
+    x.setDate(x.getDate() - day + 1);
+    return x;
+  }
+  function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+  function startOfYear(d) { return new Date(d.getFullYear(), 0, 1); }
+  function clampEndToNow(end) {
+    const now = new Date();
+    return end > now ? now : end;
+  }
+  function minsBetweenDates(a, b) { return Math.max(0, (b - a) / 60000); }
+  function fmtMins(m) {
+    if (m < 1) return '<1min';
+    if (m < 60) return `~${Math.round(m)}min`;
+    const h = Math.floor(m / 60), rem = Math.round(m % 60);
+    return rem ? `~${h}h${rem}min` : `~${h}h`;
+  }
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function setButtonTip(el, text, ariaLabel) {
+    if (!el) return;
+    el.dataset.tip = text;
+    if (ariaLabel) el.setAttribute('aria-label', ariaLabel);
+  }
+  function mdInline(s) {
+    return String(s || '').replace(/\s+/g, ' ').trim().replace(/\|/g, '\\|');
+  }
+  function fmtPlainMins(m) {
+    return m > 0 ? fmtMins(m) : '0min';
+  }
+  function fmtDateTime(d) {
+    return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  }
+  function fmtTs(ts) {
+    const value = normalizeTimestamp(ts);
+    return value ? value.replace('T', ' ') : String(ts || '');
+  }
+  function normalizeTimestamp(raw) {
+    const value = String(raw || '').trim().replace('T', ' ');
+    const m = /^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/.exec(value);
+    if (!m) return '';
+    const y = Number(m[1]), mo = Number(m[2]), da = Number(m[3]), h = Number(m[4]), mi = Number(m[5]);
+    const d = new Date(y, mo - 1, da, h, mi);
+    if (d.getFullYear() !== y || d.getMonth() !== mo - 1 || d.getDate() !== da || d.getHours() !== h || d.getMinutes() !== mi) return '';
+    return `${y}-${p2(mo)}-${p2(da)}T${p2(h)}:${p2(mi)}`;
+  }
+  function validateTs(raw) {
+    const ts = normalizeTimestamp(raw);
+    if (!ts) return { ok: false, msg: '时间格式应为 YYYY-MM-DD HH:mm。' };
+    if (new Date(ts) > new Date(Date.now() + 5 * 60000)) return { ok: false, msg: '不能记录明显未来的时间。' };
+    return { ok: true, ts };
+  }
+  function defaultFormTs() {
+    const n = new Date();
+    const candidate = `${state.selectedDate || todayStr()}T${p2(n.getHours())}:${p2(n.getMinutes())}`;
+    return new Date(candidate) > new Date(Date.now() + 5 * 60000) ? nowStr() : candidate;
+  }
+  function dateLabel(d) {
+    return `${d.getFullYear()}/${p2(d.getMonth()+1)}/${p2(d.getDate())} 周${'日一二三四五六'[d.getDay()]}`;
+  }
+  function shortDateLabel(d) { return `${d.getMonth()+1}/${d.getDate()} 周${'日一二三四五六'[d.getDay()]}`; }
+  function periodRange(view = state.view, dateKey = state.selectedDate) {
+    const base = parseDateKey(dateKey) || new Date();
+    if (view === 'week') {
+      const start = startOfWeek(base);
+      return { start, end: addDays(start, 7) };
+    }
+    if (view === 'month') {
+      const start = startOfMonth(base);
+      return { start, end: addMonths(start, 1) };
+    }
+    if (view === 'year') {
+      const start = startOfYear(base);
+      return { start, end: addYears(start, 1) };
+    }
+    const start = startOfDay(base);
+    return { start, end: addDays(start, 1) };
+  }
+  function periodLabel() {
+    const { start, end } = periodRange();
+    const last = addDays(end, -1);
+    if (state.view === 'day') return dateLabel(start);
+    if (state.view === 'week') return `${dateLabel(start)} - ${p2(last.getMonth()+1)}/${p2(last.getDate())}`;
+    if (state.view === 'month') return `${start.getFullYear()}年${start.getMonth()+1}月`;
+    return `${start.getFullYear()}年`;
+  }
+  function persistState() {
+    localStorage.setItem(VIEW_KEY, state.view);
+    localStorage.setItem(SELECTED_DATE_KEY, state.selectedDate);
+  }
+
+  // --- Theme ---
+  function getSysPref() {
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  function applyTheme(pref) {
+    const html = document.documentElement;
+    if (pref === 'auto') {
+      html.removeAttribute('data-theme');
+    } else {
+      html.setAttribute('data-theme', pref);
+    }
+    const effective = pref === 'auto' ? getSysPref() : pref;
+    document.getElementById('meta-theme-color').setAttribute('content', effective === 'light' ? '#f7f7fa' : '#0d0d14');
+    document.querySelectorAll('#theme-seg button').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.theme === pref);
+    });
+  }
+  function setThemePref(pref) {
+    localStorage.setItem(THEME_KEY, pref);
+    applyTheme(pref);
+  }
+
+  // --- Wheel picker ---
+  function buildDateItems() {
+    const now = new Date();
+    const items = [];
+    for (let i = DAYS_BACK; i >= -DAYS_FWD; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const y = d.getFullYear(), mo = d.getMonth() + 1, da = d.getDate();
+      const dow = '日一二三四五六'[d.getDay()];
+      items.push({ val: `${y}-${p2(mo)}-${p2(da)}`, label: `${mo}月${da}日 周${dow}` });
+    }
+    return items;
+  }
+
+  function mountTimePicker(mountEl, initialValue, onChangeCb) {
+    const coarse = window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 720;
+    if (coarse) mountWheel(mountEl, initialValue, onChangeCb);
+    else mountDesktopTimePicker(mountEl, initialValue, onChangeCb);
+  }
+
+  function mountWheel(mountEl, initialValue, onChangeCb) {
+    const dateItems = buildDateItems();
+    const hourItems = Array.from({length: 24}, (_, i) => ({ val: p2(i), label: p2(i) }));
+    const minItems  = Array.from({length: 60}, (_, i) => ({ val: p2(i), label: p2(i) }));
+
+    const [datePart, timePart] = (initialValue || nowStr()).split('T');
+    const [initH, initM] = (timePart || '00:00').split(':').map(Number);
+    const initDateIdx = Math.max(0, dateItems.findIndex(x => x.val === datePart));
+
+    let selDate = initDateIdx, selH = initH, selM = initM;
+
+    function emit() {
+      onChangeCb(`${dateItems[selDate].val}T${p2(selH)}:${p2(selM)}`);
+    }
+
+    function makeCol(items, initIdx, onSelect, extraClass) {
+      const col = document.createElement('div');
+      col.className = 'wheel-col' + (extraClass ? ' ' + extraClass : '');
+      col.tabIndex = 0;
+
+      const inner = document.createElement('div');
+      inner.style.paddingTop = PAD + 'px';
+      inner.style.paddingBottom = PAD + 'px';
+
+      items.forEach((item, idx) => {
+        const el = document.createElement('div');
+        el.className = 'wheel-item';
+        el.textContent = item.label;
+        el.addEventListener('click', () => col.scrollTo({ top: idx * ITEM_H, behavior: 'smooth' }));
+        inner.appendChild(el);
+      });
+      col.appendChild(inner);
+
+      function getIdx() {
+        return Math.min(Math.max(Math.round(col.scrollTop / ITEM_H), 0), items.length - 1);
+      }
+      function onSnap() { onSelect(getIdx()); }
+
+      if ('onscrollend' in window) {
+        col.addEventListener('scrollend', onSnap);
+      } else {
+        let t;
+        col.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(onSnap, 150); });
+      }
+
+      col.addEventListener('keydown', e => {
+        const cur = getIdx();
+        if (e.key === 'ArrowUp' && cur > 0) {
+          e.preventDefault();
+          col.scrollTo({ top: (cur - 1) * ITEM_H, behavior: 'smooth' });
+        } else if (e.key === 'ArrowDown' && cur < items.length - 1) {
+          e.preventDefault();
+          col.scrollTo({ top: (cur + 1) * ITEM_H, behavior: 'smooth' });
+        }
+      });
+
+      requestAnimationFrame(() => { col.scrollTop = initIdx * ITEM_H; });
+      return col;
+    }
+
+    mountEl.innerHTML = '';
+
+    const picker = document.createElement('div');
+    picker.className = 'wheel-picker';
+
+    const dateCol = makeCol(dateItems, initDateIdx, idx => { selDate = idx; emit(); }, 'wheel-col-date');
+    const div1 = document.createElement('div'); div1.className = 'wheel-divider';
+    const hCol = makeCol(hourItems, initH, idx => { selH = idx; emit(); });
+    const div2 = document.createElement('div'); div2.className = 'wheel-divider';
+    const mCol = makeCol(minItems, initM, idx => { selM = idx; emit(); });
+
+    const highlight = document.createElement('div');
+    highlight.className = 'wheel-highlight';
+
+    [dateCol, div1, hCol, div2, mCol, highlight].forEach(el => picker.appendChild(el));
+
+    const actions = document.createElement('div');
+    actions.className = 'wheel-actions';
+
+    const nowBtn = document.createElement('button');
+    nowBtn.className = 'wheel-now-btn';
+    nowBtn.type = 'button';
+    nowBtn.textContent = '现在';
+    setButtonTip(nowBtn, '把时间选择器重置为当前时间。', '重置为当前时间');
+    nowBtn.addEventListener('click', () => {
+      const n = new Date();
+      const ds = `${n.getFullYear()}-${p2(n.getMonth()+1)}-${p2(n.getDate())}`;
+      const idx = dateItems.findIndex(x => x.val === ds);
+      if (idx >= 0) { selDate = idx; dateCol.scrollTo({ top: idx * ITEM_H, behavior: 'smooth' }); }
+      selH = n.getHours(); selM = n.getMinutes();
+      hCol.scrollTo({ top: selH * ITEM_H, behavior: 'smooth' });
+      mCol.scrollTo({ top: selM * ITEM_H, behavior: 'smooth' });
+      emit();
+    });
+
+    actions.appendChild(nowBtn);
+    mountEl.appendChild(picker);
+    mountEl.appendChild(actions);
+  }
+
+  function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
+    let value = normalizeTimestamp(initialValue) || nowStr();
+    mountEl.innerHTML = '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'dt-picker';
+    wrap.innerHTML = `
+      <div class="dt-row">
+        <button class="nav-btn" type="button" data-act="d-" data-tip="日期减一天。" aria-label="日期减一天">‹</button>
+        <div class="dt-date" data-role="date"></div>
+        <button class="nav-btn" type="button" data-act="d+" data-tip="日期加一天。" aria-label="日期加一天">›</button>
+        <button class="nav-btn" type="button" data-act="now" data-tip="重置为当前时间。" aria-label="重置为当前时间">现在</button>
+      </div>
+      <div class="dt-time">
+        <div class="dt-step">
+          <button class="nav-btn" type="button" data-act="h-" data-tip="小时减一。" aria-label="小时减一">−</button>
+          <div class="dt-value" data-role="hour"></div>
+          <button class="nav-btn" type="button" data-act="h+" data-tip="小时加一。" aria-label="小时加一">+</button>
+        </div>
+        <div class="dt-step">
+          <button class="nav-btn" type="button" data-act="m-" data-tip="分钟减一。" aria-label="分钟减一">−</button>
+          <div class="dt-value" data-role="minute"></div>
+          <button class="nav-btn" type="button" data-act="m+" data-tip="分钟加一。" aria-label="分钟加一">+</button>
+        </div>
+      </div>
+      <input type="text" class="inp" data-role="text" inputmode="numeric" placeholder="YYYY-MM-DD HH:mm">
+    `;
+    mountEl.appendChild(wrap);
+
+    const dateEl = wrap.querySelector('[data-role="date"]');
+    const hourEl = wrap.querySelector('[data-role="hour"]');
+    const minuteEl = wrap.querySelector('[data-role="minute"]');
+    const textEl = wrap.querySelector('[data-role="text"]');
+
+    function sync(emit = true) {
+      const d = new Date(value);
+      dateEl.textContent = dateLabel(d);
+      hourEl.textContent = `${p2(d.getHours())} 时`;
+      minuteEl.textContent = `${p2(d.getMinutes())} 分`;
+      textEl.value = value.replace('T', ' ');
+      if (emit) onChangeCb(value);
+    }
+    function step(mutator) {
+      const d = new Date(value);
+      mutator(d);
+      value = `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+      sync();
+    }
+    wrap.addEventListener('click', e => {
+      const act = e.target.dataset.act;
+      if (!act) return;
+      if (act === 'now') { value = nowStr(); sync(); return; }
+      if (act === 'd-') step(d => d.setDate(d.getDate() - 1));
+      if (act === 'd+') step(d => d.setDate(d.getDate() + 1));
+      if (act === 'h-') step(d => d.setHours(d.getHours() - 1));
+      if (act === 'h+') step(d => d.setHours(d.getHours() + 1));
+      if (act === 'm-') step(d => d.setMinutes(d.getMinutes() - 1));
+      if (act === 'm+') step(d => d.setMinutes(d.getMinutes() + 1));
+    });
+    textEl.addEventListener('change', () => {
+      const ts = normalizeTimestamp(textEl.value);
+      if (!ts) { textEl.focus(); return; }
+      value = ts;
+      sync();
+    });
+    sync();
+  }
+
+  // --- Compute entries and summaries ---
+  function sortedEntries() {
+    return load().entries
+      .filter(e => normalizeTimestamp(e.ts))
+      .sort((a, b) => a.ts < b.ts ? -1 : 1);
+  }
+  function firstEntryDate() {
+    const entries = sortedEntries();
+    return entries.length ? new Date(entries[0].ts) : null;
+  }
+  function addBucket(totals, tag, mins, unrecorded) {
+    totals.total += mins;
+    if (unrecorded) totals.unrecorded += mins;
+    else if (tag === '求职推进') totals.job += mins;
+    else totals.other += mins;
+  }
+  function summarizeRange(start, end, opts = {}) {
+    let s = new Date(start);
+    let e = clampEndToNow(new Date(end));
+    if (opts.clipToFirst) {
+      const first = firstEntryDate();
+      if (!first) return { job: 0, other: 0, unrecorded: 0, total: 0 };
+      if (s < first) s = first;
+    }
+    if (e <= s) return { job: 0, other: 0, unrecorded: 0, total: 0 };
+
+    const entries = sortedEntries().filter(en => {
+      const t = new Date(en.ts);
+      return t >= s && t < e;
+    });
+    const totals = { job: 0, other: 0, unrecorded: 0, total: 0 };
+    if (!entries.length) {
+      addBucket(totals, '未知', minsBetweenDates(s, e), true);
+      return totals;
+    }
+    const first = new Date(entries[0].ts);
+    if (first > s) addBucket(totals, '未知', minsBetweenDates(s, first), true);
+    entries.forEach((entry, i) => {
+      const nextDate = i < entries.length - 1 ? new Date(entries[i + 1].ts) : e;
+      const mins = minsBetweenDates(new Date(entry.ts), nextDate);
+      const tag = (entry.tags || [])[0] || '';
+      addBucket(totals, tag, mins, mins > GAP || tag === '未知');
+    });
+    return totals;
+  }
+  function computeDay() {
+    const { start, end } = periodRange('day', state.selectedDate);
+    const statEnd = state.selectedDate === todayStr() ? new Date() : end;
+    const entries = sortedEntries().filter(en => {
+      const t = new Date(en.ts);
+      return t >= start && t < end;
+    });
+    const timeline = entries.map((e, i) => {
+      const nextDate = i < entries.length - 1 ? new Date(entries[i + 1].ts) : clampEndToNow(statEnd);
+      const tag = (e.tags || [])[0] || '';
+      const mins = minsBetweenDates(new Date(e.ts), nextDate);
+      const unrecorded = mins > GAP || tag === '未知';
+      return { e, mins, isLast: i === entries.length - 1, unrecorded, tag };
+    });
+    return { timeline, totals: entries.length ? summarizeRange(start, statEnd, { clipToFirst: false }) : { job: 0, other: 0, unrecorded: 0, total: 0 } };
+  }
+  function percent(n, total) { return total > 0 ? Math.round(n / total * 100) : 0; }
+  function summaryRows() {
+    const { start } = periodRange();
+    if (state.view === 'week') {
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = addDays(start, i);
+        return { key: localDateKey(d), label: shortDateLabel(d), rangeStart: d, rangeEnd: addDays(d, 1), targetView: 'day' };
+      });
+    }
+    if (state.view === 'month') {
+      const rows = [];
+      for (let d = new Date(start); d.getMonth() === start.getMonth(); d = addDays(d, 1)) {
+        rows.push({ key: localDateKey(d), label: shortDateLabel(d), rangeStart: new Date(d), rangeEnd: addDays(d, 1), targetView: 'day' });
+      }
+      return rows;
+    }
+    if (state.view === 'year') {
+      return Array.from({ length: 12 }, (_, i) => {
+        const d = new Date(start.getFullYear(), i, 1);
+        return { key: localDateKey(d), label: `${i + 1}月`, rangeStart: d, rangeEnd: addMonths(d, 1), targetView: 'month' };
+      });
+    }
+    return [];
+  }
+
+  // --- Navigation ---
+  function setView(view) {
+    state.view = view;
+    editingId = null;
+    closeForm();
+    persistState();
+    render();
+  }
+  function setSelectedDate(dateKey) {
+    state.selectedDate = dateKey;
+    persistState();
+  }
+  function shiftPeriod(delta) {
+    const d = parseDateKey(state.selectedDate) || new Date();
+    if (state.view === 'day') setSelectedDate(localDateKey(addDays(d, delta)));
+    if (state.view === 'week') setSelectedDate(localDateKey(addDays(d, delta * 7)));
+    if (state.view === 'month') setSelectedDate(localDateKey(addMonths(d, delta)));
+    if (state.view === 'year') setSelectedDate(localDateKey(addYears(d, delta)));
+    editingId = null;
+    closeForm();
+    render();
+  }
+  function goToday() {
+    setSelectedDate(todayStr());
+    editingId = null;
+    closeForm();
+    render();
+  }
+  function drill(dateKey, view) {
+    state.view = view;
+    setSelectedDate(dateKey);
+    editingId = null;
+    closeForm();
+    render();
+  }
+
+  // --- Render ---
+  function render() {
+    renderChrome();
+    if (state.view === 'day') {
+      const day = computeDay();
+      renderRuler(day.totals, day.timeline.length);
+      renderTimeline(day.timeline);
+      if (editingId) {
+        const entry = load().entries.find(e => e.id === editingId);
+        if (entry) {
+          const editor = getEditingBox(entry.id);
+          const mountEl = editor ? editor.querySelector('[data-role="edit-wheel"]') : null;
+          const tsEl = editor ? editor.querySelector('[data-role="edit-ts"]') : null;
+          if (mountEl && tsEl) {
+            mountTimePicker(mountEl, entry.ts, v => {
+              tsEl.value = v;
+            });
+          }
+        }
+      }
+      return;
+    }
+    const { start, end } = periodRange();
+    renderRuler(summarizeRange(start, end, { clipToFirst: true }), 1);
+    renderSummary();
+  }
+  function renderChrome() {
+    document.querySelectorAll('#view-tabs button').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === state.view);
+    });
+    document.getElementById('period-label').textContent = periodLabel();
+    document.getElementById('add-btn').hidden = state.view !== 'day';
+    const periodNames = { day: '天', week: '周', month: '月', year: '年' };
+    const todayLabels = { day: '回到今天', week: '回到本周', month: '回到本月', year: '回到今年' };
+    const todayTip = `回到包含今天的当前${periodNames[state.view]}。`;
+    const todayBtn = document.getElementById('today-btn');
+    todayBtn.textContent = todayLabels[state.view];
+    setButtonTip(todayBtn, todayTip, todayLabels[state.view]);
+    document.querySelectorAll('[data-action="shift-period"]').forEach(btn => {
+      const isPrev = Number(btn.dataset.delta || 0) < 0;
+      const text = `切到${isPrev ? '上一' : '下一'}${periodNames[state.view]}。`;
+      setButtonTip(btn, text, `${isPrev ? '上一' : '下一'}${periodNames[state.view]}`);
+    });
+    updateShareAvailability();
+    const labels = { day: '当日时间轴', week: '本周每日汇总', month: '本月每日汇总', year: '全年每月汇总' };
+    document.getElementById('list-label').textContent = labels[state.view];
+  }
+  function renderRuler(totals, hasItems) {
+    const el = document.getElementById('ruler');
+    if (!hasItems || !totals.total) {
+      el.innerHTML = `<p style="color:var(--muted);font-size:13px">${state.view === 'day' ? '这一天还没有记录' : '这个范围还没有可统计记录'}</p>`;
+      return;
+    }
+    const jp = percent(totals.job, totals.total);
+    const op = percent(totals.other, totals.total);
+    const up = Math.max(0, 100 - jp - op);
+    el.innerHTML = `
+      <div class="ruler-bar">
+        <div style="flex:${jp};background:var(--accent)"></div>
+        <div style="flex:${op};background:var(--green)"></div>
+        <div style="flex:${up};background:var(--track)"></div>
+      </div>
+      <div class="ruler-text">
+        <span><span class="dot" style="background:var(--accent)"></span>求职推进 ${jp}%</span>
+        <span><span class="dot" style="background:var(--green)"></span>其他 ${op}%</span>
+        <span><span class="dot" style="background:var(--track)"></span>未记录 ${up}%</span>
+        <span>${fmtMins(totals.total)}</span>
+      </div>`;
+  }
+  function renderTimeline(items) {
+    const el = document.getElementById('timeline');
+    if (!items.length) {
+      el.innerHTML = '<div class="empty-tip">点击上方「+ 记一条」开始记录，或切换日期查看历史。</div>';
+      return;
+    }
+    el.innerHTML = [...items].reverse().map(({ e, mins, isLast, unrecorded, tag }) => {
+      if (editingId === e.id) return renderEditForm(e);
+      const tagClass = tag === '求职推进' ? '' : ' e-tag-g';
+      const durStr = isLast
+        ? (unrecorded ? '未记录' : fmtMins(mins) + '（进行中）')
+        : (unrecorded ? '未记录' : fmtMins(mins));
+      return `<div class="entry" data-id="${esc(e.id)}">
+        <div class="e-body">
+          <div class="e-time">${hhmm(e.ts)}</div>
+          <div class="e-what">${esc(e.what)}</div>
+          <div class="e-meta">
+            ${tag ? `<span class="e-tag${tagClass}">#${esc(tag)}</span>` : ''}
+            <span class="e-dur">${durStr}</span>
+          </div>
+        </div>
+        <div class="e-btns">
+          <button type="button" data-action="start-edit" data-id="${esc(e.id)}" data-tip="编辑这条记录的时间、内容和标签。" aria-label="编辑这条记录">改</button>
+          <button class="dbtn" type="button" data-action="delete-entry" data-id="${esc(e.id)}" data-tip="删除这条记录，需要确认。" aria-label="删除这条记录">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  function renderSummary() {
+    const el = document.getElementById('timeline');
+    const rows = summaryRows().map(row => {
+      const totals = summarizeRange(row.rangeStart, row.rangeEnd, { clipToFirst: true });
+      const jp = percent(totals.job, totals.total);
+      const op = percent(totals.other, totals.total);
+      const up = totals.total ? Math.max(0, 100 - jp - op) : 0;
+      return `<button class="sum-row" type="button" data-action="drill" data-date="${esc(row.key)}" data-view="${esc(row.targetView)}" data-tip="打开这一段的明细视图。" aria-label="打开 ${esc(row.label)} 明细">
+        <div class="sum-top">
+          <span class="sum-name">${esc(row.label)}</span>
+          <span class="sum-total">${totals.total ? fmtMins(totals.total) : '无记录'}</span>
+        </div>
+        <div class="ruler-bar" style="margin-bottom:8px">
+          <div style="flex:${jp};background:var(--accent)"></div>
+          <div style="flex:${op};background:var(--green)"></div>
+          <div style="flex:${up};background:var(--track)"></div>
+        </div>
+        <div class="sum-meta">
+          <span>求职 ${jp}%</span>
+          <span>其他 ${op}%</span>
+          <span>未记录 ${up}%</span>
+        </div>
+      </button>`;
+    }).join('');
+    el.innerHTML = `<div class="summary-list">${rows || '<div class="empty-tip">没有可显示的汇总。</div>'}</div>`;
+  }
+  function renderEditForm(e) {
+    const tag = (e.tags || [])[0] || '';
+    const isSeed = SEEDS.includes(tag);
+    const chips = SEEDS.map(t =>
+      `<button class="chip${t === tag ? ' sel' : ''}" type="button" data-action="pick-edit-tag" data-tag="${esc(t)}" aria-label="选择标签：${esc(t)}" title="选择标签：${esc(t)}">${esc(t)}</button>`
+    ).join('');
+    return `<div class="entry editing" data-id="${esc(e.id)}">
+      <div class="e-body">
+        <div class="fl">
+          <div class="fl-label">时间（可改，补录用）</div>
+          <input type="hidden" data-role="edit-ts" value="${esc(e.ts)}">
+          <div data-role="edit-wheel"></div>
+        </div>
+        <div class="fl"><input type="text" class="inp" data-role="edit-what" value="${esc(e.what)}" placeholder="做了什么" style="margin-bottom:8px"></div>
+        <div class="chips" data-role="edit-chips" style="margin-bottom:7px">${chips}</div>
+        <input type="text" class="inp" data-role="edit-custom-tag" value="${isSeed ? '' : esc(tag)}" placeholder="自定义标签" style="font-size:13px;margin-bottom:10px">
+        <div class="form-btns">
+          <button class="btn-pri" type="button" data-action="commit-edit" data-id="${esc(e.id)}" data-tip="保存对这条记录的修改。" aria-label="保存修改">保存</button>
+          <button class="btn-sec" type="button" data-action="cancel-edit" data-tip="放弃修改，回到时间轴。" aria-label="取消编辑">取消</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // --- Form ---
+  function openForm() {
+    state.view = 'day';
+    persistState();
+    const box = document.getElementById('form-box');
+    box.style.display = 'block';
+    const ts = defaultFormTs();
+    document.getElementById('form-ts').value = ts;
+    mountTimePicker(document.getElementById('form-wheel-mount'), ts, v => {
+      document.getElementById('form-ts').value = v;
+    });
+    document.getElementById('form-what').value = '';
+    document.getElementById('form-ctag').value = '';
+    formTag = '';
+    document.querySelectorAll('#form-chips .chip').forEach(c => c.classList.remove('sel'));
+    renderChrome();
+    setTimeout(() => document.getElementById('form-what').focus(), 60);
+  }
+  function closeForm() {
+    document.getElementById('form-box').style.display = 'none';
+  }
+  function pickTag(el) {
+    const wasSelected = el.classList.contains('sel');
+    document.querySelectorAll('#form-chips .chip').forEach(c => c.classList.remove('sel'));
+    if (wasSelected) {
+      formTag = '';
+      return;
+    }
+    el.classList.add('sel');
+    formTag = el.dataset.tag || '';
+    document.getElementById('form-ctag').value = '';
+  }
+  function saveEntry() {
+    const checked = validateTs(document.getElementById('form-ts').value);
+    if (!checked.ok) { alert(checked.msg); return; }
+    const what = document.getElementById('form-what').value.trim();
+    if (!what) { document.getElementById('form-what').focus(); return; }
+    const ctag = document.getElementById('form-ctag').value.trim();
+    const tag = ctag || formTag || '未知';
+    const d = load();
+    d.entries.push({ id: uid(), ts: checked.ts, what, tags: [tag] });
+    save(d);
+    setSelectedDate(checked.ts.slice(0, 10));
+    closeForm();
+    render();
+  }
+
+  // --- Edit ---
+  function getEditingBox(id = editingId) {
+    return Array.from(document.querySelectorAll('.entry.editing'))
+      .find(el => el.dataset.id === String(id));
+  }
+  function startEdit(id) {
+    editingId = id;
+    closeForm();
+    render();
+  }
+  function cancelEdit() { editingId = null; render(); }
+  function pickEditTag(el) {
+    const box = el.closest('.entry.editing');
+    const chipBox = box ? box.querySelector('[data-role="edit-chips"]') : null;
+    if (!chipBox) return;
+    const wasSelected = el.classList.contains('sel');
+    chipBox.querySelectorAll('.chip').forEach(c => c.classList.remove('sel'));
+    if (wasSelected) return;
+    el.classList.add('sel');
+    const custom = box.querySelector('[data-role="edit-custom-tag"]');
+    if (custom) custom.value = '';
+  }
+  function commitEdit(id) {
+    const box = getEditingBox(id);
+    if (!box) return;
+    const tsEl = box.querySelector('[data-role="edit-ts"]');
+    const whatEl = box.querySelector('[data-role="edit-what"]');
+    const chipBox = box.querySelector('[data-role="edit-chips"]');
+    const customEl = box.querySelector('[data-role="edit-custom-tag"]');
+    const checked = validateTs(tsEl ? tsEl.value : '');
+    if (!checked.ok) { alert(checked.msg); return; }
+    const what = whatEl ? whatEl.value.trim() : '';
+    if (!what) { if (whatEl) whatEl.focus(); return; }
+    const sel = chipBox ? chipBox.querySelector('.chip.sel') : null;
+    const ctag = customEl ? customEl.value.trim() : '';
+    const tag = ctag || (sel ? sel.dataset.tag : '未知');
+    const d = load();
+    const entry = d.entries.find(e => e.id === id);
+    if (entry) { entry.ts = checked.ts; entry.what = what; entry.tags = [tag]; save(d); }
+    setSelectedDate(checked.ts.slice(0, 10));
+    editingId = null;
+    render();
+  }
+
+  // --- Delete ---
+  function delEntry(id) {
+    if (!confirm('删除这条记录？')) return;
+    const d = load();
+    d.entries = d.entries.filter(e => e.id !== id);
+    save(d);
+    if (editingId === id) editingId = null;
+    render();
+  }
+
+  // --- Current view summary ---
+  function viewName(view = state.view) {
+    return ({ day: '天', week: '周', month: '月', year: '年' })[view] || view;
+  }
+  function currentViewTotals() {
+    if (state.view === 'day') return computeDay().totals;
+    const { start, end } = periodRange();
+    return summarizeRange(start, end, { clipToFirst: true });
+  }
+  function statsParts(totals) {
+    const jp = percent(totals.job, totals.total);
+    const op = percent(totals.other, totals.total);
+    const up = totals.total ? Math.max(0, 100 - jp - op) : 0;
+    return { jp, op, up };
+  }
+  function dataDateRange() {
+    const entries = sortedEntries();
+    if (!entries.length) return '无记录';
+    return `${fmtTs(entries[0].ts)} - ${fmtTs(entries[entries.length - 1].ts)}`;
+  }
+  function detailDurationLabel(mins, isLast, unrecorded) {
+    const label = fmtPlainMins(mins);
+    const notes = [];
+    if (unrecorded) notes.push('未记录');
+    if (isLast && !unrecorded) notes.push('进行中');
+    return notes.length ? `${label}（${notes.join('，')}）` : label;
+  }
+  function currentViewDetailLines() {
+    if (state.view === 'day') {
+      const day = computeDay();
+      if (!day.timeline.length) return ['- 无记录'];
+      return day.timeline.map(({ e, mins, isLast, unrecorded, tag }) => {
+        const safeWhat = mdInline(e.what) || '未填写';
+        const safeTag = mdInline(tag || '未知');
+        return `- ${hhmm(e.ts)} | ${detailDurationLabel(mins, isLast, unrecorded)} | ${safeWhat} | #${safeTag}`;
+      });
+    }
+    const rows = summaryRows();
+    if (!rows.length) return ['- 无记录'];
+    return rows.map(row => {
+      const totals = summarizeRange(row.rangeStart, row.rangeEnd, { clipToFirst: true });
+      const { jp, op, up } = statsParts(totals);
+      const totalText = totals.total ? fmtMins(totals.total) : '无记录';
+      return `- ${row.label}: ${totalText}；求职 ${jp}% / 其他 ${op}% / 未记录 ${up}%`;
+    });
+  }
+  function buildCurrentViewSummaryMarkdown() {
+    const totals = currentViewTotals();
+    const { jp, op, up } = statsParts(totals);
+    const totalEntries = load().entries.length;
+    return [
+      '# 时间尺当前视图摘要',
+      '',
+      '## 元信息',
+      `- 生成时间：${fmtDateTime(new Date())}`,
+      `- 当前视图：${viewName()}`,
+      `- 当前周期：${periodLabel()}`,
+      `- 数据起止日期：${dataDateRange()}`,
+      `- 总记录数：${totalEntries}`,
+      '',
+      '## 当前视图统计比例',
+      `- 总计：${fmtPlainMins(totals.total)}`,
+      `- 求职推进：${jp}%（${fmtPlainMins(totals.job)}）`,
+      `- 其他：${op}%（${fmtPlainMins(totals.other)}）`,
+      `- 未记录：${up}%（${fmtPlainMins(totals.unrecorded)}）`,
+      '',
+      '## 当前视图明细',
+      ...currentViewDetailLines(),
+      ''
+    ].join('\n');
+  }
+
+  // --- Copy ---
+  function setCopyFeedback(btn, ok, label, fallbackLabel) {
+    if (!btn) return;
+    btn.textContent = ok ? label : '复制失败';
+    btn.classList.toggle('copied', ok);
+    setTimeout(() => {
+      btn.textContent = fallbackLabel;
+      btn.classList.remove('copied');
+    }, 2500);
+  }
+  function copyText(text, btn, label, fallbackLabel) {
+    const done = ok => setCopyFeedback(btn, ok, label, fallbackLabel);
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text)
+        .then(() => done(true))
+        .catch(() => done(legacyCopy(text)));
+      return;
+    }
+    done(legacyCopy(text));
+  }
+  function copyJSON() {
+    const json = JSON.stringify(load(), null, 2);
+    copyText(json, document.getElementById('copy-btn'), '✓ 已复制', '复制');
+  }
+  function copyCurrentViewSummary() {
+    copyText(buildCurrentViewSummaryMarkdown(), document.getElementById('summary-btn'), '✓ 已复制', '摘要');
+  }
+  function legacyCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch {}
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  // --- Download JSON ---
+  function downloadJSON() {
+    const json = JSON.stringify(load(), null, 2);
+    const now = new Date();
+    const fname = `timelog-${now.getFullYear()}${p2(now.getMonth()+1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}.json`;
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // --- Import JSON ---
+  function importJSON() { document.getElementById('import-file').click(); }
+  function handleImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      let imported;
+      try { imported = JSON.parse(e.target.result); }
+      catch { alert('文件解析失败，请确认是有效的 JSON 文件。'); return; }
+      if (!imported || !Array.isArray(imported.entries)) {
+        alert('文件格式不对：缺少 entries 数组。'); return;
+      }
+      if (!imported.entries.every(en => en.id && en.ts && en.what && normalizeTimestamp(en.ts))) {
+        alert('文件格式不对：部分条目缺少必要字段（id/ts/what）或时间格式不正确。'); return;
+      }
+      const current = load();
+      const map = {};
+      current.entries.forEach(en => { map[en.id] = en; });
+      imported.entries.forEach(en => { map[en.id] = en; });
+      current.entries = Object.values(map).sort((a, b) => a.ts < b.ts ? -1 : 1);
+      save(current);
+      render();
+      alert(`导入完成，共 ${current.entries.length} 条记录。`);
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  }
+
+  // --- Share JSON ---
+  function canUseSystemShare() {
+    return typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+  }
+  function updateShareAvailability() {
+    const btn = document.getElementById('share-btn');
+    if (!btn) return;
+    const supported = canUseSystemShare();
+    btn.hidden = !supported;
+    btn.setAttribute('aria-disabled', supported ? 'false' : 'true');
+    if (supported) setButtonTip(btn, '打开系统分享面板，优先分享 JSON 文件；文件分享不可用时改为分享文本。', '分享 JSON 备份');
+  }
+  function shareJSON() {
+    if (!canUseSystemShare()) return;
+    const json = JSON.stringify(load(), null, 2);
+    const now = new Date();
+    const fname = `timelog-${now.getFullYear()}${p2(now.getMonth()+1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}.json`;
+    if (navigator.canShare) {
+      const file = new File([json], fname, { type: 'application/json' });
+      if (navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], title: '时间尺备份' }).catch(() => {});
+        return;
+      }
+    }
+    navigator.share({ title: '时间尺备份', text: json }).catch(() => {});
+  }
+
+  // --- Actions ---
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-action]');
+    if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
+    const action = el.dataset.action;
+    if (action === 'theme') setThemePref(el.dataset.theme);
+    if (action === 'view') setView(el.dataset.view);
+    if (action === 'shift-period') shiftPeriod(Number(el.dataset.delta || 0));
+    if (action === 'today') goToday();
+    if (action === 'open-form') openForm();
+    if (action === 'pick-form-tag') pickTag(el);
+    if (action === 'save-entry') saveEntry();
+    if (action === 'close-form') closeForm();
+    if (action === 'start-edit') startEdit(el.dataset.id);
+    if (action === 'pick-edit-tag') pickEditTag(el);
+    if (action === 'commit-edit') commitEdit(el.dataset.id || editingId);
+    if (action === 'cancel-edit') cancelEdit();
+    if (action === 'delete-entry') delEntry(el.dataset.id);
+    if (action === 'drill') drill(el.dataset.date, el.dataset.view);
+    if (action === 'copy-summary') copyCurrentViewSummary();
+    if (action === 'copy-json') copyJSON();
+    if (action === 'download-json') downloadJSON();
+    if (action === 'import-json') importJSON();
+    if (action === 'share-json') shareJSON();
+  });
+  document.getElementById('import-file').addEventListener('change', handleImport);
+
+  // --- Keyboard ---
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { cancelEdit(); closeForm(); }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      if (editingId) { commitEdit(editingId); return; }
+      if (document.getElementById('form-box').style.display === 'block') saveEntry();
+    }
+  });
+
+  // --- Register SW ---
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
+  // --- Init ---
+  (function init() {
+    const today = todayStr();
+    const lastOpen = localStorage.getItem(OPEN_DATE_KEY);
+    const savedView = localStorage.getItem(VIEW_KEY);
+    const savedDate = parseDateKey(localStorage.getItem(SELECTED_DATE_KEY));
+    state.view = ['day', 'week', 'month', 'year'].includes(savedView) ? savedView : 'day';
+    state.selectedDate = lastOpen === today && savedDate ? localDateKey(savedDate) : today;
+    localStorage.setItem(OPEN_DATE_KEY, today);
+    persistState();
+
+    applyTheme(localStorage.getItem(THEME_KEY) || 'auto');
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    if (mq.addEventListener) mq.addEventListener('change', () => applyTheme(localStorage.getItem(THEME_KEY) || 'auto'));
+    document.getElementById('hdr-date').textContent = dateLabel(new Date());
+    render();
+    setInterval(render, 60000);
+  })();
+</script>
+</body>
+</html>

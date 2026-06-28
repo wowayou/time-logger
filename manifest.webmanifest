@@ -1,0 +1,19 @@
+{
+  "name": "时间尺",
+  "version": "6",
+  "short_name": "时间尺",
+  "description": "求职主线时间记录仪 — 每天看清时间进了哪里",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0d0d14",
+  "theme_color": "#0d0d14",
+  "lang": "zh",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

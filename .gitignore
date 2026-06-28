@@ -1,0 +1,26 @@
+# Exported time-log data stays private.
+*.json
+!manifest.webmanifest
+timelog-*.json
+
+# Screenshots and local review artifacts can expose real records.
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.heic
+*.avif
+screenshots/
+ui_snapshots/
+
+# Local temp and OS files.
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+.idea/
+.vscode/
