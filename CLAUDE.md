@@ -46,7 +46,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v17` / manifest `version: "17"`。
+当前版本：`timelog-v18` / manifest `version: "18"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -158,3 +158,4 @@ git diff --check
 | v15 | 2026-06-29 | 原生 ES modules + 独立 CSS 分层；修复日边界统计继承、小屏横向滚动和周标题溢出；新增 Playwright UI smoke |
 | v16 | 2026-06-29 | 4 桶标签配置、longOk 长段策略、textarea 换行、同刻冲突提示、导入平移、帮助页、tooltip/F5 抖动修复、备份升序与秒级文件名 |
 | v17 | 2026-06-29 | 新建记录时显示上一段确认块；修复 sheet 初始焦点黑阴影；导入平移改自定义弹框；375px header 与 help 关闭图标收敛 |
+| v18 | 2026-06-29 | 根级预留滚动条槽位，修复 F5 与打开面板时的横向位移 |

@@ -79,7 +79,7 @@
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    html { -webkit-text-size-adjust: 100%; }
+    html { -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; }
     body {
       background: var(--bg);
       color: var(--text);
