@@ -314,6 +314,7 @@ def audit_docs(errors: list[str]) -> None:
         "删除/取消禁用 x",
         "输入字号不低于 16px",
         "运行时资产必须进 SW 缓存",
+        "必须创建或更新同版本 GitHub Release",
         "公开仓库不得含真实记录/真实截图/具体个人线索",
         "README 演示图只能来自 `docs/assets/` 的固定 demo 数据 PNG",
         f"| v{EXPECTED_VERSION} |",
