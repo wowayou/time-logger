@@ -149,9 +149,9 @@ export function validateImportData(imported) {
   if (!imported || !Array.isArray(imported.entries)) {
     return { ok: false, msg: '文件格式不对：缺少 entries 数组。' };
   }
-  const valid = imported.entries.every(en => en.id && en.ts && en.what && normalizeTimestamp(en.ts));
+  const valid = imported.entries.every(en => en.id && en.ts && typeof en.what === 'string' && normalizeTimestamp(en.ts));
   if (!valid) {
-    return { ok: false, msg: '文件格式不对：部分条目缺少必要字段（id/ts/what）或时间格式不正确。' };
+    return { ok: false, msg: '文件格式不对：部分条目缺少必要字段（id/ts/what 字段）或时间格式不正确。' };
   }
   return { ok: true };
 }

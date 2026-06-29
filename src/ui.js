@@ -70,7 +70,7 @@ export function bucketParts(totals) {
 
 export function timelineDurationLabel(mins, isOngoing, unrecorded, pendingConfirm) {
   if (pendingConfirm) return isOngoing ? `待确认 · 进行中 · ${fmtMins(mins)}` : `待确认 · ${fmtMins(mins)}`;
-  if (unrecorded) return isOngoing ? '未记录（进行中）' : '未记录';
+  if (unrecorded) return isOngoing ? '未记录·进行中' : '未记录';
   return isOngoing ? `${fmtMins(mins)}（进行中）` : fmtMins(mins);
 }
 
@@ -78,29 +78,16 @@ export function confirmSegmentLabel(startTs, endTs) {
   return normalizeTimestamp(startTs) && normalizeTimestamp(endTs) ? `确认 ${hhmm(startTs)}-${hhmm(endTs)}` : '确认这段';
 }
 
-function compactLine(s, max = 42) {
-  const text = String(s || '未填写').replace(/\s+/g, ' ').trim() || '未填写';
-  return text.length > max ? `${text.slice(0, max)}…` : text;
-}
-
-export function renderPrevSegmentBlock(prev, endTs) {
-  const startTs = prev && normalizeTimestamp(prev.ts);
+export function renderPrevSegmentBlock(startTs, endTs) {
+  const normalizedStart = normalizeTimestamp(startTs);
   const normalizedEnd = normalizeTimestamp(endTs);
-  if (!prev || !startTs || !normalizedEnd) return '';
-  const tag = (prev.tags || [])[0] || '未知';
-  const tagClass = ` e-tag-${bucketForTag(tag)}`;
+  if (!normalizedStart || !normalizedEnd) return '';
   const endLabel = normalizedEnd === nowStr() ? '现在' : hhmm(normalizedEnd);
-  const mins = minsBetweenDates(new Date(startTs), new Date(normalizedEnd));
+  const mins = minsBetweenDates(new Date(normalizedStart), new Date(normalizedEnd));
   return `
     <div class="prev-seg-head">
-      <span>上一段</span>
-      <span class="e-tag${tagClass}">#${esc(tag)}</span>
-    </div>
-    <div class="prev-seg-what">${esc(compactLine(prev.what))}</div>
-    <div class="prev-seg-time">${hhmm(startTs)} → ${endLabel} · 已 ${fmtMins(mins)}</div>
-    <div class="prev-seg-foot">
-      <span>直接往下记即确认。</span>
-      <button class="prev-seg-action" type="button" data-action="focus-end-time">我要修改 →</button>
+      <span>刚才这一阵</span>
+      <span class="prev-seg-time">${hhmm(normalizedStart)} → ${endLabel} · 已 ${fmtMins(mins)}</span>
     </div>`;
 }
 
@@ -113,16 +100,18 @@ export function renderTimeline(items, opts = {}) {
   }
   el.innerHTML = [...items].reverse().map(({ e, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs }) => {
     if (editingId === e.id) return renderEdit(e);
-    const tagClass = ` e-tag-${bucketForTag(tag)}`;
-    const entryClass = sheetEditId === e.id ? 'entry sheet-editing' : 'entry';
-    const durStr = timelineDurationLabel(mins, isOngoing, unrecorded, pendingConfirm);
+    const isPlaceholder = typeof e.what === 'string' && e.what.trim() === '';
+    const displayTag = isPlaceholder ? '未记录' : tag;
+    const tagClass = ` e-tag-${isPlaceholder ? 'unrecorded' : bucketForTag(tag)}`;
+    const entryClass = `entry${isPlaceholder ? ' placeholder' : ''}${sheetEditId === e.id ? ' sheet-editing' : ''}`;
+    const durStr = timelineDurationLabel(mins, isOngoing, unrecorded || isPlaceholder, pendingConfirm);
     const confirmText = confirmSegmentLabel(e.ts, endTs);
     return `<div class="${entryClass}" data-id="${esc(e.id)}">
       <div class="e-body">
         <div class="e-time">${hhmm(e.ts)}</div>
-        <div class="e-what">${esc(e.what)}</div>
+        <div class="e-what">${esc(isPlaceholder ? '进行中·还没记' : e.what)}</div>
         <div class="e-meta">
-          ${tag ? `<span class="e-tag${tagClass}">#${esc(tag)}</span>` : ''}
+          ${displayTag ? `<span class="e-tag${tagClass}">#${esc(displayTag)}</span>` : ''}
           <span class="e-dur">${durStr}</span>
           ${confirmable ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" data-tip="确认后按这个标签统计；相邻时间变化会自动失效。" aria-label="${esc(confirmText)}">${esc(confirmText)}</button>` : ''}
         </div>
@@ -203,8 +192,8 @@ export function renderFormSheet(opts) {
   const title = isEdit ? '编辑' : '记一条';
   const summary = isEdit
     ? `${hhmm(e.ts)}${tag ? ` · #${esc(tag)}` : ''}`
-    : '记录新的时间去向';
-  const whatText = isEdit ? (esc(e.what) || '未填写') : '补录或记录当前时刻';
+    : '刚才这一阵';
+  const whatText = isEdit ? (esc(e.what) || '未填写') : '写下刚才做了什么';
   const saveAction = isEdit ? 'commit-edit' : 'save-entry';
   const saveId = isEdit ? ` data-id="${esc(e.id)}"` : '';
   const saveTip = isEdit ? '保存修改' : '保存记录';
@@ -224,19 +213,7 @@ export function renderFormSheet(opts) {
     : '<input type="text" class="inp" id="form-ctag" list="mainline-tags" placeholder="自定义主线标签（可选）">';
   const datalist = `<datalist id="mainline-tags">${config.mainline.map(name => `<option value="${esc(name)}"></option>`).join('')}</datalist>`;
   const prevSlot = isEdit ? '' : '<div class="prev-seg" data-role="prev-segment"></div>';
-  return `
-    <div class="form-sheet-head">
-      <div class="form-sheet-summary">
-        <div class="form-sheet-title" id="form-sheet-title">${title} · ${summary}</div>
-        <div class="form-sheet-what">${whatText}</div>
-      </div>
-      <div class="form-sheet-actions">
-        <button class="icon-btn cancel-btn" type="button" data-action="${isEdit ? 'cancel-edit' : 'close-form'}" data-tip="${isEdit ? '取消编辑' : '取消记录'}" aria-label="${isEdit ? '取消编辑' : '取消新增记录'}">${iconSvg('undo')}</button>
-        <button class="icon-btn save-btn" type="button" data-action="${saveAction}"${saveId} data-tip="${saveTip}" aria-label="${saveLabel}">${iconSvg('check')}</button>
-      </div>
-    </div>
-    <div class="form-sheet-body">
-      ${prevSlot}
+  const editBody = `
       <div class="fl">
         <div class="fl-label">时间（可改，补录用）</div>
         ${tsInput}
@@ -255,7 +232,44 @@ export function renderFormSheet(opts) {
         ${customInput}
         ${datalist}
         <div class="form-hint" data-role="mainline-hint">自定义标签默认进入「主线」；与固定 chip 同名时按 chip 归类。</div>
+      </div>`;
+  const newBody = `
+      ${prevSlot}
+      <div class="fl">
+        <div class="fl-label">做了什么</div>
+        ${whatInput}
       </div>
+      <div class="fl">
+        <div class="fl-label">标签</div>
+        ${chipWrap}
+      </div>
+      <div class="fl">
+        <div class="fl-label">自定义主线标签</div>
+        ${customInput}
+        ${datalist}
+        <div class="form-hint" data-role="mainline-hint">自定义标签默认进入「主线」；与固定 chip 同名时按 chip 归类。</div>
+      </div>
+      <div class="form-time-row">
+        ${tsInput}
+        <div class="form-time-point"><span>起点</span><strong data-role="start-time-label">--:--</strong><button class="prev-seg-action" type="button" data-action="toggle-start-time" aria-expanded="false">▸改</button></div>
+        <div class="form-time-point"><span>终点</span><strong>现在</strong></div>
+      </div>
+      <div class="fl start-time-section" data-role="start-time-section" hidden>
+        ${wheelMount}
+      </div>`;
+  return `
+    <div class="form-sheet-head">
+      <div class="form-sheet-summary">
+        <div class="form-sheet-title" id="form-sheet-title">${title} · ${summary}</div>
+        <div class="form-sheet-what">${whatText}</div>
+      </div>
+      <div class="form-sheet-actions">
+        <button class="icon-btn cancel-btn" type="button" data-action="${isEdit ? 'cancel-edit' : 'close-form'}" data-tip="${isEdit ? '取消编辑' : '取消记录'}" aria-label="${isEdit ? '取消编辑' : '取消新增记录'}">${iconSvg('undo')}</button>
+        <button class="icon-btn save-btn" type="button" data-action="${saveAction}"${saveId} data-tip="${saveTip}" aria-label="${saveLabel}">${iconSvg('check')}</button>
+      </div>
+    </div>
+    <div class="form-sheet-body">
+      ${isEdit ? editBody : newBody}
       <div class="form-inline-error" data-role="conflict-error" hidden></div>
     </div>`;
 }
@@ -290,7 +304,7 @@ export function renderHelpSheet() {
       </div>
     </div>
     <div class="form-sheet-body help-body">
-      <section><h2>怎么记</h2><p>点「+ 记一条」或「切换活动」只记录开始时刻；上一条到下一条之间的时间归上一条。</p></section>
+      <section><h2>怎么记</h2><p>点「+ 记一条」或「切换活动」记录刚才这一阵；保存后自动开一段未记录的进行中。</p></section>
       <section><h2>4 桶</h2><p>主线=求职推进和自定义主线；维持=睡觉、吃饭、通勤等必要消耗；漏损=逃避娱乐；未记录=未知、孤儿标签和待确认长段。</p></section>
       <section><h2>3 小时确认</h2><p>超过 3 小时的非睡觉片段先进入未记录；确认后才按标签统计。睡觉默认 longOk，不要求确认。</p></section>
       <section><h2>备份与合并</h2><p>复制、下载、分享、导入都是完整 JSON 备份；摘要只导出当前视图，适合贴给 AI。</p></section>

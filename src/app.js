@@ -75,9 +75,9 @@ import {
   const HELP_SEEN_KEY = 'timelog.helpSeen.v16';
 
   function defaultFormTs() {
-    const n = new Date();
-    const candidate = `${state.selectedDate || todayStr()}T${p2(n.getHours())}:${p2(n.getMinutes())}`;
-    return new Date(candidate) > new Date(Date.now() + 5 * 60000) ? nowStr() : candidate;
+    const today = todayStr();
+    const placeholder = openPlaceholderForDate(load().entries, today);
+    return placeholder ? placeholder.ts : nowStr();
   }
 
   function periodRange(view = state.view, dateKey = state.selectedDate) {
@@ -121,11 +121,19 @@ import {
   function sortedEntries() {
     return sortedEntriesFrom(load().entries);
   }
-  function prevSegmentFor(ts) {
-    const normalized = normalizeTimestamp(ts);
-    if (!normalized) return null;
-    const dayKey = normalized.slice(0, 10);
-    return sortedEntries().filter(e => e.ts.slice(0, 10) === dayKey && e.ts < normalized).pop() || null;
+  function isPlaceholderEntry(entry) {
+    return Boolean(entry && typeof entry.what === 'string' && entry.what.trim() === '');
+  }
+  function entriesOnDate(entries, dateKey) {
+    return sortedEntriesFrom(entries).filter(entry => entry.ts.slice(0, 10) === dateKey);
+  }
+  function lastEntryOnDate(entries, dateKey) {
+    const entriesForDay = entriesOnDate(entries, dateKey);
+    return entriesForDay.length ? entriesForDay[entriesForDay.length - 1] : null;
+  }
+  function openPlaceholderForDate(entries, dateKey) {
+    const last = lastEntryOnDate(entries, dateKey);
+    return isPlaceholderEntry(last) ? last : null;
   }
   function buildRangeSegments(start, end, opts = {}) {
     return buildRangeSegmentsFromEntries(load().entries, start, end, opts);
@@ -287,16 +295,23 @@ import {
   }
   function paintPrevSegment(panel, endTs) {
     const box = panel ? panel.querySelector('[data-role="prev-segment"]') : null;
-    if (!box) return;
-    box.innerHTML = renderPrevSegmentBlock(prevSegmentFor(endTs), endTs);
+    const startTs = normalizeTimestamp(endTs);
+    if (!box || !startTs) return;
+    const currentEnd = nowStr();
+    box.innerHTML = renderPrevSegmentBlock(startTs, currentEnd);
+    const startLabel = panel.querySelector('[data-role="start-time-label"]');
+    if (startLabel) startLabel.textContent = hhmm(startTs);
   }
   function mountNewTimePicker(panel, ts) {
     const tsEl = panel ? panel.querySelector('#form-ts') : null;
     const mountEl = panel ? panel.querySelector('#form-wheel-mount') : null;
-    if (!tsEl || !mountEl) return;
-    tsEl.value = ts;
-    paintPrevSegment(panel, ts);
-    mountTimePicker(mountEl, ts, v => {
+    if (!tsEl) return;
+    const startTs = normalizeTimestamp(ts) || defaultFormTs();
+    tsEl.value = startTs;
+    paintPrevSegment(panel, startTs);
+    const section = panel.querySelector('[data-role="start-time-section"]');
+    if (!mountEl || (section && section.hidden)) return;
+    mountTimePicker(mountEl, startTs, v => {
       tsEl.value = v;
       paintPrevSegment(panel, v);
     });
@@ -323,6 +338,10 @@ import {
     const sheet = document.getElementById('form-sheet');
     const panel = sheet.querySelector('.form-sheet-panel');
     const ts = mode === 'edit' ? entry.ts : (opts && opts.ts) || defaultFormTs();
+    if (mode === 'new') {
+      setSelectedDate((normalizeTimestamp(ts) || nowStr()).slice(0, 10));
+      persistState();
+    }
     panel.dataset.mode = mode;
     if (mode === 'edit') panel.dataset.id = id;
     else delete panel.dataset.id;
@@ -399,6 +418,10 @@ import {
     if (!sheet || !panel || sheet.hidden) return;
     const compact = useCompactTimePicker() ? '1' : '0';
     const mode = panel.dataset.mode || '';
+    if (mode === 'new') {
+      const section = panel.querySelector('[data-role="start-time-section"]');
+      if (section && section.hidden) return;
+    }
     const mountEl = mode === 'edit'
       ? panel.querySelector('[data-role="edit-wheel"]')
       : mode === 'new' ? document.getElementById('form-wheel-mount') : null;
@@ -471,7 +494,8 @@ import {
     const mount = mode === 'edit' ? panel.querySelector('[data-role="edit-wheel"]') : document.getElementById('form-wheel-mount');
     if (input) input.value = nextTs;
     if (mode === 'new') paintPrevSegment(panel, nextTs);
-    if (mount) {
+    const startSection = mode === 'new' ? panel.querySelector('[data-role="start-time-section"]') : null;
+    if (mount && !(startSection && startSection.hidden)) {
       mountTimePicker(mount, nextTs, v => {
         if (input) input.value = v;
         if (mode === 'new') paintPrevSegment(panel, v);
@@ -486,6 +510,21 @@ import {
   }
   function maybeRememberMainline(tag) {
     addMainlineTag(tag);
+  }
+  function ensureOpenPlaceholderAt(d, ts, completedId = '') {
+    const existing = d.entries.find(entry => entry.ts === ts && entry.id !== completedId);
+    if (existing) {
+      if (isPlaceholderEntry(existing)) {
+        existing.what = '';
+        existing.tags = [];
+        delete existing.longConfirm;
+      }
+      return existing;
+    }
+    if (completedId && d.entries.some(entry => entry.id === completedId && entry.ts === ts)) return null;
+    const placeholder = { id: uid(), ts, what: '', tags: [] };
+    d.entries.push(placeholder);
+    return placeholder;
   }
   function compactTagText(value) {
     return String(value || '').toLowerCase().replace(/[\s·._-]+/g, '');
@@ -503,6 +542,7 @@ import {
       : '自定义标签默认进入「主线」；与固定 chip 同名时按 chip 归类。';
   }
   function saveEntry() {
+    const panel = document.querySelector('#form-sheet .form-sheet-panel');
     const timeScope = document.getElementById('form-wheel-mount');
     const checked = validateTs(document.getElementById('form-ts').value);
     if (!checked.ok) {
@@ -517,14 +557,26 @@ import {
     const ctag = document.getElementById('form-ctag').value.trim();
     const tag = ctag || formTag || '未知';
     const d = load();
-    const conflict = findTimeConflict(checked.ts);
-    const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    const placeholder = openPlaceholderForDate(d.entries, checked.ts.slice(0, 10));
+    const conflict = findTimeConflict(checked.ts, placeholder ? placeholder.id : '');
     if (conflict) {
       showInlineError(panel, conflictMessage(conflict, checked.ts, 'use-conflict-plus-new'));
       return;
     }
     if (ctag) maybeRememberMainline(ctag);
-    d.entries.push({ id: uid(), ts: checked.ts, what, tags: [tag] });
+    const nowTs = nowStr();
+    let completed = null;
+    if (placeholder) {
+      placeholder.ts = checked.ts;
+      placeholder.what = what;
+      placeholder.tags = [tag];
+      delete placeholder.longConfirm;
+      completed = placeholder;
+    } else {
+      completed = { id: uid(), ts: checked.ts, what, tags: [tag] };
+      d.entries.push(completed);
+    }
+    ensureOpenPlaceholderAt(d, nowTs, completed.id);
     save(d);
     setSelectedDate(checked.ts.slice(0, 10));
     closeForm();
@@ -533,7 +585,7 @@ import {
   function switchActivity() {
     state.view = 'day';
     setSelectedDate(todayStr());
-    openFormSheet({ mode: 'new', ts: nowStr() });
+    openFormSheet({ mode: 'new' });
   }
   function autosizeTextareas(scope = document) {
     scope.querySelectorAll('textarea.ta').forEach(textarea => {
@@ -892,14 +944,24 @@ import {
   function openTagConfig() {
     openFormSheet({ mode: 'config' });
   }
-  function focusEndTime() {
-    const mount = document.getElementById('form-wheel-mount');
-    if (!mount) return;
-    mount.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    requestAnimationFrame(() => {
-      const focusEl = mount.querySelector('[data-role="text"], [data-role="date"], button, input, [tabindex]:not([tabindex="-1"])');
-      if (focusEl) focusEl.focus({ preventScroll: true });
-    });
+  function toggleStartTime(el) {
+    const panel = el.closest('.form-sheet-panel');
+    if (!panel) return;
+    const section = panel.querySelector('[data-role="start-time-section"]');
+    const tsEl = panel.querySelector('#form-ts');
+    if (!section || !tsEl) return;
+    const willOpen = section.hidden;
+    section.hidden = !willOpen;
+    el.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    el.textContent = willOpen ? '收起' : '▸改';
+    paintPrevSegment(panel, tsEl.value);
+    if (willOpen) {
+      mountNewTimePicker(panel, tsEl.value);
+      requestAnimationFrame(() => {
+        const focusEl = section.querySelector('[data-role="text"], [data-role="date"], button, input, [tabindex]:not([tabindex="-1"])');
+        if (focusEl) focusEl.focus({ preventScroll: true });
+      });
+    }
   }
   function addConfigChip() {
     const list = document.querySelector('[data-role="config-chips"]');
@@ -983,7 +1045,7 @@ import {
       if (action === 'switch-activity') switchActivity();
       if (action === 'open-help') openHelp();
       if (action === 'open-tag-config') openTagConfig();
-      if (action === 'focus-end-time') focusEndTime();
+      if (action === 'toggle-start-time') toggleStartTime(el);
       if (action === 'pick-form-tag') pickTag(el);
       if (action === 'save-entry') saveEntry();
       if (action === 'close-form') closeForm();

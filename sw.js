@@ -1,4 +1,4 @@
-const CACHE = 'timelog-v18';
+const CACHE = 'timelog-v19';
 const FILES = [
   './',
   './index.html',
