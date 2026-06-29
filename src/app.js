@@ -38,6 +38,7 @@ import {
   fmtPlainMins,
   fmtTs,
   hhmm,
+  localDateTimeKey,
   localDateKey,
   minsBetweenDates,
   normalizeTimestamp,
@@ -47,6 +48,7 @@ import {
   periodLabel as getPeriodLabel,
   periodRange as getPeriodRange,
   shortDateLabel,
+  startOfDay,
   todayStr,
   validateTs
 } from './time.js';
@@ -78,7 +80,8 @@ import {
     const dateKey = state.selectedDate || todayStr();
     const placeholder = openPlaceholderForDate(entries, dateKey);
     if (placeholder) return placeholder.ts;
-    if (entriesOnDate(entries, dateKey).length) return nowStr();
+    const last = lastEntryOnDate(entries, dateKey);
+    if (last) return last.ts;
     return `${dateKey}T00:00`;
   }
 
@@ -136,6 +139,18 @@ import {
   function openPlaceholderForDate(entries, dateKey) {
     const last = lastEntryOnDate(entries, dateKey);
     return isPlaceholderEntry(last) ? last : null;
+  }
+  function settlementEndFor(startTs, dateKey) {
+    const normalizedStart = normalizeTimestamp(startTs);
+    if (!normalizedStart) return { endTs: '', isNow: false, isDayEnd: false };
+    const startDateKey = normalizedStart.slice(0, 10);
+    const targetDateKey = parseDateKey(startDateKey) ? startDateKey : dateKey;
+    const next = entriesOnDate(load().entries, targetDateKey).find(entry => entry.ts > normalizedStart);
+    if (next) return { endTs: next.ts, isNow: false, isDayEnd: false };
+    if (targetDateKey === todayStr()) return { endTs: nowStr(), isNow: true, isDayEnd: false };
+    const day = parseDateKey(targetDateKey);
+    if (!day) return { endTs: nowStr(), isNow: true, isDayEnd: false };
+    return { endTs: localDateTimeKey(addDays(startOfDay(day), 1)), isNow: false, isDayEnd: true };
   }
   function buildRangeSegments(start, end, opts = {}) {
     return buildRangeSegmentsFromEntries(load().entries, start, end, opts);
@@ -295,13 +310,16 @@ import {
     const panel = sheet ? sheet.querySelector('.form-sheet-panel') : null;
     return sheet && panel && !sheet.hidden ? panel.dataset.mode || '' : '';
   }
-  function paintPrevSegment(panel, endTs) {
-    const startTs = normalizeTimestamp(endTs);
+  function paintPrevSegment(panel, startTs) {
+    startTs = normalizeTimestamp(startTs);
     if (!startTs) return;
+    const settlement = settlementEndFor(startTs, state.selectedDate);
     const startLabel = panel ? panel.querySelector('[data-role="start-time-label"]') : null;
+    const endLabel = panel ? panel.querySelector('[data-role="end-label"]') : null;
     const durationLabel = panel ? panel.querySelector('[data-role="duration-label"]') : null;
     if (startLabel) startLabel.textContent = hhmm(startTs);
-    if (durationLabel) durationLabel.textContent = fmtMins(minsBetweenDates(new Date(startTs), new Date(nowStr())));
+    if (endLabel && settlement.endTs) endLabel.textContent = settlement.isNow ? '现在' : (settlement.isDayEnd ? '24:00' : hhmm(settlement.endTs));
+    if (durationLabel && settlement.endTs) durationLabel.textContent = fmtMins(minsBetweenDates(new Date(startTs), new Date(settlement.endTs)));
   }
   function mountNewTimePicker(panel, ts) {
     const tsEl = panel ? panel.querySelector('#form-ts') : null;
@@ -346,7 +364,13 @@ import {
     panel.dataset.mode = mode;
     if (mode === 'edit') panel.dataset.id = id;
     else delete panel.dataset.id;
-    panel.innerHTML = renderFormSheet({ mode, entry, config: loadConfig() });
+    panel.innerHTML = renderFormSheet({
+      mode,
+      entry,
+      config: loadConfig(),
+      targetDate: state.selectedDate,
+      isToday: state.selectedDate === todayStr()
+    });
     sheet.hidden = false;
     lockBodyForSheet();
     if (mode === 'edit') {
@@ -577,7 +601,7 @@ import {
       completed = { id: uid(), ts: checked.ts, what, tags: [tag] };
       d.entries.push(completed);
     }
-    ensureOpenPlaceholderAt(d, nowTs, completed.id);
+    if (checked.ts.slice(0, 10) === todayStr()) ensureOpenPlaceholderAt(d, nowTs, completed.id);
     save(d);
     setSelectedDate(checked.ts.slice(0, 10));
     closeForm();
@@ -1114,11 +1138,10 @@ import {
   // --- Init ---
   function init() {
     const today = todayStr();
-    const lastOpen = localStorage.getItem(OPEN_DATE_KEY);
     const savedView = localStorage.getItem(VIEW_KEY);
     const savedDate = parseDateKey(localStorage.getItem(SELECTED_DATE_KEY));
     state.view = ['day', 'week', 'month', 'year'].includes(savedView) ? savedView : 'day';
-    state.selectedDate = lastOpen === today && savedDate ? localDateKey(savedDate) : today;
+    state.selectedDate = savedDate ? localDateKey(savedDate) : today;
     localStorage.setItem(OPEN_DATE_KEY, today);
     persistState();
 

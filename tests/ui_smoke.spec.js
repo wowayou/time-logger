@@ -4,9 +4,9 @@ const VIEWPORTS = [320, 375, 430, 768];
 const STATES = ['empty', 'one-record', 'yesterday-residual'];
 const FIXED_NOW = '2026-06-29T12:34:30';
 
-async function boot(page, width, state, share = false, now = '') {
+async function boot(page, width, state, share = false, now = '', selectedDateOffset = null) {
   await page.setViewportSize({ width, height: 820 });
-  await page.addInitScript(({ state, share, now }) => {
+  await page.addInitScript(({ state, share, now, selectedDateOffset }) => {
     if (now) {
       const RealDate = Date;
       const fixedNow = new RealDate(now).getTime();
@@ -48,8 +48,18 @@ async function boot(page, width, state, share = false, now = '') {
     if (state === 'yesterday-residual') {
       entries.push({ id: 'yesterday-1', ts: `${dateKey(yesterday)}T23:00`, what: '昨日残留记录', tags: ['杂'] });
     }
+    if (state === 'yesterday-placeholder') {
+      entries.push({ id: 'yesterday-open', ts: `${dateKey(yesterday)}T23:00`, what: '', tags: [] });
+    }
     localStorage.clear();
     localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
+    if (selectedDateOffset !== null) {
+      const selected = new Date(today);
+      selected.setDate(selected.getDate() + selectedDateOffset);
+      const selectedKey = dateKey(selected);
+      localStorage.setItem('timelog.selectedDate', selectedKey);
+      localStorage.setItem('timelog.openDate', selectedKey);
+    }
 
     if (share) {
       Object.defineProperty(navigator, 'share', {
@@ -61,7 +71,7 @@ async function boot(page, width, state, share = false, now = '') {
         value: () => false
       });
     }
-  }, { state, share, now });
+  }, { state, share, now, selectedDateOffset });
   await page.goto('/');
   await page.waitForFunction(() => document.querySelector('#timeline')?.children.length > 0);
 }
@@ -145,6 +155,17 @@ test('new entry shows continuation context and recomputes start', async ({ page 
   await expect(page.locator('[data-role="start-time-label"]')).toHaveText('09:30');
 });
 
+test('past-day continuation settles at day end and restores selected date', async ({ page }) => {
+  await boot(page, 768, 'yesterday-residual', false, FIXED_NOW, -1);
+  await page.getByRole('button', { name: '记一条新的时间记录' }).click();
+
+  await expect(page.locator('#form-sheet-title')).toHaveText('补记 · 6月28日');
+  await expect(page.locator('.form-sheet-what')).toHaveText('写下这一段做了什么');
+  await expect(page.locator('[data-role="start-time-label"]')).toHaveText('23:00');
+  await expect(page.locator('[data-role="end-label"]')).toHaveText('24:00');
+  await expect(page.locator('[data-role="duration-label"]')).toHaveText('~1h');
+});
+
 test('continuation save fills tail placeholder and opens unrecorded segment', async ({ page }) => {
   await boot(page, 768, 'tail-placeholder', false, FIXED_NOW);
   await page.getByRole('button', { name: '记一条新的时间记录' }).click();
@@ -159,6 +180,19 @@ test('continuation save fills tail placeholder and opens unrecorded segment', as
   expect(opened).toMatchObject({ what: '', tags: [] });
   await expect(page.locator('#timeline')).toContainText('进行中·还没记');
   await expect(page.locator('#timeline')).toContainText('未记录·进行中');
+});
+
+test('past-day save does not create today placeholder', async ({ page }) => {
+  await boot(page, 768, 'yesterday-placeholder', false, FIXED_NOW, -1);
+  await page.getByRole('button', { name: '记一条新的时间记录' }).click();
+  await page.locator('#form-what').fill('补完昨天');
+  await page.getByRole('button', { name: '选择标签：求职推进' }).click();
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(entries).toHaveLength(1);
+  expect(entries[0]).toMatchObject({ id: 'yesterday-open', ts: '2026-06-28T23:00', what: '补完昨天', tags: ['求职推进'] });
+  await expect(page.locator('#period-label')).toContainText('2026/06/28');
 });
 
 test('first record with earlier start creates real segment and open placeholder', async ({ page }) => {

@@ -185,15 +185,21 @@ export function renderFormSheet(opts) {
   const mode = opts && opts.mode === 'edit' ? 'edit' : 'new';
   const e = opts && opts.entry;
   const isEdit = mode === 'edit';
+  const isToday = !opts || opts.isToday !== false;
+  const targetDate = opts && opts.targetDate;
+  const daySummary = (() => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(targetDate || '');
+    return m ? `${Number(m[2])}月${Number(m[3])}日` : '这一天';
+  })();
   const tag = isEdit ? ((e.tags || [])[0] || '') : '';
   const config = loadConfig();
   const isKnownPickerTag = config.mainline.includes(tag) || config.chips.some(chip => chip.name === tag);
   const chips = renderTagPicker(isEdit ? 'edit' : 'form', tag, config);
-  const title = isEdit ? '编辑' : '记一条';
+  const title = isEdit ? '编辑' : (isToday ? '记一条' : '补记');
   const summary = isEdit
     ? `${hhmm(e.ts)}${tag ? ` · #${esc(tag)}` : ''}`
-    : '刚才这一阵';
-  const whatText = isEdit ? (esc(e.what) || '未填写') : '写下刚才做了什么';
+    : (isToday ? '刚才这一阵' : daySummary);
+  const whatText = isEdit ? (esc(e.what) || '未填写') : (isToday ? '写下刚才做了什么' : '写下这一段做了什么');
   const saveAction = isEdit ? 'commit-edit' : 'save-entry';
   const saveId = isEdit ? ` data-id="${esc(e.id)}"` : '';
   const saveTip = isEdit ? '保存修改' : '保存记录';
@@ -237,7 +243,7 @@ export function renderFormSheet(opts) {
       <div class="form-time-row">
         ${tsInput}
         <button class="start-time-trigger" type="button" data-action="toggle-start-time" aria-expanded="false" aria-label="修改起点时间"><span data-role="start-time-label">--:--</span></button>
-        <span class="form-time-arrow">→ 现在 · 已 <span data-role="duration-label">--</span></span>
+        <span class="form-time-arrow">→ <span data-role="end-label">现在</span> · 已 <span data-role="duration-label">--</span></span>
       </div>
       <div class="form-inline-error" data-role="conflict-error" hidden></div>
       <div class="fl start-time-section" data-role="start-time-section" hidden>
