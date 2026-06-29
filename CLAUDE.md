@@ -6,6 +6,10 @@
 
 - `index.html`：DOM 壳、PWA/meta 引用、`styles.css` 和 `src/app.js` 模块入口
 - `styles.css`：全部样式
+- `src/app.js`：启动、状态组合、导航、渲染调度、事件委托、测试 API 和 Service Worker 注册
+- `src/entry_model.js`：记录日期模型、续记默认起点、占位条、结算点、同刻冲突和 `+1min` helper
+- `src/io_actions.js`：当前视图摘要、复制、下载、导入、分享等本地 IO 动作
+- `src/sheet_controller.js`：新建/编辑/config/import sheet、focus trap、picker 重挂载和表单保存
 - `src/time.js`：本地日期解析、格式化、周期范围
 - `src/storage.js`：`localStorage['timelog.v1']` 读写、`localStorage['timelog.config']` 标签配置、导入合并
 - `src/stats.js`：纯统计逻辑、按日分段、长段确认绑定
@@ -35,7 +39,10 @@
 - `src/stats.js`：保持统计逻辑集中；不访问 DOM / navigator；桶归类只能通过 `storage.js` 的配置 helper；日边界规则必须在这里测试。
 - `src/pickers.js`：只负责时间选择器 DOM；不直接保存业务数据。
 - `src/ui.js`：只负责模板、图标、tooltip helper 和 DOM 渲染；不做数据持久化。
-- `src/app.js`：只负责状态、事件委托、页面初始化、Service Worker、复制/下载/分享动作。
+- `src/entry_model.js`：只放记录日期模型、续记默认起点、占位条、结算点、同刻冲突和 `+1min` 等纯/低副作用 helper；不访问 DOM / localStorage。
+- `src/io_actions.js`：只处理当前视图摘要、复制、下载、导入、分享；通过显式依赖接收 `load/save/render/state`，不拥有全局状态。
+- `src/sheet_controller.js`：只处理新建/编辑/config/import sheet、focus trap、picker 重挂载和表单保存；通过显式依赖读写状态和持久化。
+- `src/app.js`：只负责启动、状态组合、导航、渲染调度、事件委托、测试 API 和 Service Worker 注册。
 
 提交与推送前红线：
 
@@ -46,13 +53,14 @@
 
 ## 当前版本
 
-当前版本：`timelog-v21` / manifest `version: "21"`。
+当前版本：`timelog-v22` / manifest `version: "22"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
 1. `sw.js` 第 1 行 `CACHE = 'timelog-vN'`
 2. `manifest.webmanifest` 的 `version`
 3. `sw.js` 的 `FILES` 运行时缓存列表
+4. `scripts/project_audit.py` 的 `EXPECTED_VERSION`、`REQUIRED_RUNTIME_ASSETS` 和运行时 import 检查列表
 
 运行时资产必须进 SW 缓存；文档和开发脚本不进缓存。
 
@@ -93,6 +101,7 @@
 - 本地自然日 00:00 是统计硬边界；空日不继承前一天最后标签；有首条记录的日期从 00:00 到首条之间计为未记录；周/月/年汇总按每日独立统计累加。
 - 超过 3h 的非 `longOk` 明确标签段确认只绑定 `longConfirm.startTs` 和 `longConfirm.endTs`；相邻时间变化或中间补录自动失效，改成另一个明确标签不自动失效；跨日边界使用本地日边界作为段结束。默认只有“睡觉” `longOk:true`。
 - 时间戳是本地壁钟值，不做时区转换；跨设备导入只能通过“整体平移 ±N 小时”对齐。
+- 续记模型以所看日期为准：空日默认从 00:00 开始；有记录日默认续最后一条或当天空占位条；补录到已有右邻记录之前时结束点吸附右邻；今天无右邻到当前时间，非今天无右邻到 24:00。
 - 数据只存在 `localStorage['timelog.v1']`；标签配置只存在 `localStorage['timelog.config']`。
 - 复制/下载/导入/分享都是完整备份，导出前按 `ts` 升序排序；摘要只代表当前视图；所有动作都在浏览器本地完成，不上传。
 
@@ -128,6 +137,7 @@ git diff --check
 6. 同时刻新增/编辑出现内联冲突提示，可编辑原条或用 +1min。
 7. 下载、导入、分享、摘要、复制仍保持文字入口并可用；导出文件名带秒，JSON 按 `ts` 升序。
 8. PWA 更新链路：改 `index.html` 后升 CACHE 号；旧页面应出现“更新应用”，点击后加载新版，本机 `localStorage['timelog.v1']` 保留。
+9. 午夜后重开仍停在上次所看日期；历史日续记无右邻时结束显示 24:00，不漏到当前时间。
 
 响应式手动矩阵：
 
@@ -162,3 +172,4 @@ git diff --check
 | v19 | 2026-06-29 | 新建记录改为续记式回溯录入；空占位条表示未记录的进行中片段 |
 | v20 | 2026-06-30 | 续记模型修正（起点续上一条/当天空→00:00）；时间条合并可点展开；冲突提示上移；去黑环；F5 防闪 |
 | v21 | 2026-06-30 | 续记结算点跟随所看那天（非今天不漏 now）；重开恢复上次日期不再跨日复位；占位条只属于今天；表单结束文案动态化＋非今天明示补记日 |
+| v22 | 2026-06-30 | 测试护栏先行后拆分 `entry_model.js` / `io_actions.js` / `sheet_controller.js`；补齐倒序补录、跨日 reload、导入/导出 smoke 和 repeat 压测口径 |

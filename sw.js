@@ -1,4 +1,4 @@
-const CACHE = 'timelog-v21';
+const CACHE = 'timelog-v22';
 const FILES = [
   './',
   './index.html',
@@ -6,6 +6,9 @@ const FILES = [
   './manifest.webmanifest',
   './sw.js',
   './src/app.js',
+  './src/entry_model.js',
+  './src/io_actions.js',
+  './src/sheet_controller.js',
   './src/time.js',
   './src/storage.js',
   './src/stats.js',

@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "21"
+EXPECTED_VERSION = "22"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -19,6 +19,9 @@ REQUIRED_RUNTIME_ASSETS = [
     "manifest.webmanifest",
     "sw.js",
     "src/app.js",
+    "src/entry_model.js",
+    "src/io_actions.js",
+    "src/sheet_controller.js",
     "src/time.js",
     "src/storage.js",
     "src/stats.js",
@@ -186,7 +189,17 @@ def audit_npm_metadata(errors: list[str]) -> None:
 
 def audit_runtime_imports(errors: list[str]) -> None:
     import_re = re.compile(r"(?:import\s+(?:[^'\"]+?\s+from\s+)?|export\s+[^'\"]+?\s+from\s+|import\s*\()\s*['\"]([^'\"]+)['\"]")
-    for rel in ("src/app.js", "src/time.js", "src/storage.js", "src/stats.js", "src/pickers.js", "src/ui.js"):
+    for rel in (
+        "src/app.js",
+        "src/entry_model.js",
+        "src/io_actions.js",
+        "src/sheet_controller.js",
+        "src/time.js",
+        "src/storage.js",
+        "src/stats.js",
+        "src/pickers.js",
+        "src/ui.js",
+    ):
         text = read_text(rel)
         for match in import_re.finditer(text):
             spec = match.group(1)
@@ -202,9 +215,12 @@ def audit_index(errors: list[str]) -> None:
     html = read_text("index.html")
     css = read_text("styles.css")
     app = read_text("src/app.js")
+    entry_model = read_text("src/entry_model.js")
+    io_actions = read_text("src/io_actions.js")
+    sheet_controller = read_text("src/sheet_controller.js")
     ui = read_text("src/ui.js")
     pickers = read_text("src/pickers.js")
-    runtime = "\n".join([html, css, app, ui, pickers])
+    runtime = "\n".join([html, css, app, entry_model, io_actions, sheet_controller, ui, pickers])
 
     if "title=" in runtime:
         fail(errors, "runtime files must not use native title= tooltips")
@@ -253,7 +269,7 @@ def audit_index(errors: list[str]) -> None:
 
     if ".inp" not in css or "font-size: 16px" not in css:
         fail(errors, "text inputs must keep a 16px font-size floor for mobile")
-    open_form = re.search(r"function\s+openForm\(\)\s*\{(?P<body>.*?)\n\s*\}", app, re.DOTALL)
+    open_form = re.search(r"function\s+openForm\(\)\s*\{(?P<body>.*?)\n\s*\}", runtime, re.DOTALL)
     if open_form and "openFormSheet({ mode: 'new' })" not in open_form.group("body"):
         fail(errors, "opening the add form must use the unified form sheet")
     if "--footer-space" in runtime:

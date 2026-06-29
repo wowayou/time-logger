@@ -1,7 +1,7 @@
 # 时间尺
 
 > Status: active  
-> Updated: 2026-06-29
+> Updated: 2026-06-30
 > Intended user: 求职主线时间记录和每日复盘的个人使用者。  
 > Operating boundary: 本地静态 PWA，只记录时间去向，不做云同步、账号管理、KPI 考核或投资/合规判断。  
 > Risks and failure modes: 忘记记录导致“未记录”偏高、长时间间隔被整体计为未记录、周/月/年视图诱发过度复盘、浏览器本地数据被清理。  
@@ -65,6 +65,10 @@ Android Chrome：打开页面 → 菜单 → 添加到主屏幕。
 |---|---|
 | `index.html` | DOM 壳、PWA/meta 引用、`styles.css` 和 `src/app.js` 模块入口 |
 | `styles.css` | 全部样式，包含主题、布局、控件、sheet、footer 和响应式规则 |
+| `src/app.js` | 启动、状态组合、导航、渲染调度、事件委托和 Service Worker 注册 |
+| `src/entry_model.js` | 记录日期模型、续记默认起点、占位条、结算点和同刻冲突 helper |
+| `src/io_actions.js` | 当前视图摘要、复制、下载、导入、分享等本地 IO 动作 |
+| `src/sheet_controller.js` | 新建/编辑/config/import sheet、focus trap、picker 重挂载和表单保存 |
 | `src/time.js` | 本地日期解析、格式化、周期范围 |
 | `src/storage.js` | `localStorage['timelog.v1']` 读取/保存和导入合并 |
 | `src/stats.js` | 纯统计逻辑、按日分段、长段确认绑定 |
@@ -90,7 +94,7 @@ npm run test:ui
 git diff --check
 ```
 
-审计脚本检查 PWA 版本、图标资源、Service Worker 缓存列表、tooltip/icon 红线、README 演示截图白名单和文档隐私红线。确认逻辑 smoke 直接导入 `src/stats.js`，跑固定用例、日边界回归和随机压测。UI smoke 使用开发期 Playwright 覆盖 320/375/430/768 宽度、空数据/单条记录/昨日残留记录和分享按钮显示/隐藏。
+审计脚本检查 PWA 版本、图标资源、Service Worker 缓存列表、tooltip/icon 红线、README 演示截图白名单和文档隐私红线。确认逻辑 smoke 直接导入 `src/stats.js`，跑固定用例、日边界回归和随机压测。UI smoke 使用开发期 Playwright 覆盖 320/375/430/768 宽度、空数据/单条记录/昨日残留记录、续记占位条、倒序补录、跨日重开、导入导出和分享按钮显示/隐藏。
 
 开发期 npm 只允许用于测试：`package.json` 保持 `"private": true`、`"type": "module"`，禁止新增运行时 `dependencies`，禁止提交 `node_modules/`、`test-results/`、`playwright-report/`。应用运行时仍是原生 ES modules + 静态文件，不引入构建流程。
 
@@ -113,7 +117,7 @@ git diff --check
 }
 ```
 
-时长 = 当前条到下一条 ts 的间隔，渲染时实时算，不存储。统计以本地自然日 00:00 为硬边界：空日不继承前一天最后标签；某天第一条记录之前从 00:00 起计为未记录；周/月/年汇总按每日独立统计累加。统计以分钟数为权威值：`job` / `maintain` / `leak` / `unrecorded` / `pending` / `total` 都先按分钟累加，条形图按分钟比例显示，百分比只用于展示，不反向参与统计，也不强行凑满 100%。
+续记模型以所看日期为准：空日默认从 00:00 开始；有记录日默认续最后一条，若当天已有空占位条则续占位条；补录到已有右邻记录之前时，结束点吸附到右邻记录。今天无右邻时结算到当前时间，非今天无右邻时结算到 24:00。时长 = 当前条到下一条 ts 的间隔，渲染时实时算，不存储。统计以本地自然日 00:00 为硬边界：空日不继承前一天最后标签；某天第一条记录之前从 00:00 起计为未记录；周/月/年汇总按每日独立统计累加。统计以分钟数为权威值：`job` / `maintain` / `leak` / `unrecorded` / `pending` / `total` 都先按分钟累加，条形图按分钟比例显示，百分比只用于展示，不反向参与统计，也不强行凑满 100%。
 
 标签渲染时派生为 4 桶：主线 `job`、维持 `maintain`、漏损 `leak`、未记录 `unrecorded`。自定义标签默认进入主线；固定 chip 可在本机配置；孤儿标签和“未知”计为**未记录**。超过 3h 的非 `longOk` 明确标签段先显示为**待确认**并并入未记录；确认按钮会显示该段起止时间，确认后才按标签统计。默认只有“睡觉” `longOk:true`，吃饭/洗漱等过长仍需确认。
 

@@ -1,4 +1,8 @@
-import { mountTimePicker, setTimeInputError, useCompactTimePicker } from './pickers.js';
+import { mountTimePicker } from './pickers.js';
+import {
+  defaultFormTimestamp,
+  settlementEndFor as getSettlementEndFor
+} from './entry_model.js';
 import {
   OPEN_DATE_KEY,
   SELECTED_DATE_KEY,
@@ -13,6 +17,8 @@ import {
   uid,
   validateImportData
 } from './storage.js';
+import { createIoActions } from './io_actions.js';
+import { createSheetController } from './sheet_controller.js';
 import {
   GAP,
   addBucket,
@@ -33,27 +39,16 @@ import {
   addMonths,
   addYears,
   dateLabel,
-  fmtDateTime,
-  fmtMins,
-  fmtPlainMins,
-  fmtTs,
-  hhmm,
-  localDateTimeKey,
   localDateKey,
   minsBetweenDates,
   normalizeTimestamp,
-  nowStr,
-  p2,
   parseDateKey,
   periodLabel as getPeriodLabel,
   periodRange as getPeriodRange,
   shortDateLabel,
-  startOfDay,
-  todayStr,
-  validateTs
+  todayStr
 } from './time.js';
 import {
-  renderFormSheet,
   renderRuler,
   renderSummaryRows,
   renderTimeline,
@@ -62,15 +57,8 @@ import {
 
   let editingId = null;
   let sheetEditId = null;
-  let sheetScrollY = 0;
-  let sheetTimeMounted = false;
-  let sheetLastFocus = null;
-  let sheetTrapController = null;
-  let sheetResizeTimer = null;
   let pendingUpdateRegistration = null;
   let updateReloading = false;
-  let formTag = '';
-  let importShiftMinutes = 0;
   let lastIntervalSignature = '';
   let state = { view: 'day', selectedDate: '' };
   const HELP_SEEN_KEY = 'timelog.helpSeen.v16';
@@ -78,11 +66,7 @@ import {
   function defaultFormTs() {
     const entries = load().entries;
     const dateKey = state.selectedDate || todayStr();
-    const placeholder = openPlaceholderForDate(entries, dateKey);
-    if (placeholder) return placeholder.ts;
-    const last = lastEntryOnDate(entries, dateKey);
-    if (last) return last.ts;
-    return `${dateKey}T00:00`;
+    return defaultFormTimestamp(entries, dateKey);
   }
 
   function periodRange(view = state.view, dateKey = state.selectedDate) {
@@ -126,31 +110,8 @@ import {
   function sortedEntries() {
     return sortedEntriesFrom(load().entries);
   }
-  function isPlaceholderEntry(entry) {
-    return Boolean(entry && typeof entry.what === 'string' && entry.what.trim() === '');
-  }
-  function entriesOnDate(entries, dateKey) {
-    return sortedEntriesFrom(entries).filter(entry => entry.ts.slice(0, 10) === dateKey);
-  }
-  function lastEntryOnDate(entries, dateKey) {
-    const entriesForDay = entriesOnDate(entries, dateKey);
-    return entriesForDay.length ? entriesForDay[entriesForDay.length - 1] : null;
-  }
-  function openPlaceholderForDate(entries, dateKey) {
-    const last = lastEntryOnDate(entries, dateKey);
-    return isPlaceholderEntry(last) ? last : null;
-  }
   function settlementEndFor(startTs, dateKey) {
-    const normalizedStart = normalizeTimestamp(startTs);
-    if (!normalizedStart) return { endTs: '', isNow: false, isDayEnd: false };
-    const startDateKey = normalizedStart.slice(0, 10);
-    const targetDateKey = parseDateKey(startDateKey) ? startDateKey : dateKey;
-    const next = entriesOnDate(load().entries, targetDateKey).find(entry => entry.ts > normalizedStart);
-    if (next) return { endTs: next.ts, isNow: false, isDayEnd: false };
-    if (targetDateKey === todayStr()) return { endTs: nowStr(), isNow: true, isDayEnd: false };
-    const day = parseDateKey(targetDateKey);
-    if (!day) return { endTs: nowStr(), isNow: true, isDayEnd: false };
-    return { endTs: localDateTimeKey(addDays(startOfDay(day), 1)), isNow: false, isDayEnd: true };
+    return getSettlementEndFor(load().entries, startTs, dateKey);
   }
   function buildRangeSegments(start, end, opts = {}) {
     return buildRangeSegmentsFromEntries(load().entries, start, end, opts);
@@ -198,8 +159,8 @@ import {
   function setView(view) {
     state.view = view;
     editingId = null;
-    closeEditSheet();
-    closeForm();
+    sheetController.closeEditSheet();
+    sheetController.closeForm();
     persistState();
     render();
   }
@@ -214,23 +175,23 @@ import {
     if (state.view === 'month') setSelectedDate(localDateKey(addMonths(d, delta)));
     if (state.view === 'year') setSelectedDate(localDateKey(addYears(d, delta)));
     editingId = null;
-    closeEditSheet();
-    closeForm();
+    sheetController.closeEditSheet();
+    sheetController.closeForm();
     render();
   }
   function goToday() {
     setSelectedDate(todayStr());
     editingId = null;
-    closeEditSheet();
-    closeForm();
+    sheetController.closeEditSheet();
+    sheetController.closeForm();
     render();
   }
   function drill(dateKey, view) {
     state.view = view;
     setSelectedDate(dateKey);
     editingId = null;
-    closeEditSheet();
-    closeForm();
+    sheetController.closeEditSheet();
+    sheetController.closeForm();
     render();
   }
 
@@ -244,7 +205,7 @@ import {
       if (editingId) {
         const entry = load().entries.find(e => e.id === editingId);
         if (entry) {
-          const editor = getEditingBox(entry.id);
+          const editor = sheetController.getEditingBox(entry.id);
           const mountEl = editor ? editor.querySelector('[data-role="edit-wheel"]') : null;
           const tsEl = editor ? editor.querySelector('[data-role="edit-ts"]') : null;
           if (mountEl && tsEl) {
@@ -283,7 +244,7 @@ import {
       const text = `切到${isPrev ? '上一' : '下一'}${periodNames[state.view]}。`;
       setButtonTip(btn, text, `${isPrev ? '上一' : '下一'}${periodNames[state.view]}`);
     });
-    updateShareAvailability();
+    ioActions.updateShareAvailability();
     const labels = { day: '当日时间轴', week: '本周每日汇总', month: '本月每日汇总', year: '全年每月汇总' };
     document.getElementById('list-label').textContent = labels[state.view];
   }
@@ -296,431 +257,7 @@ import {
     renderSummaryRows(rows);
   }
 
-  // --- Form ---
-  function openForm() {
-    openFormSheet({ mode: 'new' });
-  }
-  function isFormOpen() {
-    const sheet = document.getElementById('form-sheet');
-    const panel = sheet ? sheet.querySelector('.form-sheet-panel') : null;
-    return Boolean(sheet && panel && !sheet.hidden && panel.dataset.mode === 'new');
-  }
-  function getSheetMode() {
-    const sheet = document.getElementById('form-sheet');
-    const panel = sheet ? sheet.querySelector('.form-sheet-panel') : null;
-    return sheet && panel && !sheet.hidden ? panel.dataset.mode || '' : '';
-  }
-  function paintPrevSegment(panel, startTs) {
-    startTs = normalizeTimestamp(startTs);
-    if (!startTs) return;
-    const settlement = settlementEndFor(startTs, state.selectedDate);
-    const startLabel = panel ? panel.querySelector('[data-role="start-time-label"]') : null;
-    const endLabel = panel ? panel.querySelector('[data-role="end-label"]') : null;
-    const durationLabel = panel ? panel.querySelector('[data-role="duration-label"]') : null;
-    if (startLabel) startLabel.textContent = hhmm(startTs);
-    if (endLabel && settlement.endTs) endLabel.textContent = settlement.isNow ? '现在' : (settlement.isDayEnd ? '24:00' : hhmm(settlement.endTs));
-    if (durationLabel && settlement.endTs) durationLabel.textContent = fmtMins(minsBetweenDates(new Date(startTs), new Date(settlement.endTs)));
-  }
-  function mountNewTimePicker(panel, ts) {
-    const tsEl = panel ? panel.querySelector('#form-ts') : null;
-    const mountEl = panel ? panel.querySelector('#form-wheel-mount') : null;
-    if (!tsEl) return;
-    const startTs = normalizeTimestamp(ts) || defaultFormTs();
-    tsEl.value = startTs;
-    paintPrevSegment(panel, startTs);
-    const section = panel.querySelector('[data-role="start-time-section"]');
-    if (!mountEl || (section && section.hidden)) return;
-    mountTimePicker(mountEl, startTs, v => {
-      tsEl.value = v;
-      paintPrevSegment(panel, v);
-    });
-  }
-  function openFormSheet(opts) {
-    const requestedMode = opts && opts.mode;
-    const mode = ['edit', 'help', 'config', 'import-shift'].includes(requestedMode) ? requestedMode : 'new';
-    const id = opts && opts.id;
-    const entry = mode === 'edit' ? load().entries.find(e => e.id === id) : null;
-    if (mode === 'edit' && !entry) return;
-    sheetLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    if (mode === 'new') {
-      state.view = 'day';
-      persistState();
-      editingId = null;
-      sheetEditId = null;
-      formTag = '';
-    } else if (mode === 'edit') {
-      editingId = null;
-      sheetEditId = id;
-      sheetTimeMounted = false;
-      render();
-    }
-    const sheet = document.getElementById('form-sheet');
-    const panel = sheet.querySelector('.form-sheet-panel');
-    const ts = mode === 'edit' ? entry.ts : (opts && opts.ts) || defaultFormTs();
-    if (mode === 'new') {
-      setSelectedDate((normalizeTimestamp(ts) || nowStr()).slice(0, 10));
-      persistState();
-    }
-    panel.dataset.mode = mode;
-    if (mode === 'edit') panel.dataset.id = id;
-    else delete panel.dataset.id;
-    panel.innerHTML = renderFormSheet({
-      mode,
-      entry,
-      config: loadConfig(),
-      targetDate: state.selectedDate,
-      isToday: state.selectedDate === todayStr()
-    });
-    sheet.hidden = false;
-    lockBodyForSheet();
-    if (mode === 'edit') {
-      const tsEl = panel.querySelector('[data-role="edit-ts"]');
-      mountTimePicker(panel.querySelector('[data-role="edit-wheel"]'), ts, v => {
-        tsEl.value = v;
-      });
-      sheetTimeMounted = true;
-    } else if (mode === 'new') {
-      mountNewTimePicker(panel, ts);
-      panel.querySelector('#form-what').value = '';
-      panel.querySelector('#form-ctag').value = '';
-      panel.querySelectorAll('#form-chips .chip').forEach(c => c.classList.remove('sel'));
-      renderChrome();
-    }
-    autosizeTextareas(panel);
-    trapFocus(sheet);
-    requestAnimationFrame(() => {
-      panel.setAttribute('tabindex', '-1');
-      panel.focus({ preventScroll: true });
-    });
-  }
-  function trapFocus(container) {
-    if (sheetTrapController) sheetTrapController.abort();
-    sheetTrapController = new AbortController();
-    container.addEventListener('keydown', e => {
-      if (e.key !== 'Tab') return;
-      const focusable = Array.from(container.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
-        .filter(el => el.offsetParent !== null || el === document.activeElement);
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }, { signal: sheetTrapController.signal });
-  }
-  function closeFormSheet(opts = {}) {
-    const restoreFocus = opts.restoreFocus !== false;
-    const sheet = document.getElementById('form-sheet');
-    const panel = sheet ? sheet.querySelector('.form-sheet-panel') : null;
-    const wasOpen = Boolean(sheet && panel && !sheet.hidden);
-    const mode = wasOpen ? panel.dataset.mode || '' : '';
-    if (sheetTrapController) {
-      sheetTrapController.abort();
-      sheetTrapController = null;
-    }
-    if (sheet && panel) {
-      sheet.hidden = true;
-      panel.innerHTML = '';
-      delete panel.dataset.id;
-      delete panel.dataset.mode;
-    }
-    sheetEditId = null;
-    sheetTimeMounted = false;
-    if (wasOpen) unlockBodyForSheet();
-    if (restoreFocus && sheetLastFocus && document.contains(sheetLastFocus)) {
-      sheetLastFocus.focus();
-    }
-    sheetLastFocus = null;
-    return mode;
-  }
-  function remountOpenSheetTimePickerIfNeeded() {
-    const sheet = document.getElementById('form-sheet');
-    const panel = sheet ? sheet.querySelector('.form-sheet-panel') : null;
-    if (!sheet || !panel || sheet.hidden) return;
-    const compact = useCompactTimePicker() ? '1' : '0';
-    const mode = panel.dataset.mode || '';
-    if (mode === 'new') {
-      const section = panel.querySelector('[data-role="start-time-section"]');
-      if (section && section.hidden) return;
-    }
-    const mountEl = mode === 'edit'
-      ? panel.querySelector('[data-role="edit-wheel"]')
-      : mode === 'new' ? document.getElementById('form-wheel-mount') : null;
-    if (!mountEl || mountEl.dataset.pickerCompact === compact) return;
-    const tsEl = mode === 'edit'
-      ? panel.querySelector('[data-role="edit-ts"]')
-      : document.getElementById('form-ts');
-    if (!tsEl) return;
-    if (mode === 'new') {
-      mountNewTimePicker(panel, tsEl.value);
-      return;
-    }
-    mountTimePicker(mountEl, tsEl.value, v => { tsEl.value = v; });
-  }
-  function handleResponsiveResize() {
-    clearTimeout(sheetResizeTimer);
-    sheetResizeTimer = setTimeout(remountOpenSheetTimePickerIfNeeded, 120);
-  }
-  function closeForm() {
-    const mode = closeFormSheet();
-    if (mode === 'edit') render();
-  }
-  function pickTag(el) {
-    const wasSelected = el.classList.contains('sel');
-    document.querySelectorAll('#form-chips .chip').forEach(c => c.classList.remove('sel'));
-    if (wasSelected) {
-      formTag = '';
-      return;
-    }
-    el.classList.add('sel');
-    formTag = el.dataset.tag || '';
-    document.getElementById('form-ctag').value = '';
-  }
-  function clearInlineError(scope, role = 'conflict-error') {
-    const err = scope ? scope.querySelector(`[data-role="${role}"]`) : null;
-    if (!err) return;
-    err.hidden = true;
-    err.innerHTML = '';
-  }
-  function showInlineError(scope, html, role = 'conflict-error') {
-    const err = scope ? scope.querySelector(`[data-role="${role}"]`) : null;
-    if (!err) return;
-    err.innerHTML = html;
-    err.hidden = false;
-  }
-  function findTimeConflict(ts, selfId = '') {
-    return load().entries.find(entry => entry.ts === ts && entry.id !== selfId) || null;
-  }
-  function htmlEscape(s) {
-    return String(s || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-  function conflictMessage(conflict, ts, plusAction) {
-    const what = htmlEscape((conflict.what || '未填写').replace(/\s+/g, ' ').slice(0, 36));
-    return `同一时刻已有「${what}」。<button class="mini-btn" type="button" data-action="edit-conflict-entry" data-id="${htmlEscape(conflict.id)}">编辑那条</button><button class="mini-btn" type="button" data-action="${plusAction}" data-ts="${htmlEscape(ts)}">用+1min</button>`;
-  }
-  function addOneMinute(ts) {
-    const d = new Date(ts);
-    d.setMinutes(d.getMinutes() + 1);
-    return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
-  }
-  function useConflictPlusMinute(el) {
-    const panel = el.closest('.form-sheet-panel, .entry.editing');
-    const mode = panel && panel.dataset.mode;
-    const nextTs = addOneMinute(el.dataset.ts || '');
-    const input = mode === 'edit' ? panel.querySelector('[data-role="edit-ts"]') : document.getElementById('form-ts');
-    const mount = mode === 'edit' ? panel.querySelector('[data-role="edit-wheel"]') : document.getElementById('form-wheel-mount');
-    if (input) input.value = nextTs;
-    if (mode === 'new') paintPrevSegment(panel, nextTs);
-    const startSection = mode === 'new' ? panel.querySelector('[data-role="start-time-section"]') : null;
-    if (mount && !(startSection && startSection.hidden)) {
-      mountTimePicker(mount, nextTs, v => {
-        if (input) input.value = v;
-        if (mode === 'new') paintPrevSegment(panel, v);
-      });
-      setTimeInputError(mount, '');
-    }
-    clearInlineError(panel);
-  }
-  function editConflictEntry(id) {
-    closeFormSheet({ restoreFocus: false });
-    openEditSheet(id);
-  }
-  function maybeRememberMainline(tag) {
-    addMainlineTag(tag);
-  }
-  function ensureOpenPlaceholderAt(d, ts, completedId = '') {
-    const existing = d.entries.find(entry => entry.ts === ts && entry.id !== completedId);
-    if (existing) {
-      if (isPlaceholderEntry(existing)) {
-        existing.what = '';
-        existing.tags = [];
-        delete existing.longConfirm;
-      }
-      return existing;
-    }
-    if (completedId && d.entries.some(entry => entry.id === completedId && entry.ts === ts)) return null;
-    const placeholder = { id: uid(), ts, what: '', tags: [] };
-    d.entries.push(placeholder);
-    return placeholder;
-  }
-  function compactTagText(value) {
-    return String(value || '').toLowerCase().replace(/[\s·._-]+/g, '');
-  }
-  function updateMainlineHint(input) {
-    const box = input.closest('.form-sheet-panel, .entry.editing');
-    const hint = box ? box.querySelector('[data-role="mainline-hint"]') : null;
-    if (!hint) return;
-    const value = input.value.trim();
-    const compact = compactTagText(value);
-    const config = loadConfig();
-    const near = compact ? config.mainline.find(name => compactTagText(name) === compact && name !== value) : '';
-    hint.textContent = near
-      ? `可能已有相近主线「${near}」。留空可直接选历史 chip。`
-      : '自定义标签默认进入「主线」；与固定 chip 同名时按 chip 归类。';
-  }
-  function saveEntry() {
-    const panel = document.querySelector('#form-sheet .form-sheet-panel');
-    const timeScope = document.getElementById('form-wheel-mount');
-    const checked = validateTs(document.getElementById('form-ts').value);
-    if (!checked.ok) {
-      setTimeInputError(timeScope, checked.msg);
-      const focusEl = timeScope.querySelector('[data-role="text"], [data-role="date"]');
-      if (focusEl) focusEl.focus();
-      return;
-    }
-    setTimeInputError(timeScope, '');
-    const what = document.getElementById('form-what').value.trim();
-    if (!what) { document.getElementById('form-what').focus(); return; }
-    const ctag = document.getElementById('form-ctag').value.trim();
-    const tag = ctag || formTag || '未知';
-    const d = load();
-    const placeholder = openPlaceholderForDate(d.entries, checked.ts.slice(0, 10));
-    const conflict = findTimeConflict(checked.ts, placeholder ? placeholder.id : '');
-    if (conflict) {
-      showInlineError(panel, conflictMessage(conflict, checked.ts, 'use-conflict-plus-new'));
-      return;
-    }
-    if (ctag) maybeRememberMainline(ctag);
-    const nowTs = nowStr();
-    let completed = null;
-    if (placeholder) {
-      placeholder.ts = checked.ts;
-      placeholder.what = what;
-      placeholder.tags = [tag];
-      delete placeholder.longConfirm;
-      completed = placeholder;
-    } else {
-      completed = { id: uid(), ts: checked.ts, what, tags: [tag] };
-      d.entries.push(completed);
-    }
-    if (checked.ts.slice(0, 10) === todayStr()) ensureOpenPlaceholderAt(d, nowTs, completed.id);
-    save(d);
-    setSelectedDate(checked.ts.slice(0, 10));
-    closeForm();
-    render();
-  }
-  function switchActivity() {
-    state.view = 'day';
-    setSelectedDate(todayStr());
-    openFormSheet({ mode: 'new' });
-  }
-  function autosizeTextareas(scope = document) {
-    scope.querySelectorAll('textarea.ta').forEach(textarea => {
-      textarea.style.height = 'auto';
-      textarea.style.height = `${Math.max(textarea.scrollHeight, 52)}px`;
-    });
-  }
-
-  // --- Edit ---
-  function getEditingBox(id = editingId) {
-    return Array.from(document.querySelectorAll('.entry.editing, .form-sheet-panel'))
-      .find(el => el.dataset.id === String(id));
-  }
-  function lockBodyForSheet() {
-    sheetScrollY = window.scrollY || document.documentElement.scrollTop || 0;
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${sheetScrollY}px`;
-    document.body.style.left = '0';
-    document.body.style.right = '0';
-    document.body.style.width = '100%';
-    document.body.classList.add('sheet-open');
-  }
-  function unlockBodyForSheet() {
-    document.body.classList.remove('sheet-open');
-    document.body.style.position = '';
-    document.body.style.top = '';
-    document.body.style.left = '';
-    document.body.style.right = '';
-    document.body.style.width = '';
-    window.scrollTo(0, sheetScrollY);
-  }
-  function openEditSheet(id) {
-    openFormSheet({ mode: 'edit', id });
-  }
-  function closeEditSheet(opts = {}) {
-    return closeFormSheet({ restoreFocus: opts.restoreFocus !== false });
-  }
-  function startEdit(id) {
-    openEditSheet(id);
-  }
-  function cancelEdit() {
-    const changed = Boolean(editingId || sheetEditId || getSheetMode() === 'edit');
-    closeEditSheet();
-    editingId = null;
-    if (changed) render();
-  }
-  function pickEditTag(el) {
-    const box = el.closest('.entry.editing, .form-sheet-panel');
-    const chipBox = box ? box.querySelector('[data-role="edit-chips"]') : null;
-    if (!chipBox) return;
-    const wasSelected = el.classList.contains('sel');
-    chipBox.querySelectorAll('.chip').forEach(c => c.classList.remove('sel'));
-    if (wasSelected) return;
-    el.classList.add('sel');
-    const custom = box.querySelector('[data-role="edit-custom-tag"]');
-    if (custom) custom.value = '';
-  }
-  function toggleEditTime(el) {
-    const box = el.closest('.entry.editing, .form-sheet-panel');
-    if (!box) return;
-    const section = box.querySelector('[data-role="edit-time-section"]');
-    const mountEl = box.querySelector('[data-role="edit-wheel"]');
-    const tsEl = box.querySelector('[data-role="edit-ts"]');
-    if (!section || !mountEl || !tsEl) return;
-    const willOpen = section.hidden;
-    section.hidden = !willOpen;
-    el.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-    el.textContent = willOpen ? '收起时间' : '修改时间';
-    if (willOpen && (!sheetTimeMounted || box.classList.contains('entry'))) {
-      mountTimePicker(mountEl, tsEl.value, v => {
-        tsEl.value = v;
-      });
-      sheetTimeMounted = true;
-    }
-  }
-  function commitEdit(id) {
-    const box = getEditingBox(id);
-    if (!box) return;
-    const tsEl = box.querySelector('[data-role="edit-ts"]');
-    const whatEl = box.querySelector('[data-role="edit-what"]');
-    const chipBox = box.querySelector('[data-role="edit-chips"]');
-    const customEl = box.querySelector('[data-role="edit-custom-tag"]');
-    const timeScope = box.querySelector('[data-role="edit-wheel"]') || box;
-    const checked = validateTs(tsEl ? tsEl.value : '');
-    if (!checked.ok) {
-      setTimeInputError(timeScope, checked.msg);
-      const focusEl = timeScope.querySelector('[data-role="text"], [data-role="date"]');
-      if (focusEl) focusEl.focus();
-      return;
-    }
-    setTimeInputError(timeScope, '');
-    const what = whatEl ? whatEl.value.trim() : '';
-    if (!what) { if (whatEl) whatEl.focus(); return; }
-    const sel = chipBox ? chipBox.querySelector('.chip.sel') : null;
-    const ctag = customEl ? customEl.value.trim() : '';
-    const tag = ctag || (sel ? sel.dataset.tag : '未知');
-    const d = load();
-    const conflict = findTimeConflict(checked.ts, id);
-    if (conflict) {
-      showInlineError(box, conflictMessage(conflict, checked.ts, 'use-conflict-plus-edit'));
-      return;
-    }
-    const entry = d.entries.find(e => e.id === id);
-    if (ctag) maybeRememberMainline(ctag);
-    if (entry) { entry.ts = checked.ts; entry.what = what; entry.tags = [tag]; save(d); }
-    setSelectedDate(checked.ts.slice(0, 10));
-    closeEditSheet();
-    editingId = null;
-    render();
-  }
+  // --- Segment confirmation ---
   function confirmSegment(id, endTs) {
     const d = load();
     const result = confirmSegmentInData(d, id, endTs);
@@ -742,281 +279,60 @@ import {
     d.entries = d.entries.filter(e => e.id !== id);
     save(d);
     if (editingId === id) editingId = null;
-    if (sheetEditId === id) closeEditSheet();
+    if (sheetEditId === id) sheetController.closeEditSheet();
     render();
   }
 
-  // --- Current view summary ---
-  function viewName(view = state.view) {
-    return ({ day: '天', week: '周', month: '月', year: '年' })[view] || view;
-  }
-  function currentViewTotals() {
-    if (state.view === 'day') return computeDay().totals;
-    const { start, end } = periodRange();
-    return summarizeRange(start, end);
-  }
-  function mdInline(s) {
-    return String(s || '').replace(/\s+/g, ' ').trim().replace(/\|/g, '\\|');
-  }
-  function statsParts(totals) {
-    const jp = formatPercent(totals.job, totals.total);
-    const mp = formatPercent(totals.maintain, totals.total);
-    const lp = formatPercent(totals.leak, totals.total);
-    const up = formatPercent(totals.unrecorded, totals.total);
-    return { jp, mp, lp, up };
-  }
-  function dataDateRange() {
-    const entries = sortedEntries();
-    if (!entries.length) return '无记录';
-    return `${fmtTs(entries[0].ts)} - ${fmtTs(entries[entries.length - 1].ts)}`;
-  }
-  function detailDurationLabel(mins, isOngoing, unrecorded, pendingConfirm) {
-    const label = fmtPlainMins(mins);
-    const notes = [];
-    if (pendingConfirm) notes.push('待确认');
-    else if (unrecorded) notes.push('未记录');
-    if (isOngoing) notes.push('进行中');
-    return notes.length ? `${label}（${notes.join('，')}）` : label;
-  }
-  function currentViewDetailLines() {
-    if (state.view === 'day') {
-      const day = computeDay();
-      if (!day.timeline.length) return ['- 无记录'];
-      return day.timeline.map(({ e, mins, isOngoing, unrecorded, pendingConfirm, tag }) => {
-        const safeWhat = mdInline(e.what) || '未填写';
-        const safeTag = mdInline(tag || '未知');
-        return `- ${hhmm(e.ts)} | ${detailDurationLabel(mins, isOngoing, unrecorded, pendingConfirm)} | ${safeWhat} | #${safeTag}`;
-      });
-    }
-    const rows = summaryRows();
-    if (!rows.length) return ['- 无记录'];
-      return rows.map(row => {
-      const totals = summarizeRange(row.rangeStart, row.rangeEnd);
-      const { jp, mp, lp, up } = statsParts(totals);
-      const totalText = totals.total ? fmtMins(totals.total) : '无记录';
-      const pendingText = totals.pending ? ` / 待确认 ${fmtPlainMins(totals.pending)}` : '';
-      return `- ${row.label}: ${totalText}；主线 ${jp} / 维持 ${mp} / 漏损 ${lp} / 未记录 ${up}${pendingText}`;
-    });
-  }
-  function buildCurrentViewSummaryMarkdown() {
-    const totals = currentViewTotals();
-    const { jp, mp, lp, up } = statsParts(totals);
-    const totalEntries = load().entries.length;
-    return [
-      '# 时间尺当前视图摘要',
-      '',
-      '## 元信息',
-      `- 生成时间：${fmtDateTime(new Date())}`,
-      `- 当前视图：${viewName()}`,
-      `- 当前周期：${periodFullLabel()}`,
-      `- 数据起止日期：${dataDateRange()}`,
-      `- 总记录数：${totalEntries}`,
-      '',
-      '## 当前视图统计比例',
-      `- 总计：${fmtPlainMins(totals.total)}`,
-      `- 主线：${jp}（${fmtPlainMins(totals.job)}）`,
-      `- 维持：${mp}（${fmtPlainMins(totals.maintain)}）`,
-      `- 漏损：${lp}（${fmtPlainMins(totals.leak)}）`,
-      `- 未记录：${up}（${fmtPlainMins(totals.unrecorded)}）`,
-      `- 待确认：${fmtPlainMins(totals.pending || 0)}`,
-      '',
-      '## 当前视图明细',
-      ...currentViewDetailLines(),
-      ''
-    ].join('\n');
-  }
-
-  // --- Copy ---
-  function setCopyFeedback(btn, ok, label, fallbackLabel) {
-    if (!btn) return;
-    btn.textContent = ok ? label : '复制失败';
-    btn.classList.toggle('copied', ok);
-    setTimeout(() => {
-      btn.textContent = fallbackLabel;
-      btn.classList.remove('copied');
-    }, 2500);
-  }
-  function copyText(text, btn, label, fallbackLabel) {
-    const done = ok => setCopyFeedback(btn, ok, label, fallbackLabel);
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(text)
-        .then(() => done(true))
-        .catch(() => done(legacyCopy(text)));
-      return;
-    }
-    done(legacyCopy(text));
-  }
-  function copyJSON() {
-    const json = JSON.stringify(exportData(), null, 2);
-    copyText(json, document.getElementById('copy-btn'), '✓ 已复制', '复制');
-  }
-  function copyCurrentViewSummary() {
-    copyText(buildCurrentViewSummaryMarkdown(), document.getElementById('summary-btn'), '✓ 已复制', '摘要');
-  }
-  function legacyCopy(text) {
-    const ta = document.createElement('textarea');
-    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.focus(); ta.select();
-    let ok = false;
-    try { ok = document.execCommand('copy'); } catch {}
-    document.body.removeChild(ta);
-    return ok;
-  }
-
-  // --- Download JSON ---
-  function downloadJSON() {
-    const json = JSON.stringify(exportData(), null, 2);
-    const fname = backupFileName();
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = fname;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  // --- Import JSON ---
-  function parseImportShiftHours(raw) {
-    const value = String(raw || '').trim();
-    if (!value) return 0;
-    const hours = Number(value);
-    return Number.isFinite(hours) ? Math.round(hours * 60) : 0;
-  }
-  function importJSON() {
-    openFormSheet({ mode: 'import-shift' });
-  }
-  function cancelImportShift() {
-    closeForm();
-  }
-  function confirmImportShift() {
-    const input = document.getElementById('import-shift-hours');
-    importShiftMinutes = parseImportShiftHours(input ? input.value : '0');
-    closeForm();
-    const fileInput = document.getElementById('import-file');
-    if (fileInput) {
-      fileInput.value = '';
-      fileInput.click();
-    }
-  }
-  function handleImport(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      let imported;
-      try { imported = JSON.parse(e.target.result); }
-      catch { alert('文件解析失败，请确认是有效的 JSON 文件。'); return; }
-      const checked = validateImportData(imported);
-      if (!checked.ok) { alert(checked.msg); return; }
-      const current = mergeImportedEntries(load(), imported.entries, { shiftMinutes: importShiftMinutes });
-      if (imported.config) {
-        const currentConfig = loadConfig();
-        saveConfig({
-          mainline: [...currentConfig.mainline, ...(imported.config.mainline || [])],
-          chips: [...currentConfig.chips, ...(imported.config.chips || [])]
-        });
-      }
-      save(current);
-      render();
-      alert(`导入完成，共 ${current.entries.length} 条记录。`);
-    };
-    reader.readAsText(file);
-    event.target.value = '';
-  }
-
-  // --- Share JSON ---
-  function canUseSystemShare() {
-    return typeof navigator !== 'undefined' && typeof navigator.share === 'function';
-  }
-  function updateShareAvailability() {
-    const btn = document.getElementById('share-btn');
-    if (!btn) return;
-    const supported = canUseSystemShare();
-    btn.hidden = !supported;
-    btn.setAttribute('aria-disabled', supported ? 'false' : 'true');
-    if (supported) setButtonTip(btn, '打开系统分享面板，优先分享 JSON 文件；文件分享不可用时改为分享文本。', '分享 JSON 备份');
-  }
-  function shareJSON() {
-    if (!canUseSystemShare()) return;
-    const json = JSON.stringify(exportData(), null, 2);
-    const fname = backupFileName();
-    if (navigator.canShare) {
-      const file = new File([json], fname, { type: 'application/json' });
-      if (navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: `时间尺完整备份 ${fname}` }).catch(() => {});
-        return;
-      }
-    }
-    navigator.share({ title: `时间尺完整备份 ${fname}`, text: json }).catch(() => {});
-  }
-  function exportData() {
-    const d = load();
-    return { ...d, config: loadConfig(), entries: sortedEntriesFrom(d.entries).map(entry => ({ ...entry })) };
-  }
-  function backupFileName() {
-    const now = new Date();
-    return `timelog-${now.getFullYear()}${p2(now.getMonth()+1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}.json`;
-  }
+  // --- Data signature ---
   function dataSignature() {
     const d = load();
     return JSON.stringify({ view: state.view, selectedDate: state.selectedDate, entries: d.entries });
   }
   function openHelp(opts = {}) {
     if (opts.markSeen !== false) localStorage.setItem(HELP_SEEN_KEY, '1');
-    openFormSheet({ mode: 'help' });
+    sheetController.openFormSheet({ mode: 'help' });
   }
   function openTagConfig() {
-    openFormSheet({ mode: 'config' });
+    sheetController.openFormSheet({ mode: 'config' });
   }
-  function toggleStartTime(el) {
-    const panel = el.closest('.form-sheet-panel');
-    if (!panel) return;
-    const section = panel.querySelector('[data-role="start-time-section"]');
-    const tsEl = panel.querySelector('#form-ts');
-    if (!section || !tsEl) return;
-    const willOpen = section.hidden;
-    section.hidden = !willOpen;
-    el.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-    paintPrevSegment(panel, tsEl.value);
-    if (willOpen) {
-      mountNewTimePicker(panel, tsEl.value);
-      requestAnimationFrame(() => {
-        const focusEl = section.querySelector('[data-role="text"], [data-role="date"], button, input, [tabindex]:not([tabindex="-1"])');
-        if (focusEl) focusEl.focus({ preventScroll: true });
-      });
-    }
-  }
-  function addConfigChip() {
-    const list = document.querySelector('[data-role="config-chips"]');
-    if (!list) return;
-    const div = document.createElement('div');
-    div.className = 'cfg-row';
-    div.innerHTML = '<input class="inp cfg-name" type="text" value="" aria-label="标签名称"><select class="inp cfg-bucket" aria-label="桶"><option value="maintain">维持</option><option value="leak">漏损</option></select><label class="cfg-long"><input type="checkbox" class="cfg-long-ok"> longOk</label><button class="mini-btn" type="button" data-action="remove-config-chip">删除</button>';
-    list.appendChild(div);
-    div.querySelector('.cfg-name').focus();
-  }
-  function removeConfigChip(el) {
-    const row = el.closest('.cfg-row');
-    if (row) row.remove();
-  }
-  function saveTagConfig() {
-    const panel = document.querySelector('#form-sheet .form-sheet-panel');
-    const rows = Array.from(panel.querySelectorAll('.cfg-row'));
-    const chips = rows.map(row => ({
-      name: row.querySelector('.cfg-name').value.trim(),
-      bucket: row.querySelector('.cfg-bucket').value,
-      longOk: row.querySelector('.cfg-long-ok').checked
-    })).filter(chip => chip.name);
-    if (!chips.length) {
-      showInlineError(panel, '至少保留一个维持/漏损 chip。', 'config-error');
-      return;
-    }
-    const existing = loadConfig();
-    saveConfig({ ...existing, chips });
-    closeForm();
-    render();
-  }
+
+  const sheetController = createSheetController({
+    state,
+    load,
+    loadConfig,
+    save,
+    saveConfig,
+    addMainlineTag,
+    uid,
+    defaultFormTs,
+    settlementEndFor,
+    persistState,
+    setSelectedDate,
+    render,
+    renderChrome,
+    getEditingId: () => editingId,
+    setEditingId: value => { editingId = value; },
+    getSheetEditId: () => sheetEditId,
+    setSheetEditId: value => { sheetEditId = value; }
+  });
+
+  const ioActions = createIoActions({
+    state,
+    load,
+    loadConfig,
+    save,
+    saveConfig,
+    validateImportData,
+    mergeImportedEntries,
+    periodRange,
+    periodFullLabel,
+    computeDay,
+    summaryRows,
+    summarizeRange,
+    openFormSheet: opts => sheetController.openFormSheet(opts),
+    closeForm: () => sheetController.closeForm(),
+    render
+  });
 
   // --- App update prompt ---
   function showUpdatePrompt(registration) {
@@ -1066,55 +382,55 @@ import {
       if (action === 'view') setView(el.dataset.view);
       if (action === 'shift-period') shiftPeriod(Number(el.dataset.delta || 0));
       if (action === 'today') goToday();
-      if (action === 'open-form') openForm();
-      if (action === 'switch-activity') switchActivity();
+      if (action === 'open-form') sheetController.openForm();
+      if (action === 'switch-activity') sheetController.switchActivity();
       if (action === 'open-help') openHelp();
       if (action === 'open-tag-config') openTagConfig();
-      if (action === 'toggle-start-time') toggleStartTime(el);
-      if (action === 'pick-form-tag') pickTag(el);
-      if (action === 'save-entry') saveEntry();
-      if (action === 'close-form') closeForm();
-      if (action === 'use-conflict-plus-new' || action === 'use-conflict-plus-edit') useConflictPlusMinute(el);
-      if (action === 'edit-conflict-entry') editConflictEntry(el.dataset.id);
-      if (action === 'start-edit') startEdit(el.dataset.id);
-      if (action === 'pick-edit-tag') pickEditTag(el);
-      if (action === 'toggle-edit-time') toggleEditTime(el);
-      if (action === 'commit-edit') commitEdit(el.dataset.id || editingId);
-      if (action === 'cancel-edit') cancelEdit();
-      if (action === 'add-config-chip') addConfigChip();
-      if (action === 'remove-config-chip') removeConfigChip(el);
-      if (action === 'save-tag-config') saveTagConfig();
+      if (action === 'toggle-start-time') sheetController.toggleStartTime(el);
+      if (action === 'pick-form-tag') sheetController.pickTag(el);
+      if (action === 'save-entry') sheetController.saveEntry();
+      if (action === 'close-form') sheetController.closeForm();
+      if (action === 'use-conflict-plus-new' || action === 'use-conflict-plus-edit') sheetController.useConflictPlusMinute(el);
+      if (action === 'edit-conflict-entry') sheetController.editConflictEntry(el.dataset.id);
+      if (action === 'start-edit') sheetController.startEdit(el.dataset.id);
+      if (action === 'pick-edit-tag') sheetController.pickEditTag(el);
+      if (action === 'toggle-edit-time') sheetController.toggleEditTime(el);
+      if (action === 'commit-edit') sheetController.commitEdit(el.dataset.id || editingId);
+      if (action === 'cancel-edit') sheetController.cancelEdit();
+      if (action === 'add-config-chip') sheetController.addConfigChip();
+      if (action === 'remove-config-chip') sheetController.removeConfigChip(el);
+      if (action === 'save-tag-config') sheetController.saveTagConfig();
       if (action === 'confirm-segment') confirmSegment(el.dataset.id, el.dataset.end);
       if (action === 'delete-entry') delEntry(el.dataset.id);
       if (action === 'drill') drill(el.dataset.date, el.dataset.view);
-      if (action === 'copy-summary') copyCurrentViewSummary();
-      if (action === 'copy-json') copyJSON();
-      if (action === 'download-json') downloadJSON();
-      if (action === 'import-json') importJSON();
-      if (action === 'cancel-import-shift') cancelImportShift();
-      if (action === 'confirm-import-shift') confirmImportShift();
-      if (action === 'share-json') shareJSON();
+      if (action === 'copy-summary') ioActions.copyCurrentViewSummary();
+      if (action === 'copy-json') ioActions.copyJSON();
+      if (action === 'download-json') ioActions.downloadJSON();
+      if (action === 'import-json') ioActions.importJSON();
+      if (action === 'cancel-import-shift') ioActions.cancelImportShift();
+      if (action === 'confirm-import-shift') ioActions.confirmImportShift();
+      if (action === 'share-json') ioActions.shareJSON();
       if (action === 'update-app') applyUpdate();
     });
-    document.getElementById('import-file').addEventListener('change', handleImport);
+    document.getElementById('import-file').addEventListener('change', ioActions.handleImport);
     document.addEventListener('input', e => {
       if (e.target instanceof HTMLTextAreaElement && e.target.classList.contains('ta')) {
-        autosizeTextareas(e.target.parentElement || document);
+        sheetController.autosizeTextareas(e.target.parentElement || document);
       }
       if (e.target instanceof HTMLInputElement && (e.target.id === 'form-ctag' || e.target.matches('[data-role="edit-custom-tag"]'))) {
-        updateMainlineHint(e.target);
+        sheetController.updateMainlineHint(e.target);
       }
     });
 
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { cancelEdit(); closeForm(); }
+      if (e.key === 'Escape') { sheetController.cancelEdit(); sheetController.closeForm(); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        if (editingId || sheetEditId) { commitEdit(editingId || sheetEditId); return; }
-        if (isFormOpen()) saveEntry();
+        if (editingId || sheetEditId) { sheetController.commitEdit(editingId || sheetEditId); return; }
+        if (sheetController.isFormOpen()) sheetController.saveEntry();
       }
     });
-    window.addEventListener('resize', handleResponsiveResize, { passive: true });
-    window.addEventListener('orientationchange', handleResponsiveResize, { passive: true });
+    window.addEventListener('resize', sheetController.handleResponsiveResize, { passive: true });
+    window.addEventListener('orientationchange', sheetController.handleResponsiveResize, { passive: true });
   }
 
   // --- Register SW ---
@@ -1155,7 +471,7 @@ import {
       openHelp();
     }
     setInterval(() => {
-      if (editingId || sheetEditId || isFormOpen() || getSheetMode()) return;
+      if (editingId || sheetEditId || sheetController.isFormOpen() || sheetController.getSheetMode()) return;
       const signature = dataSignature();
       if (signature === lastIntervalSignature) return;
       render();
