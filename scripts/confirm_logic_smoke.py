@@ -194,6 +194,48 @@ assertTotals(
   'empty day must not inherit previous day label'
 );
 
+const closedCrossDayEntries = [
+  entry('a', '2020-01-01T23:00', '求职推进', { startTs: '2020-01-01T23:00', endTs: '2020-01-02T02:35' }),
+  entry('b', '2020-01-02T02:35', '杂')
+];
+const closedCrossDaySegments = buildRangeSegmentsFromEntries(
+  closedCrossDayEntries,
+  new Date('2020-01-02T00:00'),
+  new Date('2020-01-02T02:35'),
+  { now: '2020-01-03T00:00' }
+);
+assert(closedCrossDaySegments.length === 1, 'closed cross-day segment should slice into next day');
+assert(closedCrossDaySegments[0].e.id === 'a', 'closed cross-day slice should keep original entry id');
+assert(formatDate(closedCrossDaySegments[0].start) === '2020-01-02T00:00', 'closed cross-day slice should start at local midnight');
+assert(closedCrossDaySegments[0].endTs === '2020-01-02T02:35', 'closed cross-day segment should bind to the true right neighbor');
+assertTotals(
+  summarizeEntries(closedCrossDayEntries, new Date('2020-01-02T00:00'), new Date('2020-01-02T02:35'), { now: '2020-01-03T00:00' }),
+  { job: 155, maintain: 0, leak: 0, unrecorded: 0, pending: 0, total: 155 },
+  'confirmed closed cross-day segment returns to original label on next day'
+);
+
+const crossConfirmData = {
+  version: 1,
+  entries: [
+    entry('a', '2020-01-01T23:00', '求职推进'),
+    entry('b', '2020-01-02T02:35', '杂')
+  ]
+};
+const crossConfirmResult = confirmSegmentInData(crossConfirmData, 'a', '2020-01-02T02:35', { now: '2020-01-03T00:00' });
+assert(crossConfirmResult.ok, 'cross-day closed long segment confirmation failed');
+assert(crossConfirmData.entries[0].longConfirm.startTs === '2020-01-01T23:00', 'cross-day long confirmation should bind original start');
+assert(crossConfirmData.entries[0].longConfirm.endTs === '2020-01-02T02:35', 'cross-day long confirmation should bind true right neighbor');
+
+const movedCrossDayEntries = [
+  entry('a', '2020-01-01T23:00', '求职推进', { startTs: '2020-01-01T23:00', endTs: '2020-01-02T02:35' }),
+  entry('b', '2020-01-02T02:40', '杂')
+];
+assertTotals(
+  summarizeEntries(movedCrossDayEntries, new Date('2020-01-02T00:00'), new Date('2020-01-02T02:40'), { now: '2020-01-03T00:00' }),
+  { job: 0, maintain: 0, leak: 0, unrecorded: 160, pending: 160, total: 160 },
+  'cross-day adjacent time change invalidates old confirmation'
+);
+
 assertTotals(
   summarizeEntries(
     [entry('a', '2020-01-02T09:00', '求职推进'), entry('b', '2020-01-02T10:00', '杂')],

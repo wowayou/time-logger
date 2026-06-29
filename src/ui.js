@@ -98,7 +98,7 @@ export function renderTimeline(items, opts = {}) {
     el.innerHTML = '<div class="empty-tip">点击上方「+ 记一条」开始记录，或切换日期查看历史。</div>';
     return;
   }
-  el.innerHTML = [...items].reverse().map(({ e, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs }) => {
+  el.innerHTML = [...items].reverse().map(({ e, start, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs }) => {
     if (editingId === e.id) return renderEdit(e);
     const isPlaceholder = typeof e.what === 'string' && e.what.trim() === '';
     const displayTag = isPlaceholder ? '未记录' : tag;
@@ -106,9 +106,10 @@ export function renderTimeline(items, opts = {}) {
     const entryClass = `entry${isPlaceholder ? ' placeholder' : ''}${sheetEditId === e.id ? ' sheet-editing' : ''}`;
     const durStr = timelineDurationLabel(mins, isOngoing, unrecorded || isPlaceholder, pendingConfirm);
     const confirmText = confirmSegmentLabel(e.ts, endTs);
+    const startLabel = start ? hhmm(start) : hhmm(e.ts);
     return `<div class="${entryClass}" data-id="${esc(e.id)}">
       <div class="e-body">
-        <div class="e-time">${hhmm(e.ts)}</div>
+        <div class="e-time">${startLabel}</div>
         <div class="e-what">${esc(isPlaceholder ? '进行中·还没记' : e.what)}</div>
         <div class="e-meta">
           ${displayTag ? `<span class="e-tag${tagClass}">#${esc(displayTag)}</span>` : ''}
@@ -181,7 +182,7 @@ export function renderEditForm(e) {
 export function renderFormSheet(opts) {
   if (opts && opts.mode === 'help') return renderHelpSheet();
   if (opts && opts.mode === 'config') return renderConfigSheet(opts.config || loadConfig());
-  if (opts && opts.mode === 'import-shift') return renderImportShiftDialog();
+  if (opts && opts.mode === 'import-shift') return renderImportShiftDialog(opts);
   const mode = opts && opts.mode === 'edit' ? 'edit' : 'new';
   const e = opts && opts.entry;
   const isEdit = mode === 'edit';
@@ -317,7 +318,9 @@ export function renderHelpSheet() {
     </div>`;
 }
 
-export function renderImportShiftDialog() {
+export function renderImportShiftDialog(opts = {}) {
+  const value = opts.importShiftHours !== undefined ? opts.importShiftHours : '0';
+  const hint = opts.importShiftHint || '导入前可把所有时间整体平移。例：iPhone 记在 UTC+8、电脑 UTC-5，填 -13；留空或 0 不平移。';
   return `
     <div class="form-sheet-head">
       <div class="form-sheet-summary">
@@ -330,10 +333,10 @@ export function renderImportShiftDialog() {
       </div>
     </div>
     <div class="form-sheet-body import-shift-body">
-      <div class="form-hint">导入前可把所有时间整体平移。例：iPhone 记在 UTC+8、电脑 UTC-5，填 -13；留空或 0 不平移。</div>
+      <div class="form-hint">${esc(hint)}</div>
       <div class="fl">
         <div class="fl-label">平移小时数</div>
-        <input type="number" class="inp" id="import-shift-hours" value="0" step="1" inputmode="numeric">
+        <input type="number" class="inp" id="import-shift-hours" value="${esc(value)}" step="0.25" inputmode="decimal">
       </div>
     </div>`;
 }

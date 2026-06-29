@@ -4,6 +4,7 @@ import { setButtonTip } from './ui.js';
 
 export function createIoActions(deps) {
   let importShiftMinutes = 0;
+  let pendingImport = null;
 
   function viewName(view = deps.state.view) {
     return ({ day: '天', week: '周', month: '月', year: '年' })[view] || view;
@@ -46,10 +47,10 @@ export function createIoActions(deps) {
     if (deps.state.view === 'day') {
       const day = deps.computeDay();
       if (!day.timeline.length) return ['- 无记录'];
-      return day.timeline.map(({ e, mins, isOngoing, unrecorded, pendingConfirm, tag }) => {
+      return day.timeline.map(({ e, start, mins, isOngoing, unrecorded, pendingConfirm, tag }) => {
         const safeWhat = mdInline(e.what) || '未填写';
         const safeTag = mdInline(tag || '未知');
-        return `- ${hhmm(e.ts)} | ${detailDurationLabel(mins, isOngoing, unrecorded, pendingConfirm)} | ${safeWhat} | #${safeTag}`;
+        return `- ${hhmm(start || e.ts)} | ${detailDurationLabel(mins, isOngoing, unrecorded, pendingConfirm)} | ${safeWhat} | #${safeTag}`;
       });
     }
     const rows = deps.summaryRows();
@@ -122,9 +123,31 @@ export function createIoActions(deps) {
     done(legacyCopy(text));
   }
 
+  function resolvedTimeZone() {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    } catch {
+      return '';
+    }
+  }
+
+  function exportMeta() {
+    return {
+      exportedAt: new Date().toISOString(),
+      sourceTimezoneOffsetMinutes: new Date().getTimezoneOffset(),
+      sourceTimeZone: resolvedTimeZone()
+    };
+  }
+
   function exportData() {
     const d = deps.load();
-    return { ...d, config: deps.loadConfig(), entries: sortedEntriesFrom(d.entries).map(entry => ({ ...entry })) };
+    return {
+      ...d,
+      version: 1,
+      meta: exportMeta(),
+      config: deps.loadConfig(),
+      entries: sortedEntriesFrom(d.entries).map(entry => ({ ...entry }))
+    };
   }
 
   function backupFileName() {
@@ -160,23 +183,82 @@ export function createIoActions(deps) {
     return Number.isFinite(hours) ? Math.round(hours * 60) : 0;
   }
 
+  function formatShiftHours(minutes) {
+    const hours = minutes / 60;
+    return Number.isInteger(hours) ? String(hours) : String(Number(hours.toFixed(2)));
+  }
+
+  function sourceOffsetMinutes(imported) {
+    const value = imported && imported.meta && imported.meta.sourceTimezoneOffsetMinutes;
+    const offset = Number(value);
+    return Number.isFinite(offset) ? offset : null;
+  }
+
+  function timezoneOffsetLabel(offsetMinutes) {
+    const utcOffset = -offsetMinutes;
+    const sign = utcOffset >= 0 ? '+' : '-';
+    const abs = Math.abs(utcOffset);
+    const hours = Math.floor(abs / 60);
+    const minutes = abs % 60;
+    return `UTC${sign}${hours}${minutes ? `:${p2(minutes)}` : ''}`;
+  }
+
+  function suggestedShiftMinutes(imported) {
+    const sourceOffset = sourceOffsetMinutes(imported);
+    if (sourceOffset === null) return 0;
+    return sourceOffset - new Date().getTimezoneOffset();
+  }
+
+  function importShiftHint(imported, suggestedMinutes) {
+    const sourceOffset = sourceOffsetMinutes(imported);
+    if (sourceOffset === null) {
+      return '这个备份没有时区元信息，默认不平移；需要对齐双设备壁钟时可手动填写。';
+    }
+    const currentOffset = new Date().getTimezoneOffset();
+    const sourceZone = imported.meta && imported.meta.sourceTimeZone ? ` ${imported.meta.sourceTimeZone}` : '';
+    const base = `源设备 ${timezoneOffsetLabel(sourceOffset)}${sourceZone}，当前设备 ${timezoneOffsetLabel(currentOffset)}。`;
+    if (!suggestedMinutes) return `${base} 默认不平移。`;
+    return `${base} 已建议 ${formatShiftHours(suggestedMinutes)} 小时，可按需要改为 0。`;
+  }
+
   function importJSON() {
-    deps.openFormSheet({ mode: 'import-shift' });
-  }
-
-  function cancelImportShift() {
-    deps.closeForm();
-  }
-
-  function confirmImportShift() {
-    const input = document.getElementById('import-shift-hours');
-    importShiftMinutes = parseImportShiftHours(input ? input.value : '0');
-    deps.closeForm();
+    pendingImport = null;
+    importShiftMinutes = 0;
     const fileInput = document.getElementById('import-file');
     if (fileInput) {
       fileInput.value = '';
       fileInput.click();
     }
+  }
+
+  function cancelImportShift() {
+    pendingImport = null;
+    importShiftMinutes = 0;
+    deps.closeForm();
+  }
+
+  function applyImportedData(imported, shiftMinutes) {
+    const current = deps.mergeImportedEntries(deps.load(), imported.entries, { shiftMinutes });
+    if (imported.config) {
+      const currentConfig = deps.loadConfig();
+      deps.saveConfig({
+        mainline: [...currentConfig.mainline, ...(imported.config.mainline || [])],
+        chips: [...currentConfig.chips, ...(imported.config.chips || [])]
+      });
+    }
+    deps.save(current);
+    deps.render();
+    alert(`导入完成，共 ${current.entries.length} 条记录。`);
+  }
+
+  function confirmImportShift() {
+    const input = document.getElementById('import-shift-hours');
+    importShiftMinutes = parseImportShiftHours(input ? input.value : '0');
+    const imported = pendingImport;
+    pendingImport = null;
+    deps.closeForm();
+    if (!imported) return;
+    applyImportedData(imported, importShiftMinutes);
   }
 
   function handleImport(event) {
@@ -189,17 +271,13 @@ export function createIoActions(deps) {
       catch { alert('文件解析失败，请确认是有效的 JSON 文件。'); return; }
       const checked = deps.validateImportData(imported);
       if (!checked.ok) { alert(checked.msg); return; }
-      const current = deps.mergeImportedEntries(deps.load(), imported.entries, { shiftMinutes: importShiftMinutes });
-      if (imported.config) {
-        const currentConfig = deps.loadConfig();
-        deps.saveConfig({
-          mainline: [...currentConfig.mainline, ...(imported.config.mainline || [])],
-          chips: [...currentConfig.chips, ...(imported.config.chips || [])]
-        });
-      }
-      deps.save(current);
-      deps.render();
-      alert(`导入完成，共 ${current.entries.length} 条记录。`);
+      pendingImport = imported;
+      importShiftMinutes = suggestedShiftMinutes(imported);
+      deps.openFormSheet({
+        mode: 'import-shift',
+        importShiftHours: formatShiftHours(importShiftMinutes),
+        importShiftHint: importShiftHint(imported, importShiftMinutes)
+      });
     };
     reader.readAsText(file);
     event.target.value = '';

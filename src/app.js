@@ -124,11 +124,7 @@ import {
     const statEnd = state.selectedDate === todayStr() ? new Date() : end;
     const allEntries = sortedEntries();
     const segments = buildRangeSegmentsFromEntries(allEntries, start, statEnd);
-    const timeline = segments.filter(segment => {
-      if (!segment.e) return false;
-      const t = new Date(segment.e.ts);
-      return t >= start && t < end;
-    });
+    const timeline = segments.filter(segment => segment.e);
     return { timeline, totals: summarizeEntries(allEntries, start, statEnd) };
   }
   function summaryRows() {

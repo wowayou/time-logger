@@ -4,9 +4,9 @@ export const VIEWPORTS = [320, 375, 430, 768];
 export const STATES = ['empty', 'one-record', 'yesterday-residual'];
 export const FIXED_NOW = '2026-06-29T12:34:30';
 
-export async function boot(page, width, state, share = false, now = '', selectedDateOffset = null) {
+export async function boot(page, width, state, share = false, now = '', selectedDateOffset = null, timezoneOffsetMinutes = null) {
   await page.setViewportSize({ width, height: 820 });
-  await page.addInitScript(({ state, share, now, selectedDateOffset }) => {
+  await page.addInitScript(({ state, share, now, selectedDateOffset, timezoneOffsetMinutes }) => {
     if (now) {
       const RealDate = Date;
       const fixedNow = new RealDate(now).getTime();
@@ -19,6 +19,12 @@ export async function boot(page, width, state, share = false, now = '', selected
         static UTC(...args) { return RealDate.UTC(...args); }
       }
       window.Date = FixedDate;
+    }
+    if (timezoneOffsetMinutes !== null) {
+      Object.defineProperty(Date.prototype, 'getTimezoneOffset', {
+        configurable: true,
+        value: () => timezoneOffsetMinutes
+      });
     }
     function p2(n) { return String(n).padStart(2, '0'); }
     function dateKey(d) { return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; }
@@ -51,6 +57,12 @@ export async function boot(page, width, state, share = false, now = '', selected
     if (state === 'yesterday-placeholder') {
       entries.push({ id: 'yesterday-open', ts: `${dateKey(yesterday)}T23:00`, what: '', tags: [] });
     }
+    if (state === 'cross-day-shifted') {
+      entries.push(
+        { id: 'cross-start', ts: `${dateKey(yesterday)}T23:00`, what: '跨日切片记录', tags: ['睡觉'] },
+        { id: 'cross-open', ts: `${dateKey(today)}T02:35`, what: '', tags: [] }
+      );
+    }
     localStorage.clear();
     localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
     if (selectedDateOffset !== null) {
@@ -71,7 +83,7 @@ export async function boot(page, width, state, share = false, now = '', selected
         value: () => false
       });
     }
-  }, { state, share, now, selectedDateOffset });
+  }, { state, share, now, selectedDateOffset, timezoneOffsetMinutes });
   await page.goto('/');
   await page.waitForFunction(() => document.querySelector('#timeline')?.children.length > 0);
 }

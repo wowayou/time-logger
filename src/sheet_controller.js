@@ -136,6 +136,8 @@ export function createSheetController(deps) {
       mode,
       entry,
       config: deps.loadConfig(),
+      importShiftHours: opts && opts.importShiftHours,
+      importShiftHint: opts && opts.importShiftHint,
       targetDate: deps.state.selectedDate,
       isToday: deps.state.selectedDate === todayStr()
     });

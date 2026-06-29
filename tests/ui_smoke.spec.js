@@ -152,6 +152,19 @@ test('cross-day reload restores the previously selected date', async ({ page }) 
   await expect(page.locator('#timeline')).toContainText('昨日残留记录');
 });
 
+test('closed cross-day segment is sliced into the selected day timeline', async ({ page }) => {
+  await boot(page, 768, 'cross-day-shifted', false, '2026-06-30T12:34:30');
+
+  await expect(page.locator('#period-label')).toContainText('2026/06/30');
+  await expect(page.locator('#timeline')).toContainText('跨日切片记录');
+  await expect(page.locator('#timeline')).toContainText('进行中·还没记');
+  await expect(page.locator('#ruler')).toContainText('维持 20.5%');
+  await expect(page.locator('#ruler')).not.toContainText('未记录 100%');
+
+  const visibleTimes = await page.locator('.entry .e-time').allTextContents();
+  expect(visibleTimes).toEqual(['02:35', '00:00']);
+});
+
 test('same-minute placeholder save reuses timestamp without duplicate', async ({ page }) => {
   await boot(page, 768, 'now-placeholder', false, FIXED_NOW);
   await page.getByRole('button', { name: '记一条新的时间记录' }).click();
@@ -189,7 +202,14 @@ test('help close icon and import shift dialog stay custom', async ({ page }) => 
   expect(helpTooltipVisibility).toBe('hidden');
 
   await page.keyboard.press('Escape');
+  const chooserPromise = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    name: 'timelog-empty.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ version: 1, entries: [] }))
+  });
   await expect(page.locator('#form-sheet-title')).toContainText('导入时区平移');
   await expect(page.locator('#import-shift-hours')).toBeVisible();
   await page.getByRole('button', { name: '取消导入' }).click();
@@ -197,7 +217,7 @@ test('help close icon and import shift dialog stay custom', async ({ page }) => 
 });
 
 test('JSON import shifts time, merges config, and export stays sorted', async ({ page }) => {
-  await boot(page, 768, 'empty', false, FIXED_NOW);
+  await boot(page, 768, 'empty', false, FIXED_NOW, null, -480);
   const imported = {
     version: 1,
     entries: [
@@ -215,16 +235,18 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
     await dialog.accept();
   });
 
-  await page.getByRole('button', { name: '导入 JSON 备份' }).click();
-  await page.locator('#import-shift-hours').fill('1');
   const chooserPromise = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: '确认导入' }).click();
+  await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
     name: 'timelog-import.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(imported))
   });
+  await expect(page.locator('#form-sheet-title')).toContainText('导入时区平移');
+  await expect(page.locator('#import-shift-hours')).toHaveValue('0');
+  await page.locator('#import-shift-hours').fill('1');
+  await page.getByRole('button', { name: '确认导入' }).click();
 
   await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.length)).toBe(2);
   expect(alertText).toContain('导入完成');
@@ -245,4 +267,42 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
   const exported = JSON.parse(await readFile(exportPath, 'utf8'));
   expect(exported.entries.map(entry => entry.ts)).toEqual(['2026-06-28T09:00', '2026-06-28T21:00']);
   expect(exported.config.mainline).toContain('导入主线');
+  expect(exported.meta.sourceTimezoneOffsetMinutes).toBe(-480);
+  expect(exported.meta.sourceTimeZone).toBeTruthy();
+});
+
+test('JSON import uses timezone metadata to suggest default shift', async ({ page }) => {
+  await boot(page, 768, 'empty', false, FIXED_NOW, null, -480);
+  const imported = {
+    version: 1,
+    meta: {
+      exportedAt: '2026-06-29T15:00:00.000Z',
+      sourceTimezoneOffsetMinutes: -540,
+      sourceTimeZone: 'Asia/Tokyo'
+    },
+    entries: [
+      { id: 'tokyo-entry', ts: '2026-06-29T09:00', what: '东京设备记录', tags: ['求职推进'] }
+    ]
+  };
+  page.on('dialog', async dialog => {
+    await dialog.accept();
+  });
+
+  const chooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: '导入 JSON 备份' }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    name: 'timelog-tokyo.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(imported))
+  });
+
+  await expect(page.locator('#form-sheet-title')).toContainText('导入时区平移');
+  await expect(page.locator('#import-shift-hours')).toHaveValue('-1');
+  await expect(page.locator('.import-shift-body')).toContainText('Asia/Tokyo');
+  await page.getByRole('button', { name: '确认导入' }).click();
+
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(stored).toHaveLength(1);
+  expect(stored[0]).toMatchObject({ id: 'tokyo-entry', ts: '2026-06-29T08:00' });
 });

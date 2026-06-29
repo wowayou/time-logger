@@ -83,20 +83,20 @@ function pushUnknownSegment(segments, start, end) {
   });
 }
 
-function segmentEndForEntry(dayEntries, index, dayStart, now) {
-  const entry = dayEntries[index];
-  const next = dayEntries[index + 1];
-  const dayEnd = addDays(dayStart, 1);
-  if (next) return { rawEnd: new Date(next.ts), endTs: next.ts, isOngoing: false, next };
-  if (now >= dayStart && now < dayEnd) return { rawEnd: new Date(now), endTs: '', isOngoing: true, next: null };
-  return { rawEnd: dayEnd, endTs: localDateTimeKey(dayEnd), isOngoing: false, next: null };
-}
+function segmentBoundsForEntry(entries, index, now) {
+  const entry = entries[index];
+  const rawStart = new Date(entry.ts);
+  const next = entries[index + 1] || null;
+  if (next) {
+    return { rawStart, rawEnd: new Date(next.ts), endTs: next.ts, isOngoing: false, next };
+  }
 
-function dayEntriesFor(entries, dayStart, dayEnd) {
-  return entries.filter(entry => {
-    const t = new Date(entry.ts);
-    return t >= dayStart && t < dayEnd;
-  });
+  const dayStart = startOfDay(rawStart);
+  const dayEnd = addDays(dayStart, 1);
+  if (now >= dayStart && now < dayEnd) {
+    return { rawStart, rawEnd: new Date(now), endTs: '', isOngoing: true, next: null };
+  }
+  return { rawStart, rawEnd: dayEnd, endTs: localDateTimeKey(dayEnd), isOngoing: false, next: null };
 }
 
 export function buildRangeSegmentsFromEntries(inputEntries, start, end, opts = {}) {
@@ -116,13 +116,9 @@ export function buildRangeSegmentsFromEntries(inputEntries, start, end, opts = {
     const rangeEnd = new Date(Math.min(e, dayEnd));
     if (rangeEnd <= rangeStart) continue;
 
-    const dayEntries = dayEntriesFor(entries, dayStart, dayEnd);
-    if (!dayEntries.length) continue;
-
     let cursor = new Date(rangeStart);
-    dayEntries.forEach((entry, index) => {
-      const rawStart = new Date(entry.ts);
-      const { rawEnd, endTs, isOngoing, next } = segmentEndForEntry(dayEntries, index, dayStart, now);
+    entries.forEach((entry, index) => {
+      const { rawStart, rawEnd, endTs, isOngoing, next } = segmentBoundsForEntry(entries, index, now);
       if (rawEnd <= rangeStart || rawStart >= rangeEnd) return;
 
       if (rawStart > cursor) {
@@ -171,13 +167,10 @@ export function confirmSegmentInData(d, id, endTs, opts = {}) {
   if (!entry) return { ok: false, reason: 'stale' };
 
   const start = new Date(entry.ts);
-  const dayStart = startOfDay(start);
-  const dayEnd = addDays(dayStart, 1);
-  const dayEntries = dayEntriesFor(entries, dayStart, dayEnd);
-  const index = dayEntries.findIndex(e => e.id === id);
+  const index = entries.findIndex(e => e.id === id);
   if (index < 0) return { ok: false, reason: 'stale' };
 
-  const segmentEnd = segmentEndForEntry(dayEntries, index, dayStart, now);
+  const segmentEnd = segmentBoundsForEntry(entries, index, now);
   if (segmentEnd.isOngoing || segmentEnd.endTs !== endTs) {
     return { ok: false, reason: 'stale' };
   }
