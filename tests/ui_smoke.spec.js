@@ -129,9 +129,8 @@ test('new entry shows continuation context and recomputes start', async ({ page 
   await page.getByRole('button', { name: '记一条新的时间记录' }).click();
   const panel = page.locator('.form-sheet-panel');
   await expect(panel).toBeFocused();
-  await expect(page.locator('[data-role="prev-segment"]')).toContainText('刚才这一阵');
-  await expect(page.locator('[data-role="prev-segment"]')).toContainText('10:00');
   await expect(page.locator('[data-role="start-time-label"]')).toHaveText('10:00');
+  await expect(page.locator('[data-role="duration-label"]')).not.toBeEmpty();
   const tooltipVisibility = await page.locator('.form-sheet-actions .icon-btn').first()
     .evaluate(btn => getComputedStyle(btn, '::after').visibility);
   expect(tooltipVisibility).toBe('hidden');
@@ -143,7 +142,6 @@ test('new entry shows continuation context and recomputes start', async ({ page 
 
   await page.locator('[data-role="text"]').fill('2026-06-29 09:30');
   await page.locator('[data-role="text"]').blur();
-  await expect(page.locator('[data-role="prev-segment"]')).toContainText('09:30');
   await expect(page.locator('[data-role="start-time-label"]')).toHaveText('09:30');
 });
 

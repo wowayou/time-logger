@@ -52,7 +52,6 @@ import {
 } from './time.js';
 import {
   renderFormSheet,
-  renderPrevSegmentBlock,
   renderRuler,
   renderSummaryRows,
   renderTimeline,
@@ -75,9 +74,12 @@ import {
   const HELP_SEEN_KEY = 'timelog.helpSeen.v16';
 
   function defaultFormTs() {
-    const today = todayStr();
-    const placeholder = openPlaceholderForDate(load().entries, today);
-    return placeholder ? placeholder.ts : nowStr();
+    const entries = load().entries;
+    const dateKey = state.selectedDate || todayStr();
+    const placeholder = openPlaceholderForDate(entries, dateKey);
+    if (placeholder) return placeholder.ts;
+    if (entriesOnDate(entries, dateKey).length) return nowStr();
+    return `${dateKey}T00:00`;
   }
 
   function periodRange(view = state.view, dateKey = state.selectedDate) {
@@ -294,13 +296,12 @@ import {
     return sheet && panel && !sheet.hidden ? panel.dataset.mode || '' : '';
   }
   function paintPrevSegment(panel, endTs) {
-    const box = panel ? panel.querySelector('[data-role="prev-segment"]') : null;
     const startTs = normalizeTimestamp(endTs);
-    if (!box || !startTs) return;
-    const currentEnd = nowStr();
-    box.innerHTML = renderPrevSegmentBlock(startTs, currentEnd);
-    const startLabel = panel.querySelector('[data-role="start-time-label"]');
+    if (!startTs) return;
+    const startLabel = panel ? panel.querySelector('[data-role="start-time-label"]') : null;
+    const durationLabel = panel ? panel.querySelector('[data-role="duration-label"]') : null;
     if (startLabel) startLabel.textContent = hhmm(startTs);
+    if (durationLabel) durationLabel.textContent = fmtMins(minsBetweenDates(new Date(startTs), new Date(nowStr())));
   }
   function mountNewTimePicker(panel, ts) {
     const tsEl = panel ? panel.querySelector('#form-ts') : null;
@@ -953,7 +954,6 @@ import {
     const willOpen = section.hidden;
     section.hidden = !willOpen;
     el.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-    el.textContent = willOpen ? '收起' : '▸改';
     paintPrevSegment(panel, tsEl.value);
     if (willOpen) {
       mountNewTimePicker(panel, tsEl.value);
@@ -1012,6 +1012,7 @@ import {
 
   // --- Test API ---
   function exposeTestApi() {
+    document.body.classList.add('app-ready');
     window.__timelogTest = {
       GAP,
       addBucket,
@@ -1126,6 +1127,7 @@ import {
     if (mq.addEventListener) mq.addEventListener('change', () => applyTheme(localStorage.getItem(THEME_KEY) || 'auto'));
     document.getElementById('hdr-date').textContent = dateLabel(new Date());
     render();
+    document.body.classList.add('app-ready');
     if (!navigator.webdriver && !localStorage.getItem(HELP_SEEN_KEY)) {
       openHelp();
     }

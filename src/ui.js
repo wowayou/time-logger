@@ -212,13 +212,13 @@ export function renderFormSheet(opts) {
     ? `<input type="text" class="inp edit-tag-input" data-role="edit-custom-tag" list="mainline-tags" value="${isKnownPickerTag ? '' : esc(tag)}" placeholder="自定义主线标签">`
     : '<input type="text" class="inp" id="form-ctag" list="mainline-tags" placeholder="自定义主线标签（可选）">';
   const datalist = `<datalist id="mainline-tags">${config.mainline.map(name => `<option value="${esc(name)}"></option>`).join('')}</datalist>`;
-  const prevSlot = isEdit ? '' : '<div class="prev-seg" data-role="prev-segment"></div>';
   const editBody = `
       <div class="fl">
         <div class="fl-label">时间（可改，补录用）</div>
         ${tsInput}
         ${wheelMount}
       </div>
+      <div class="form-inline-error" data-role="conflict-error" hidden></div>
       <div class="fl">
         <div class="fl-label">做了什么</div>
         ${whatInput}
@@ -234,7 +234,15 @@ export function renderFormSheet(opts) {
         <div class="form-hint" data-role="mainline-hint">自定义标签默认进入「主线」；与固定 chip 同名时按 chip 归类。</div>
       </div>`;
   const newBody = `
-      ${prevSlot}
+      <div class="form-time-row">
+        ${tsInput}
+        <button class="start-time-trigger" type="button" data-action="toggle-start-time" aria-expanded="false" aria-label="修改起点时间"><span data-role="start-time-label">--:--</span></button>
+        <span class="form-time-arrow">→ 现在 · 已 <span data-role="duration-label">--</span></span>
+      </div>
+      <div class="form-inline-error" data-role="conflict-error" hidden></div>
+      <div class="fl start-time-section" data-role="start-time-section" hidden>
+        ${wheelMount}
+      </div>
       <div class="fl">
         <div class="fl-label">做了什么</div>
         ${whatInput}
@@ -248,14 +256,6 @@ export function renderFormSheet(opts) {
         ${customInput}
         ${datalist}
         <div class="form-hint" data-role="mainline-hint">自定义标签默认进入「主线」；与固定 chip 同名时按 chip 归类。</div>
-      </div>
-      <div class="form-time-row">
-        ${tsInput}
-        <div class="form-time-point"><span>起点</span><strong data-role="start-time-label">--:--</strong><button class="prev-seg-action" type="button" data-action="toggle-start-time" aria-expanded="false">▸改</button></div>
-        <div class="form-time-point"><span>终点</span><strong>现在</strong></div>
-      </div>
-      <div class="fl start-time-section" data-role="start-time-section" hidden>
-        ${wheelMount}
       </div>`;
   return `
     <div class="form-sheet-head">
@@ -270,7 +270,6 @@ export function renderFormSheet(opts) {
     </div>
     <div class="form-sheet-body">
       ${isEdit ? editBody : newBody}
-      <div class="form-inline-error" data-role="conflict-error" hidden></div>
     </div>`;
 }
 
