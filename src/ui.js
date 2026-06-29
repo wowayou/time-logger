@@ -1,4 +1,4 @@
-import { fmtMins, hhmm, normalizeTimestamp } from './time.js';
+import { fmtMins, hhmm, minsBetweenDates, normalizeTimestamp, nowStr } from './time.js';
 import { formatPercent } from './stats.js';
 import {
   BUCKETS,
@@ -22,6 +22,7 @@ export function iconSvg(name) {
     undo: '<path d="M9 14 4 9l5-5"></path>',
     plus: '<path d="M12 5v14"></path><path d="M5 12h14"></path>',
     help: '<path d="M9.1 9a3 3 0 1 1 5.8 1c-.6 1.3-2.1 1.7-2.7 2.8"></path><path d="M12 17h.01"></path>',
+    close: '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>',
     settings: '<path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 0 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 0 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 0 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z"></path>'
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[name] || ''}</svg>`;
@@ -75,6 +76,32 @@ export function timelineDurationLabel(mins, isOngoing, unrecorded, pendingConfir
 
 export function confirmSegmentLabel(startTs, endTs) {
   return normalizeTimestamp(startTs) && normalizeTimestamp(endTs) ? `确认 ${hhmm(startTs)}-${hhmm(endTs)}` : '确认这段';
+}
+
+function compactLine(s, max = 42) {
+  const text = String(s || '未填写').replace(/\s+/g, ' ').trim() || '未填写';
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+export function renderPrevSegmentBlock(prev, endTs) {
+  const startTs = prev && normalizeTimestamp(prev.ts);
+  const normalizedEnd = normalizeTimestamp(endTs);
+  if (!prev || !startTs || !normalizedEnd) return '';
+  const tag = (prev.tags || [])[0] || '未知';
+  const tagClass = ` e-tag-${bucketForTag(tag)}`;
+  const endLabel = normalizedEnd === nowStr() ? '现在' : hhmm(normalizedEnd);
+  const mins = minsBetweenDates(new Date(startTs), new Date(normalizedEnd));
+  return `
+    <div class="prev-seg-head">
+      <span>上一段</span>
+      <span class="e-tag${tagClass}">#${esc(tag)}</span>
+    </div>
+    <div class="prev-seg-what">${esc(compactLine(prev.what))}</div>
+    <div class="prev-seg-time">${hhmm(startTs)} → ${endLabel} · 已 ${fmtMins(mins)}</div>
+    <div class="prev-seg-foot">
+      <span>直接往下记即确认。</span>
+      <button class="prev-seg-action" type="button" data-action="focus-end-time">我要修改 →</button>
+    </div>`;
 }
 
 export function renderTimeline(items, opts = {}) {
@@ -165,6 +192,7 @@ export function renderEditForm(e) {
 export function renderFormSheet(opts) {
   if (opts && opts.mode === 'help') return renderHelpSheet();
   if (opts && opts.mode === 'config') return renderConfigSheet(opts.config || loadConfig());
+  if (opts && opts.mode === 'import-shift') return renderImportShiftDialog();
   const mode = opts && opts.mode === 'edit' ? 'edit' : 'new';
   const e = opts && opts.entry;
   const isEdit = mode === 'edit';
@@ -195,6 +223,7 @@ export function renderFormSheet(opts) {
     ? `<input type="text" class="inp edit-tag-input" data-role="edit-custom-tag" list="mainline-tags" value="${isKnownPickerTag ? '' : esc(tag)}" placeholder="自定义主线标签">`
     : '<input type="text" class="inp" id="form-ctag" list="mainline-tags" placeholder="自定义主线标签（可选）">';
   const datalist = `<datalist id="mainline-tags">${config.mainline.map(name => `<option value="${esc(name)}"></option>`).join('')}</datalist>`;
+  const prevSlot = isEdit ? '' : '<div class="prev-seg" data-role="prev-segment"></div>';
   return `
     <div class="form-sheet-head">
       <div class="form-sheet-summary">
@@ -207,6 +236,7 @@ export function renderFormSheet(opts) {
       </div>
     </div>
     <div class="form-sheet-body">
+      ${prevSlot}
       <div class="fl">
         <div class="fl-label">时间（可改，补录用）</div>
         ${tsInput}
@@ -256,7 +286,7 @@ export function renderHelpSheet() {
         <div class="form-sheet-what">打点模型、本地备份、4 桶统计</div>
       </div>
       <div class="form-sheet-actions">
-        <button class="icon-btn cancel-btn" type="button" data-action="close-form" data-tip="关闭说明" aria-label="关闭说明">${iconSvg('undo')}</button>
+        <button class="icon-btn cancel-btn" type="button" data-action="close-form" data-tip="关闭说明" aria-label="关闭说明">${iconSvg('close')}</button>
       </div>
     </div>
     <div class="form-sheet-body help-body">
@@ -265,6 +295,27 @@ export function renderHelpSheet() {
       <section><h2>3 小时确认</h2><p>超过 3 小时的非睡觉片段先进入未记录；确认后才按标签统计。睡觉默认 longOk，不要求确认。</p></section>
       <section><h2>备份与合并</h2><p>复制、下载、分享、导入都是完整 JSON 备份；摘要只导出当前视图，适合贴给 AI。</p></section>
       <section><h2>双设备时区</h2><p>时间按设备壁钟保存，不做自动转换。导入时可整体平移 ±N 小时来对齐。</p></section>
+    </div>`;
+}
+
+export function renderImportShiftDialog() {
+  return `
+    <div class="form-sheet-head">
+      <div class="form-sheet-summary">
+        <div class="form-sheet-title" id="form-sheet-title">导入时区平移</div>
+        <div class="form-sheet-what">按小时整体移动导入记录的时间</div>
+      </div>
+      <div class="form-sheet-actions">
+        <button class="icon-btn cancel-btn" type="button" data-action="cancel-import-shift" data-tip="取消导入" aria-label="取消导入">${iconSvg('undo')}</button>
+        <button class="icon-btn save-btn" type="button" data-action="confirm-import-shift" data-tip="确认导入" aria-label="确认导入">${iconSvg('check')}</button>
+      </div>
+    </div>
+    <div class="form-sheet-body import-shift-body">
+      <div class="form-hint">导入前可把所有时间整体平移。例：iPhone 记在 UTC+8、电脑 UTC-5，填 -13；留空或 0 不平移。</div>
+      <div class="fl">
+        <div class="fl-label">平移小时数</div>
+        <input type="number" class="inp" id="import-shift-hours" value="0" step="1" inputmode="numeric">
+      </div>
     </div>`;
 }
 

@@ -52,6 +52,7 @@ import {
 } from './time.js';
 import {
   renderFormSheet,
+  renderPrevSegmentBlock,
   renderRuler,
   renderSummaryRows,
   renderTimeline,
@@ -119,6 +120,12 @@ import {
   // --- Compute entries and summaries ---
   function sortedEntries() {
     return sortedEntriesFrom(load().entries);
+  }
+  function prevSegmentFor(ts) {
+    const normalized = normalizeTimestamp(ts);
+    if (!normalized) return null;
+    const dayKey = normalized.slice(0, 10);
+    return sortedEntries().filter(e => e.ts.slice(0, 10) === dayKey && e.ts < normalized).pop() || null;
   }
   function buildRangeSegments(start, end, opts = {}) {
     return buildRangeSegmentsFromEntries(load().entries, start, end, opts);
@@ -278,9 +285,25 @@ import {
     const panel = sheet ? sheet.querySelector('.form-sheet-panel') : null;
     return sheet && panel && !sheet.hidden ? panel.dataset.mode || '' : '';
   }
+  function paintPrevSegment(panel, endTs) {
+    const box = panel ? panel.querySelector('[data-role="prev-segment"]') : null;
+    if (!box) return;
+    box.innerHTML = renderPrevSegmentBlock(prevSegmentFor(endTs), endTs);
+  }
+  function mountNewTimePicker(panel, ts) {
+    const tsEl = panel ? panel.querySelector('#form-ts') : null;
+    const mountEl = panel ? panel.querySelector('#form-wheel-mount') : null;
+    if (!tsEl || !mountEl) return;
+    tsEl.value = ts;
+    paintPrevSegment(panel, ts);
+    mountTimePicker(mountEl, ts, v => {
+      tsEl.value = v;
+      paintPrevSegment(panel, v);
+    });
+  }
   function openFormSheet(opts) {
     const requestedMode = opts && opts.mode;
-    const mode = ['edit', 'help', 'config'].includes(requestedMode) ? requestedMode : 'new';
+    const mode = ['edit', 'help', 'config', 'import-shift'].includes(requestedMode) ? requestedMode : 'new';
     const id = opts && opts.id;
     const entry = mode === 'edit' ? load().entries.find(e => e.id === id) : null;
     if (mode === 'edit' && !entry) return;
@@ -313,20 +336,17 @@ import {
       });
       sheetTimeMounted = true;
     } else if (mode === 'new') {
-      document.getElementById('form-ts').value = ts;
-      mountTimePicker(document.getElementById('form-wheel-mount'), ts, v => {
-        document.getElementById('form-ts').value = v;
-      });
-      document.getElementById('form-what').value = '';
-      document.getElementById('form-ctag').value = '';
-      document.querySelectorAll('#form-chips .chip').forEach(c => c.classList.remove('sel'));
+      mountNewTimePicker(panel, ts);
+      panel.querySelector('#form-what').value = '';
+      panel.querySelector('#form-ctag').value = '';
+      panel.querySelectorAll('#form-chips .chip').forEach(c => c.classList.remove('sel'));
       renderChrome();
     }
     autosizeTextareas(panel);
     trapFocus(sheet);
     requestAnimationFrame(() => {
-      const focusEl = sheet.querySelector('[data-role="date"], [data-role="text"], .inp, button');
-      if (focusEl) focusEl.focus();
+      panel.setAttribute('tabindex', '-1');
+      panel.focus({ preventScroll: true });
     });
   }
   function trapFocus(container) {
@@ -387,9 +407,11 @@ import {
       ? panel.querySelector('[data-role="edit-ts"]')
       : document.getElementById('form-ts');
     if (!tsEl) return;
-    mountTimePicker(mountEl, tsEl.value, v => {
-      tsEl.value = v;
-    });
+    if (mode === 'new') {
+      mountNewTimePicker(panel, tsEl.value);
+      return;
+    }
+    mountTimePicker(mountEl, tsEl.value, v => { tsEl.value = v; });
   }
   function handleResponsiveResize() {
     clearTimeout(sheetResizeTimer);
@@ -448,8 +470,12 @@ import {
     const input = mode === 'edit' ? panel.querySelector('[data-role="edit-ts"]') : document.getElementById('form-ts');
     const mount = mode === 'edit' ? panel.querySelector('[data-role="edit-wheel"]') : document.getElementById('form-wheel-mount');
     if (input) input.value = nextTs;
+    if (mode === 'new') paintPrevSegment(panel, nextTs);
     if (mount) {
-      mountTimePicker(mount, nextTs, v => { input.value = v; });
+      mountTimePicker(mount, nextTs, v => {
+        if (input) input.value = v;
+        if (mode === 'new') paintPrevSegment(panel, v);
+      });
       setTimeInputError(mount, '');
     }
     clearInlineError(panel);
@@ -781,10 +807,20 @@ import {
     return Number.isFinite(hours) ? Math.round(hours * 60) : 0;
   }
   function importJSON() {
-    const raw = prompt('导入前是否整体平移时间？单位：小时，可填 -1、0、8。留空按 0。', '0');
-    if (raw === null) return;
-    importShiftMinutes = parseImportShiftHours(raw);
-    document.getElementById('import-file').click();
+    openFormSheet({ mode: 'import-shift' });
+  }
+  function cancelImportShift() {
+    closeForm();
+  }
+  function confirmImportShift() {
+    const input = document.getElementById('import-shift-hours');
+    importShiftMinutes = parseImportShiftHours(input ? input.value : '0');
+    closeForm();
+    const fileInput = document.getElementById('import-file');
+    if (fileInput) {
+      fileInput.value = '';
+      fileInput.click();
+    }
   }
   function handleImport(event) {
     const file = event.target.files[0];
@@ -855,6 +891,15 @@ import {
   }
   function openTagConfig() {
     openFormSheet({ mode: 'config' });
+  }
+  function focusEndTime() {
+    const mount = document.getElementById('form-wheel-mount');
+    if (!mount) return;
+    mount.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    requestAnimationFrame(() => {
+      const focusEl = mount.querySelector('[data-role="text"], [data-role="date"], button, input, [tabindex]:not([tabindex="-1"])');
+      if (focusEl) focusEl.focus({ preventScroll: true });
+    });
   }
   function addConfigChip() {
     const list = document.querySelector('[data-role="config-chips"]');
@@ -938,6 +983,7 @@ import {
       if (action === 'switch-activity') switchActivity();
       if (action === 'open-help') openHelp();
       if (action === 'open-tag-config') openTagConfig();
+      if (action === 'focus-end-time') focusEndTime();
       if (action === 'pick-form-tag') pickTag(el);
       if (action === 'save-entry') saveEntry();
       if (action === 'close-form') closeForm();
@@ -958,6 +1004,8 @@ import {
       if (action === 'copy-json') copyJSON();
       if (action === 'download-json') downloadJSON();
       if (action === 'import-json') importJSON();
+      if (action === 'cancel-import-shift') cancelImportShift();
+      if (action === 'confirm-import-shift') confirmImportShift();
       if (action === 'share-json') shareJSON();
       if (action === 'update-app') applyUpdate();
     });

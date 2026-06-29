@@ -46,7 +46,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v16` / manifest `version: "16"`。
+当前版本：`timelog-v17` / manifest `version: "17"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -68,11 +68,11 @@
 - 禁止 `title=`，避免原生 tooltip 与自定义 tooltip 叠加。
 - 可见文字按钮不强制 tooltip；图标按钮必须同时有短 `data-tip` 和 `aria-label`。
 - tooltip 默认不能生成会撑宽页面的盒子；hover 延迟 800ms 后显示，移开立即隐藏；`focus-visible` 必须无延迟显示；触屏不能靠 hover 触发 tooltip。
-- 图标语义固定：编辑=铅笔，保存=对勾，删除=垃圾桶，取消=回退/撤销箭头。
+- 图标语义固定：编辑=铅笔，保存=对勾，删除=垃圾桶，取消=回退/撤销箭头，关闭只读页=细线 ×。
 - 删除/取消禁用 x、`×`、`✕`，包括图标定义、按钮文本和渲染模板。
 - 时间轴记录操作和编辑态保存/取消使用图标；底部备份栏、添加表单按钮继续用文字。
 - 输入字号不低于 16px，避免移动端聚焦放大。
-- 统一表单 sheet 打开后聚焦在时间/首个输入；“做了什么”是 textarea，Enter 必须换行，只有 Cmd/Ctrl+Enter 或 ✓ 按钮保存；定时刷新不能打断新增或编辑中的输入。
+- 统一表单 sheet 打开后先把焦点收进 sheet 容器，首个 Tab 进入内部控件；“做了什么”是 textarea，Enter 必须换行，只有 Cmd/Ctrl+Enter 或 ✓ 按钮保存；定时刷新不能打断新增或编辑中的输入。
 
 ## 隐私红线
 
@@ -157,3 +157,4 @@ git diff --check
 | v14 | 2026-06-28 | 响应式布局改为内容驱动：header/footer 容器查询、view/date 稳定网格、sticky footer、宽度驱动 sheet 与时间 picker |
 | v15 | 2026-06-29 | 原生 ES modules + 独立 CSS 分层；修复日边界统计继承、小屏横向滚动和周标题溢出；新增 Playwright UI smoke |
 | v16 | 2026-06-29 | 4 桶标签配置、longOk 长段策略、textarea 换行、同刻冲突提示、导入平移、帮助页、tooltip/F5 抖动修复、备份升序与秒级文件名 |
+| v17 | 2026-06-29 | 新建记录时显示上一段确认块；修复 sheet 初始焦点黑阴影；导入平移改自定义弹框；375px header 与 help 关闭图标收敛 |
