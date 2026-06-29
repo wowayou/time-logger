@@ -35,7 +35,7 @@ function approx(actual, expected, message) {
 }
 
 function assertTotals(actual, expected, label) {
-  for (const key of ['job', 'other', 'unrecorded', 'pending', 'total']) {
+  for (const key of ['job', 'maintain', 'leak', 'unrecorded', 'pending', 'total']) {
     approx(actual[key], expected[key], `${label} ${key}`);
   }
 }
@@ -74,7 +74,7 @@ const thresholdEntries = [
 ];
 assertTotals(
   summarizeEntries(thresholdEntries, new Date('2020-01-01T09:00'), new Date('2020-01-01T13:00')),
-  { job: 180, other: 60, unrecorded: 0, pending: 0, total: 240 },
+  { job: 180, maintain: 60, leak: 0, unrecorded: 0, pending: 0, total: 240 },
   '180 minute threshold'
 );
 
@@ -83,7 +83,7 @@ const pendingEntries = [
   entry('b', '2020-01-01T12:01', '杂')
 ];
 const pendingTotals = summarizeEntries(pendingEntries, new Date('2020-01-01T09:00'), new Date('2020-01-01T12:01'));
-assertTotals(pendingTotals, { job: 0, other: 0, unrecorded: 181, pending: 181, total: 181 }, '181 minute pending');
+assertTotals(pendingTotals, { job: 0, maintain: 0, leak: 0, unrecorded: 181, pending: 181, total: 181 }, '181 minute pending');
 const pendingSegments = buildRangeSegmentsFromEntries(pendingEntries, new Date('2020-01-01T09:00'), new Date('2020-01-01T12:01'));
 assert(pendingSegments[0].confirmable === true, 'closed 181 minute known segment should be confirmable');
 
@@ -92,7 +92,7 @@ const confirmResult = confirmSegmentInData(confirmData, 'a', '2020-01-01T12:01')
 assert(confirmResult.ok, 'confirming a closed long segment failed');
 assertTotals(
   summarizeEntries(confirmData.entries, new Date('2020-01-01T09:00'), new Date('2020-01-01T12:01')),
-  { job: 181, other: 0, unrecorded: 0, pending: 0, total: 181 },
+  { job: 181, maintain: 0, leak: 0, unrecorded: 0, pending: 0, total: 181 },
   'confirmed segment returns to label'
 );
 
@@ -102,10 +102,41 @@ const unknownEntries = [
 ];
 assertTotals(
   summarizeEntries(unknownEntries, new Date('2020-01-01T09:00'), new Date('2020-01-01T14:00')),
-  { job: 0, other: 0, unrecorded: 300, pending: 0, total: 300 },
+  { job: 0, maintain: 0, leak: 0, unrecorded: 300, pending: 0, total: 300 },
   'unknown tag remains unrecorded'
 );
 assert(confirmSegmentInData({ version: 1, entries: unknownEntries }, 'a', '2020-01-01T14:00').reason === 'not-required', 'unknown tag should not be confirmable');
+
+const sleepEntries = [
+  entry('a', '2020-01-01T00:00', '睡觉'),
+  entry('b', '2020-01-01T06:00', '求职推进')
+];
+assertTotals(
+  summarizeEntries(sleepEntries, new Date('2020-01-01T00:00'), new Date('2020-01-01T06:00')),
+  { job: 0, maintain: 360, leak: 0, unrecorded: 0, pending: 0, total: 360 },
+  'sleep longOk bypasses confirmation'
+);
+assert(confirmSegmentInData({ version: 1, entries: sleepEntries.map(e => ({ ...e })) }, 'a', '2020-01-01T06:00').reason === 'not-required', 'sleep should not require long confirmation');
+
+const mealEntries = [
+  entry('a', '2020-01-01T00:00', '吃饭'),
+  entry('b', '2020-01-01T06:00', '求职推进')
+];
+assertTotals(
+  summarizeEntries(mealEntries, new Date('2020-01-01T00:00'), new Date('2020-01-01T06:00')),
+  { job: 0, maintain: 0, leak: 0, unrecorded: 360, pending: 360, total: 360 },
+  'non-longOk maintain chip still requires confirmation'
+);
+
+assertTotals(
+  summarizeEntries(
+    [entry('a', '2020-01-01T09:00', '研究·学工具·逃避'), entry('b', '2020-01-01T10:00', '求职推进')],
+    new Date('2020-01-01T09:00'),
+    new Date('2020-01-01T10:00')
+  ),
+  { job: 0, maintain: 0, leak: 60, unrecorded: 0, pending: 0, total: 60 },
+  'legacy leak alias maps to leak bucket'
+);
 
 const ongoingFlags = classifySegment(entry('a', '2020-01-01T09:00', '求职推进'), 181, '', true);
 assert(ongoingFlags.pendingConfirm === true, 'ongoing long known segment should be pending');
@@ -118,7 +149,7 @@ const insertedEntries = [
 ];
 assertTotals(
   summarizeEntries(insertedEntries, new Date('2020-01-01T09:00'), new Date('2020-01-01T15:00')),
-  { job: 0, other: 120, unrecorded: 240, pending: 240, total: 360 },
+  { job: 0, maintain: 120, leak: 0, unrecorded: 240, pending: 240, total: 360 },
   'inserted middle record invalidates old confirmation'
 );
 
@@ -128,7 +159,7 @@ const changedStartEntries = [
 ];
 assertTotals(
   summarizeEntries(changedStartEntries, new Date('2020-01-01T09:05'), new Date('2020-01-01T15:00')),
-  { job: 0, other: 0, unrecorded: 355, pending: 355, total: 355 },
+  { job: 0, maintain: 0, leak: 0, unrecorded: 355, pending: 355, total: 355 },
   'changed start invalidates old confirmation'
 );
 
@@ -138,7 +169,7 @@ const changedEndEntries = [
 ];
 assertTotals(
   summarizeEntries(changedEndEntries, new Date('2020-01-01T09:00'), new Date('2020-01-01T15:05')),
-  { job: 0, other: 0, unrecorded: 365, pending: 365, total: 365 },
+  { job: 0, maintain: 0, leak: 0, unrecorded: 365, pending: 365, total: 365 },
   'changed end invalidates old confirmation'
 );
 
@@ -148,7 +179,7 @@ const changedLabelEntries = [
 ];
 assertTotals(
   summarizeEntries(changedLabelEntries, new Date('2020-01-01T09:00'), new Date('2020-01-01T13:00')),
-  { job: 0, other: 240, unrecorded: 0, pending: 0, total: 240 },
+  { job: 0, maintain: 240, leak: 0, unrecorded: 0, pending: 0, total: 240 },
   'changed explicit label keeps same time-bound confirmation'
 );
 
@@ -159,7 +190,7 @@ assertTotals(
     new Date('2020-01-03T00:00'),
     { now: '2020-01-03T00:00' }
   ),
-  { job: 0, other: 0, unrecorded: 0, pending: 0, total: 0 },
+  { job: 0, maintain: 0, leak: 0, unrecorded: 0, pending: 0, total: 0 },
   'empty day must not inherit previous day label'
 );
 
@@ -169,7 +200,7 @@ assertTotals(
     new Date('2020-01-02T00:00'),
     new Date('2020-01-02T10:00')
   ),
-  { job: 60, other: 0, unrecorded: 540, pending: 0, total: 600 },
+  { job: 60, maintain: 0, leak: 0, unrecorded: 540, pending: 0, total: 600 },
   'midnight to first same-day record is unrecorded'
 );
 
@@ -180,7 +211,7 @@ assertTotals(
     new Date('2020-01-03T00:00'),
     { now: '2020-01-03T00:00' }
   ),
-  { job: 0, other: 60, unrecorded: 1380, pending: 0, total: 1440 },
+  { job: 0, maintain: 60, leak: 0, unrecorded: 1380, pending: 0, total: 1440 },
   'multi-day summary stops at local day boundary and leaves empty next day empty'
 );
 
@@ -198,7 +229,7 @@ const boundaryData = { version: 1, entries: boundaryEntries.map(e => ({ ...e }))
 assert(confirmSegmentInData(boundaryData, 'a', '2020-01-02T00:00', { now: '2020-01-03T00:00' }).ok, 'boundary segment confirmation failed');
 assertTotals(
   summarizeEntries(boundaryData.entries, new Date('2020-01-01T20:00'), new Date('2020-01-02T00:00'), { now: '2020-01-03T00:00' }),
-  { job: 240, other: 0, unrecorded: 0, pending: 0, total: 240 },
+  { job: 240, maintain: 0, leak: 0, unrecorded: 0, pending: 0, total: 240 },
   'confirmed boundary segment returns to label'
 );
 
@@ -231,7 +262,7 @@ for (let round = 0; round < 250; round += 1) {
   const start = new Date(entries[0].ts);
   const end = new Date(entries[entries.length - 1].ts);
   const totals = summarizeEntries(entries, start, end);
-  approx(totals.job + totals.other + totals.unrecorded, totals.total, `random ${round} bucket sum`);
+  approx(totals.job + totals.maintain + totals.leak + totals.unrecorded, totals.total, `random ${round} bucket sum`);
   assert(totals.pending <= totals.unrecorded + 1e-9, `random ${round} pending exceeds unrecorded`);
 
   const segments = buildRangeSegmentsFromEntries(entries, start, end);

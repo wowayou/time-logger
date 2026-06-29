@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "15"
+EXPECTED_VERSION = "16"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -212,8 +212,16 @@ def audit_index(errors: list[str]) -> None:
         fail(errors, "index.html must load styles.css")
     if '<script type="module" src="src/app.js"></script>' not in html:
         fail(errors, "index.html must use src/app.js as the native module entry")
-    if "<style>" in html or re.search(r"<script>\s*", html):
-        fail(errors, "index.html must not contain inline style/script blocks")
+    if "<style>" in html:
+        fail(errors, "index.html must not contain inline style blocks")
+    for match in re.finditer(r"<script(?P<attrs>[^>]*)>(?P<body>.*?)</script>", html, re.DOTALL):
+        attrs = match.group("attrs")
+        body = match.group("body").strip()
+        if 'type="module"' in attrs and 'src="src/app.js"' in attrs and not body:
+            continue
+        if "timelog.theme" in body and "document.documentElement.setAttribute" in body:
+            continue
+        fail(errors, "index.html may only contain the app module script and the early theme script")
 
     if not re.search(r"button\[data-tip\]:hover::after,\s*\n\s*button\[data-tip\]:hover::before\s*\{[^}]*transition-delay:\s*" + re.escape(EXPECTED_TOOLTIP_DELAY), css, re.DOTALL):
         fail(errors, f"desktop hover tooltip must use a {EXPECTED_TOOLTIP_DELAY} show delay")

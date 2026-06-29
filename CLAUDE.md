@@ -7,7 +7,7 @@
 - `index.html`：DOM 壳、PWA/meta 引用、`styles.css` 和 `src/app.js` 模块入口
 - `styles.css`：全部样式
 - `src/time.js`：本地日期解析、格式化、周期范围
-- `src/storage.js`：`localStorage['timelog.v1']` 读写和导入合并
+- `src/storage.js`：`localStorage['timelog.v1']` 读写、`localStorage['timelog.config']` 标签配置、导入合并
 - `src/stats.js`：纯统计逻辑、按日分段、长段确认绑定
 - `src/pickers.js`：移动滚轮与桌面时间选择器
 - `src/ui.js`：渲染模板、图标、tooltip helper 和 DOM 更新
@@ -31,8 +31,8 @@
 模块边界：
 
 - `src/time.js`：只放日期、时间、周期和格式化工具；不读写 DOM / localStorage。
-- `src/storage.js`：只负责 `localStorage['timelog.v1']`、导入校验和合并；不渲染 UI。
-- `src/stats.js`：保持纯统计逻辑；不访问 DOM / navigator / localStorage；日边界规则必须在这里测试。
+- `src/storage.js`：只负责本地数据/config、导入校验和合并；不渲染 UI。
+- `src/stats.js`：保持统计逻辑集中；不访问 DOM / navigator；桶归类只能通过 `storage.js` 的配置 helper；日边界规则必须在这里测试。
 - `src/pickers.js`：只负责时间选择器 DOM；不直接保存业务数据。
 - `src/ui.js`：只负责模板、图标、tooltip helper 和 DOM 渲染；不做数据持久化。
 - `src/app.js`：只负责状态、事件委托、页面初始化、Service Worker、复制/下载/分享动作。
@@ -45,7 +45,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v15` / manifest `version: "15"`。
+当前版本：`timelog-v16` / manifest `version: "16"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -58,8 +58,8 @@
 ## UI 红线
 
 - 响应式默认用 container query、CSS Grid/Flex 和 sticky 文档流布局；禁止按 iPhone/iPad/设备名堆叠 viewport 补丁。
-- Header 排版固定为三行信息架构：第一行站点标识、可选日期、紧凑主题切换、GitHub 链接；第二行天/周/月/年视图切换；第三行 `< 当前周期 >` 与回到今天按钮；不要把日期导航塞回第一行。
-- 窄屏第一行优先保留站点标识、主题切换和 GitHub；空间不足时可以隐藏日期文字。
+- Header 排版固定为三行信息架构：第一行站点标识、可选日期、紧凑主题切换、说明/配置/GitHub；第二行天/周/月/年视图切换；第三行 `< 当前周期 >` 与回到今天按钮；不要把日期导航塞回第一行。
+- 窄屏第一行优先保留站点标识、主题切换和说明入口；空间不足时可以隐藏日期文字。
 - 窄屏日期导航必须允许两行：上一段/周期/下一段一行，回到今天/本周/本月/今年独立一行；周视图窄屏周期标题可用短格式，完整日期保留在可访问标签中。
 - Footer 必须在文档流内 sticky 到底部，备份操作必须用响应式 grid，不得固定五按钮单行硬挤；分享按钮默认 hidden，由能力检测后再显示，避免首屏布局跳动。
 - 表单 sheet 只按宽度适配：`>=720px` 居中 dialog，`<720px` bottom sheet；不要用 `pointer:fine` 决定视觉布局。
@@ -71,7 +71,7 @@
 - 删除/取消禁用 x、`×`、`✕`，包括图标定义、按钮文本和渲染模板。
 - 时间轴记录操作和编辑态保存/取消使用图标；底部备份栏、添加表单按钮继续用文字。
 - 输入字号不低于 16px，避免移动端聚焦放大。
-- 统一表单 sheet 打开后聚焦在时间/首个输入；新建表单在“做了什么”或“自定义标签”输入框按 Enter 等同保存；定时刷新不能打断新增或编辑中的输入。
+- 统一表单 sheet 打开后聚焦在时间/首个输入；“做了什么”是 textarea，Enter 必须换行，只有 Cmd/Ctrl+Enter 或 ✓ 按钮保存；定时刷新不能打断新增或编辑中的输入。
 
 ## 隐私红线
 
@@ -87,11 +87,13 @@
 - 日期值统一 `YYYY-MM-DDTHH:mm`。
 - 颜色走 CSS 变量；按钮白字 `#fff` 可保留。
 - 尺子未记录段用 `--track`，不用 `--border`。
-- 统计以分钟数为权威值：`job` / `other` / `unrecorded` / `pending` / `total` 先累加分钟；百分比只用于展示，不反向参与统计，不强行凑满 100%。
+- 统计以分钟数为权威值：`job` / `maintain` / `leak` / `unrecorded` / `pending` / `total` 先累加分钟；百分比只用于展示，不反向参与统计，不强行凑满 100%。
+- 标签 taxonomy 固定 4 桶：主线 `job`、维持 `maintain`、漏损 `leak`、未记录 `unrecorded`。桶在渲染/统计时由 tag→bucket 映射派生；孤儿 tag 落未记录。
 - 本地自然日 00:00 是统计硬边界；空日不继承前一天最后标签；有首条记录的日期从 00:00 到首条之间计为未记录；周/月/年汇总按每日独立统计累加。
-- 超过 3h 的明确标签段确认只绑定 `longConfirm.startTs` 和 `longConfirm.endTs`；相邻时间变化或中间补录自动失效，改成另一个明确标签不自动失效；跨日边界使用本地日边界作为段结束。
-- 数据只存在 `localStorage['timelog.v1']`。
-- 复制/下载/导入/分享都在浏览器本地完成，不上传。
+- 超过 3h 的非 `longOk` 明确标签段确认只绑定 `longConfirm.startTs` 和 `longConfirm.endTs`；相邻时间变化或中间补录自动失效，改成另一个明确标签不自动失效；跨日边界使用本地日边界作为段结束。默认只有“睡觉” `longOk:true`。
+- 时间戳是本地壁钟值，不做时区转换；跨设备导入只能通过“整体平移 ±N 小时”对齐。
+- 数据只存在 `localStorage['timelog.v1']`；标签配置只存在 `localStorage['timelog.config']`。
+- 复制/下载/导入/分享都是完整备份，导出前按 `ts` 升序排序；摘要只代表当前视图；所有动作都在浏览器本地完成，不上传。
 
 ## v2 锁死 & 别镀金
 
@@ -119,10 +121,12 @@ git diff --check
 
 1. 桌面鼠标 hover 图标按钮约 800ms 后只出现自定义 tooltip，移开立即隐藏；键盘 Tab 到图标按钮时 tooltip 立即出现，不出现原生 title。
 2. 编辑、删除、保存、取消均为图标；取消不是 x，删除不是 x。
-3. 移动端新增/编辑输入不自动放大；统一 sheet 打开后焦点落在时间/首个输入。
-4. 新增或编辑时，定时刷新不打断输入。
-5. 下载、导入、分享、摘要、复制仍保持文字入口并可用。
-6. PWA 更新链路：改 `index.html` 后升 CACHE 号；旧页面应出现“更新应用”，点击后加载新版，本机 `localStorage['timelog.v1']` 保留。
+3. 移动端新增/编辑输入不自动放大；textarea 回车换行，Cmd/Ctrl+Enter 或 ✓ 保存。
+4. 新增或编辑时，定时刷新不打断输入；无数据变化的 60s tick 不重绘页面。
+5. Ruler/摘要显示主线、维持、漏损、未记录 4 桶；睡觉 6h 不待确认，吃饭 6h 待确认。
+6. 同时刻新增/编辑出现内联冲突提示，可编辑原条或用 +1min。
+7. 下载、导入、分享、摘要、复制仍保持文字入口并可用；导出文件名带秒，JSON 按 `ts` 升序。
+8. PWA 更新链路：改 `index.html` 后升 CACHE 号；旧页面应出现“更新应用”，点击后加载新版，本机 `localStorage['timelog.v1']` 保留。
 
 响应式手动矩阵：
 
@@ -151,3 +155,4 @@ git diff --check
 | v13 | 2026-06-28 | 三行 header 信息架构、icon/GitHub 链接、四端统一表单 sheet、focus trap、Enter 新建保存、响应式 footer 和 44px 触控目标 |
 | v14 | 2026-06-28 | 响应式布局改为内容驱动：header/footer 容器查询、view/date 稳定网格、sticky footer、宽度驱动 sheet 与时间 picker |
 | v15 | 2026-06-29 | 原生 ES modules + 独立 CSS 分层；修复日边界统计继承、小屏横向滚动和周标题溢出；新增 Playwright UI smoke |
+| v16 | 2026-06-29 | 4 桶标签配置、longOk 长段策略、textarea 换行、同刻冲突提示、导入平移、帮助页、tooltip/F5 抖动修复、备份升序与秒级文件名 |

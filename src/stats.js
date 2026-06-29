@@ -6,6 +6,7 @@ import {
   normalizeTimestamp,
   startOfDay
 } from './time.js';
+import { bucketForTag, longOkForTag, tagKnownForConfirmation } from './storage.js';
 
 export const GAP = 180;
 
@@ -16,7 +17,7 @@ export function sortedEntriesFrom(entries) {
 }
 
 export function emptyTotals() {
-  return { job: 0, other: 0, unrecorded: 0, pending: 0, total: 0 };
+  return { job: 0, maintain: 0, leak: 0, unrecorded: 0, pending: 0, total: 0 };
 }
 
 export function primaryTag(entry) {
@@ -24,7 +25,7 @@ export function primaryTag(entry) {
 }
 
 export function isKnownTag(tag) {
-  return Boolean(tag && tag !== '未知');
+  return tagKnownForConfirmation(tag);
 }
 
 export function isSegmentConfirmed(entry, endTs) {
@@ -34,12 +35,14 @@ export function isSegmentConfirmed(entry, endTs) {
 
 export function classifySegment(entry, rawMins, endTs, isOngoing) {
   const tag = primaryTag(entry);
-  const needsConfirmation = isKnownTag(tag) && rawMins > GAP;
+  const bucket = bucketForTag(tag);
+  const needsConfirmation = bucket !== 'unrecorded' && !longOkForTag(tag) && rawMins > GAP;
   const confirmed = needsConfirmation && !isOngoing && isSegmentConfirmed(entry, endTs);
   const pendingConfirm = needsConfirmation && !confirmed;
   return {
     tag,
-    unrecorded: tag === '未知' || pendingConfirm,
+    bucket,
+    unrecorded: bucket === 'unrecorded' || pendingConfirm,
     pendingConfirm,
     confirmable: pendingConfirm && !isOngoing
   };
@@ -52,8 +55,13 @@ export function addBucket(totals, tag, mins, flags = {}) {
   totals.total += mins;
   if (pending) totals.pending += mins;
   if (unrecorded) totals.unrecorded += mins;
-  else if (tag === '求职推进') totals.job += mins;
-  else totals.other += mins;
+  else {
+    const bucket = bucketForTag(tag);
+    if (bucket === 'job') totals.job += mins;
+    else if (bucket === 'maintain') totals.maintain += mins;
+    else if (bucket === 'leak') totals.leak += mins;
+    else totals.unrecorded += mins;
+  }
 }
 
 function pushUnknownSegment(segments, start, end) {
@@ -176,7 +184,7 @@ export function confirmSegmentInData(d, id, endTs, opts = {}) {
 
   const tag = primaryTag(entry);
   const rawMins = minsBetweenDates(start, segmentEnd.rawEnd);
-  if (!isKnownTag(tag) || rawMins <= GAP) {
+  if (!isKnownTag(tag) || longOkForTag(tag) || rawMins <= GAP) {
     return { ok: false, reason: 'not-required' };
   }
   const stored = (d.entries || []).find(e => e.id === id);
@@ -205,7 +213,8 @@ export function summarizeEntriesByDay(entries, start, end, opts = {}) {
     const dayEnd = addDays(dayStart, 1);
     const dayTotals = summarizeEntries(entries, new Date(Math.max(start, dayStart)), new Date(Math.min(end, dayEnd)), opts);
     addBucket(totals, '求职推进', dayTotals.job);
-    addBucket(totals, '杂', dayTotals.other);
+    addBucket(totals, '杂', dayTotals.maintain);
+    addBucket(totals, '娱乐', dayTotals.leak);
     addBucket(totals, '未知', dayTotals.unrecorded, { unrecorded: true, pending: false });
     totals.pending += dayTotals.pending;
   }

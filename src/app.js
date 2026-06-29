@@ -4,9 +4,12 @@ import {
   SELECTED_DATE_KEY,
   THEME_KEY,
   VIEW_KEY,
+  addMainlineTag,
   load,
+  loadConfig,
   mergeImportedEntries,
   save,
+  saveConfig,
   uid,
   validateImportData
 } from './storage.js';
@@ -65,7 +68,10 @@ import {
   let pendingUpdateRegistration = null;
   let updateReloading = false;
   let formTag = '';
+  let importShiftMinutes = 0;
+  let lastIntervalSignature = '';
   let state = { view: 'day', selectedDate: '' };
+  const HELP_SEEN_KEY = 'timelog.helpSeen.v16';
 
   function defaultFormTs() {
     const n = new Date();
@@ -216,11 +222,13 @@ import {
           }
         }
       }
+      lastIntervalSignature = dataSignature();
       return;
     }
     const { start, end } = periodRange();
     renderRuler(summarizeRange(start, end), 1, state.view);
     renderSummary();
+    lastIntervalSignature = dataSignature();
   }
   function renderChrome() {
     document.querySelectorAll('#view-tabs button').forEach(btn => {
@@ -230,6 +238,8 @@ import {
     periodEl.textContent = periodLabel({ short: state.view === 'week' });
     periodEl.setAttribute('aria-label', periodFullLabel());
     document.getElementById('add-btn').hidden = state.view !== 'day';
+    const switchBtn = document.getElementById('switch-btn');
+    if (switchBtn) switchBtn.hidden = state.view !== 'day';
     const periodNames = { day: '天', week: '周', month: '月', year: '年' };
     const todayLabels = { day: '回到今天', week: '回到本周', month: '回到本月', year: '回到今年' };
     const todayTip = `回到包含今天的当前${periodNames[state.view]}。`;
@@ -269,7 +279,8 @@ import {
     return sheet && panel && !sheet.hidden ? panel.dataset.mode || '' : '';
   }
   function openFormSheet(opts) {
-    const mode = opts && opts.mode === 'edit' ? 'edit' : 'new';
+    const requestedMode = opts && opts.mode;
+    const mode = ['edit', 'help', 'config'].includes(requestedMode) ? requestedMode : 'new';
     const id = opts && opts.id;
     const entry = mode === 'edit' ? load().entries.find(e => e.id === id) : null;
     if (mode === 'edit' && !entry) return;
@@ -280,7 +291,7 @@ import {
       editingId = null;
       sheetEditId = null;
       formTag = '';
-    } else {
+    } else if (mode === 'edit') {
       editingId = null;
       sheetEditId = id;
       sheetTimeMounted = false;
@@ -288,11 +299,11 @@ import {
     }
     const sheet = document.getElementById('form-sheet');
     const panel = sheet.querySelector('.form-sheet-panel');
-    const ts = mode === 'edit' ? entry.ts : defaultFormTs();
+    const ts = mode === 'edit' ? entry.ts : (opts && opts.ts) || defaultFormTs();
     panel.dataset.mode = mode;
     if (mode === 'edit') panel.dataset.id = id;
     else delete panel.dataset.id;
-    panel.innerHTML = renderFormSheet({ mode, entry });
+    panel.innerHTML = renderFormSheet({ mode, entry, config: loadConfig() });
     sheet.hidden = false;
     lockBodyForSheet();
     if (mode === 'edit') {
@@ -301,7 +312,7 @@ import {
         tsEl.value = v;
       });
       sheetTimeMounted = true;
-    } else {
+    } else if (mode === 'new') {
       document.getElementById('form-ts').value = ts;
       mountTimePicker(document.getElementById('form-wheel-mount'), ts, v => {
         document.getElementById('form-ts').value = v;
@@ -311,6 +322,7 @@ import {
       document.querySelectorAll('#form-chips .chip').forEach(c => c.classList.remove('sel'));
       renderChrome();
     }
+    autosizeTextareas(panel);
     trapFocus(sheet);
     requestAnimationFrame(() => {
       const focusEl = sheet.querySelector('[data-role="date"], [data-role="text"], .inp, button');
@@ -369,7 +381,7 @@ import {
     const mode = panel.dataset.mode || '';
     const mountEl = mode === 'edit'
       ? panel.querySelector('[data-role="edit-wheel"]')
-      : document.getElementById('form-wheel-mount');
+      : mode === 'new' ? document.getElementById('form-wheel-mount') : null;
     if (!mountEl || mountEl.dataset.pickerCompact === compact) return;
     const tsEl = mode === 'edit'
       ? panel.querySelector('[data-role="edit-ts"]')
@@ -398,6 +410,72 @@ import {
     formTag = el.dataset.tag || '';
     document.getElementById('form-ctag').value = '';
   }
+  function clearInlineError(scope, role = 'conflict-error') {
+    const err = scope ? scope.querySelector(`[data-role="${role}"]`) : null;
+    if (!err) return;
+    err.hidden = true;
+    err.innerHTML = '';
+  }
+  function showInlineError(scope, html, role = 'conflict-error') {
+    const err = scope ? scope.querySelector(`[data-role="${role}"]`) : null;
+    if (!err) return;
+    err.innerHTML = html;
+    err.hidden = false;
+  }
+  function findTimeConflict(ts, selfId = '') {
+    return load().entries.find(entry => entry.ts === ts && entry.id !== selfId) || null;
+  }
+  function htmlEscape(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+  function conflictMessage(conflict, ts, plusAction) {
+    const what = htmlEscape((conflict.what || '未填写').replace(/\s+/g, ' ').slice(0, 36));
+    return `同一时刻已有「${what}」。<button class="mini-btn" type="button" data-action="edit-conflict-entry" data-id="${htmlEscape(conflict.id)}">编辑那条</button><button class="mini-btn" type="button" data-action="${plusAction}" data-ts="${htmlEscape(ts)}">用+1min</button>`;
+  }
+  function addOneMinute(ts) {
+    const d = new Date(ts);
+    d.setMinutes(d.getMinutes() + 1);
+    return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  }
+  function useConflictPlusMinute(el) {
+    const panel = el.closest('.form-sheet-panel, .entry.editing');
+    const mode = panel && panel.dataset.mode;
+    const nextTs = addOneMinute(el.dataset.ts || '');
+    const input = mode === 'edit' ? panel.querySelector('[data-role="edit-ts"]') : document.getElementById('form-ts');
+    const mount = mode === 'edit' ? panel.querySelector('[data-role="edit-wheel"]') : document.getElementById('form-wheel-mount');
+    if (input) input.value = nextTs;
+    if (mount) {
+      mountTimePicker(mount, nextTs, v => { input.value = v; });
+      setTimeInputError(mount, '');
+    }
+    clearInlineError(panel);
+  }
+  function editConflictEntry(id) {
+    closeFormSheet({ restoreFocus: false });
+    openEditSheet(id);
+  }
+  function maybeRememberMainline(tag) {
+    addMainlineTag(tag);
+  }
+  function compactTagText(value) {
+    return String(value || '').toLowerCase().replace(/[\s·._-]+/g, '');
+  }
+  function updateMainlineHint(input) {
+    const box = input.closest('.form-sheet-panel, .entry.editing');
+    const hint = box ? box.querySelector('[data-role="mainline-hint"]') : null;
+    if (!hint) return;
+    const value = input.value.trim();
+    const compact = compactTagText(value);
+    const config = loadConfig();
+    const near = compact ? config.mainline.find(name => compactTagText(name) === compact && name !== value) : '';
+    hint.textContent = near
+      ? `可能已有相近主线「${near}」。留空可直接选历史 chip。`
+      : '自定义标签默认进入「主线」；与固定 chip 同名时按 chip 归类。';
+  }
   function saveEntry() {
     const timeScope = document.getElementById('form-wheel-mount');
     const checked = validateTs(document.getElementById('form-ts').value);
@@ -413,11 +491,29 @@ import {
     const ctag = document.getElementById('form-ctag').value.trim();
     const tag = ctag || formTag || '未知';
     const d = load();
+    const conflict = findTimeConflict(checked.ts);
+    const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    if (conflict) {
+      showInlineError(panel, conflictMessage(conflict, checked.ts, 'use-conflict-plus-new'));
+      return;
+    }
+    if (ctag) maybeRememberMainline(ctag);
     d.entries.push({ id: uid(), ts: checked.ts, what, tags: [tag] });
     save(d);
     setSelectedDate(checked.ts.slice(0, 10));
     closeForm();
     render();
+  }
+  function switchActivity() {
+    state.view = 'day';
+    setSelectedDate(todayStr());
+    openFormSheet({ mode: 'new', ts: nowStr() });
+  }
+  function autosizeTextareas(scope = document) {
+    scope.querySelectorAll('textarea.ta').forEach(textarea => {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.max(textarea.scrollHeight, 52)}px`;
+    });
   }
 
   // --- Edit ---
@@ -509,7 +605,13 @@ import {
     const ctag = customEl ? customEl.value.trim() : '';
     const tag = ctag || (sel ? sel.dataset.tag : '未知');
     const d = load();
+    const conflict = findTimeConflict(checked.ts, id);
+    if (conflict) {
+      showInlineError(box, conflictMessage(conflict, checked.ts, 'use-conflict-plus-edit'));
+      return;
+    }
     const entry = d.entries.find(e => e.id === id);
+    if (ctag) maybeRememberMainline(ctag);
     if (entry) { entry.ts = checked.ts; entry.what = what; entry.tags = [tag]; save(d); }
     setSelectedDate(checked.ts.slice(0, 10));
     closeEditSheet();
@@ -555,9 +657,10 @@ import {
   }
   function statsParts(totals) {
     const jp = formatPercent(totals.job, totals.total);
-    const op = formatPercent(totals.other, totals.total);
+    const mp = formatPercent(totals.maintain, totals.total);
+    const lp = formatPercent(totals.leak, totals.total);
     const up = formatPercent(totals.unrecorded, totals.total);
-    return { jp, op, up };
+    return { jp, mp, lp, up };
   }
   function dataDateRange() {
     const entries = sortedEntries();
@@ -584,17 +687,17 @@ import {
     }
     const rows = summaryRows();
     if (!rows.length) return ['- 无记录'];
-    return rows.map(row => {
+      return rows.map(row => {
       const totals = summarizeRange(row.rangeStart, row.rangeEnd);
-      const { jp, op, up } = statsParts(totals);
+      const { jp, mp, lp, up } = statsParts(totals);
       const totalText = totals.total ? fmtMins(totals.total) : '无记录';
       const pendingText = totals.pending ? ` / 待确认 ${fmtPlainMins(totals.pending)}` : '';
-      return `- ${row.label}: ${totalText}；求职 ${jp} / 其他 ${op} / 未记录 ${up}${pendingText}`;
+      return `- ${row.label}: ${totalText}；主线 ${jp} / 维持 ${mp} / 漏损 ${lp} / 未记录 ${up}${pendingText}`;
     });
   }
   function buildCurrentViewSummaryMarkdown() {
     const totals = currentViewTotals();
-    const { jp, op, up } = statsParts(totals);
+    const { jp, mp, lp, up } = statsParts(totals);
     const totalEntries = load().entries.length;
     return [
       '# 时间尺当前视图摘要',
@@ -608,8 +711,9 @@ import {
       '',
       '## 当前视图统计比例',
       `- 总计：${fmtPlainMins(totals.total)}`,
-      `- 求职推进：${jp}（${fmtPlainMins(totals.job)}）`,
-      `- 其他：${op}（${fmtPlainMins(totals.other)}）`,
+      `- 主线：${jp}（${fmtPlainMins(totals.job)}）`,
+      `- 维持：${mp}（${fmtPlainMins(totals.maintain)}）`,
+      `- 漏损：${lp}（${fmtPlainMins(totals.leak)}）`,
       `- 未记录：${up}（${fmtPlainMins(totals.unrecorded)}）`,
       `- 待确认：${fmtPlainMins(totals.pending || 0)}`,
       '',
@@ -640,7 +744,7 @@ import {
     done(legacyCopy(text));
   }
   function copyJSON() {
-    const json = JSON.stringify(load(), null, 2);
+    const json = JSON.stringify(exportData(), null, 2);
     copyText(json, document.getElementById('copy-btn'), '✓ 已复制', '复制');
   }
   function copyCurrentViewSummary() {
@@ -658,9 +762,8 @@ import {
 
   // --- Download JSON ---
   function downloadJSON() {
-    const json = JSON.stringify(load(), null, 2);
-    const now = new Date();
-    const fname = `timelog-${now.getFullYear()}${p2(now.getMonth()+1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}.json`;
+    const json = JSON.stringify(exportData(), null, 2);
+    const fname = backupFileName();
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -671,7 +774,18 @@ import {
   }
 
   // --- Import JSON ---
-  function importJSON() { document.getElementById('import-file').click(); }
+  function parseImportShiftHours(raw) {
+    const value = String(raw || '').trim();
+    if (!value) return 0;
+    const hours = Number(value);
+    return Number.isFinite(hours) ? Math.round(hours * 60) : 0;
+  }
+  function importJSON() {
+    const raw = prompt('导入前是否整体平移时间？单位：小时，可填 -1、0、8。留空按 0。', '0');
+    if (raw === null) return;
+    importShiftMinutes = parseImportShiftHours(raw);
+    document.getElementById('import-file').click();
+  }
   function handleImport(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -682,7 +796,14 @@ import {
       catch { alert('文件解析失败，请确认是有效的 JSON 文件。'); return; }
       const checked = validateImportData(imported);
       if (!checked.ok) { alert(checked.msg); return; }
-      const current = mergeImportedEntries(load(), imported.entries);
+      const current = mergeImportedEntries(load(), imported.entries, { shiftMinutes: importShiftMinutes });
+      if (imported.config) {
+        const currentConfig = loadConfig();
+        saveConfig({
+          mainline: [...currentConfig.mainline, ...(imported.config.mainline || [])],
+          chips: [...currentConfig.chips, ...(imported.config.chips || [])]
+        });
+      }
       save(current);
       render();
       alert(`导入完成，共 ${current.entries.length} 条记录。`);
@@ -705,17 +826,65 @@ import {
   }
   function shareJSON() {
     if (!canUseSystemShare()) return;
-    const json = JSON.stringify(load(), null, 2);
-    const now = new Date();
-    const fname = `timelog-${now.getFullYear()}${p2(now.getMonth()+1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}.json`;
+    const json = JSON.stringify(exportData(), null, 2);
+    const fname = backupFileName();
     if (navigator.canShare) {
       const file = new File([json], fname, { type: 'application/json' });
       if (navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: '时间尺备份' }).catch(() => {});
+        navigator.share({ files: [file], title: `时间尺完整备份 ${fname}` }).catch(() => {});
         return;
       }
     }
-    navigator.share({ title: '时间尺备份', text: json }).catch(() => {});
+    navigator.share({ title: `时间尺完整备份 ${fname}`, text: json }).catch(() => {});
+  }
+  function exportData() {
+    const d = load();
+    return { ...d, config: loadConfig(), entries: sortedEntriesFrom(d.entries).map(entry => ({ ...entry })) };
+  }
+  function backupFileName() {
+    const now = new Date();
+    return `timelog-${now.getFullYear()}${p2(now.getMonth()+1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}.json`;
+  }
+  function dataSignature() {
+    const d = load();
+    return JSON.stringify({ view: state.view, selectedDate: state.selectedDate, entries: d.entries });
+  }
+  function openHelp(opts = {}) {
+    if (opts.markSeen !== false) localStorage.setItem(HELP_SEEN_KEY, '1');
+    openFormSheet({ mode: 'help' });
+  }
+  function openTagConfig() {
+    openFormSheet({ mode: 'config' });
+  }
+  function addConfigChip() {
+    const list = document.querySelector('[data-role="config-chips"]');
+    if (!list) return;
+    const div = document.createElement('div');
+    div.className = 'cfg-row';
+    div.innerHTML = '<input class="inp cfg-name" type="text" value="" aria-label="标签名称"><select class="inp cfg-bucket" aria-label="桶"><option value="maintain">维持</option><option value="leak">漏损</option></select><label class="cfg-long"><input type="checkbox" class="cfg-long-ok"> longOk</label><button class="mini-btn" type="button" data-action="remove-config-chip">删除</button>';
+    list.appendChild(div);
+    div.querySelector('.cfg-name').focus();
+  }
+  function removeConfigChip(el) {
+    const row = el.closest('.cfg-row');
+    if (row) row.remove();
+  }
+  function saveTagConfig() {
+    const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    const rows = Array.from(panel.querySelectorAll('.cfg-row'));
+    const chips = rows.map(row => ({
+      name: row.querySelector('.cfg-name').value.trim(),
+      bucket: row.querySelector('.cfg-bucket').value,
+      longOk: row.querySelector('.cfg-long-ok').checked
+    })).filter(chip => chip.name);
+    if (!chips.length) {
+      showInlineError(panel, '至少保留一个维持/漏损 chip。', 'config-error');
+      return;
+    }
+    const existing = loadConfig();
+    saveConfig({ ...existing, chips });
+    closeForm();
+    render();
   }
 
   // --- App update prompt ---
@@ -766,14 +935,22 @@ import {
       if (action === 'shift-period') shiftPeriod(Number(el.dataset.delta || 0));
       if (action === 'today') goToday();
       if (action === 'open-form') openForm();
+      if (action === 'switch-activity') switchActivity();
+      if (action === 'open-help') openHelp();
+      if (action === 'open-tag-config') openTagConfig();
       if (action === 'pick-form-tag') pickTag(el);
       if (action === 'save-entry') saveEntry();
       if (action === 'close-form') closeForm();
+      if (action === 'use-conflict-plus-new' || action === 'use-conflict-plus-edit') useConflictPlusMinute(el);
+      if (action === 'edit-conflict-entry') editConflictEntry(el.dataset.id);
       if (action === 'start-edit') startEdit(el.dataset.id);
       if (action === 'pick-edit-tag') pickEditTag(el);
       if (action === 'toggle-edit-time') toggleEditTime(el);
       if (action === 'commit-edit') commitEdit(el.dataset.id || editingId);
       if (action === 'cancel-edit') cancelEdit();
+      if (action === 'add-config-chip') addConfigChip();
+      if (action === 'remove-config-chip') removeConfigChip(el);
+      if (action === 'save-tag-config') saveTagConfig();
       if (action === 'confirm-segment') confirmSegment(el.dataset.id, el.dataset.end);
       if (action === 'delete-entry') delEntry(el.dataset.id);
       if (action === 'drill') drill(el.dataset.date, el.dataset.view);
@@ -785,21 +962,17 @@ import {
       if (action === 'update-app') applyUpdate();
     });
     document.getElementById('import-file').addEventListener('change', handleImport);
+    document.addEventListener('input', e => {
+      if (e.target instanceof HTMLTextAreaElement && e.target.classList.contains('ta')) {
+        autosizeTextareas(e.target.parentElement || document);
+      }
+      if (e.target instanceof HTMLInputElement && (e.target.id === 'form-ctag' || e.target.matches('[data-role="edit-custom-tag"]'))) {
+        updateMainlineHint(e.target);
+      }
+    });
 
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') { cancelEdit(); closeForm(); }
-      if (e.key === 'Enter' && !e.isComposing && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) {
-        const target = e.target;
-        const canSaveNew = target instanceof HTMLElement
-          && isFormOpen()
-          && target.closest('.form-sheet-panel')
-          && (target.id === 'form-what' || target.id === 'form-ctag');
-        if (canSaveNew) {
-          e.preventDefault();
-          saveEntry();
-          return;
-        }
-      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         if (editingId || sheetEditId) { commitEdit(editingId || sheetEditId); return; }
         if (isFormOpen()) saveEntry();
@@ -843,8 +1016,14 @@ import {
     if (mq.addEventListener) mq.addEventListener('change', () => applyTheme(localStorage.getItem(THEME_KEY) || 'auto'));
     document.getElementById('hdr-date').textContent = dateLabel(new Date());
     render();
+    if (!navigator.webdriver && !localStorage.getItem(HELP_SEEN_KEY)) {
+      openHelp();
+    }
     setInterval(() => {
-      if (!editingId && !sheetEditId && !isFormOpen()) render();
+      if (editingId || sheetEditId || isFormOpen() || getSheetMode()) return;
+      const signature = dataSignature();
+      if (signature === lastIntervalSignature) return;
+      render();
     }, 60000);
   }
 
