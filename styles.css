@@ -102,6 +102,13 @@
       margin: 0 auto;
       padding: env(safe-area-inset-top) clamp(12px, 4vw, 16px) 18px;
       container-type: inline-size;
+      /* Soften the app-ready reveal so the first paint fades in instead of
+         snapping 0→1 (reads as a flash on slower devices like iPhone SE2). */
+      opacity: 1;
+      transition: opacity 0.18s ease;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .app { transition: none; }
     }
 
     /* Header */
@@ -1007,7 +1014,13 @@
     /* Form sheet */
     .form-sheet {
       position: fixed;
-      inset: 0;
+      left: 0;
+      right: 0;
+      /* Track the visual viewport so the iOS keyboard cannot push the sticky
+         head (and its save ✓) off-screen. Falls back to the full layout
+         viewport when visualViewport vars are unset. */
+      top: var(--vvt, 0px);
+      height: var(--vvh, 100%);
       z-index: 80;
       display: grid;
       align-items: end;
@@ -1022,7 +1035,7 @@
       position: relative;
       display: flex;
       flex-direction: column;
-      max-height: min(92dvh, 720px, calc(100dvh - env(safe-area-inset-top) - 8px));
+      max-height: min(var(--vvh, 92dvh), 720px, calc(100dvh - env(safe-area-inset-top) - 8px));
       width: 100%;
       max-width: 600px;
       margin: 0 auto;

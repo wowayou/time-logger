@@ -51,6 +51,15 @@ export async function boot(page, width, state, share = false, now = '', selected
     if (state === 'now-placeholder') {
       entries.push({ id: 'open-now', ts: minuteKey(today), what: '', tags: [] });
     }
+    if (state === 'mid-placeholder') {
+      // An empty placeholder stranded in the MIDDLE of the day (not the tail),
+      // so openPlaceholderForDate won't find it — exercises ③ backfill merge.
+      entries.push(
+        { id: 'mid-a', ts: `${dateKey(today)}T08:00`, what: '早间', tags: ['求职推进'] },
+        { id: 'mid-open', ts: `${dateKey(today)}T09:00`, what: '', tags: [] },
+        { id: 'mid-c', ts: `${dateKey(today)}T11:00`, what: '上午', tags: ['求职推进'] }
+      );
+    }
     if (state === 'yesterday-residual') {
       entries.push({ id: 'yesterday-1', ts: `${dateKey(yesterday)}T23:00`, what: '昨日残留记录', tags: ['杂'] });
     }
@@ -65,6 +74,14 @@ export async function boot(page, width, state, share = false, now = '', selected
     }
     if (state === 'planned-only') {
       entries.push({ id: 'plan-1', ts: `${dateKey(today)}T09:30`, what: '准备面试', tags: ['求职推进'], planned: true });
+    }
+    if (state === 'plan-collides-now') {
+      // A future plan plus a real entry already sitting on the frozen "now"
+      // minute, so confirming the plan must dodge the same-ts collision (⑥).
+      entries.push(
+        { id: 'now-entry', ts: minuteKey(today), what: '正在做的事', tags: ['求职推进'] },
+        { id: 'plan-future', ts: `${dateKey(today)}T23:30`, what: '准备面试', tags: ['求职推进'], planned: true }
+      );
     }
     if (state === 'custom-chip') {
       entries.push({ id: 'stretch-1', ts: `${dateKey(today)}T08:00`, what: '拉伸', tags: ['拉伸'] });

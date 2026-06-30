@@ -4,6 +4,7 @@ import {
   conflictMessage,
   ensureOpenPlaceholderAt,
   findTimeConflict,
+  isPlaceholderEntry,
   openPlaceholderForDate
 } from './entry_model.js';
 import {
@@ -116,6 +117,40 @@ export function createSheetController(deps) {
     }
   }
 
+  function syncVisualViewport() {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!vv) return;
+    const root = document.documentElement;
+    // The iOS soft keyboard shrinks visualViewport and can offset it from the
+    // layout viewport; publish both so the fixed sheet overlay tracks it and
+    // the sticky head (with save ✓) stays on-screen. See docs/postmortems.md ⑧.
+    root.style.setProperty('--vvt', `${Math.max(0, vv.offsetTop)}px`);
+    root.style.setProperty('--vvh', `${vv.height}px`);
+  }
+
+  function clearVisualViewport() {
+    const root = document.documentElement;
+    root.style.removeProperty('--vvt');
+    root.style.removeProperty('--vvh');
+  }
+
+  function attachVisualViewport() {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!vv) return;
+    syncVisualViewport();
+    vv.addEventListener('resize', syncVisualViewport);
+    vv.addEventListener('scroll', syncVisualViewport);
+  }
+
+  function detachVisualViewport() {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (vv) {
+      vv.removeEventListener('resize', syncVisualViewport);
+      vv.removeEventListener('scroll', syncVisualViewport);
+    }
+    clearVisualViewport();
+  }
+
   function lockBodyForSheet() {
     sheetScrollY = window.scrollY || document.documentElement.scrollTop || 0;
     document.body.style.position = 'fixed';
@@ -124,9 +159,11 @@ export function createSheetController(deps) {
     document.body.style.right = '0';
     document.body.style.width = '100%';
     document.body.classList.add('sheet-open');
+    attachVisualViewport();
   }
 
   function unlockBodyForSheet() {
+    detachVisualViewport();
     document.body.classList.remove('sheet-open');
     document.body.style.position = '';
     document.body.style.top = '';
@@ -193,7 +230,9 @@ export function createSheetController(deps) {
       formTag = '';
       formBucket = defaultBucketFromEntries();
       formRecordMode = loadRecordModePref();
-      if (isHistoryDate()) formRecordMode = 'log';
+      // Backfilling a known past gap is always an "already happened" record;
+      // a leaked plan-mode pref would force a future ts and silently fail to save.
+      if (isHistoryDate() || (opts && opts.backfill)) formRecordMode = 'log';
     } else if (mode === 'edit') {
       deps.setSheetEditId(id);
       sheetTimeMounted = false;
@@ -225,6 +264,7 @@ export function createSheetController(deps) {
       targetDate: deps.state.selectedDate,
       isToday: deps.state.selectedDate === todayStr(),
       isHistoryDay: isHistoryDate(),
+      backfill: Boolean(opts && opts.backfill),
       bucket: mode === 'edit' ? editBucket : formBucket,
       defaultBucket: formBucket,
       recordMode: formRecordMode
@@ -440,6 +480,11 @@ export function createSheetController(deps) {
     if (!err) return;
     err.innerHTML = html;
     err.hidden = false;
+    // ④ A blocked ✓ must give feedback the user can actually see; the panel body
+    // scrolls and the iOS keyboard can hide the lower half, so pull it into view.
+    if (typeof err.scrollIntoView === 'function') {
+      err.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
   }
 
   function useConflictPlusMinute(el) {
@@ -520,11 +565,18 @@ export function createSheetController(deps) {
     const ctag = document.getElementById('form-ctag').value.trim();
     const tag = ctag || formTag || '未知';
     const d = deps.load();
-    const placeholder = openPlaceholderForDate(d.entries, checked.ts.slice(0, 10));
+    let placeholder = openPlaceholderForDate(d.entries, checked.ts.slice(0, 10));
     const conflict = findTimeConflict(d.entries, checked.ts, placeholder ? placeholder.id : '');
     if (conflict) {
-      showInlineError(panel, conflictMessage(conflict, checked.ts, 'use-conflict-plus-new'));
-      return;
+      // A backfill can land exactly on an empty placeholder stranded in the
+      // middle of the day (openPlaceholderForDate only finds the tail one).
+      // Fill that placeholder in place instead of blocking it as a self-conflict.
+      if (!planned && isPlaceholderEntry(conflict)) {
+        placeholder = conflict;
+      } else {
+        showInlineError(panel, conflictMessage(conflict, checked.ts, 'use-conflict-plus-new'));
+        return;
+      }
     }
     if (ctag) rememberTag(ctag, formBucket, d.entries);
     if (planned) {

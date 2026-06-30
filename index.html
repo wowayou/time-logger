@@ -12,6 +12,14 @@
       try {
         const pref = localStorage.getItem('timelog.theme') || 'auto';
         if (pref === 'light' || pref === 'dark') document.documentElement.setAttribute('data-theme', pref);
+        // Resolve theme-color before paint so light-mode reloads don't flash a dark
+        // status bar (the meta default is dark; applyTheme only runs after the module
+        // loads). auto follows the system preference.
+        const effective = pref === 'auto'
+          ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+          : pref;
+        const meta = document.getElementById('meta-theme-color');
+        if (meta) meta.setAttribute('content', effective === 'light' ? '#f7f7fa' : '#0d0d14');
       } catch {}
     })();
   </script>

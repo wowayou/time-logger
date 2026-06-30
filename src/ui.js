@@ -250,7 +250,7 @@ export function renderFormSheet(opts) {
   const isKnownPickerTag = config.mainline.includes(tag) || config.chips.some(chip => chip.name === tag);
   const bucketSeg = renderBucketSeg(isEdit ? 'edit' : 'form', bucket);
   const chips = renderTagPicker(isEdit ? 'edit' : 'form', tag, config, bucket);
-  const recordModeSeg = isEdit || isHistoryDay ? '' : renderRecordModeSeg(recordMode);
+  const recordModeSeg = isEdit || isHistoryDay || (opts && opts.backfill) ? '' : renderRecordModeSeg(recordMode);
   const title = isEdit ? '编辑' : (isPlan ? '计划' : (isToday ? '记一条' : '补记'));
   const summary = isEdit
     ? `${hhmm(e.ts)}${tag ? ` · #${esc(tag)}` : ''}`

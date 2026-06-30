@@ -1,6 +1,8 @@
 import {
+  addOneMinute,
   defaultFormTimestamp,
   ensureOpenPlaceholderAt,
+  findTimeConflict,
   settlementEndFor as getSettlementEndFor
 } from './entry_model.js';
 import {
@@ -280,6 +282,13 @@ import {
     if (!entry || !entry.planned) return;
     delete entry.planned;
     if (new Date(entry.ts) > new Date()) entry.ts = nowStr();
+    // ⑥ Confirming to "now" can collide with an existing entry on that exact
+    // minute. Every other write path guards same-ts; here there is no sheet to
+    // host an inline prompt, so nudge forward to the next free minute (matching
+    // the "+1min" direction) instead of silently creating a duplicate timestamp.
+    while (findTimeConflict(d.entries, entry.ts, entry.id)) {
+      entry.ts = addOneMinute(entry.ts);
+    }
     if (entry.ts.slice(0, 10) === todayStr()) {
       ensureOpenPlaceholderAt(d.entries, nowStr(), entry.id, uid);
     }
@@ -390,7 +399,7 @@ import {
       if (action === 'shift-period') shiftPeriod(Number(el.dataset.delta || 0));
       if (action === 'today') goToday();
       if (action === 'open-form') sheetController.openForm();
-      if (action === 'backfill-gap') sheetController.openFormSheet({ mode: 'new', ts: el.dataset.ts });
+      if (action === 'backfill-gap') sheetController.openFormSheet({ mode: 'new', ts: el.dataset.ts, backfill: true });
       if (action === 'switch-activity') sheetController.switchActivity();
       if (action === 'open-help') openHelp();
       if (action === 'open-backup') openBackup();

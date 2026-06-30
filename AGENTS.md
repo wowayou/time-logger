@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v28` / manifest `version: "28"`。
+当前版本：`timelog-v29` / manifest `version: "29"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -182,3 +182,4 @@ git diff --check
 | v26 | 2026-06-30 | 自定义标签首次使用即固定（修复首次被错算为未记录，取代 v25 的第二次才固定）；表单 sheet 与页面头部补 `safe-area-inset-top`；未记录引导空档可点「补一下」补录；计划时间补充「计划=未来」说明 |
 | v27 | 2026-06-30 | 修复表单 sheet 第一项被 head 阴影裁切（head 改全宽 margin 覆盖、去 box-shadow 下溢）；补录/编辑默认桶不再落 unrecorded 导致自定义标签静默不固定、污染统计（桶兜底 job + 按 ts 取最后一条）；自定义标签输入即显示为该桶选中草稿 chip（统一「当前标签」）；删除死代码 summarizeEntriesByDay/hasEntriesOnDate |
 | v28 | 2026-07-01 | 热修编辑静默不落库：`commitEdit` 之前用两次 `load()`（改 A 图、存 B 图），导致编辑标签/内容/时间全部丢失、看似"修改功能没实现"；改为单次 `load()`、在被保存的图里取 entry。详见 `docs/postmortems.md` P1 |
+| v29 | 2026-07-01 | ⑧ 表单遮罩跟随 visualViewport，iOS 键盘不再把保存 ✓ 顶出屏外；② 补录强制「已发生」并隐藏计划开关（修计划模式泄漏致补录静默失败）；③ 补录落在中间空占位条时就地并入而非报自冲突；④ 被拦的保存把内联/时间错误 `scrollIntoView` 到视野内；⑤ 滚轮日期窗口动态包含打开值（修窗口外日期被静默改到边界），超 `MAX_WINDOW_DAYS` 钉边界项；⑥ confirmPlanned 落「现在」撞同刻时静默 +1min 顺推到空位；首屏闪烁：内联启动脚本预先解析 theme-color、揭露加淡入。详见 `docs/postmortems.md` |

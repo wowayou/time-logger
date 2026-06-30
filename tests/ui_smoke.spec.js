@@ -486,3 +486,65 @@ test('editing an existing record persists content and tag (① commitEdit single
   expect(afterSave).toMatchObject({ what: '改后的内容', tags: ['改后标签'] });
   await expect(page.locator('#timeline')).toContainText('改后的内容');
 });
+
+test('② backfill on today forces log mode even when plan pref leaked', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('timelog.recordMode', 'plan'));
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+
+  // Backfill the gap before the first record on *today*. Previously the leaked
+  // plan pref opened the form in 计划 mode with a past ts, so ✓ silently failed.
+  await page.getByRole('button', { name: '补录这段未记录时间' }).first().click();
+  // The record-mode toggle must be hidden, and the form is in log mode.
+  await expect(page.locator('[data-role="record-mode-seg"]')).toHaveCount(0);
+  await page.locator('#form-what').fill('补一下');
+  await page.getByRole('button', { name: '选择标签：求职推进' }).click();
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  await expect(page.locator('#form-sheet')).toBeHidden();
+
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  const saved = entries.find(e => e.what === '补一下');
+  expect(saved).toBeTruthy();
+  expect(saved.planned).toBeFalsy();
+  expect(saved.tags).toEqual(['求职推进']);
+});
+
+test('③ backfill fills a middle placeholder instead of self-conflicting', async ({ page }) => {
+  await boot(page, 768, 'mid-placeholder', false, FIXED_NOW);
+
+  // Open the form via the early gap, then drive the start time exactly onto the
+  // stranded mid-day empty placeholder (09:00). The tail-only
+  // openPlaceholderForDate doesn't see it, so without the local merge
+  // findTimeConflict would block the save as a same-minute self-conflict.
+  await page.getByRole('button', { name: '补录这段未记录时间' }).first().click();
+  await page.locator('[data-action="toggle-start-time"]').click();
+  await page.locator('[data-role="text"]').fill('2026-06-29 09:00');
+  await page.locator('[data-role="text"]').blur();
+  await page.locator('#form-what').fill('补中段');
+  await page.getByRole('button', { name: '选择标签：求职推进' }).click();
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  await expect(page.locator('#form-sheet')).toBeHidden();
+
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  // The placeholder is filled in place (no duplicate at 09:00, no new id explosion).
+  const atNine = entries.filter(e => e.ts === '2026-06-29T09:00');
+  expect(atNine).toHaveLength(1);
+  expect(atNine[0]).toMatchObject({ id: 'mid-open', what: '补中段', tags: ['求职推进'] });
+});
+
+test('⑥ confirming a plan onto a taken now-minute nudges forward', async ({ page }) => {
+  await boot(page, 768, 'plan-collides-now', false, FIXED_NOW);
+
+  // Confirm the future plan: it collapses to "now", which is already occupied by
+  // now-entry. It must shift forward to a free minute, never overwrite/duplicate.
+  await page.getByRole('button', { name: '标记计划为已发生' }).click();
+
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  const original = entries.find(e => e.id === 'now-entry');
+  const confirmed = entries.find(e => e.id === 'plan-future');
+  expect(original).toMatchObject({ ts: '2026-06-29T12:34', what: '正在做的事' });
+  expect(confirmed.planned).toBeFalsy();
+  // Pushed off the taken minute, no two entries share a timestamp.
+  expect(confirmed.ts).not.toBe('2026-06-29T12:34');
+  const stamps = entries.map(e => e.ts);
+  expect(new Set(stamps).size).toBe(stamps.length);
+});

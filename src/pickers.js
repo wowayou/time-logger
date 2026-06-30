@@ -1,10 +1,11 @@
-import { normalizeTimestamp, nowStr, p2 } from './time.js';
+import { normalizeTimestamp, nowStr, p2, parseDateKey, todayStr } from './time.js';
 import { setButtonTip } from './ui.js';
 
 const ITEM_H = 40;
 const PAD = 80;
 const DAYS_BACK = 90;
 const DAYS_FWD = 7;
+const MAX_WINDOW_DAYS = 800;
 
 export function setTimeInputError(scope, msg) {
   if (!scope) return;
@@ -18,18 +19,51 @@ export function setTimeInputError(scope, msg) {
   if (!err) return;
   err.textContent = msg || '';
   err.hidden = !msg;
+  // ④ Keep a blocked-save reason visible above the iOS keyboard / scroll fold.
+  if (msg && typeof err.scrollIntoView === 'function') {
+    err.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
 }
 
-function buildDateItems() {
+function dateItemFor(d) {
+  const y = d.getFullYear(), mo = d.getMonth() + 1, da = d.getDate();
+  const dow = '日一二三四五六'[d.getDay()];
+  return { val: `${y}-${p2(mo)}-${p2(da)}`, label: `${mo}月${da}日 周${dow}` };
+}
+
+// ⑤ The wheel only lists a finite date window (default ±90/+7). If the value the
+// picker opens on falls outside it, the old findIndex→-1→Math.max(0,-1)=0 silently
+// rewrote the entry's date to the window's first day on save. So the window must
+// always span the opened value: extend back/forward to cover `anchor`, capped at
+// MAX_WINDOW_DAYS so a wildly far date can't generate thousands of rows (the far
+// edge is pinned as the boundary item instead).
+function buildDateItems(anchor = '') {
   const now = new Date();
-  const items = [];
-  for (let i = DAYS_BACK; i >= -DAYS_FWD; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const y = d.getFullYear(), mo = d.getMonth() + 1, da = d.getDate();
-    const dow = '日一二三四五六'[d.getDay()];
-    items.push({ val: `${y}-${p2(mo)}-${p2(da)}`, label: `${mo}月${da}日 周${dow}` });
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let back = DAYS_BACK;
+  let fwd = DAYS_FWD;
+  const anchorDate = /^\d{4}-\d{2}-\d{2}$/.test(anchor) ? parseDateKey(anchor) : null;
+  let pinBack = null;
+  let pinFwd = null;
+  if (anchorDate) {
+    const diffDays = Math.round((anchorDate - today) / 86400000);
+    if (diffDays < -back) {
+      if (-diffDays <= MAX_WINDOW_DAYS) back = -diffDays;
+      else pinBack = anchorDate; // beyond cap: pin as a single boundary row
+    }
+    if (diffDays > fwd) {
+      if (diffDays <= MAX_WINDOW_DAYS) fwd = diffDays;
+      else pinFwd = anchorDate;
+    }
   }
+  const items = [];
+  if (pinBack) items.push(dateItemFor(pinBack));
+  for (let i = back; i >= -fwd; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    items.push(dateItemFor(d));
+  }
+  if (pinFwd) items.push(dateItemFor(pinFwd));
   return items;
 }
 
@@ -45,13 +79,16 @@ export function mountTimePicker(mountEl, initialValue, onChangeCb) {
 }
 
 function mountWheel(mountEl, initialValue, onChangeCb) {
-  const dateItems = buildDateItems();
+  const [datePart, timePart] = (initialValue || nowStr()).split('T');
+  const [initH, initM] = (timePart || '00:00').split(':').map(Number);
+  // Build the window around the opened date so its row always exists; the picker
+  // then lands exactly on it and never silently rewrites the date on save.
+  const dateItems = buildDateItems(datePart);
   const hourItems = Array.from({length: 24}, (_, i) => ({ val: p2(i), label: p2(i) }));
   const minItems  = Array.from({length: 60}, (_, i) => ({ val: p2(i), label: p2(i) }));
 
-  const [datePart, timePart] = (initialValue || nowStr()).split('T');
-  const [initH, initM] = (timePart || '00:00').split(':').map(Number);
-  const initDateIdx = Math.max(0, dateItems.findIndex(x => x.val === datePart));
+  const foundIdx = dateItems.findIndex(x => x.val === datePart);
+  const initDateIdx = foundIdx >= 0 ? foundIdx : dateItems.findIndex(x => x.val === todayStr());
 
   let selDate = initDateIdx, selH = initH, selM = initM;
 

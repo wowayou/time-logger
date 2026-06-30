@@ -40,17 +40,98 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ---
 
-## 待修（已确诊，编入 v29 成批扫描）
+## P2 · 编辑时 ✓ 被 iOS 键盘顶出屏外（v29）
 
-v28 按「数据丢失先热修」只发了 P1。下列在排查中一并确诊，数据当前可达性较低或属打磨，未塞进热修：
+**确诊日期**：2026-07-01 · **状态**：已修复（v29）· **严重度**：中（功能不可达）
 
-- **② 补录计划模式泄漏**：`openFormSheet` 让补录沿用持久化的记录模式 pref，且只在「历史日」强制「已发生」。补**今天**的空档时若 pref 停在「计划中」，表单以计划模式开、预填过去时刻，`validatePlannedTs` 拒「计划时间应晚于现在」→ ✓ 静默失败（与标签无关）。修法：补录强制 log 并隐藏计划开关。
-- **③ 补录撞中间空占位条**：`saveEntry` 只经 `openPlaceholderForDate`（仅看当天最后一条）识别可复用占位条；中间被遗落的占位条不被识别 → 撞 `findTimeConflict` 被当冲突拦下。修法：**局部并入**——`saveEntry` 内发现撞上的是空 placeholder 就就地并入，不改共享的 `openPlaceholderForDate`，影响面锁在补录路径。
-- **④ ✓ 静默失败**：所有被拦保存（时间非法 / 内容空 / 同刻冲突）都只留一条不显眼的内联提示，✓ 看起来像坏的。修法：被拦时给视野内、靠近 ✓ 的可见反馈（含 `scrollIntoView`）。
-- **⑤ 滚轮日期窗口静默改值**：`pickers.js` 窗口固定 ±90/7 天，`Math.max(0, findIndex)` 让窗口外的初始值落到 index 0（90 天前）；保存即把记录日期**静默搬到边界**。修法：窗口动态扩到包含当前值（span 设上限防性能，极远值钉为边界项）。
-- **⑥ confirmPlanned 撞同刻无守卫**：把计划标记「已发生」时 `ts→now`，但不走 `findTimeConflict`，可造出同刻重复条。修法：撞车时静默 +1min 向后逆推到空位（复用现有 helper）。
-- **闪烁（iPhone SE2 刷新）**：未锁定具体形态。两个零风险嫌疑——内联启动脚本只设 `data-theme` 未设 `theme-color`（亮色模式状态栏先暗后亮）、`opacity:0 → app-ready` 双 rAF 揭露蹦出。计划「先修后验」。
+**现象**：iPhone SE2 上编辑记录、聚焦输入弹出软键盘后，保存 ✓ 跑到屏幕上方看不见、够不着，能改但存不了。
 
-### v28 协作约束补记
+**根因**：`.form-sheet` 是 `position: fixed; inset: 0` 的遮罩，面板 bottom-anchored（`align-items: end`），✓ 在顶部 sticky 的 `.form-sheet-head` 里。iOS 键盘弹出时 Safari 把整个 fixed 遮罩上推，顶部 head（连同 ✓）被推出可视区。
+
+**修法**：visualViewport 驱动——`sheet_controller.js` 在开 sheet 时监听 `window.visualViewport` 的 `resize`/`scroll`，把可视视口的 top/height 写进 `--vvt`/`--vvh` CSS 变量；`.form-sheet` 用 `top: var(--vvt)`、`height: var(--vvh)`、面板 `max-height: var(--vvh, …)` 跟随键盘上方的可视区。无 visualViewport 时回退到原布局。关 sheet 时移除监听并清变量。
+
+**护栏**：需真机验（fixed-overlay + 键盘交互无法在 headless 稳定复现）；CSS 回退保证不支持时退回旧行为。
+
+---
+
+## P3 · 补录计划模式泄漏致 ✓ 静默失败（v29）
+
+**确诊日期**：2026-07-01 · **状态**：已修复（v29）· **严重度**：中
+
+**现象**：补**今天**的空档（「补一下」）填好内容、选好标签、点 ✓ → 静默不保存；与标签无关。
+
+**根因**：`openFormSheet` 让 `new` 模式沿用持久化的记录模式 pref（`loadRecordModePref`），且只在「历史日」(`isHistoryDate`) 才强制 `log`。今天不是历史日，所以若 pref 曾停在「计划中」，补录表单以计划模式打开、预填过去时刻，`validatePlannedTs` 拒「计划时间应晚于现在」→ 在标签逻辑之前就 return。
+
+**修法**：`openFormSheet` 收 `backfill` 标志（由 `backfill-gap` 动作传入），`isHistoryDate() || opts.backfill` 时强制 `formRecordMode = 'log'`；`renderFormSheet` 收同名标志，补录时不渲染记录模式开关。
+
+**护栏**：UI smoke `② backfill on today forces log mode even when plan pref leaked`——预置 `recordMode='plan'`，补录今天空档，断言开关不存在且保存为非计划记录。
+
+---
+
+## P4 · 补录撞中间空占位条被当冲突拦下（v29）
+
+**确诊日期**：2026-07-01 · **状态**：已修复（v29）· **严重度**：中
+
+**现象**：补录落到当天**中间**一条空占位条所在的分钟时，被当成同刻冲突拦下，存不进。
+
+**根因**：`saveEntry` 只经 `openPlaceholderForDate`（仅看当天**最后**一条）识别可复用占位条；中间被遗落的占位条不被识别，于是走 `findTimeConflict` 被判为同刻冲突。
+
+**修法**：**局部并入**——`saveEntry` 内若同刻冲突的那条本身是空 placeholder（`isPlaceholderEntry`）且非计划，就地采纳它作为填充目标，不报冲突。**不改**共享的 `openPlaceholderForDate`，影响面锁在补录路径，避开续记/结算/跨日精密逻辑。
+
+**护栏**：UI smoke `③ backfill fills a middle placeholder instead of self-conflicting`——补录到中间占位条分钟，断言就地填充、该分钟无重复条。
+
+---
+
+## P5 · 被拦保存无可见反馈（v29）
+
+**确诊日期**：2026-07-01 · **状态**：已修复（v29）· **严重度**：低（体验）
+
+**现象**：保存被拦（时间非法 / 内容空 / 同刻冲突）时只留一条不显眼的内联提示，可能落在键盘下方或折叠区外，✓ 看起来像坏的。
+
+**修法**：`showInlineError`（sheet_controller）和 `setTimeInputError`（pickers）在显示消息后 `scrollIntoView({ block: 'center' })`，把反馈拉进视野。
+
+**护栏**：归在 ④ 体验类，靠现有冲突 smoke 覆盖触发路径。
+
+---
+
+## P6 · 滚轮日期窗口静默改值（v29）
+
+**确诊日期**：2026-07-01 · **状态**：已修复（v29）· **严重度**：中（潜在静默数据改写，当前数据够不着）
+
+**现象（潜在）**：移动端滚轮日期选择器窗口固定 ±90/+7 天。打开窗口外的记录（>90 天前或 >7 天后）时 `findIndex` 返回 -1，`Math.max(0, -1)=0` 让初始值落到 index 0（90 天前）；保存即把该记录日期**静默搬到边界**。当前真实数据尚无 >90 天记录，够不着，但攒够历史或导入旧数据后会触发。
+
+**修法**：`buildDateItems(anchor)` 动态把窗口扩到包含打开值；扩展上限 `MAX_WINDOW_DAYS=800` 防生成上千行，超限时把那个极远日期**钉为单独的边界项**保证其 val 一定在列表里；`mountWheel` 用精确 index，找不到时回退到今天而非静默 0。桌面端是日历 + 自由文本输入，无此窗口，无需改。
+
+**护栏**：confirm_smoke 不覆盖 DOM；该路径靠真机/手动验，逻辑改动集中在 `buildDateItems`/`mountWheel`。
+
+---
+
+## P7 · confirmPlanned 撞同刻无守卫（v29）
+
+**确诊日期**：2026-07-01 · **状态**：已修复（v29）· **严重度**：低
+
+**现象（潜在）**：把计划标记「已发生」时 `ts→now`，但不走 `findTimeConflict`，可造出与现有记录同刻的重复条（其它写路径都有同刻守卫）。
+
+**修法**：`confirmPlanned` 在 `ts→now` 后，若该分钟已被占用，复用 `addOneMinute` 向后逆推到第一个空位（与表单「用+1min」方向一致），再 `ensureOpenPlaceholderAt`。
+
+**护栏**：UI smoke `⑥ confirming a plan onto a taken now-minute nudges forward`——预置占用「现在」分钟的记录 + 未来计划，确认计划后断言时间戳全局唯一、原记录不被覆盖。
+
+---
+
+## P8 · iPhone SE2 刷新闪烁（v29）
+
+**确诊日期**：2026-07-01 · **状态**：先修后验（v29）· **严重度**：低（体验）
+
+**现象**：SE2 刷新时闪一下（用户未能进一步描述形态）。
+
+**修法（两个零风险嫌疑同治）**：
+1. `index.html` 内联启动脚本之前只设 `data-theme`、未设 `theme-color`，亮色模式用户每次刷新先看到硬编码的暗色状态栏再纠正。改为在内联脚本里就按 pref（含 `auto`→系统）算出 effective 主题并设对 `<meta theme-color>`，paint 前就对。
+2. `body:not(.app-ready) .app { opacity: 0 }` 双 rAF 后硬 0→1 蹦出。加一段短 fade-in 柔化揭露，不掩盖真实加载时间。
+
+**护栏**：需真机验（无法 headless 复现「闪一下」的主观形态）；两项均为零风险、可独立回退。
+
+---
+
+## 协作约束补记（v28）
 
 - 多步改动走主线程；避免并发 fan-out 子代理 / workflow（上游会 429，串行 workflow 亦然）。已同步进 `CLAUDE.md` / `AGENTS.md`「开发与维护红线」。
