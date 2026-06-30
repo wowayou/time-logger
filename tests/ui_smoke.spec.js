@@ -375,7 +375,7 @@ test('config rename migrates existing tags and removes replacement UI', async ({
   ]));
 });
 
-test('custom tags pin only on second use in the same bucket', async ({ page }) => {
+test('custom tags pin immediately on first use in the same bucket', async ({ page }) => {
   await boot(page, 768, 'empty', false, FIXED_NOW);
 
   await page.getByRole('button', { name: '记一条新的时间记录' }).click();
@@ -384,7 +384,9 @@ test('custom tags pin only on second use in the same bucket', async ({ page }) =
   await page.locator('#form-ctag').fill('临时拉伸');
   await page.getByRole('button', { name: '保存时间记录' }).click();
   let config = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.config') || '{"chips":[]}'));
-  expect(config.chips.some(chip => chip.name === '临时拉伸')).toBe(false);
+  expect(config.chips).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: '临时拉伸', bucket: 'maintain' })
+  ]));
 
   await page.getByRole('button', { name: '记一条新的时间记录' }).click();
   await page.getByRole('button', { name: '维持' }).click();
@@ -392,9 +394,7 @@ test('custom tags pin only on second use in the same bucket', async ({ page }) =
   await page.locator('#form-ctag').fill('临时拉伸');
   await page.getByRole('button', { name: '保存时间记录' }).click();
   config = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.config')));
-  expect(config.chips).toEqual(expect.arrayContaining([
-    expect.objectContaining({ name: '临时拉伸', bucket: 'maintain' })
-  ]));
+  expect(config.chips.filter(chip => chip.name === '临时拉伸').length).toBe(1);
 });
 
 test('sheet controls stay inside rounded panel bounds', async ({ page }) => {

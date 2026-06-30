@@ -360,9 +360,9 @@ globalThis.localStorage = {
 };
 localStorage.setItem(CONFIG_KEY, JSON.stringify({ version: 1, mainline: ['求职推进'], chips: [] }));
 rememberCustomTagForBucket('临时拉伸', 'maintain', []);
-assert(!loadConfig().chips.some(chip => chip.name === '临时拉伸'), 'first custom tag use should not pin');
+assert(loadConfig().chips.some(chip => chip.name === '临时拉伸' && chip.bucket === 'maintain'), 'first custom tag use pins immediately');
 rememberCustomTagForBucket('临时拉伸', 'maintain', [entry('pin1', '2020-01-01T09:00', '临时拉伸')]);
-assert(loadConfig().chips.some(chip => chip.name === '临时拉伸' && chip.bucket === 'maintain'), 'second custom tag use should pin');
+assert(loadConfig().chips.filter(chip => chip.name === '临时拉伸').length === 1, 'repeat use keeps a single pinned chip');
 
 console.log('confirm_logic_smoke passed');
 '''

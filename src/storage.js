@@ -126,12 +126,7 @@ export function rememberTagForBucket(tag, bucket) {
   return loadConfig();
 }
 
-export function shouldPinCustomTag(tag, entries) {
-  return countEntriesWithTag(entries, tag) >= 1;
-}
-
-export function rememberCustomTagForBucket(tag, bucket, entries) {
-  if (!shouldPinCustomTag(tag, entries)) return loadConfig();
+export function rememberCustomTagForBucket(tag, bucket) {
   return rememberTagForBucket(tag, bucket);
 }
 

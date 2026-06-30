@@ -1,4 +1,4 @@
-import { fmtMins, hhmm, normalizeTimestamp } from './time.js';
+import { fmtMins, hhmm, localDateTimeKey, normalizeTimestamp } from './time.js';
 import { formatPercent } from './stats.js';
 import {
   BUCKETS,
@@ -119,6 +119,20 @@ export function renderTimeline(items, opts = {}) {
           <button class="icon-btn save-btn" type="button" data-action="confirm-planned" data-id="${esc(e.id)}" data-tip="标记为已发生" aria-label="标记计划为已发生">${iconSvg('check')}</button>
           <button class="icon-btn" type="button" data-action="start-edit" data-id="${esc(e.id)}" data-tip="编辑计划" aria-label="编辑计划">${iconSvg('edit')}</button>
           <button class="icon-btn dbtn" type="button" data-action="delete-entry" data-id="${esc(e.id)}" data-tip="删除计划" aria-label="删除计划">${iconSvg('trash')}</button>
+        </div>
+      </div>`;
+    }
+    if (!e) {
+      const gapTs = localDateTimeKey(start);
+      return `<div class="entry gap" data-gap-ts="${esc(gapTs)}">
+        <div class="e-body">
+          <div class="e-time">${hhmm(start)}</div>
+          <div class="e-what">这一段还没记，要补吗？</div>
+          <div class="e-meta">
+            <span class="e-tag e-tag-unrecorded">#未记录</span>
+            <span class="e-dur">${fmtMins(mins)}</span>
+            <button class="mini-btn" type="button" data-action="backfill-gap" data-ts="${esc(gapTs)}" data-tip="在这段未记录时间补一条；结束会自动接到下一条记录。" aria-label="补录这段未记录时间">补一下</button>
+          </div>
         </div>
       </div>`;
     }
@@ -301,6 +315,7 @@ export function renderFormSheet(opts) {
       <div class="fl${isPlan ? '' : ' hidden'}" data-role="plan-time-row">
         <div class="fl-label">计划时间</div>
         <div data-role="form-wheel-mount"></div>
+        <div class="form-hint">计划是未来的事；要记现在或过去的，切到「已发生」。</div>
       </div>
       <div class="form-inline-error" data-role="conflict-error" hidden></div>
       <div class="fl start-time-section" data-role="start-time-section" hidden>

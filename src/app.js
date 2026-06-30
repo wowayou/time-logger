@@ -63,6 +63,7 @@ import {
   let lastIntervalSignature = '';
   let state = { view: 'day', selectedDate: '' };
   const HELP_SEEN_KEY = 'timelog.helpSeen.v16';
+  const UNRECORDED_GAP_FLOOR_MIN = 15;
 
   function defaultFormTs() {
     const entries = load().entries;
@@ -125,7 +126,7 @@ import {
     const statEnd = state.selectedDate === todayStr() ? new Date() : end;
     const allEntries = load().entries;
     const segments = buildRangeSegmentsFromEntries(allEntries, start, statEnd);
-    const timeline = segments.filter(segment => segment.e);
+    const timeline = segments.filter(segment => segment.e || segment.mins >= UNRECORDED_GAP_FLOOR_MIN);
     const planned = listPlannedEntries(allEntries, state.selectedDate);
     return { timeline, planned, totals: summarizeEntries(allEntries, start, statEnd) };
   }
@@ -389,6 +390,7 @@ import {
       if (action === 'shift-period') shiftPeriod(Number(el.dataset.delta || 0));
       if (action === 'today') goToday();
       if (action === 'open-form') sheetController.openForm();
+      if (action === 'backfill-gap') sheetController.openFormSheet({ mode: 'new', ts: el.dataset.ts });
       if (action === 'switch-activity') sheetController.switchActivity();
       if (action === 'open-help') openHelp();
       if (action === 'open-backup') openBackup();

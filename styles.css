@@ -100,7 +100,7 @@
       flex: 1 0 auto;
       max-width: 600px;
       margin: 0 auto;
-      padding: 0 clamp(12px, 4vw, 16px) 18px;
+      padding: env(safe-area-inset-top) clamp(12px, 4vw, 16px) 18px;
       container-type: inline-size;
     }
 
@@ -850,6 +850,8 @@
     .entry.editing { border-color: var(--accent); }
     .entry.sheet-editing { border-color: var(--accent); }
     .entry.placeholder { border-color: var(--border); }
+    .entry.gap { border-style: dashed; border-color: var(--border); background: transparent; }
+    .entry.gap .e-what { color: var(--muted); }
     .e-body { flex: 1; min-width: 0; }
     .e-time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
     .e-what { font-size: 15px; color: var(--text); word-break: break-word; white-space: pre-wrap; margin-bottom: 5px; }
@@ -1019,7 +1021,7 @@
       position: relative;
       display: flex;
       flex-direction: column;
-      max-height: min(92dvh, 720px);
+      max-height: min(92dvh, 720px, calc(100dvh - env(safe-area-inset-top) - 8px));
       width: 100%;
       max-width: 600px;
       margin: 0 auto;
@@ -1041,7 +1043,7 @@
       align-items: center;
       gap: 10px;
       min-height: 64px;
-      padding: 12px 0 10px;
+      padding: calc(12px + env(safe-area-inset-top)) 0 10px;
       background: var(--card);
       box-shadow: 0 0 0 16px var(--card);
       border-bottom: 1px solid var(--border);
