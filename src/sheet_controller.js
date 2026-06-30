@@ -578,7 +578,8 @@ export function createSheetController(deps) {
     const chipBox = box.querySelector('[data-role="edit-chips"]');
     const customEl = box.querySelector('[data-role="edit-custom-tag"]');
     const timeScope = box.querySelector('[data-role="edit-wheel"]') || box;
-    const entry = deps.load().entries.find(e => e.id === id);
+    const d = deps.load();
+    const entry = d.entries.find(e => e.id === id);
     const planned = Boolean(entry && entry.planned);
     const checked = validateTsForMode(tsEl ? tsEl.value : '', {
       planned,
@@ -596,7 +597,6 @@ export function createSheetController(deps) {
     const sel = chipBox ? chipBox.querySelector('.chip.sel') : null;
     const ctag = customEl ? customEl.value.trim() : '';
     const tag = ctag || (sel ? sel.dataset.tag : '未知');
-    const d = deps.load();
     const conflict = findTimeConflict(d.entries, checked.ts, id);
     if (conflict) {
       showInlineError(box, conflictMessage(conflict, checked.ts, 'use-conflict-plus-edit'));

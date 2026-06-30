@@ -461,3 +461,28 @@ test('reload starts with has-entries boot state and reaches app-ready', async ({
   await expect(page.locator('html')).toHaveAttribute('data-boot', 'has-entries');
   await expect(page.locator('#timeline')).toContainText('响应式测试记录');
 });
+
+test('editing an existing record persists content and tag (① commitEdit single load)', async ({ page }) => {
+  await boot(page, 768, 'one-record', false, FIXED_NOW);
+
+  // Open the existing record's edit sheet.
+  await page.getByRole('button', { name: '编辑记录' }).click();
+  const what = page.locator('[data-role="edit-what"]');
+  await expect(what).toBeVisible();
+  await expect(what).toHaveValue('响应式测试记录');
+
+  // Change both content and tag, then save with the ✓ (commit-edit).
+  await what.fill('改后的内容');
+  await page.locator('[data-role="edit-custom-tag"]').fill('改后标签');
+  await page.getByRole('button', { name: '保存修改' }).click();
+
+  // Regression guard for the double-load bug: the mutation must land in the same
+  // graph that deps.save() writes to localStorage, not a throwaway second load().
+  // (No reload assertion here: the fixture's addInitScript re-seeds localStorage
+  // on every navigation, so a reload would restore the original seed.)
+  const afterSave = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(e => e.id === 'today-1')
+  );
+  expect(afterSave).toMatchObject({ what: '改后的内容', tags: ['改后标签'] });
+  await expect(page.locator('#timeline')).toContainText('改后的内容');
+});
