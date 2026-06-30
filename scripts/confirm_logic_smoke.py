@@ -327,6 +327,24 @@ for (let round = 0; round < 250; round += 1) {
   }
 }
 
+import { listPlannedEntries } from './src/stats.js';
+import { migrateEntryTags, countEntriesWithTag } from './src/storage.js';
+
+const plannedOnly = [
+  { id: 'plan1', ts: '2020-01-01T20:00', what: '面试', tags: ['求职推进'], planned: true }
+];
+assertTotals(
+  summarizeEntries(plannedOnly, new Date('2020-01-01T00:00'), new Date('2020-01-01T23:59')),
+  { job: 0, maintain: 0, leak: 0, unrecorded: 0, pending: 0, total: 0 },
+  'planned entries excluded from stats'
+);
+assert(listPlannedEntries(plannedOnly, '2020-01-01').length === 1, 'planned list for day');
+
+const migrateList = [entry('m1', '2020-01-01T09:00', '旧标签')];
+assert(countEntriesWithTag(migrateList, '旧标签') === 1, 'count entries with tag');
+migrateEntryTags(migrateList, '旧标签', '新标签');
+assert(primaryTag(migrateList[0]) === '新标签', 'migrate entry tags');
+
 console.log('confirm_logic_smoke passed');
 '''
 

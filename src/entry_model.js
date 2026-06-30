@@ -1,4 +1,4 @@
-import { sortedEntriesFrom } from './stats.js';
+import { loggedEntriesFrom } from './stats.js';
 import {
   addDays,
   localDateTimeKey,
@@ -15,7 +15,7 @@ export function isPlaceholderEntry(entry) {
 }
 
 export function entriesOnDate(entries, dateKey) {
-  return sortedEntriesFrom(entries).filter(entry => entry.ts.slice(0, 10) === dateKey);
+  return loggedEntriesFrom(entries).filter(entry => entry.ts.slice(0, 10) === dateKey);
 }
 
 export function lastEntryOnDate(entries, dateKey) {

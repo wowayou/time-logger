@@ -157,7 +157,7 @@ export function createIoActions(deps) {
 
   function copyJSON() {
     const json = JSON.stringify(exportData(), null, 2);
-    copyText(json, document.getElementById('copy-btn'), '✓ 已复制', '复制');
+    copyText(json, document.getElementById('copy-btn'), '✓ 已复制', '复制 JSON');
   }
 
   function copyCurrentViewSummary() {
@@ -296,6 +296,13 @@ export function createIoActions(deps) {
     if (supported) setButtonTip(btn, '打开系统分享面板，优先分享 JSON 文件；文件分享不可用时改为分享文本。', '分享 JSON 备份');
   }
 
+  function openBackupSheet() {
+    deps.openFormSheet({
+      mode: 'backup',
+      shareSupported: canUseSystemShare()
+    });
+  }
+
   function shareJSON() {
     if (!canUseSystemShare()) return;
     const json = JSON.stringify(exportData(), null, 2);
@@ -320,6 +327,7 @@ export function createIoActions(deps) {
     confirmImportShift,
     handleImport,
     updateShareAvailability,
+    openBackupSheet,
     shareJSON,
     exportData
   };

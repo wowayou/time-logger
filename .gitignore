@@ -32,3 +32,6 @@ node_modules/
 test-results/
 playwright-report/
 __pycache__/
+
+# Local toolkit notes (business planning, private).
+toolkit/

@@ -12,6 +12,7 @@ import {
   load,
   loadConfig,
   mergeImportedEntries,
+  rememberTagForBucket,
   save,
   saveConfig,
   uid,
@@ -29,6 +30,7 @@ import {
   formatPercent,
   isKnownTag,
   isSegmentConfirmed,
+  listPlannedEntries,
   percentValue,
   primaryTag,
   sortedEntriesFrom,
@@ -42,6 +44,7 @@ import {
   localDateKey,
   minsBetweenDates,
   normalizeTimestamp,
+  nowStr,
   parseDateKey,
   periodLabel as getPeriodLabel,
   periodRange as getPeriodRange,
@@ -122,10 +125,11 @@ import {
   function computeDay() {
     const { start, end } = periodRange('day', state.selectedDate);
     const statEnd = state.selectedDate === todayStr() ? new Date() : end;
-    const allEntries = sortedEntries();
+    const allEntries = load().entries;
     const segments = buildRangeSegmentsFromEntries(allEntries, start, statEnd);
     const timeline = segments.filter(segment => segment.e);
-    return { timeline, totals: summarizeEntries(allEntries, start, statEnd) };
+    const planned = listPlannedEntries(allEntries, state.selectedDate);
+    return { timeline, planned, totals: summarizeEntries(allEntries, start, statEnd) };
   }
   function summaryRows() {
     const { start } = periodRange();
@@ -196,8 +200,8 @@ import {
     renderChrome();
     if (state.view === 'day') {
       const day = computeDay();
-      renderRuler(day.totals, day.timeline.length || day.totals.total, state.view);
-      renderTimeline(day.timeline, { editingId, sheetEditId });
+      renderRuler(day.totals, day.timeline.length || day.planned.length || day.totals.total, state.view);
+      renderTimeline(day.timeline, { editingId, sheetEditId, plannedItems: day.planned });
       if (editingId) {
         const entry = load().entries.find(e => e.id === editingId);
         if (entry) {
@@ -279,6 +283,16 @@ import {
     render();
   }
 
+  function confirmPlanned(id) {
+    const d = load();
+    const entry = d.entries.find(e => e.id === id);
+    if (!entry || !entry.planned) return;
+    delete entry.planned;
+    if (new Date(entry.ts) > new Date()) entry.ts = nowStr();
+    save(d);
+    render();
+  }
+
   // --- Data signature ---
   function dataSignature() {
     const d = load();
@@ -292,6 +306,10 @@ import {
     sheetController.openFormSheet({ mode: 'config' });
   }
 
+  function openBackup() {
+    ioActions.openBackupSheet();
+  }
+
   const sheetController = createSheetController({
     state,
     load,
@@ -299,6 +317,7 @@ import {
     save,
     saveConfig,
     addMainlineTag,
+    rememberTagForBucket,
     uid,
     defaultFormTs,
     settlementEndFor,
@@ -363,6 +382,7 @@ import {
       normalizeTimestamp,
       percentValue,
       primaryTag,
+      listPlannedEntries,
       sortedEntriesFrom,
       summarizeEntries
     };
@@ -381,21 +401,27 @@ import {
       if (action === 'open-form') sheetController.openForm();
       if (action === 'switch-activity') sheetController.switchActivity();
       if (action === 'open-help') openHelp();
+      if (action === 'open-backup') openBackup();
       if (action === 'open-tag-config') openTagConfig();
       if (action === 'toggle-start-time') sheetController.toggleStartTime(el);
       if (action === 'pick-form-tag') sheetController.pickTag(el);
+      if (action === 'pick-form-bucket') sheetController.pickBucket(el);
+      if (action === 'pick-record-mode') sheetController.pickRecordMode(el);
       if (action === 'save-entry') sheetController.saveEntry();
       if (action === 'close-form') sheetController.closeForm();
       if (action === 'use-conflict-plus-new' || action === 'use-conflict-plus-edit') sheetController.useConflictPlusMinute(el);
       if (action === 'edit-conflict-entry') sheetController.editConflictEntry(el.dataset.id);
       if (action === 'start-edit') sheetController.startEdit(el.dataset.id);
       if (action === 'pick-edit-tag') sheetController.pickEditTag(el);
+      if (action === 'pick-edit-bucket') sheetController.pickBucket(el);
       if (action === 'toggle-edit-time') sheetController.toggleEditTime(el);
       if (action === 'commit-edit') sheetController.commitEdit(el.dataset.id || editingId);
       if (action === 'cancel-edit') sheetController.cancelEdit();
       if (action === 'add-config-chip') sheetController.addConfigChip();
       if (action === 'remove-config-chip') sheetController.removeConfigChip(el);
+      if (action === 'remove-mainline-name') sheetController.removeMainlineName(el);
       if (action === 'save-tag-config') sheetController.saveTagConfig();
+      if (action === 'confirm-planned') confirmPlanned(el.dataset.id);
       if (action === 'confirm-segment') confirmSegment(el.dataset.id, el.dataset.end);
       if (action === 'delete-entry') delEntry(el.dataset.id);
       if (action === 'drill') drill(el.dataset.date, el.dataset.view);
@@ -448,6 +474,25 @@ import {
   }
 
   // --- Init ---
+  let tickTimer = null;
+
+  function startTickTimer() {
+    if (tickTimer) return;
+    tickTimer = setInterval(() => {
+      if (document.hidden) return;
+      if (editingId || sheetEditId || sheetController.isFormOpen() || sheetController.getSheetMode()) return;
+      const signature = dataSignature();
+      if (signature === lastIntervalSignature) return;
+      render();
+    }, 60000);
+  }
+
+  function stopTickTimer() {
+    if (!tickTimer) return;
+    clearInterval(tickTimer);
+    tickTimer = null;
+  }
+
   function init() {
     const today = todayStr();
     const savedView = localStorage.getItem(VIEW_KEY);
@@ -464,14 +509,15 @@ import {
     render();
     document.body.classList.add('app-ready');
     if (!navigator.webdriver && !localStorage.getItem(HELP_SEEN_KEY)) {
-      openHelp();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => openHelp());
+      });
     }
-    setInterval(() => {
-      if (editingId || sheetEditId || sheetController.isFormOpen() || sheetController.getSheetMode()) return;
-      const signature = dataSignature();
-      if (signature === lastIntervalSignature) return;
-      render();
-    }, 60000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopTickTimer();
+      else startTickTimer();
+    }, { passive: true });
+    startTickTimer();
   }
 
   if (window.__TIMELOG_TEST__) {

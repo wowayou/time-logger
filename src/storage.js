@@ -6,6 +6,7 @@ export const THEME_KEY = 'timelog.theme';
 export const VIEW_KEY = 'timelog.view';
 export const SELECTED_DATE_KEY = 'timelog.selectedDate';
 export const OPEN_DATE_KEY = 'timelog.openDate';
+export const RECORD_MODE_KEY = 'timelog.recordMode';
 export const BUCKETS = {
   job: '主线',
   maintain: '维持',
@@ -98,6 +99,53 @@ export function addMainlineTag(tag) {
     config.mainline.unshift(name);
     saveConfig(config);
   }
+  return config;
+}
+
+export function addChipTag(tag, bucket) {
+  const name = cleanName(tag);
+  if (!name || name === '未知' || bucket === 'job' || bucket === 'unrecorded') return loadConfig();
+  const config = loadConfig();
+  const existing = config.chips.find(chip => chip.name === name);
+  if (existing) {
+    if (existing.bucket !== bucket) {
+      existing.bucket = bucket;
+      saveConfig(config);
+    }
+    return config;
+  }
+  if (config.mainline.includes(name)) return config;
+  config.chips.push({ name, bucket, longOk: false });
+  saveConfig(config);
+  return config;
+}
+
+export function rememberTagForBucket(tag, bucket) {
+  if (bucket === 'job') return addMainlineTag(tag);
+  if (bucket === 'maintain' || bucket === 'leak') return addChipTag(tag, bucket);
+  return loadConfig();
+}
+
+export function countEntriesWithTag(entries, name) {
+  const target = cleanName(name);
+  if (!target) return 0;
+  return (entries || []).filter(entry => cleanName((entry.tags || [])[0]) === target).length;
+}
+
+export function migrateEntryTags(entries, from, to) {
+  const source = cleanName(from);
+  const dest = cleanName(to);
+  if (!source || !dest || source === dest) return entries;
+  (entries || []).forEach(entry => {
+    if (cleanName((entry.tags || [])[0]) === source) entry.tags = [dest];
+  });
+  return entries;
+}
+
+export function removeMainlineName(config, name) {
+  const target = cleanName(name);
+  if (!target) return config;
+  config.mainline = config.mainline.filter(item => item !== target);
   return config;
 }
 

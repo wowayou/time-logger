@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { FIXED_NOW, STATES, VIEWPORTS, boot, expectNoHorizontalOverflow } from './ui_fixture.js';
+import { FIXED_NOW, STATES, VIEWPORTS, boot, expectNoHorizontalOverflow, openBackupMenu } from './ui_fixture.js';
 
 for (const width of VIEWPORTS) {
   for (const state of STATES) {
@@ -21,6 +21,7 @@ for (const width of VIEWPORTS) {
 for (const share of [false, true]) {
   test(`footer does not overflow when share is ${share ? 'available' : 'hidden'}`, async ({ page }) => {
     await boot(page, 320, 'one-record', share);
+    await openBackupMenu(page);
     if (share) await expect(page.locator('#share-btn')).toBeVisible();
     else await expect(page.locator('#share-btn')).toBeHidden();
     await expectNoHorizontalOverflow(page);
@@ -45,9 +46,8 @@ test('new entry shows continuation context and recomputes start', async ({ page 
   expect(tooltipVisibility).toBe('hidden');
 
   await page.locator('[data-action="toggle-start-time"]').click();
-  await expect(page.locator('#form-wheel-mount')).toBeVisible();
-  await expect.poll(async () => page.locator('#form-wheel-mount')
-    .evaluate(mount => mount.contains(document.activeElement))).toBe(true);
+  await expect(page.locator('[data-role="form-wheel-mount"]').first()).toBeVisible();
+  await expect(page.locator('[data-role="text"]').first()).toBeVisible();
 
   await page.locator('[data-role="text"]').fill('2026-06-29 09:30');
   await page.locator('[data-role="text"]').blur();
@@ -203,6 +203,7 @@ test('help close icon and import shift dialog stay custom', async ({ page }) => 
 
   await page.keyboard.press('Escape');
   const chooserPromise = page.waitForEvent('filechooser');
+  await openBackupMenu(page);
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
@@ -236,6 +237,7 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
   });
 
   const chooserPromise = page.waitForEvent('filechooser');
+  await openBackupMenu(page);
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
@@ -261,6 +263,7 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
   ]));
 
   const downloadPromise = page.waitForEvent('download');
+  await openBackupMenu(page);
   await page.getByRole('button', { name: '下载 JSON 备份' }).click();
   const download = await downloadPromise;
   const exportPath = await download.path();
@@ -289,6 +292,7 @@ test('JSON import uses timezone metadata to suggest default shift', async ({ pag
   });
 
   const chooserPromise = page.waitForEvent('filechooser');
+  await openBackupMenu(page);
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({

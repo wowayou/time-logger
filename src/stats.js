@@ -16,6 +16,15 @@ export function sortedEntriesFrom(entries) {
     .sort((a, b) => a.ts < b.ts ? -1 : 1);
 }
 
+export function loggedEntriesFrom(entries) {
+  return sortedEntriesFrom(entries).filter(e => !e.planned);
+}
+
+export function listPlannedEntries(entries, dateKey) {
+  return sortedEntriesFrom(entries)
+    .filter(e => e.planned && e.ts.slice(0, 10) === dateKey);
+}
+
 export function emptyTotals() {
   return { job: 0, maintain: 0, leak: 0, unrecorded: 0, pending: 0, total: 0 };
 }
@@ -106,7 +115,7 @@ export function buildRangeSegmentsFromEntries(inputEntries, start, end, opts = {
   if (e > now) e = now;
   if (e <= s) return [];
 
-  const entries = sortedEntriesFrom(inputEntries);
+  const entries = loggedEntriesFrom(inputEntries);
   if (!entries.length) return [];
 
   const segments = [];

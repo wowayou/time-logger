@@ -114,6 +114,27 @@ export function validateTs(raw) {
   return { ok: true, ts };
 }
 
+export function validatePlannedTs(raw, dateKey) {
+  const ts = normalizeTimestamp(raw);
+  if (!ts) return { ok: false, msg: '请输入完整日期和时间，例如 2026-06-28 09:05。' };
+  const when = new Date(ts);
+  const now = new Date();
+  if (when <= new Date(now.getTime() + 5 * 60000)) {
+    return { ok: false, msg: '计划时间应晚于现在。' };
+  }
+  const dayStart = parseDateKey(dateKey) || startOfDay(now);
+  const dayEnd = addDays(dayStart, 1);
+  const maxFuture = addDays(now, 7);
+  const max = dayEnd < maxFuture ? dayEnd : maxFuture;
+  if (when >= max) return { ok: false, msg: '计划时间不能超出所选日或 7 天后。' };
+  return { ok: true, ts };
+}
+
+export function validateTsForMode(raw, opts = {}) {
+  if (opts.planned) return validatePlannedTs(raw, opts.dateKey);
+  return validateTs(raw);
+}
+
 export function fmtTs(ts) {
   const value = normalizeTimestamp(ts);
   return value ? value.replace('T', ' ') : String(ts || '');

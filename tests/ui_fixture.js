@@ -88,6 +88,11 @@ export async function boot(page, width, state, share = false, now = '', selected
   await page.waitForFunction(() => document.querySelector('#timeline')?.children.length > 0);
 }
 
+export async function openBackupMenu(page) {
+  await page.getByRole('button', { name: '打开备份菜单' }).click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('备份');
+}
+
 export async function expectNoHorizontalOverflow(page) {
   const metrics = await page.evaluate(() => {
     const doc = document.documentElement;
