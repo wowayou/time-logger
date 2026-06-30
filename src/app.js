@@ -429,6 +429,7 @@ import {
       }
       if (e.target instanceof HTMLInputElement && (e.target.id === 'form-ctag' || e.target.matches('[data-role="edit-custom-tag"]'))) {
         sheetController.updateMainlineHint(e.target);
+        sheetController.syncCustomDraft(e.target);
       }
     });
 

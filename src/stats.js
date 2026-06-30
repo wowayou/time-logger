@@ -1,6 +1,5 @@
 import {
   addDays,
-  localDateKey,
   localDateTimeKey,
   minsBetweenDates,
   normalizeTimestamp,
@@ -207,22 +206,4 @@ export function formatPercent(n, total) {
   if (p >= 99.95 && p < 100) return '>99.9%';
   if (p < 100) return `${p.toFixed(1).replace(/\.0$/, '')}%`;
   return '100%';
-}
-
-export function summarizeEntriesByDay(entries, start, end, opts = {}) {
-  const totals = emptyTotals();
-  for (let dayStart = startOfDay(start); dayStart < end; dayStart = addDays(dayStart, 1)) {
-    const dayEnd = addDays(dayStart, 1);
-    const dayTotals = summarizeEntries(entries, new Date(Math.max(start, dayStart)), new Date(Math.min(end, dayEnd)), opts);
-    addBucket(totals, '求职推进', dayTotals.job);
-    addBucket(totals, '杂', dayTotals.maintain);
-    addBucket(totals, '娱乐', dayTotals.leak);
-    addBucket(totals, '未知', dayTotals.unrecorded, { unrecorded: true, pending: false });
-    totals.pending += dayTotals.pending;
-  }
-  return totals;
-}
-
-export function hasEntriesOnDate(entries, dateKey) {
-  return sortedEntriesFrom(entries).some(entry => localDateKey(new Date(entry.ts)) === dateKey);
 }

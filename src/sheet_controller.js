@@ -48,12 +48,22 @@ export function createSheetController(deps) {
     localStorage.setItem(RECORD_MODE_KEY, mode === 'plan' ? 'plan' : 'log');
   }
 
+  function safeBucket(bucket) {
+    return bucket === 'maintain' || bucket === 'leak' ? bucket : 'job';
+  }
+
   function defaultBucketFromEntries() {
     const entries = deps.load().entries;
     const dateKey = deps.state.selectedDate || todayStr();
-    const last = [...entries].reverse().find(entry => !entry.planned && entry.ts.slice(0, 10) === dateKey);
-    if (!last) return 'job';
-    return bucketForTag((last.tags || [])[0] || '', deps.loadConfig());
+    const config = deps.loadConfig();
+    const onDay = entries
+      .filter(entry => !entry.planned && entry.ts.slice(0, 10) === dateKey)
+      .sort((a, b) => a.ts < b.ts ? -1 : 1);
+    for (let i = onDay.length - 1; i >= 0; i--) {
+      const bucket = bucketForTag((onDay[i].tags || [])[0] || '', config);
+      if (bucket !== 'unrecorded') return bucket;
+    }
+    return 'job';
   }
 
   function defaultPlanTimestamp() {
@@ -187,7 +197,7 @@ export function createSheetController(deps) {
     } else if (mode === 'edit') {
       deps.setSheetEditId(id);
       sheetTimeMounted = false;
-      editBucket = bucketForTag((entry.tags || [])[0] || '', deps.loadConfig());
+      editBucket = safeBucket(bucketForTag((entry.tags || [])[0] || '', deps.loadConfig()));
       deps.render();
     } else if (mode === 'config') {
       configSnapshot = JSON.parse(JSON.stringify(deps.loadConfig()));
@@ -476,8 +486,18 @@ export function createSheetController(deps) {
       : bucketHint(bucket);
   }
 
+  function syncCustomDraft(input) {
+    const panel = input.closest('.form-sheet-panel, .entry.editing');
+    if (!panel) return;
+    const isEdit = panel.dataset.mode === 'edit';
+    const chipRoot = panel.querySelector('#form-chips, [data-role="edit-chips"]');
+    if (!chipRoot) return;
+    formTag = '';
+    chipRoot.innerHTML = renderTagPicker(isEdit ? 'edit' : 'form', input.value.trim(), deps.loadConfig(), isEdit ? editBucket : formBucket);
+  }
+
   function rememberTag(tag, bucket, entries) {
-    deps.rememberCustomTagForBucket(tag, bucket, entries);
+    deps.rememberCustomTagForBucket(tag, safeBucket(bucket), entries);
   }
 
   function saveEntry() {
@@ -673,6 +693,7 @@ export function createSheetController(deps) {
     switchActivity,
     autosizeTextareas,
     updateMainlineHint,
+    syncCustomDraft,
     toggleStartTime,
     saveTagConfig,
     handleResponsiveResize,

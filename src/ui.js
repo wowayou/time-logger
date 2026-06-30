@@ -347,21 +347,21 @@ export function renderTagPicker(prefix, selectedTag, config = loadConfig(), buck
   const groups = chipGroups(config);
   const mainline = config.mainline.map(name => ({ name, bucket: 'job' }));
   const chipBtn = item => `<button class="chip chip-${item.bucket}${item.name === selectedTag ? ' sel' : ''}" type="button" data-action="${action}" data-tag="${esc(item.name)}" data-bucket="${item.bucket}" aria-label="选择标签：${esc(item.name)}">${esc(item.name)}</button>`;
-  if (bucketFilter === 'job') {
-    if (!mainline.length) return '<div class="form-hint">这个桶还没有可选标签，可直接写自定义标签。</div>';
-    return `<div class="chips">${mainline.map(chipBtn).join('')}</div>`;
-  }
-  if (bucketFilter === 'maintain') {
-    if (!groups.maintain.length) return '<div class="form-hint">这个桶还没有可选标签，可直接写自定义标签。</div>';
-    return `<div class="chips">${groups.maintain.map(chipBtn).join('')}</div>`;
-  }
-  if (bucketFilter === 'leak') {
-    if (!groups.leak.length) return '<div class="form-hint">这个桶还没有可选标签，可直接写自定义标签。</div>';
-    return `<div class="chips">${groups.leak.map(chipBtn).join('')}</div>`;
-  }
+  const draftName = String(selectedTag || '').trim();
+  const known = !draftName || config.mainline.includes(draftName) || config.chips.some(chip => chip.name === draftName);
+  const draftBucket = bucketFilter === 'maintain' || bucketFilter === 'leak' ? bucketFilter : 'job';
+  const draftChip = !known
+    ? `<button class="chip chip-${draftBucket} sel chip-draft" type="button" tabindex="-1" data-tag="${esc(draftName)}" aria-label="将记为新标签：${esc(draftName)}">${esc(draftName)}</button>`
+    : '';
+  const emptyHint = '<div class="form-hint">这个桶还没有可选标签，可直接写自定义标签。</div>';
+  const chipsRow = items => `<div class="chips">${draftChip}${items.map(chipBtn).join('')}</div>`;
+  if (bucketFilter === 'job') return (mainline.length || draftChip) ? chipsRow(mainline) : emptyHint;
+  if (bucketFilter === 'maintain') return (groups.maintain.length || draftChip) ? chipsRow(groups.maintain) : emptyHint;
+  if (bucketFilter === 'leak') return (groups.leak.length || draftChip) ? chipsRow(groups.leak) : emptyHint;
   const all = [...mainline, ...groups.maintain, ...groups.leak];
-  if (!all.length) return '<div class="form-hint">还没有可选标签，可直接写自定义标签。</div>';
+  if (!all.length && !draftChip) return '<div class="form-hint">还没有可选标签，可直接写自定义标签。</div>';
   const parts = [];
+  if (draftChip) parts.push(`<div class="chips">${draftChip}</div>`);
   if (mainline.length) parts.push(`<div class="chips">${mainline.map(chipBtn).join('')}</div>`);
   if (groups.maintain.length) parts.push(`<div class="chip-group-label">维持</div><div class="chips">${groups.maintain.map(chipBtn).join('')}</div>`);
   if (groups.leak.length) parts.push(`<div class="chip-group-label">漏损</div><div class="chips">${groups.leak.map(chipBtn).join('')}</div>`);

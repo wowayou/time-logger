@@ -397,18 +397,46 @@ test('custom tags pin immediately on first use in the same bucket', async ({ pag
   expect(config.chips.filter(chip => chip.name === '临时拉伸').length).toBe(1);
 });
 
+test('typing a custom tag selects it as a draft chip (unified current tag)', async ({ page }) => {
+  await boot(page, 768, 'empty', false, FIXED_NOW);
+
+  await page.getByRole('button', { name: '记一条新的时间记录' }).click();
+  await page.getByRole('button', { name: '维持' }).click();
+
+  // A new custom value shows as a selected draft chip in the chosen bucket.
+  await page.locator('#form-ctag').fill('整理桌面');
+  const draft = page.locator('#form-chips .chip.chip-draft');
+  await expect(draft).toHaveText('整理桌面');
+  await expect(draft).toHaveClass(/sel/);
+  await expect(draft).toHaveClass(/chip-maintain/);
+
+  // Typing an existing chip name highlights that chip instead of duplicating it.
+  await page.locator('#form-ctag').fill('睡觉');
+  await expect(page.locator('#form-chips .chip-draft')).toHaveCount(0);
+  await expect(page.locator('#form-chips .chip.sel')).toHaveText('睡觉');
+
+  // Clearing the input restores the normal picker with nothing selected.
+  await page.locator('#form-ctag').fill('');
+  await expect(page.locator('#form-chips .chip.sel')).toHaveCount(0);
+});
+
 test('sheet controls stay inside rounded panel bounds', async ({ page }) => {
   await boot(page, 375, 'one-record', false, FIXED_NOW);
   await openBackupMenu(page);
   const bounds = await page.evaluate(() => {
     const panel = document.querySelector('.form-sheet-panel').getBoundingClientRect();
+    const head = document.querySelector('.form-sheet-head');
+    const headRect = head.getBoundingClientRect();
     const close = document.querySelector('.form-sheet-actions .icon-btn').getBoundingClientRect();
     const first = document.querySelector('.backup-sheet-btns .copy-btn').getBoundingClientRect();
     return {
       closeTop: close.top,
       closeRight: close.right,
       firstLeft: first.left,
+      firstTop: first.top,
       firstBottom: first.bottom,
+      headBottom: headRect.bottom,
+      headShadow: getComputedStyle(head).boxShadow,
       panelTop: panel.top,
       panelRight: panel.right,
       panelLeft: panel.left,
@@ -419,6 +447,10 @@ test('sheet controls stay inside rounded panel bounds', async ({ page }) => {
   expect(bounds.closeRight).toBeLessThanOrEqual(bounds.panelRight);
   expect(bounds.firstLeft).toBeGreaterThanOrEqual(bounds.panelLeft);
   expect(bounds.firstBottom).toBeLessThanOrEqual(bounds.panelBottom);
+  // ① the sticky head must not bleed a box-shadow over the first body item, and the
+  // first item must sit below the head (no clipped top edge).
+  expect(bounds.headShadow).toBe('none');
+  expect(bounds.firstTop).toBeGreaterThanOrEqual(bounds.headBottom - 1);
 });
 
 test('reload starts with has-entries boot state and reaches app-ready', async ({ page }) => {

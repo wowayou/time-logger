@@ -433,6 +433,7 @@
     }
     .chip-maintain.sel { background: var(--maintain-bg); border-color: var(--maintain); color: var(--maintain); }
     .chip-leak.sel { background: var(--leak-bg); border-color: var(--leak); color: var(--leak); }
+    .chip-draft { border-style: dashed; cursor: default; }
     .form-hint {
       margin-top: 5px;
       color: var(--muted);
@@ -1043,9 +1044,10 @@
       align-items: center;
       gap: 10px;
       min-height: 64px;
-      padding: calc(12px + env(safe-area-inset-top)) 0 10px;
+      margin: 0 -16px;
+      padding: calc(12px + env(safe-area-inset-top)) 16px 10px;
       background: var(--card);
-      box-shadow: 0 0 0 16px var(--card);
+      border-radius: 16px 16px 0 0;
       border-bottom: 1px solid var(--border);
     }
     .form-sheet-summary {
