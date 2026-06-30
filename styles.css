@@ -93,7 +93,7 @@
       flex-direction: column;
       overflow-x: hidden;
     }
-    body:not(.app-ready) { visibility: hidden; }
+    body:not(.app-ready) .app { opacity: 0; }
     button { touch-action: manipulation; }
     .app {
       width: 100%;
@@ -174,15 +174,6 @@
       width: 20px;
       height: 20px;
     }
-    .hdr-date {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 13px;
-      color: var(--muted);
-      line-height: 1.25;
-    }
     .seg {
       display: inline-flex;
       align-items: center;
@@ -217,7 +208,6 @@
     }
     .theme-seg button { padding: 7px 8px; }
     @container (max-width: 390px) {
-      .hdr-date,
       .hdr-title { display: none; }
     }
     @container (max-width: 330px) {
@@ -464,41 +454,6 @@
     }
     .form-inline-error[hidden] { display: none; }
 
-    .prev-seg {
-      display: none;
-    }
-    .prev-seg:not(:empty) {
-      display: grid;
-      gap: 6px;
-      padding: 10px 11px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--input);
-    }
-    .prev-seg-head {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      min-width: 0;
-      color: var(--muted);
-      font-size: 12px;
-    }
-    .prev-seg-head .e-tag {
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-    .prev-seg-what {
-      color: var(--text);
-      font-size: 14px;
-      line-height: 1.35;
-      overflow-wrap: anywhere;
-    }
-    .prev-seg-time {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.35;
-      font-variant-numeric: tabular-nums;
-    }
     .form-time-row {
       display: flex;
       align-items: center;
@@ -880,6 +835,7 @@
       flex: 0 0 auto;
     }
     #timeline { min-height: 160px; }
+    html[data-boot="has-entries"] #timeline { min-height: 360px; }
     .entry {
       background: var(--card);
       border-radius: 12px;
@@ -1061,19 +1017,18 @@
     }
     .form-sheet-panel {
       position: relative;
+      display: flex;
+      flex-direction: column;
       max-height: min(92dvh, 720px);
       width: 100%;
       max-width: 600px;
       margin: 0 auto;
-      overflow-y: auto;
-      scroll-padding-top: 84px;
       border: 1px solid var(--border);
       border-bottom: none;
       border-radius: 16px 16px 0 0;
       background: var(--card);
-      padding: 0 16px calc(16px + env(safe-area-inset-bottom));
+      padding: 0 16px;
       box-shadow: 0 -16px 42px rgba(0,0,0,0.32);
-      -webkit-overflow-scrolling: touch;
       transition: transform 0.25s ease-out, opacity 0.2s ease;
     }
     .form-sheet-panel:focus, .form-sheet-panel:focus-visible { outline: none; }
@@ -1122,6 +1077,12 @@
       display: grid;
       gap: 12px;
       padding-top: 14px;
+      padding-bottom: calc(16px + env(safe-area-inset-bottom));
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      scroll-padding-top: 84px;
+      flex: 1;
+      min-height: 0;
     }
     .help-body section {
       display: grid;
@@ -1174,8 +1135,10 @@
         max-width: 520px;
         border-bottom: 1px solid var(--border);
         border-radius: 16px;
-        padding-bottom: 16px;
         box-shadow: 0 18px 54px rgba(0,0,0,0.34);
+      }
+      .form-sheet-body {
+        padding-bottom: 16px;
       }
     }
     body.sheet-open {

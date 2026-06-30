@@ -63,8 +63,21 @@ export async function boot(page, width, state, share = false, now = '', selected
         { id: 'cross-open', ts: `${dateKey(today)}T02:35`, what: '', tags: [] }
       );
     }
+    if (state === 'planned-only') {
+      entries.push({ id: 'plan-1', ts: `${dateKey(today)}T09:30`, what: '准备面试', tags: ['求职推进'], planned: true });
+    }
+    if (state === 'custom-chip') {
+      entries.push({ id: 'stretch-1', ts: `${dateKey(today)}T08:00`, what: '拉伸', tags: ['拉伸'] });
+    }
     localStorage.clear();
     localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
+    if (state === 'custom-chip') {
+      localStorage.setItem('timelog.config', JSON.stringify({
+        version: 1,
+        mainline: ['求职推进'],
+        chips: [{ name: '拉伸', bucket: 'maintain', longOk: false }]
+      }));
+    }
     if (selectedDateOffset !== null) {
       const selected = new Date(today);
       selected.setDate(selected.getDate() + selectedDateOffset);
@@ -73,19 +86,18 @@ export async function boot(page, width, state, share = false, now = '', selected
       localStorage.setItem('timelog.openDate', selectedKey);
     }
 
-    if (share) {
-      Object.defineProperty(navigator, 'share', {
-        configurable: true,
-        value: () => Promise.resolve()
-      });
-      Object.defineProperty(navigator, 'canShare', {
-        configurable: true,
-        value: () => false
-      });
-    }
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: share ? () => Promise.resolve() : undefined
+    });
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: share ? () => false : undefined
+    });
   }, { state, share, now, selectedDateOffset, timezoneOffsetMinutes });
   await page.goto('/');
   await page.waitForFunction(() => document.querySelector('#timeline')?.children.length > 0);
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
 }
 
 export async function openBackupMenu(page) {

@@ -57,10 +57,16 @@ export function createSheetController(deps) {
   }
 
   function defaultPlanTimestamp() {
+    const dateKey = deps.state.selectedDate || todayStr();
+    if (dateKey > todayStr()) return `${dateKey}T09:00`;
     const d = new Date();
     d.setMinutes(0, 0, 0);
     d.setHours(d.getHours() + 1);
     return normalizeTimestamp(`${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()} ${d.getHours()}:${d.getMinutes()}`);
+  }
+
+  function isHistoryDate(dateKey = deps.state.selectedDate) {
+    return Boolean(dateKey && dateKey < todayStr());
   }
 
   function getFormWheelMount(panel) {
@@ -173,13 +179,12 @@ export function createSheetController(deps) {
     if (mode === 'new') {
       deps.state.view = 'day';
       deps.persistState();
-      deps.setEditingId(null);
       deps.setSheetEditId(null);
       formTag = '';
       formBucket = defaultBucketFromEntries();
       formRecordMode = loadRecordModePref();
+      if (isHistoryDate()) formRecordMode = 'log';
     } else if (mode === 'edit') {
-      deps.setEditingId(null);
       deps.setSheetEditId(id);
       sheetTimeMounted = false;
       editBucket = bucketForTag((entry.tags || [])[0] || '', deps.loadConfig());
@@ -209,6 +214,7 @@ export function createSheetController(deps) {
       shareSupported: typeof navigator !== 'undefined' && typeof navigator.share === 'function',
       targetDate: deps.state.selectedDate,
       isToday: deps.state.selectedDate === todayStr(),
+      isHistoryDay: isHistoryDate(),
       bucket: mode === 'edit' ? editBucket : formBucket,
       defaultBucket: formBucket,
       recordMode: formRecordMode
@@ -323,9 +329,8 @@ export function createSheetController(deps) {
   }
 
   function cancelEdit() {
-    const changed = Boolean(deps.getEditingId() || deps.getSheetEditId() || getSheetMode() === 'edit');
+    const changed = Boolean(deps.getSheetEditId() || getSheetMode() === 'edit');
     closeEditSheet();
-    deps.setEditingId(null);
     if (changed) deps.render();
   }
 
@@ -382,6 +387,7 @@ export function createSheetController(deps) {
 
   function pickRecordMode(el) {
     const panel = el.closest('.form-sheet-panel');
+    if (el.dataset.mode === 'plan' && isHistoryDate()) return;
     formRecordMode = el.dataset.mode === 'plan' ? 'plan' : 'log';
     saveRecordModePref(formRecordMode);
     if (!panel) return;
@@ -396,13 +402,20 @@ export function createSheetController(deps) {
     });
     const title = panel.querySelector('#form-sheet-title');
     const what = panel.querySelector('.form-sheet-what');
-    if (title) title.textContent = formRecordMode === 'plan' ? '计划 · 安排接下来要做的事' : `记一条 · ${deps.state.selectedDate === todayStr() ? '刚才这一阵' : '补记'}`;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(deps.state.selectedDate || '');
+    const daySummary = m ? `${Number(m[2])}月${Number(m[3])}日` : '这一天';
+    if (title) title.textContent = formRecordMode === 'plan' ? `计划 · ${daySummary}` : `记一条 · ${deps.state.selectedDate === todayStr() ? '刚才这一阵' : '补记'}`;
     if (what) what.textContent = formRecordMode === 'plan' ? '写下计划要做什么' : (deps.state.selectedDate === todayStr() ? '写下刚才做了什么' : '写下这一段做了什么');
+    const whatLabel = panel.querySelector('[data-role="what-label"]');
+    if (whatLabel) whatLabel.textContent = formRecordMode === 'plan' ? '计划做什么' : '做了什么';
+    const whatInput = panel.querySelector('#form-what');
+    if (whatInput) whatInput.setAttribute('placeholder', formRecordMode === 'plan' ? '准备面试 / 写方案…' : '写邮件 / 刷手机 / 准备面试…');
     const tsEl = panel.querySelector('#form-ts');
     if (tsEl) {
       tsEl.value = formRecordMode === 'plan' ? defaultPlanTimestamp() : deps.defaultFormTs();
       mountNewTimePicker(panel, tsEl.value);
     }
+    deps.renderChrome();
   }
 
   function clearInlineError(scope, role = 'conflict-error') {
@@ -463,8 +476,8 @@ export function createSheetController(deps) {
       : bucketHint(bucket);
   }
 
-  function rememberTag(tag, bucket) {
-    deps.rememberTagForBucket(tag, bucket);
+  function rememberTag(tag, bucket, entries) {
+    deps.rememberCustomTagForBucket(tag, bucket, entries);
   }
 
   function saveEntry() {
@@ -493,7 +506,7 @@ export function createSheetController(deps) {
       showInlineError(panel, conflictMessage(conflict, checked.ts, 'use-conflict-plus-new'));
       return;
     }
-    if (ctag) rememberTag(ctag, formBucket);
+    if (ctag) rememberTag(ctag, formBucket, d.entries);
     if (planned) {
       d.entries.push({ id: deps.uid(), ts: checked.ts, what, tags: [tag], planned: true });
       deps.save(d);
@@ -528,32 +541,13 @@ export function createSheetController(deps) {
     openFormSheet({ mode: 'new' });
   }
 
-  function getEditingBox(id = deps.getEditingId()) {
+  function getEditingBox(id = deps.getSheetEditId()) {
     return Array.from(document.querySelectorAll('.entry.editing, .form-sheet-panel'))
       .find(el => el.dataset.id === String(id));
   }
 
   function pickEditTag(el) {
     pickTag(el);
-  }
-
-  function toggleEditTime(el) {
-    const box = el.closest('.entry.editing, .form-sheet-panel');
-    if (!box) return;
-    const section = box.querySelector('[data-role="edit-time-section"]');
-    const mountEl = box.querySelector('[data-role="edit-wheel"]');
-    const tsEl = box.querySelector('[data-role="edit-ts"]');
-    if (!section || !mountEl || !tsEl) return;
-    const willOpen = section.hidden;
-    section.hidden = !willOpen;
-    el.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-    el.textContent = willOpen ? '收起时间' : '修改时间';
-    if (willOpen && (!sheetTimeMounted || box.classList.contains('entry'))) {
-      mountTimePicker(mountEl, tsEl.value, v => {
-        tsEl.value = v;
-      });
-      sheetTimeMounted = true;
-    }
   }
 
   function commitEdit(id) {
@@ -588,7 +582,7 @@ export function createSheetController(deps) {
       showInlineError(box, conflictMessage(conflict, checked.ts, 'use-conflict-plus-edit'));
       return;
     }
-    if (ctag) rememberTag(ctag, editBucket);
+    if (ctag) rememberTag(ctag, editBucket, d.entries.filter(item => item.id !== id));
     if (entry) {
       entry.ts = checked.ts;
       entry.what = what;
@@ -599,7 +593,6 @@ export function createSheetController(deps) {
     }
     deps.setSelectedDate(checked.ts.slice(0, 10));
     closeEditSheet();
-    deps.setEditingId(null);
     deps.render();
   }
 
@@ -622,52 +615,6 @@ export function createSheetController(deps) {
     }
   }
 
-  function addConfigChip() {
-    const list = document.querySelector('[data-role="config-chips"]');
-    if (!list) return;
-    const div = document.createElement('div');
-    div.className = 'cfg-row';
-    div.innerHTML = '<input class="inp cfg-name" type="text" value="" aria-label="标签名称"><select class="inp cfg-bucket" aria-label="桶"><option value="maintain">维持</option><option value="leak">漏损</option></select><label class="cfg-long"><input type="checkbox" class="cfg-long-ok"> longOk</label><button class="mini-btn" type="button" data-action="remove-config-chip">替换</button>';
-    list.appendChild(div);
-    div.querySelector('.cfg-name').focus();
-  }
-
-  function removeConfigChip(el) {
-    const row = el.closest('.cfg-row');
-    if (!row) return;
-    const name = (row.querySelector('.cfg-name') || {}).value || row.dataset.originalName || '';
-    const count = countEntriesWithTag(deps.load().entries, name);
-    if (!count) {
-      row.remove();
-      return;
-    }
-    if (row.querySelector('.cfg-migrate')) return;
-    const config = deps.loadConfig();
-    const select = document.createElement('select');
-    select.className = 'inp cfg-migrate';
-    select.setAttribute('aria-label', '迁移到');
-    select.dataset.original = name;
-    select.innerHTML = `<option value="">选择迁移目标（${count} 条）</option>${config.chips.filter(chip => chip.name !== name).map(chip => `<option value="${chip.name}">${chip.name}</option>`).join('')}<option value="__keep__">保留文字、脱离配置</option>`;
-    row.dataset.pendingRemove = '1';
-    row.appendChild(select);
-    const nameInput = row.querySelector('.cfg-name');
-    if (nameInput) nameInput.readOnly = true;
-  }
-
-  function removeMainlineName(el) {
-    const name = el.dataset.name || '';
-    const count = countEntriesWithTag(deps.load().entries, name);
-    if (count && !confirm(`主线「${name}」有 ${count} 条记录。移除后这些记录会变为孤儿标签。继续？`)) return;
-    const panel = document.querySelector('#form-sheet .form-sheet-panel');
-    const row = el.closest('.cfg-mainline-row');
-    if (row) row.remove();
-    if (panel) {
-      const list = panel.querySelector('.cfg-mainline-list');
-      if (list && !list.querySelector('.cfg-mainline-row')) list.innerHTML = '<div class="form-hint">无</div>';
-    }
-    if (configSnapshot) configSnapshot.mainline = configSnapshot.mainline.filter(item => item !== name);
-  }
-
   function saveTagConfig() {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
     const rows = Array.from(panel.querySelectorAll('.cfg-row'));
@@ -675,36 +622,28 @@ export function createSheetController(deps) {
       originalName: row.dataset.originalName || row.querySelector('.cfg-name').value.trim(),
       name: row.querySelector('.cfg-name').value.trim(),
       bucket: row.querySelector('.cfg-bucket').value,
-      longOk: row.querySelector('.cfg-long-ok').checked,
-      pendingRemove: row.dataset.pendingRemove === '1',
-      migrateTo: (row.querySelector('.cfg-migrate') || {}).value || ''
-    })).filter(chip => chip.name);
-    const finalChips = rowStates.filter(chip => !chip.pendingRemove);
-    if (!finalChips.length) {
+      longOk: row.querySelector('.cfg-long-ok').checked
+    })).filter(chip => chip.name && (chip.bucket === 'maintain' || chip.bucket === 'leak'));
+    if (!rowStates.length) {
       showInlineError(panel, '至少保留一个维持/漏损 chip。', 'config-error');
+      return;
+    }
+    const duplicate = rowStates.find((chip, index) => rowStates.findIndex(item => item.name === chip.name) !== index);
+    if (duplicate) {
+      showInlineError(panel, `「${duplicate.name}」重复了，请合并成一个标签名。`, 'config-error');
       return;
     }
     const snapshot = configSnapshot || deps.loadConfig();
     const d = deps.load();
-    const mainlineRows = Array.from(panel.querySelectorAll('.cfg-mainline-row'));
-    const mainline = mainlineRows.map(row => row.querySelector('span') && row.querySelector('span').textContent).filter(Boolean);
-    for (const chip of rowStates.filter(item => item.pendingRemove)) {
-      const count = countEntriesWithTag(d.entries, chip.originalName);
-      if (count && !chip.migrateTo) {
-        showInlineError(panel, `「${chip.originalName}」有 ${count} 条记录，替换前请选择迁移目标。`, 'config-error');
-        return;
-      }
-      if (chip.migrateTo && chip.migrateTo !== '__keep__') migrateEntryTags(d.entries, chip.originalName, chip.migrateTo);
-    }
-    for (const chip of finalChips) {
+    for (const chip of rowStates) {
       if (chip.originalName && chip.originalName !== chip.name && countEntriesWithTag(d.entries, chip.originalName)) {
         migrateEntryTags(d.entries, chip.originalName, chip.name);
       }
     }
     const nextConfig = {
       ...deps.loadConfig(),
-      mainline,
-      chips: finalChips.map(chip => ({ name: chip.name, bucket: chip.bucket, longOk: chip.longOk }))
+      mainline: snapshot.mainline,
+      chips: rowStates.map(chip => ({ name: chip.name, bucket: chip.bucket, longOk: chip.longOk }))
     };
     deps.save(d);
     deps.saveConfig(nextConfig);
@@ -729,16 +668,12 @@ export function createSheetController(deps) {
     useConflictPlusMinute,
     editConflictEntry,
     pickEditTag,
-    toggleEditTime,
     commitEdit,
     saveEntry,
     switchActivity,
     autosizeTextareas,
     updateMainlineHint,
     toggleStartTime,
-    addConfigChip,
-    removeConfigChip,
-    removeMainlineName,
     saveTagConfig,
     handleResponsiveResize,
     getEditingBox

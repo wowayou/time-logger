@@ -1,4 +1,4 @@
-import { fmtMins, hhmm, minsBetweenDates, normalizeTimestamp, nowStr } from './time.js';
+import { fmtMins, hhmm, normalizeTimestamp } from './time.js';
 import { formatPercent } from './stats.js';
 import {
   BUCKETS,
@@ -38,7 +38,10 @@ export function setButtonTip(el, text, ariaLabel) {
 export function renderRuler(totals, hasItems, view) {
   const el = document.getElementById('ruler');
   if (!hasItems || !totals.total) {
-    el.innerHTML = `<p class="muted-note">${view === 'day' ? '这一天还没有记录' : '这个范围还没有可统计记录'}</p>`;
+    const text = (hasItems && !totals.total && view === 'day')
+      ? '今日有计划，不计入统计'
+      : (view === 'day' ? '这一天还没有记录' : '这个范围还没有可统计记录');
+    el.innerHTML = `<p class="muted-note">${text}</p>`;
     return;
   }
   const parts = bucketParts(totals);
@@ -79,21 +82,9 @@ export function confirmSegmentLabel(startTs, endTs) {
   return normalizeTimestamp(startTs) && normalizeTimestamp(endTs) ? `确认 ${hhmm(startTs)}-${hhmm(endTs)}` : '确认这段';
 }
 
-export function renderPrevSegmentBlock(startTs, endTs) {
-  const normalizedStart = normalizeTimestamp(startTs);
-  const normalizedEnd = normalizeTimestamp(endTs);
-  if (!normalizedStart || !normalizedEnd) return '';
-  const endLabel = normalizedEnd === nowStr() ? '现在' : hhmm(normalizedEnd);
-  const mins = minsBetweenDates(new Date(normalizedStart), new Date(normalizedEnd));
-  return `
-    <div class="prev-seg-head">
-      <span>刚才这一阵</span>
-      <span class="prev-seg-time">${hhmm(normalizedStart)} → ${endLabel} · 已 ${fmtMins(mins)}</span>
-    </div>`;
-}
 
 export function renderTimeline(items, opts = {}) {
-  const { editingId = null, sheetEditId = null, plannedItems = [], renderEditForm: renderEdit = renderEditForm } = opts;
+  const { sheetEditId = null, plannedItems = [] } = opts;
   const el = document.getElementById('timeline');
   const planned = (plannedItems || []).map(e => ({
     e,
@@ -113,7 +104,6 @@ export function renderTimeline(items, opts = {}) {
     return;
   }
   el.innerHTML = [...allItems].reverse().map(({ e, start, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs, planned: isPlanned }) => {
-    if (editingId === e.id) return renderEdit(e);
     if (isPlanned) {
       const displayTag = (e.tags || [])[0] || '未知';
       const tagClass = ` e-tag-${bucketForTag(displayTag)}`;
@@ -179,47 +169,6 @@ export function renderSummaryRows(rows) {
   el.innerHTML = `<div class="summary-list">${html || '<div class="empty-tip">没有可显示的汇总。</div>'}</div>`;
 }
 
-export function renderEditForm(e, opts = {}) {
-  const tag = (e.tags || [])[0] || '';
-  const config = loadConfig();
-  const bucket = opts.bucket || bucketForTag(tag, config);
-  const isKnownPickerTag = config.mainline.includes(tag) || config.chips.some(chip => chip.name === tag);
-  const bucketSeg = renderBucketSeg('edit', bucket);
-  const chips = renderTagPicker('edit', tag, config, bucket);
-  const tagClass = ` e-tag-${bucketForTag(tag, config)}`;
-  const datalist = `<datalist id="mainline-tags">${config.mainline.map(name => `<option value="${esc(name)}"></option>`).join('')}</datalist>`;
-  return `<div class="entry editing" data-id="${esc(e.id)}">
-    <div class="e-body">
-      <div class="edit-context">
-        <div class="e-time">${hhmm(e.ts)}</div>
-        <div class="e-what">${esc(e.what)}</div>
-        <div class="e-meta">
-          ${tag ? `<span class="e-tag${tagClass}">#${esc(tag)}</span>` : ''}
-        </div>
-      </div>
-      <div class="fl">
-        <div class="fl-label">时间（可改，补录用）</div>
-        <input type="hidden" data-role="edit-ts" value="${esc(e.ts)}">
-        <div data-role="edit-wheel"></div>
-      </div>
-      <div class="form-inline-error" data-role="conflict-error" hidden></div>
-      <div class="fl"><textarea class="inp ta edit-what-input" data-role="edit-what" rows="2" placeholder="做了什么">${esc(e.what)}</textarea></div>
-      <div class="fl">
-        <div class="fl-label">归类</div>
-        ${bucketSeg}
-      </div>
-      <div data-role="edit-chips" style="margin-bottom:7px">${chips}</div>
-      <input type="text" class="inp edit-tag-input" data-role="edit-custom-tag" list="mainline-tags" value="${isKnownPickerTag ? '' : esc(tag)}" placeholder="自定义标签">
-      ${datalist}
-      <div class="form-hint" data-role="mainline-hint">${bucketHint(bucket)}</div>
-      <div class="form-btns edit-actions">
-        <button class="icon-btn save-btn" type="button" data-action="commit-edit" data-id="${esc(e.id)}" data-tip="保存修改" aria-label="保存修改">${iconSvg('check')}</button>
-        <button class="icon-btn cancel-btn" type="button" data-action="cancel-edit" data-tip="取消编辑" aria-label="取消编辑">${iconSvg('undo')}</button>
-      </div>
-    </div>
-  </div>`;
-}
-
 export function bucketHint(bucket) {
   if (bucket === 'maintain') return '自定义标签将归入「维持」；与固定 chip 同名时按 chip 归类。';
   if (bucket === 'leak') return '自定义标签将归入「漏损」；与固定 chip 同名时按 chip 归类。';
@@ -272,6 +221,7 @@ export function renderFormSheet(opts) {
   const e = opts && opts.entry;
   const isEdit = mode === 'edit';
   const isToday = !opts || opts.isToday !== false;
+  const isHistoryDay = Boolean(opts && opts.isHistoryDay);
   const targetDate = opts && opts.targetDate;
   const daySummary = (() => {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(targetDate || '');
@@ -281,17 +231,21 @@ export function renderFormSheet(opts) {
   const config = loadConfig();
   const bucket = opts && opts.bucket ? opts.bucket : (isEdit ? bucketForTag(tag, config) : (opts && opts.defaultBucket) || 'job');
   const recordMode = opts && opts.recordMode ? opts.recordMode : 'log';
+  const isPlan = !isEdit && !isHistoryDay && recordMode === 'plan';
+  const isEditPlanned = isEdit && e && e.planned;
   const isKnownPickerTag = config.mainline.includes(tag) || config.chips.some(chip => chip.name === tag);
   const bucketSeg = renderBucketSeg(isEdit ? 'edit' : 'form', bucket);
   const chips = renderTagPicker(isEdit ? 'edit' : 'form', tag, config, bucket);
-  const recordModeSeg = isEdit ? '' : renderRecordModeSeg(recordMode);
-  const title = isEdit ? '编辑' : (recordMode === 'plan' ? '计划' : (isToday ? '记一条' : '补记'));
+  const recordModeSeg = isEdit || isHistoryDay ? '' : renderRecordModeSeg(recordMode);
+  const title = isEdit ? '编辑' : (isPlan ? '计划' : (isToday ? '记一条' : '补记'));
   const summary = isEdit
     ? `${hhmm(e.ts)}${tag ? ` · #${esc(tag)}` : ''}`
-    : (recordMode === 'plan' ? '安排接下来要做的事' : (isToday ? '刚才这一阵' : daySummary));
+    : (isPlan ? daySummary : (isToday ? '刚才这一阵' : daySummary));
   const whatText = isEdit
     ? (esc(e.what) || '未填写')
-    : (recordMode === 'plan' ? '写下计划要做什么' : (isToday ? '写下刚才做了什么' : '写下这一段做了什么'));
+    : (isPlan ? '写下计划要做什么' : (isToday ? '写下刚才做了什么' : '写下这一段做了什么'));
+  const whatFieldLabel = isPlan || isEditPlanned ? '计划做什么' : '做了什么';
+  const whatPlaceholder = isPlan || isEditPlanned ? '准备面试 / 写方案…' : (isEdit ? '做了什么' : '写邮件 / 刷手机 / 准备面试…');
   const saveAction = isEdit ? 'commit-edit' : 'save-entry';
   const saveId = isEdit ? ` data-id="${esc(e.id)}"` : '';
   const saveTip = isEdit ? '保存修改' : '保存记录';
@@ -301,8 +255,8 @@ export function renderFormSheet(opts) {
     : '<input type="hidden" id="form-ts">';
   const wheelMount = isEdit ? '<div data-role="edit-wheel"></div>' : '<div id="form-wheel-mount"></div>';
   const whatInput = isEdit
-    ? `<textarea class="inp ta edit-what-input" data-role="edit-what" rows="2" placeholder="做了什么">${esc(e.what)}</textarea>`
-    : '<textarea class="inp ta" id="form-what" rows="2" placeholder="写邮件 / 刷手机 / 准备面试…"></textarea>';
+    ? `<textarea class="inp ta edit-what-input" data-role="edit-what" rows="2" placeholder="${esc(whatPlaceholder)}">${esc(e.what)}</textarea>`
+    : `<textarea class="inp ta" id="form-what" rows="2" placeholder="${esc(whatPlaceholder)}"></textarea>`;
   const chipWrap = isEdit
     ? `<div data-role="edit-chips">${chips}</div>`
     : `<div id="form-chips">${chips}</div>`;
@@ -333,18 +287,18 @@ export function renderFormSheet(opts) {
       </div>
       <div class="form-inline-error" data-role="conflict-error" hidden></div>
       <div class="fl">
-        <div class="fl-label">做了什么</div>
+        <div class="fl-label">${whatFieldLabel}</div>
         ${whatInput}
       </div>
       ${tagBlock}`;
   const newBody = `
       ${recordModeSeg}
       <input type="hidden" id="form-ts">
-      <div class="form-time-row"${recordMode === 'plan' ? ' hidden' : ''} data-role="log-time-row">
+      <div class="form-time-row"${isPlan ? ' hidden' : ''} data-role="log-time-row">
         <button class="start-time-trigger" type="button" data-action="toggle-start-time" aria-expanded="false" aria-label="修改起点时间"><span data-role="start-time-label">--:--</span></button>
         <span class="form-time-arrow">→ <span data-role="end-label">现在</span> · 已 <span data-role="duration-label">--</span></span>
       </div>
-      <div class="fl${recordMode === 'plan' ? '' : ' hidden'}" data-role="plan-time-row">
+      <div class="fl${isPlan ? '' : ' hidden'}" data-role="plan-time-row">
         <div class="fl-label">计划时间</div>
         <div data-role="form-wheel-mount"></div>
       </div>
@@ -353,7 +307,7 @@ export function renderFormSheet(opts) {
         <div data-role="form-wheel-mount"></div>
       </div>
       <div class="fl">
-        <div class="fl-label">做了什么</div>
+        <div class="fl-label" data-role="what-label">${whatFieldLabel}</div>
         ${whatInput}
       </div>
       ${tagBlock}`;
@@ -377,15 +331,26 @@ export function renderTagPicker(prefix, selectedTag, config = loadConfig(), buck
   const action = prefix === 'edit' ? 'pick-edit-tag' : 'pick-form-tag';
   const groups = chipGroups(config);
   const mainline = config.mainline.map(name => ({ name, bucket: 'job' }));
-  let items = [];
-  if (bucketFilter === 'job') items = mainline;
-  else if (bucketFilter === 'maintain') items = groups.maintain;
-  else if (bucketFilter === 'leak') items = groups.leak;
-  else items = [...mainline, ...groups.maintain, ...groups.leak];
-  if (!items.length) return '<div class="form-hint">这个桶还没有可选标签，可直接写自定义标签。</div>';
-  return `<div class="chips">
-    ${items.map(item => `<button class="chip chip-${item.bucket}${item.name === selectedTag ? ' sel' : ''}" type="button" data-action="${action}" data-tag="${esc(item.name)}" data-bucket="${item.bucket}" aria-label="选择标签：${esc(item.name)}">${esc(item.name)}</button>`).join('')}
-  </div>`;
+  const chipBtn = item => `<button class="chip chip-${item.bucket}${item.name === selectedTag ? ' sel' : ''}" type="button" data-action="${action}" data-tag="${esc(item.name)}" data-bucket="${item.bucket}" aria-label="选择标签：${esc(item.name)}">${esc(item.name)}</button>`;
+  if (bucketFilter === 'job') {
+    if (!mainline.length) return '<div class="form-hint">这个桶还没有可选标签，可直接写自定义标签。</div>';
+    return `<div class="chips">${mainline.map(chipBtn).join('')}</div>`;
+  }
+  if (bucketFilter === 'maintain') {
+    if (!groups.maintain.length) return '<div class="form-hint">这个桶还没有可选标签，可直接写自定义标签。</div>';
+    return `<div class="chips">${groups.maintain.map(chipBtn).join('')}</div>`;
+  }
+  if (bucketFilter === 'leak') {
+    if (!groups.leak.length) return '<div class="form-hint">这个桶还没有可选标签，可直接写自定义标签。</div>';
+    return `<div class="chips">${groups.leak.map(chipBtn).join('')}</div>`;
+  }
+  const all = [...mainline, ...groups.maintain, ...groups.leak];
+  if (!all.length) return '<div class="form-hint">还没有可选标签，可直接写自定义标签。</div>';
+  const parts = [];
+  if (mainline.length) parts.push(`<div class="chips">${mainline.map(chipBtn).join('')}</div>`);
+  if (groups.maintain.length) parts.push(`<div class="chip-group-label">维持</div><div class="chips">${groups.maintain.map(chipBtn).join('')}</div>`);
+  if (groups.leak.length) parts.push(`<div class="chip-group-label">漏损</div><div class="chips">${groups.leak.map(chipBtn).join('')}</div>`);
+  return parts.join('');
 }
 
 export function renderHelpSheet() {
@@ -437,32 +402,35 @@ export function renderConfigSheet(config = loadConfig(), opts = {}) {
   const entries = opts.entries || [];
   const row = chip => {
     const count = countEntriesWithTag(entries, chip.name);
-    const migrate = count > 0 ? `<select class="inp cfg-migrate" aria-label="迁移到" data-original="${esc(chip.name)}"><option value="">移除时需迁移 ${count} 条</option>${config.chips.filter(item => item.name !== chip.name).map(item => `<option value="${esc(item.name)}">${esc(item.name)}</option>`).join('')}<option value="__keep__">保留文字、脱离配置</option></select>` : '';
-    return `
-    <div class="cfg-row" data-original-name="${esc(chip.name)}">
-      <input class="inp cfg-name" type="text" value="${esc(chip.name)}" aria-label="标签名称">
+    return `<div class="cfg-row" data-original-name="${esc(chip.name)}">
+      <div class="cfg-row-left">
+        <input class="inp cfg-name" type="text" value="${esc(chip.name)}" aria-label="标签名称">
+        <label class="cfg-long"><input type="checkbox" class="cfg-long-ok"${chip.longOk ? ' checked' : ''}> 超长段免确认</label>
+        ${count ? `<span class="form-hint">${count} 条记录</span>` : ''}
+      </div>
       <select class="inp cfg-bucket" aria-label="桶">
         <option value="maintain"${chip.bucket === 'maintain' ? ' selected' : ''}>维持</option>
         <option value="leak"${chip.bucket === 'leak' ? ' selected' : ''}>漏损</option>
       </select>
-      <label class="cfg-long"><input type="checkbox" class="cfg-long-ok"${chip.longOk ? ' checked' : ''}> longOk</label>
-      <button class="mini-btn" type="button" data-action="remove-config-chip">替换</button>
-      ${migrate}
     </div>`;
   };
-  const mainlineRow = name => {
-    const count = countEntriesWithTag(entries, name);
-    return `<div class="cfg-mainline-row" data-original-name="${esc(name)}">
-      <span>${esc(name)}</span>
-      <span class="cfg-count">${count ? `${count} 条` : ''}</span>
-      <button class="mini-btn" type="button" data-action="remove-mainline-name" data-name="${esc(name)}">移除</button>
-    </div>`;
+  const section = (bucket, title) => {
+    const chips = config.chips.filter(chip => chip.bucket === bucket);
+    return `<section class="cfg-section">
+      <div class="chip-group-label">${title}</div>
+      <div class="cfg-list" data-role="config-chips">${chips.map(row).join('')}</div>
+    </section>`;
   };
+  const mainlineHint = config.mainline.length
+    ? `<div class="form-hint">主线历史：${config.mainline.map(name => {
+      const count = countEntriesWithTag(entries, name);
+      return count ? `${esc(name)}（${count} 条）` : esc(name);
+    }).join('、')}</div>` : '';
   return `
     <div class="form-sheet-head">
       <div class="form-sheet-summary">
-        <div class="form-sheet-title" id="form-sheet-title">标签配置</div>
-        <div class="form-sheet-what">4 桶固定；改名或移除会迁移历史记录</div>
+        <div class="form-sheet-title" id="form-sheet-title">标签高级设置</div>
+        <div class="form-sheet-what">改名会同步迁移历史记录</div>
       </div>
       <div class="form-sheet-actions">
         <button class="icon-btn cancel-btn" type="button" data-action="close-form" data-tip="取消配置" aria-label="取消配置">${iconSvg('undo')}</button>
@@ -470,10 +438,10 @@ export function renderConfigSheet(config = loadConfig(), opts = {}) {
       </div>
     </div>
     <div class="form-sheet-body config-body">
-      <div class="form-hint">主线历史</div>
-      <div class="cfg-mainline-list">${config.mainline.map(mainlineRow).join('') || '<div class="form-hint">无</div>'}</div>
-      <div class="cfg-list" data-role="config-chips">${config.chips.map(row).join('')}</div>
-      <button class="btn-sec cfg-add" type="button" data-action="add-config-chip">+ 添加维持/漏损 chip</button>
+      <div class="form-hint">录入时先选桶；自定义标签在同桶第二次使用后自动固定。内置标签不会在这里删除，可改名、改桶或设置超长段免确认。</div>
+      ${mainlineHint}
+      ${section('maintain', '维持标签')}
+      ${section('leak', '漏损标签')}
       <div class="form-inline-error" data-role="config-error" hidden></div>
     </div>`;
 }

@@ -54,7 +54,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v24` / manifest `version: "24"`。
+当前版本：`timelog-v25` / manifest `version: "25"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -176,3 +176,4 @@ git diff --check
 | v22 | 2026-06-30 | 测试护栏先行后拆分 `entry_model.js` / `io_actions.js` / `sheet_controller.js`；补齐倒序补录、跨日 reload、导入/导出 smoke 和 repeat 压测口径 |
 | v23 | 2026-06-30 | 修复跨时区导入后的跨日闭合段切片；导出新增时区 meta，导入按源/当前时区自动建议平移值 |
 | v24 | 2026-06-30 | iOS 视口稳定与 deferred help；底栏「摘要+备份」；桶优先选标签与 chip 替换迁移；完整计划模式 |
+| v25 | 2026-06-30 | 收窄启动门闩与启动骨架；修复 sheet 裁切；计划/已发生文案收敛；标签高级设置精简；自定义标签第二次使用才固定 |

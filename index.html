@@ -15,6 +15,14 @@
       } catch {}
     })();
   </script>
+  <script>
+    (() => {
+      try {
+        const d = JSON.parse(localStorage.getItem('timelog.v1'));
+        document.documentElement.setAttribute('data-boot', (d && d.entries && d.entries.length) ? 'has-entries' : 'empty');
+      } catch { document.documentElement.setAttribute('data-boot', 'empty'); }
+    })();
+  </script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -31,7 +39,6 @@
         <img src="icon.svg" alt="时间尺" class="hdr-icon" width="32" height="32">
       </a>
       <h1 class="hdr-title">时间尺</h1>
-      <span class="hdr-date" id="hdr-date"></span>
     </div>
     <div class="seg theme-seg" id="theme-seg" role="group" aria-label="主题">
       <button type="button" data-action="theme" data-theme="auto" data-tip="跟随系统亮暗色设置。" data-tip-pos="bottom" aria-label="主题：自动">自动</button>
@@ -67,7 +74,7 @@
   <button class="add-btn" id="add-btn" type="button" data-action="open-form" data-tip="打开表单，记录刚才这一阵。" aria-label="记一条新的时间记录">+ 记一条</button>
 
   <div class="ruler" id="ruler">
-    <p class="muted-note">今天还没有记录</p>
+    <div class="ruler-bar"></div>
   </div>
 
   <div>

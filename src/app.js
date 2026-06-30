@@ -1,18 +1,18 @@
-import { mountTimePicker } from './pickers.js';
 import {
   defaultFormTimestamp,
+  ensureOpenPlaceholderAt,
   settlementEndFor as getSettlementEndFor
 } from './entry_model.js';
 import {
   OPEN_DATE_KEY,
+  RECORD_MODE_KEY,
   SELECTED_DATE_KEY,
   THEME_KEY,
   VIEW_KEY,
-  addMainlineTag,
   load,
   loadConfig,
   mergeImportedEntries,
-  rememberTagForBucket,
+  rememberCustomTagForBucket,
   save,
   saveConfig,
   uid,
@@ -40,7 +40,6 @@ import {
   addDays,
   addMonths,
   addYears,
-  dateLabel,
   localDateKey,
   minsBetweenDates,
   normalizeTimestamp,
@@ -58,7 +57,6 @@ import {
   setButtonTip
 } from './ui.js';
 
-  let editingId = null;
   let sheetEditId = null;
   let pendingUpdateRegistration = null;
   let updateReloading = false;
@@ -158,7 +156,6 @@ import {
   // --- Navigation ---
   function setView(view) {
     state.view = view;
-    editingId = null;
     sheetController.closeEditSheet();
     sheetController.closeForm();
     persistState();
@@ -174,14 +171,12 @@ import {
     if (state.view === 'week') setSelectedDate(localDateKey(addDays(d, delta * 7)));
     if (state.view === 'month') setSelectedDate(localDateKey(addMonths(d, delta)));
     if (state.view === 'year') setSelectedDate(localDateKey(addYears(d, delta)));
-    editingId = null;
     sheetController.closeEditSheet();
     sheetController.closeForm();
     render();
   }
   function goToday() {
     setSelectedDate(todayStr());
-    editingId = null;
     sheetController.closeEditSheet();
     sheetController.closeForm();
     render();
@@ -189,7 +184,6 @@ import {
   function drill(dateKey, view) {
     state.view = view;
     setSelectedDate(dateKey);
-    editingId = null;
     sheetController.closeEditSheet();
     sheetController.closeForm();
     render();
@@ -201,20 +195,7 @@ import {
     if (state.view === 'day') {
       const day = computeDay();
       renderRuler(day.totals, day.timeline.length || day.planned.length || day.totals.total, state.view);
-      renderTimeline(day.timeline, { editingId, sheetEditId, plannedItems: day.planned });
-      if (editingId) {
-        const entry = load().entries.find(e => e.id === editingId);
-        if (entry) {
-          const editor = sheetController.getEditingBox(entry.id);
-          const mountEl = editor ? editor.querySelector('[data-role="edit-wheel"]') : null;
-          const tsEl = editor ? editor.querySelector('[data-role="edit-ts"]') : null;
-          if (mountEl && tsEl) {
-            mountTimePicker(mountEl, entry.ts, v => {
-              tsEl.value = v;
-            });
-          }
-        }
-      }
+      renderTimeline(day.timeline, { sheetEditId, plannedItems: day.planned });
       lastIntervalSignature = dataSignature();
       return;
     }
@@ -230,7 +211,17 @@ import {
     const periodEl = document.getElementById('period-label');
     periodEl.textContent = periodLabel({ short: state.view === 'week' });
     periodEl.setAttribute('aria-label', periodFullLabel());
-    document.getElementById('add-btn').hidden = state.view !== 'day';
+    const addBtn = document.getElementById('add-btn');
+    const canPlanOnDate = state.selectedDate >= todayStr();
+    const preferPlan = localStorage.getItem(RECORD_MODE_KEY) === 'plan';
+    const addLabel = canPlanOnDate && preferPlan ? '+ 计划一条' : '+ 记一条';
+    addBtn.hidden = state.view !== 'day';
+    addBtn.textContent = addLabel;
+    setButtonTip(
+      addBtn,
+      canPlanOnDate && preferPlan ? '打开表单，安排接下来要做的事。' : '打开表单，记录刚才这一阵。',
+      canPlanOnDate && preferPlan ? '计划一条新的时间记录' : '记一条新的时间记录'
+    );
     const switchBtn = document.getElementById('switch-btn');
     if (switchBtn) switchBtn.hidden = state.view !== 'day';
     const periodNames = { day: '天', week: '周', month: '月', year: '年' };
@@ -278,7 +269,6 @@ import {
     const d = load();
     d.entries = d.entries.filter(e => e.id !== id);
     save(d);
-    if (editingId === id) editingId = null;
     if (sheetEditId === id) sheetController.closeEditSheet();
     render();
   }
@@ -289,6 +279,9 @@ import {
     if (!entry || !entry.planned) return;
     delete entry.planned;
     if (new Date(entry.ts) > new Date()) entry.ts = nowStr();
+    if (entry.ts.slice(0, 10) === todayStr()) {
+      ensureOpenPlaceholderAt(d.entries, nowStr(), entry.id, uid);
+    }
     save(d);
     render();
   }
@@ -316,8 +309,7 @@ import {
     loadConfig,
     save,
     saveConfig,
-    addMainlineTag,
-    rememberTagForBucket,
+    rememberCustomTagForBucket,
     uid,
     defaultFormTs,
     settlementEndFor,
@@ -325,8 +317,6 @@ import {
     setSelectedDate,
     render,
     renderChrome,
-    getEditingId: () => editingId,
-    setEditingId: value => { editingId = value; },
     getSheetEditId: () => sheetEditId,
     setSheetEditId: value => { sheetEditId = value; }
   });
@@ -414,12 +404,8 @@ import {
       if (action === 'start-edit') sheetController.startEdit(el.dataset.id);
       if (action === 'pick-edit-tag') sheetController.pickEditTag(el);
       if (action === 'pick-edit-bucket') sheetController.pickBucket(el);
-      if (action === 'toggle-edit-time') sheetController.toggleEditTime(el);
-      if (action === 'commit-edit') sheetController.commitEdit(el.dataset.id || editingId);
+      if (action === 'commit-edit') sheetController.commitEdit(el.dataset.id || sheetEditId);
       if (action === 'cancel-edit') sheetController.cancelEdit();
-      if (action === 'add-config-chip') sheetController.addConfigChip();
-      if (action === 'remove-config-chip') sheetController.removeConfigChip(el);
-      if (action === 'remove-mainline-name') sheetController.removeMainlineName(el);
       if (action === 'save-tag-config') sheetController.saveTagConfig();
       if (action === 'confirm-planned') confirmPlanned(el.dataset.id);
       if (action === 'confirm-segment') confirmSegment(el.dataset.id, el.dataset.end);
@@ -447,7 +433,7 @@ import {
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') { sheetController.cancelEdit(); sheetController.closeForm(); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        if (editingId || sheetEditId) { sheetController.commitEdit(editingId || sheetEditId); return; }
+        if (sheetEditId) { sheetController.commitEdit(sheetEditId); return; }
         if (sheetController.isFormOpen()) sheetController.saveEntry();
       }
     });
@@ -480,7 +466,7 @@ import {
     if (tickTimer) return;
     tickTimer = setInterval(() => {
       if (document.hidden) return;
-      if (editingId || sheetEditId || sheetController.isFormOpen() || sheetController.getSheetMode()) return;
+      if (sheetEditId || sheetController.isFormOpen() || sheetController.getSheetMode()) return;
       const signature = dataSignature();
       if (signature === lastIntervalSignature) return;
       render();
@@ -505,14 +491,13 @@ import {
     applyTheme(localStorage.getItem(THEME_KEY) || 'auto');
     const mq = window.matchMedia('(prefers-color-scheme: light)');
     if (mq.addEventListener) mq.addEventListener('change', () => applyTheme(localStorage.getItem(THEME_KEY) || 'auto'));
-    document.getElementById('hdr-date').textContent = dateLabel(new Date());
     render();
-    document.body.classList.add('app-ready');
-    if (!navigator.webdriver && !localStorage.getItem(HELP_SEEN_KEY)) {
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => openHelp());
+        document.body.classList.add('app-ready');
+        if (!navigator.webdriver && !localStorage.getItem(HELP_SEEN_KEY)) openHelp();
       });
-    }
+    });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) stopTickTimer();
       else startTickTimer();

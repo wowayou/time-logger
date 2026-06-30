@@ -46,7 +46,7 @@ export function createIoActions(deps) {
   function currentViewDetailLines() {
     if (deps.state.view === 'day') {
       const day = deps.computeDay();
-      if (!day.timeline.length) return ['- 无记录'];
+      if (!day.timeline.length) return ['- 无已发生记录'];
       return day.timeline.map(({ e, start, mins, isOngoing, unrecorded, pendingConfirm, tag }) => {
         const safeWhat = mdInline(e.what) || '未填写';
         const safeTag = mdInline(tag || '未知');
@@ -64,10 +64,21 @@ export function createIoActions(deps) {
     });
   }
 
+  function currentViewPlanLines() {
+    if (deps.state.view !== 'day') return [];
+    const day = deps.computeDay();
+    return day.planned.map(entry => {
+      const safeWhat = mdInline(entry.what) || '未填写';
+      const safeTag = mdInline((entry.tags || [])[0] || '未知');
+      return `- ${hhmm(entry.ts)} | 计划 | ${safeWhat} | #${safeTag}`;
+    });
+  }
+
   function buildCurrentViewSummaryMarkdown() {
     const totals = currentViewTotals();
     const { jp, mp, lp, up } = statsParts(totals);
     const totalEntries = deps.load().entries.length;
+    const planLines = currentViewPlanLines();
     return [
       '# 时间尺当前视图摘要',
       '',
@@ -88,6 +99,7 @@ export function createIoActions(deps) {
       '',
       '## 当前视图明细',
       ...currentViewDetailLines(),
+      ...(planLines.length ? ['', '## 计划', ...planLines] : []),
       ''
     ].join('\n');
   }

@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "24"
+EXPECTED_VERSION = "25"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -123,7 +123,7 @@ def audit_demo_assets(errors: list[str]) -> None:
 
     readme = read_text("README.md")
     assets_dir = ROOT / "docs" / "assets"
-    actual_pngs = sorted(str(path.relative_to(ROOT)) for path in assets_dir.glob("*.png")) if assets_dir.exists() else []
+    actual_pngs = sorted(path.relative_to(ROOT).as_posix() for path in assets_dir.glob("*.png")) if assets_dir.exists() else []
     for src in REQUIRED_DEMO_ASSETS:
         path = ROOT / src
         if not path.exists():
@@ -237,6 +237,8 @@ def audit_index(errors: list[str]) -> None:
             continue
         if "timelog.theme" in body and "document.documentElement.setAttribute" in body:
             continue
+        if "timelog.v1" in body and "data-boot" in body:
+            continue
         fail(errors, "index.html may only contain the app module script and the early theme script")
 
     if not re.search(r"button\[data-tip\]:hover::after,\s*\n\s*button\[data-tip\]:hover::before\s*\{[^}]*transition-delay:\s*" + re.escape(EXPECTED_TOOLTIP_DELAY), css, re.DOTALL):
@@ -264,7 +266,7 @@ def audit_index(errors: list[str]) -> None:
             fail(errors, f"icon button is missing data-tip near byte {match.start()}")
 
     for tip in ("编辑记录", "删除记录", "保存修改", "取消编辑"):
-        if f'data-tip="{tip}"' not in runtime:
+        if f'data-tip="{tip}"' not in runtime and f"'{tip}'" not in runtime:
             fail(errors, f"icon action tooltip is missing or not short: {tip}")
 
     if ".inp" not in css or "font-size: 16px" not in css:

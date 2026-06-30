@@ -310,3 +310,122 @@ test('JSON import uses timezone metadata to suggest default shift', async ({ pag
   expect(stored).toHaveLength(1);
   expect(stored[0]).toMatchObject({ id: 'tokyo-entry', ts: '2026-06-29T08:00' });
 });
+
+test('plan mode uses plan copy and is hidden on historical days', async ({ page }) => {
+  await boot(page, 768, 'empty', false, FIXED_NOW);
+  await page.getByRole('button', { name: '记一条新的时间记录' }).click();
+  await page.getByRole('button', { name: '记录计划中' }).click();
+  await expect(page.locator('#form-sheet-title')).toContainText('计划 · 6月29日');
+  await expect(page.locator('.form-sheet-what')).toHaveText('写下计划要做什么');
+  await expect(page.locator('[data-role="what-label"]')).toHaveText('计划做什么');
+  await expect(page.locator('#form-what')).toHaveAttribute('placeholder', '准备面试 / 写方案…');
+  await page.locator('#form-what').fill('准备面试');
+  await page.getByRole('button', { name: '选择标签：求职推进' }).click();
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+
+  await expect(page.getByRole('button', { name: '计划一条新的时间记录' })).toHaveText('+ 计划一条');
+  await expect(page.locator('#timeline')).toContainText('计划·#求职推进');
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(entries).toHaveLength(1);
+  expect(entries[0]).toMatchObject({ what: '准备面试', tags: ['求职推进'], planned: true });
+
+  await boot(page, 768, 'empty', false, FIXED_NOW, -1);
+  await page.getByRole('button', { name: '记一条新的时间记录' }).click();
+  await expect(page.locator('[data-role="record-mode-seg"]')).toHaveCount(0);
+  await expect(page.locator('#form-sheet-title')).toHaveText('补记 · 6月28日');
+});
+
+test('planned-only day has honest ruler copy and confirm opens placeholder', async ({ page }) => {
+  await boot(page, 768, 'planned-only', false, FIXED_NOW);
+  await expect(page.locator('#ruler')).toContainText('今日有计划，不计入统计');
+  await expect(page.locator('#timeline')).toContainText('准备面试');
+
+  await page.getByRole('button', { name: '标记计划为已发生' }).click();
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(entries.find(entry => entry.id === 'plan-1')).toMatchObject({ ts: '2026-06-29T09:30', what: '准备面试', tags: ['求职推进'] });
+  expect(entries.find(entry => entry.ts === '2026-06-29T12:34' && entry.what === '')).toMatchObject({ tags: [] });
+  await expect(page.locator('#timeline')).toContainText('进行中·还没记');
+});
+
+test('summary includes a plan section for day view', async ({ page, context }) => {
+  await boot(page, 768, 'planned-only', false, FIXED_NOW);
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByRole('button', { name: '复制当前视图摘要' }).click();
+  const text = await page.evaluate(() => navigator.clipboard.readText());
+  expect(text).toContain('## 计划');
+  expect(text).toContain('- 09:30 | 计划 | 准备面试 | #求职推进');
+});
+
+test('config rename migrates existing tags and removes replacement UI', async ({ page }) => {
+  await boot(page, 768, 'custom-chip', false, FIXED_NOW);
+  await page.getByRole('button', { name: '配置标签' }).click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('标签高级设置');
+  await expect(page.locator('.config-body')).not.toContainText('替换');
+  await expect(page.locator('.cfg-migrate')).toHaveCount(0);
+  await page.locator('.cfg-name').filter({ hasText: /^$/ }).first().fill('活动拉伸');
+  await page.getByRole('button', { name: '保存标签配置' }).click();
+
+  const stored = await page.evaluate(() => ({
+    data: JSON.parse(localStorage.getItem('timelog.v1')),
+    config: JSON.parse(localStorage.getItem('timelog.config'))
+  }));
+  expect(stored.data.entries.find(entry => entry.id === 'stretch-1')).toMatchObject({ tags: ['活动拉伸'] });
+  expect(stored.config.chips).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: '活动拉伸', bucket: 'maintain', longOk: false })
+  ]));
+});
+
+test('custom tags pin only on second use in the same bucket', async ({ page }) => {
+  await boot(page, 768, 'empty', false, FIXED_NOW);
+
+  await page.getByRole('button', { name: '记一条新的时间记录' }).click();
+  await page.getByRole('button', { name: '维持' }).click();
+  await page.locator('#form-what').fill('第一次拉伸');
+  await page.locator('#form-ctag').fill('临时拉伸');
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  let config = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.config') || '{"chips":[]}'));
+  expect(config.chips.some(chip => chip.name === '临时拉伸')).toBe(false);
+
+  await page.getByRole('button', { name: '记一条新的时间记录' }).click();
+  await page.getByRole('button', { name: '维持' }).click();
+  await page.locator('#form-what').fill('第二次拉伸');
+  await page.locator('#form-ctag').fill('临时拉伸');
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  config = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.config')));
+  expect(config.chips).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: '临时拉伸', bucket: 'maintain' })
+  ]));
+});
+
+test('sheet controls stay inside rounded panel bounds', async ({ page }) => {
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  await openBackupMenu(page);
+  const bounds = await page.evaluate(() => {
+    const panel = document.querySelector('.form-sheet-panel').getBoundingClientRect();
+    const close = document.querySelector('.form-sheet-actions .icon-btn').getBoundingClientRect();
+    const first = document.querySelector('.backup-sheet-btns .copy-btn').getBoundingClientRect();
+    return {
+      closeTop: close.top,
+      closeRight: close.right,
+      firstLeft: first.left,
+      firstBottom: first.bottom,
+      panelTop: panel.top,
+      panelRight: panel.right,
+      panelLeft: panel.left,
+      panelBottom: panel.bottom
+    };
+  });
+  expect(bounds.closeTop).toBeGreaterThanOrEqual(bounds.panelTop);
+  expect(bounds.closeRight).toBeLessThanOrEqual(bounds.panelRight);
+  expect(bounds.firstLeft).toBeGreaterThanOrEqual(bounds.panelLeft);
+  expect(bounds.firstBottom).toBeLessThanOrEqual(bounds.panelBottom);
+});
+
+test('reload starts with has-entries boot state and reaches app-ready', async ({ page }) => {
+  await boot(page, 768, 'one-record', false, FIXED_NOW);
+  await expect(page.locator('html')).toHaveAttribute('data-boot', 'has-entries');
+  await page.reload();
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  await expect(page.locator('html')).toHaveAttribute('data-boot', 'has-entries');
+  await expect(page.locator('#timeline')).toContainText('响应式测试记录');
+});

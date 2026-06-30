@@ -126,6 +126,15 @@ export function rememberTagForBucket(tag, bucket) {
   return loadConfig();
 }
 
+export function shouldPinCustomTag(tag, entries) {
+  return countEntriesWithTag(entries, tag) >= 1;
+}
+
+export function rememberCustomTagForBucket(tag, bucket, entries) {
+  if (!shouldPinCustomTag(tag, entries)) return loadConfig();
+  return rememberTagForBucket(tag, bucket);
+}
+
 export function countEntriesWithTag(entries, name) {
   const target = cleanName(name);
   if (!target) return 0;
@@ -140,13 +149,6 @@ export function migrateEntryTags(entries, from, to) {
     if (cleanName((entry.tags || [])[0]) === source) entry.tags = [dest];
   });
   return entries;
-}
-
-export function removeMainlineName(config, name) {
-  const target = cleanName(name);
-  if (!target) return config;
-  config.mainline = config.mainline.filter(item => item !== target);
-  return config;
 }
 
 export function chipGroups(config = loadConfig()) {

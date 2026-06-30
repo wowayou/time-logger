@@ -328,7 +328,13 @@ for (let round = 0; round < 250; round += 1) {
 }
 
 import { listPlannedEntries } from './src/stats.js';
-import { migrateEntryTags, countEntriesWithTag } from './src/storage.js';
+import {
+  migrateEntryTags,
+  countEntriesWithTag,
+  rememberCustomTagForBucket,
+  loadConfig,
+  CONFIG_KEY
+} from './src/storage.js';
 
 const plannedOnly = [
   { id: 'plan1', ts: '2020-01-01T20:00', what: '面试', tags: ['求职推进'], planned: true }
@@ -345,6 +351,19 @@ assert(countEntriesWithTag(migrateList, '旧标签') === 1, 'count entries with 
 migrateEntryTags(migrateList, '旧标签', '新标签');
 assert(primaryTag(migrateList[0]) === '新标签', 'migrate entry tags');
 
+globalThis.localStorage = {
+  data: new Map(),
+  getItem(key) { return this.data.has(key) ? this.data.get(key) : null; },
+  setItem(key, value) { this.data.set(key, String(value)); },
+  removeItem(key) { this.data.delete(key); },
+  clear() { this.data.clear(); }
+};
+localStorage.setItem(CONFIG_KEY, JSON.stringify({ version: 1, mainline: ['求职推进'], chips: [] }));
+rememberCustomTagForBucket('临时拉伸', 'maintain', []);
+assert(!loadConfig().chips.some(chip => chip.name === '临时拉伸'), 'first custom tag use should not pin');
+rememberCustomTagForBucket('临时拉伸', 'maintain', [entry('pin1', '2020-01-01T09:00', '临时拉伸')]);
+assert(loadConfig().chips.some(chip => chip.name === '临时拉伸' && chip.bucket === 'maintain'), 'second custom tag use should pin');
+
 console.log('confirm_logic_smoke passed');
 '''
 
@@ -358,6 +377,7 @@ def main() -> int:
         ["node", "--input-type=module"],
         input=HARNESS,
         text=True,
+        encoding="utf-8",
         capture_output=True,
         cwd=ROOT,
         check=False,
