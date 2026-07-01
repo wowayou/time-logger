@@ -1,3 +1,7 @@
+// 时间尺 (time-logger)
+// Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Commercial licensing available on request; contact via the repository above.
 import { normalizeTimestamp, nowStr, p2, parseDateKey, todayStr } from './time.js';
 import { setButtonTip } from './ui.js';
 

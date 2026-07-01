@@ -1,3 +1,7 @@
+// 时间尺 (time-logger)
+// Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Commercial licensing available on request; contact via the repository above.
 import { mountTimePicker, setTimeInputError, useCompactTimePicker } from './pickers.js';
 import {
   addOneMinute,
@@ -344,6 +348,53 @@ export function createSheetController(deps) {
     });
   }
 
+  function softKeyboardUp() {
+    // Heuristic for "the iOS soft keyboard is currently on screen": an input/
+    // textarea holds focus AND the visual viewport is much shorter than the
+    // layout viewport. Desktop, headless (Playwright) and no-keyboard closes all
+    // fall through to false and keep the original synchronous teardown.
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!vv) return false;
+    const active = document.activeElement;
+    const isInput = Boolean(active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT'));
+    const shrunk = (window.innerHeight - vv.height) > 120;
+    return isInput && shrunk;
+  }
+
+  // P14: defer the sheet teardown until the soft keyboard has finished collapsing,
+  // then close + render in a single frame — otherwise iOS dismisses the keyboard
+  // AFTER our synchronous close and reflows the viewport a beat later, painting a
+  // visible second jump on save. Only engaged when a keyboard is actually up;
+  // desktop/headless run `run()` immediately so UI smoke never sees a deferral.
+  function settleThenTeardown(run) {
+    if (!softKeyboardUp()) { run(); return; }
+    const vv = window.visualViewport;
+    const active = document.activeElement;
+    document.body.classList.add('sheet-closing');
+    if (active && typeof active.blur === 'function') active.blur();
+    let done = false;
+    let settleTimer = null;
+    let cap = null;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      vv.removeEventListener('resize', onResize);
+      clearTimeout(settleTimer);
+      clearTimeout(cap);
+      requestAnimationFrame(() => {
+        run();
+        requestAnimationFrame(() => document.body.classList.remove('sheet-closing'));
+      });
+    };
+    const onResize = () => {
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(finish, 60);
+    };
+    vv.addEventListener('resize', onResize);
+    // Cap: if the keyboard never reports a resize, don't hang the teardown.
+    cap = setTimeout(finish, 250);
+  }
+
   function closeFormSheet(opts = {}) {
     const restoreFocus = opts.restoreFocus !== false;
     const sheet = document.getElementById('form-sheet');
@@ -650,8 +701,7 @@ export function createSheetController(deps) {
       d.entries.push({ id: deps.uid(), ts: checked.ts, what, tags: [tag], planned: true });
       deps.save(d);
       deps.setSelectedDate(checked.ts.slice(0, 10));
-      closeForm();
-      deps.render();
+      settleThenTeardown(() => { closeForm(); deps.render(); });
       return;
     }
     if (placeholder) {
@@ -668,8 +718,7 @@ export function createSheetController(deps) {
     normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
     deps.save(d);
     deps.setSelectedDate(checked.ts.slice(0, 10));
-    closeForm();
-    deps.render();
+    settleThenTeardown(() => { closeForm(); deps.render(); });
   }
 
   // 「补/切」: bounded insert into a segment. Carve [start, end) as the new label,
@@ -702,8 +751,7 @@ export function createSheetController(deps) {
     normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
     deps.save(d);
     deps.setSelectedDate(startChecked.ts.slice(0, 10));
-    closeForm();
-    deps.render();
+    settleThenTeardown(() => { closeForm(); deps.render(); });
   }
 
   function switchActivity() {
@@ -764,8 +812,7 @@ export function createSheetController(deps) {
       deps.save(d);
     }
     deps.setSelectedDate(checked.ts.slice(0, 10));
-    closeEditSheet();
-    deps.render();
+    settleThenTeardown(() => { closeEditSheet(); deps.render(); });
   }
 
   function toggleStartTime(el) {

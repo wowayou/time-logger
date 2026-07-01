@@ -1,3 +1,9 @@
+/*
+  时间尺 (time-logger)
+  Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Commercial licensing available on request; contact via the repository above.
+*/
     /* === 暗色（默认）=== */
     :root {
       --bg: #0d0d14;
@@ -1199,6 +1205,13 @@
     }
     body.sheet-open .footer { display: none; }
     body.sheet-open .update-banner { bottom: calc(12px + env(safe-area-inset-bottom)); }
+    /* P14: during the deferred teardown (soft keyboard collapsing before we close
+       + render) suppress transitions/animations so any residual reflow lands in a
+       single silent frame instead of animating a visible second jump. */
+    body.sheet-closing * {
+      transition: none !important;
+      animation: none !important;
+    }
 
     .empty-tip {
       text-align: center;

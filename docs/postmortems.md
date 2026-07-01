@@ -208,6 +208,22 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ---
 
+## P14 · 保存后一拍才重排 / iPhone 收起键盘的二次抖动（v31）
+
+**确诊日期**：2026-07-01 · **状态**：先修后验（v31）· **严重度**：低（体验）
+
+**现象**：iPhone Safari PWA 上编辑一条记录、点 ✓ 保存后，页面先关表单重排一次，隔一拍又抖一下才稳定。P12/P13 是「打开表单」与「表单溢出」，这条是**保存关闭**时的二次重排，症状独立。
+
+**根因**：`commitEdit`（及三条 `save*` 路径）在软键盘仍在场时**同步**执行 `closeEditSheet()` + `deps.render()`。关闭表单让持焦的 textarea/input 失焦，iOS 随后才收起软键盘并把 visualViewport 恢复高度——这次恢复发生在我们同步重排**之后**一帧，于是「关表单排一次、键盘收起再排一次」被看成两跳。桌面/无键盘不涉及这个二次恢复，所以只在真机 iOS 出现。
+
+**修法**：新增 `settleThenTeardown(run)` 统一四条 keyboard-save 路径（`saveEntry` 计划/非计划、`saveBackfill`、`commitEdit`）。仅当 `softKeyboardUp()`（有 input/textarea 持焦 **且** `innerHeight - visualViewport.height > 120`）时：先给 `body` 加 `.sheet-closing` 抑制过渡 → `blur()` 主动收起键盘 → 监听 `visualViewport` resize，稳定 60ms 后（250ms 上限兜底防不触发）在**单帧内** `close + render`，再下一帧移除 `.sheet-closing`。这样只重排一次、且发生在键盘已收起后。桌面 / headless / 无 visualViewport / 未持焦全部走原**同步**路径，Playwright UI smoke 行为不变、不 flake。
+
+**护栏**：需线上 Pages 真机帧步验证（fixed-overlay + 软键盘无法 headless 稳定复现，同 P12）。`.sheet-closing` 仅在 teardown 窗口存在，纯遮罩残余重排，不改最终布局。若真机仍见抖动则 v32 跟进。
+
+**经验**：iOS 软键盘的收起是**异步**的，会在失焦后再改一次 viewport；任何「表单关闭即同步重排」都要么等键盘先落定、要么把两次重排合并进键盘收起后的单帧。
+
+---
+
 ## 协作约束补记（v28）
 
 - 多步改动走主线程；避免并发 fan-out 子代理 / workflow（上游会 429，串行 workflow 亦然）。已同步进 `CLAUDE.md` / `AGENTS.md`「开发与维护红线」。
