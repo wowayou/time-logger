@@ -132,6 +132,82 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ---
 
+## P9 · 补录搬走尾占位 / 无法优雅切分（v30）
+
+**确诊日期**：2026-07-01 · **状态**：已修复（v30）· **严重度**：中
+
+**现象**：想在一段已成段的时段（如 4:47→9:40）中间塞一段别的事，只能改起点，且结束会顺延到下一条，导致「6:00 之后整段被改成新标签」；补录还会牵连改动无关段。
+
+**根因**：纯打点模型里插入只有「起点」，后半段继承新标签直到下一个点；`saveEntry` 又盲目复用 `openPlaceholderForDate`（仅当天**最后**一条）拿到的尾占位并搬到补录时刻。
+
+**修法**：点存储 + 区间 UX。补录改「起点+终点」**有界插入** `carveInsert`：写 `新标签@起点` + `合成原标签@终点`（原标签可为空占位＝未记录），只写点、保持段不重叠强不变式，不碰 `buildRangeSegments`。落未记录段时两侧自动保持未记录。跨点窗口拦下加内联提示。每段渲染统一「补/切」按钮，预填该段 `[段起,段终]`。
+
+**护栏**：`confirm_logic_smoke` 加 carve 拆分 / carve 落未记录两条；UI smoke 加「切分成三段、邻段不动」。
+
+---
+
+## P10 · 记录时静默改桶污染全历史（v30）
+
+**确诊日期**：2026-07-01 · **状态**：已修复（v30）· **严重度**：中
+
+**现象**：某 chip 先归 A 桶，之后记录时选了 B 桶又用同名，A 桶的全历史被静默改到 B 桶。
+
+**根因**：`storage.addChipTag` 命中同名 existing chip 时 `existing.bucket = bucket` 直接变异并存回；桶在渲染/统计时按名字派生，于是全历史随之改桶。与自身提示「同名按 chip 归类」矛盾。
+
+**修法**：`addChipTag` 命中同名即返回、**不改桶**；改桶只在配置页 `saveTagConfig` 显式发生。表单加一行「已属 X 桶，仍按 X 归类」小提示。
+
+**护栏**：`confirm_logic_smoke` 加「记录同名 chip 选别的桶 → 桶不变」。
+
+---
+
+## P11 · 删除无归一化 / 静默并入前段（v30）
+
+**确诊日期**：2026-07-01 · **状态**：已修复（v30）· **严重度**：中
+
+**现象**：删除后（尾占位被删或末条被删）下一条「记一条」默认起点撞末条，被迫先 +1min；删一个独立活动会把它那段时间静默说成前一段的标签。
+
+**根因**：`delEntry` 纯 `filter` + 重渲，无归一化、不恢复尾占位；点模型里删除让前段直接延伸盖住释放的时间。
+
+**修法**：智能删除——两侧相邻同标签→移除让 `coalesceRedundant` 愈合（撤销切分）；否则把该条转空占位＝未记录，绝不静默改成前段标签。所有写路径末尾统一 `normalizeEntries`（去冗余边界 + 今天恒保尾占位），根治「增删改补录后被迫 +1min」。占位渲染区分活动尾（进行中）与中间/历史（未记录）。
+
+**护栏**：UI smoke 加「删独立中段→转未记录、邻段不变」；`coalesceRedundant` 加「同标签不同内容不合并」防误并。
+
+---
+
+## P12 · sheet 打开先小后大 / iPhone 抖动（v30）
+
+**确诊日期**：2026-07-01 · **状态**：先修后验（v30）· **严重度**：低（体验）
+
+**现象**：iPhone Safari PWA 打开新增表单时先出现一个较小界面、过一小会变大。
+
+**根因**：`.form-sheet` 用 `top:var(--vvt)`、`height:var(--vvh)`，但 `openFormSheet` 先 `sheet.hidden=false` 再 `lockBodyForSheet()→syncVisualViewport()`，首帧用 fallback 几何、随后一帧才套上真实 visualViewport 值，产生跳变。
+
+**修法**：把 `lockBodyForSheet()`（内含首次 `syncVisualViewport`）挪到 `sheet.hidden=false` **之前**，首帧即带正确 `--vvt/--vvh`。Bug2「textarea 被时间控件挡住」留真机复现后实修。
+
+**护栏**：需真机验（fixed-overlay + 键盘无法 headless 稳定复现）。
+
+---
+
+## P13 · iPhone SE2 编辑表单溢出屏幕、✓ 够不着（v30）
+
+**确诊日期**：2026-07-01 · **状态**：已修复（v30）· **严重度**：高（功能不可达）
+
+**现象**：SE2 上编辑「做了什么」较长的记录，编辑表单超出屏幕可见区域，保存 ✓ 够不着、无法编辑。用户怀疑是多行文本框导致。
+
+**根因（两层，同一类溢出）**：
+1. **横向 min-content 撑爆**：`.form-sheet-panel` 是 `.form-sheet`（grid）的子项，未设 `min-width:0`；`.form-sheet-body`（grid）用隐式 `auto` 列。文本框内容一多，其 min-content 沿 grid/flex 链把面板撑到 `max-width:600px`——在 375px 屏上 ✓ 被顶到 `left:487`，整块跑出右侧屏外（真实浏览器实测 `panel.right=600`）。
+2. **纵向无上限**：`autosizeTextareas` 把高度设成 `scrollHeight` 无封顶，长内容 + 编辑态内联 200px 滚轮，键盘弹起后（visualViewport ~250px）文本框吃掉整屏。
+
+**修法**：
+- 横向：`.form-sheet-panel { min-width: 0 }` + `.form-sheet-body { grid-template-columns: minmax(0,1fr) }` + `.fl { min-width: 0 }`，与 view-tabs 的 `minmax(0,1fr)` 同一套「min-content 不撑父」纪律。
+- 纵向：`autosizeTextareas` 按当前 `visualViewport.height` 的 ~32%（下限 88px）封顶，超出加 `.ta-capped` 内部滚动；`syncVisualViewport` 在键盘开合时重算封顶。
+
+**护栏**：UI smoke `editing a long-note record keeps the save button on screen (SE2 textarea cap)`——375px 打开长内容编辑，断言 `panel.right ≤ 视宽`、✓ 四边都在视口内、textarea 被封顶且可滚。真实浏览器复现测得修后 `panel.right=360`、✓ 可点。
+
+**经验**：任何进 grid/flex 的可变高/宽容器都要显式 `min-width:0`（或列 `minmax(0,1fr)`），否则子内容的 min-content 会静默把父撑过屏。这是本仓库第二次踩（view-tabs 之后）。
+
+---
+
 ## 协作约束补记（v28）
 
 - 多步改动走主线程；避免并发 fan-out 子代理 / workflow（上游会 429，串行 workflow 亦然）。已同步进 `CLAUDE.md` / `AGENTS.md`「开发与维护红线」。

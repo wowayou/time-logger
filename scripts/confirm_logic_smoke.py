@@ -23,6 +23,11 @@ import {
   primaryTag,
   summarizeEntries
 } from './src/stats.js';
+import {
+  carveInsert,
+  coalesceRedundant,
+  normalizeEntries
+} from './src/entry_model.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -327,6 +332,57 @@ for (let round = 0; round < 250; round += 1) {
   }
 }
 
+// --- v30 backfill / normalization engine ---
+let genSeq = 0;
+const genId = () => `gen${genSeq += 1}`;
+
+// Bounded insert splits a labeled segment and restores the original label at end.
+const carveSplit = [
+  { id: 'sleep', ts: '2026-07-01T04:47', what: '睡觉', tags: ['睡觉'] },
+  { id: 'wash', ts: '2026-07-01T09:40', what: '洗漱', tags: ['洗漱'] }
+];
+carveInsert(carveSplit, { start: '2026-07-01T06:00', end: '2026-07-01T07:00', what: '写代码', tag: '求职推进', createId: genId });
+const carveSorted = carveSplit.slice().sort((a, b) => (a.ts < b.ts ? -1 : 1));
+assert(carveSorted.length === 4, 'carve splits into four points');
+assert(carveSorted[0].ts === '2026-07-01T04:47' && carveSorted[0].tags[0] === '睡觉', 'carve keeps the head 睡觉');
+assert(carveSorted[1].ts === '2026-07-01T06:00' && carveSorted[1].tags[0] === '求职推进', 'carve inserts the new label at start');
+assert(carveSorted[2].ts === '2026-07-01T07:00' && carveSorted[2].tags[0] === '睡觉' && carveSorted[2].what === '睡觉', 'carve restores the original label at end');
+assert(carveSorted[3].ts === '2026-07-01T09:40' && carveSorted[3].tags[0] === '洗漱', 'carve never touches the next segment');
+
+// Carving into an unrecorded (placeholder) stretch leaves both sides unrecorded.
+const carveGap = [
+  { id: 'ph', ts: '2026-07-01T04:00', what: '', tags: [] },
+  { id: 'wash', ts: '2026-07-01T09:40', what: '洗漱', tags: ['洗漱'] }
+];
+carveInsert(carveGap, { start: '2026-07-01T06:00', end: '2026-07-01T07:00', what: '写代码', tag: '求职推进', createId: genId });
+const gapSorted = carveGap.slice().sort((a, b) => (a.ts < b.ts ? -1 : 1));
+assert(gapSorted.length === 4, 'carve into a gap makes four points');
+assert(gapSorted[0].what === '' && gapSorted[0].ts === '2026-07-01T04:00', 'left of the fill stays unrecorded');
+assert(gapSorted[1].ts === '2026-07-01T06:00' && gapSorted[1].tags[0] === '求职推进', 'the filled middle carries the new label');
+assert(gapSorted[2].ts === '2026-07-01T07:00' && gapSorted[2].what === '' && gapSorted[2].tags.length === 0, 'right of the fill restores an unrecorded placeholder');
+
+// coalesceRedundant heals a carve-undo (identical adjacent) ...
+const healEntries = [
+  { id: 'a', ts: '2026-07-01T04:47', what: '睡觉', tags: ['睡觉'] },
+  { id: 'b', ts: '2026-07-01T07:00', what: '睡觉', tags: ['睡觉'] },
+  { id: 'c', ts: '2026-07-01T09:40', what: '洗漱', tags: ['洗漱'] }
+];
+coalesceRedundant(healEntries);
+assert(healEntries.length === 2 && !healEntries.some(e => e.id === 'b'), 'adjacent identical segments coalesce');
+
+// ... but never merges same-tag records that carry different content.
+const distinctEntries = [
+  { id: 'a', ts: '2026-07-01T09:00', what: '写代码', tags: ['求职推进'] },
+  { id: 'b', ts: '2026-07-01T10:00', what: '写方案', tags: ['求职推进'] }
+];
+coalesceRedundant(distinctEntries);
+assert(distinctEntries.length === 2, 'same tag but different content stays two records');
+
+// normalizeEntries guarantees today keeps a tail placeholder at now (kills +1min).
+const normData = { version: 1, entries: [{ id: 'x', ts: '2026-07-01T09:00', what: '写代码', tags: ['求职推进'] }] };
+normalizeEntries(normData, { todayKey: '2026-07-01', nowTs: '2026-07-01T12:00', createId: genId });
+assert(normData.entries.some(e => e.ts === '2026-07-01T12:00' && e.what === '' && e.tags.length === 0), 'normalize opens a tail placeholder at now');
+
 import { listPlannedEntries } from './src/stats.js';
 import {
   migrateEntryTags,
@@ -363,6 +419,12 @@ rememberCustomTagForBucket('临时拉伸', 'maintain', []);
 assert(loadConfig().chips.some(chip => chip.name === '临时拉伸' && chip.bucket === 'maintain'), 'first custom tag use pins immediately');
 rememberCustomTagForBucket('临时拉伸', 'maintain', [entry('pin1', '2020-01-01T09:00', '临时拉伸')]);
 assert(loadConfig().chips.filter(chip => chip.name === '临时拉伸').length === 1, 'repeat use keeps a single pinned chip');
+
+// Recording an existing chip with a different bucket selected must NOT re-bucket
+// it (v30: 「同名按 chip 归类」). Re-bucketing is a config-page action only.
+localStorage.setItem(CONFIG_KEY, JSON.stringify({ version: 1, mainline: ['求职推进'], chips: [{ name: '娱乐', bucket: 'leak', longOk: false }] }));
+rememberCustomTagForBucket('娱乐', 'maintain', []);
+assert(loadConfig().chips.find(chip => chip.name === '娱乐').bucket === 'leak', 'recording never silently re-buckets an existing chip');
 
 console.log('confirm_logic_smoke passed');
 '''

@@ -1,19 +1,21 @@
 import { mountTimePicker, setTimeInputError, useCompactTimePicker } from './pickers.js';
 import {
   addOneMinute,
+  carveInsert,
   conflictMessage,
-  ensureOpenPlaceholderAt,
   findTimeConflict,
   isPlaceholderEntry,
+  normalizeEntries,
   openPlaceholderForDate
 } from './entry_model.js';
 import {
+  BUCKETS,
   bucketForTag,
   countEntriesWithTag,
   migrateEntryTags,
   RECORD_MODE_KEY
 } from './storage.js';
-import { fmtMins, hhmm, minsBetweenDates, normalizeTimestamp, nowStr, todayStr, validateTsForMode } from './time.js';
+import { fmtMins, hhmm, minsBetweenDates, normalizeTimestamp, nowStr, todayStr, validateTs, validateTsForMode } from './time.js';
 import { bucketHint, renderFormSheet, renderTagPicker } from './ui.js';
 
 export function createSheetController(deps) {
@@ -26,6 +28,8 @@ export function createSheetController(deps) {
   let formBucket = 'job';
   let editBucket = 'job';
   let formRecordMode = 'log';
+  let formBackfill = false;
+  let formBackfillEnd = '';
   let configSnapshot = null;
 
   function getSheetMode() {
@@ -117,6 +121,32 @@ export function createSheetController(deps) {
     }
   }
 
+  function paintBackfillDuration(panel) {
+    const startTsEl = panel ? panel.querySelector('#form-ts') : null;
+    const endTsEl = panel ? panel.querySelector('#form-end-ts') : null;
+    const durLabel = panel ? panel.querySelector('[data-role="backfill-duration"]') : null;
+    if (!startTsEl || !endTsEl || !durLabel) return;
+    const s = normalizeTimestamp(startTsEl.value);
+    const e = normalizeTimestamp(endTsEl.value);
+    if (s && e && e > s) durLabel.textContent = `共 ${fmtMins(minsBetweenDates(new Date(s), new Date(e)))}`;
+    else durLabel.textContent = s && e && e <= s ? '结束需晚于开始' : '';
+  }
+
+  function mountBackfillPickers(panel, startTs, endTs) {
+    const startTsEl = panel ? panel.querySelector('#form-ts') : null;
+    const endTsEl = panel ? panel.querySelector('#form-end-ts') : null;
+    const startMount = panel ? panel.querySelector('[data-role="backfill-start-mount"]') : null;
+    const endMount = panel ? panel.querySelector('[data-role="backfill-end-mount"]') : null;
+    if (!startTsEl || !endTsEl) return;
+    const s = normalizeTimestamp(startTs) || deps.defaultFormTs();
+    const e = normalizeTimestamp(endTs) || s;
+    startTsEl.value = s;
+    endTsEl.value = e;
+    paintBackfillDuration(panel);
+    if (startMount) mountTimePicker(startMount, s, v => { startTsEl.value = v; paintBackfillDuration(panel); });
+    if (endMount) mountTimePicker(endMount, e, v => { endTsEl.value = v; paintBackfillDuration(panel); });
+  }
+
   function syncVisualViewport() {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
     if (!vv) return;
@@ -126,6 +156,10 @@ export function createSheetController(deps) {
     // the sticky head (with save ✓) stays on-screen. See docs/postmortems.md ⑧.
     root.style.setProperty('--vvt', `${Math.max(0, vv.offsetTop)}px`);
     root.style.setProperty('--vvh', `${vv.height}px`);
+    // The keyboard opening/closing changes the viewport height the textarea cap
+    // is derived from; re-run autosize so a long note re-clamps to the new fold.
+    const openSheet = document.querySelector('#form-sheet:not([hidden]) .form-sheet-panel');
+    if (openSheet) autosizeTextareas(openSheet);
   }
 
   function clearVisualViewport() {
@@ -194,9 +228,19 @@ export function createSheetController(deps) {
   }
 
   function autosizeTextareas(scope = document) {
+    // Grow to fit content, but CAP the height so a long note can never push the
+    // rest of the form (or the save ✓) past the visible area — on iPhone SE2 with
+    // the soft keyboard up the visual viewport is ~250px, so an uncapped textarea
+    // full of text swallows the whole panel and the record becomes uneditable.
+    // Past the cap the textarea scrolls internally (overflow-y auto below).
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    const viewH = (vv && vv.height) || (typeof window !== 'undefined' ? window.innerHeight : 0) || 0;
+    const cap = viewH ? Math.max(88, Math.round(viewH * 0.32)) : 200;
     scope.querySelectorAll('textarea.ta').forEach(textarea => {
       textarea.style.height = 'auto';
-      textarea.style.height = `${Math.max(textarea.scrollHeight, 52)}px`;
+      const target = Math.min(Math.max(textarea.scrollHeight, 52), cap);
+      textarea.style.height = `${target}px`;
+      textarea.classList.toggle('ta-capped', textarea.scrollHeight > cap);
     });
   }
 
@@ -230,9 +274,11 @@ export function createSheetController(deps) {
       formTag = '';
       formBucket = defaultBucketFromEntries();
       formRecordMode = loadRecordModePref();
+      formBackfill = Boolean(opts && opts.backfill);
+      formBackfillEnd = (opts && opts.endTs) || '';
       // Backfilling a known past gap is always an "already happened" record;
       // a leaked plan-mode pref would force a future ts and silently fail to save.
-      if (isHistoryDate() || (opts && opts.backfill)) formRecordMode = 'log';
+      if (isHistoryDate() || formBackfill) formRecordMode = 'log';
     } else if (mode === 'edit') {
       deps.setSheetEditId(id);
       sheetTimeMounted = false;
@@ -269,8 +315,12 @@ export function createSheetController(deps) {
       defaultBucket: formBucket,
       recordMode: formRecordMode
     });
-    sheet.hidden = false;
+    // ① Set the visualViewport geometry (--vvt/--vvh) BEFORE revealing the sheet
+    // so the fixed overlay paints at the right size on the first frame instead of
+    // snapping "small → bigger" a frame later (v30 bug1). lockBodyForSheet runs the
+    // initial syncVisualViewport.
     lockBodyForSheet();
+    sheet.hidden = false;
     if (mode === 'edit') {
       const tsEl = panel.querySelector('[data-role="edit-ts"]');
       mountTimePicker(panel.querySelector('[data-role="edit-wheel"]'), ts, v => {
@@ -278,7 +328,8 @@ export function createSheetController(deps) {
       });
       sheetTimeMounted = true;
     } else if (mode === 'new') {
-      mountNewTimePicker(panel, ts);
+      if (formBackfill) mountBackfillPickers(panel, ts, formBackfillEnd);
+      else mountNewTimePicker(panel, ts);
       const whatEl = panel.querySelector('#form-what');
       const ctagEl = panel.querySelector('#form-ctag');
       if (whatEl) whatEl.value = '';
@@ -311,6 +362,8 @@ export function createSheetController(deps) {
     }
     deps.setSheetEditId(null);
     sheetTimeMounted = false;
+    formBackfill = false;
+    formBackfillEnd = '';
     configSnapshot = null;
     if (wasOpen) unlockBodyForSheet();
     if (restoreFocus && sheetLastFocus && document.contains(sheetLastFocus)) {
@@ -326,6 +379,12 @@ export function createSheetController(deps) {
     if (!sheet || !panel || sheet.hidden) return;
     const compact = useCompactTimePicker() ? '1' : '0';
     const mode = panel.dataset.mode || '';
+    if (mode === 'new' && formBackfill) {
+      const startMount = panel.querySelector('[data-role="backfill-start-mount"]');
+      if (!startMount || startMount.dataset.pickerCompact === compact) return;
+      mountBackfillPickers(panel, panel.querySelector('#form-ts').value, panel.querySelector('#form-end-ts').value);
+      return;
+    }
     if (mode === 'new') {
       const planRow = panel.querySelector('[data-role="plan-time-row"]');
       if (planRow && planRow.hidden) {
@@ -525,6 +584,13 @@ export function createSheetController(deps) {
     const compact = compactTagText(value);
     const config = deps.loadConfig();
     const bucket = box && box.dataset.mode === 'edit' ? editBucket : formBucket;
+    const sameName = value ? config.chips.find(chip => chip.name === value) : null;
+    if (sameName && sameName.bucket !== bucket) {
+      // Recording never re-buckets an existing chip; tell the user their bucket
+      // pick won't move it (matches the storage.addChipTag fix).
+      hint.textContent = `「${value}」已是${BUCKETS[sameName.bucket]}标签，记录时仍按${BUCKETS[sameName.bucket]}归类。`;
+      return;
+    }
     const near = compact ? config.mainline.find(name => compactTagText(name) === compact && name !== value) : '';
     hint.textContent = near
       ? `可能已有相近标签「${near}」。留空可直接选历史 chip。`
@@ -547,6 +613,7 @@ export function createSheetController(deps) {
 
   function saveEntry() {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    if (formBackfill) { saveBackfill(panel); return; }
     const timeScope = getFormWheelMount(panel) || panel;
     const planned = formRecordMode === 'plan';
     const checked = validateTsForMode(document.getElementById('form-ts').value, {
@@ -568,7 +635,7 @@ export function createSheetController(deps) {
     let placeholder = openPlaceholderForDate(d.entries, checked.ts.slice(0, 10));
     const conflict = findTimeConflict(d.entries, checked.ts, placeholder ? placeholder.id : '');
     if (conflict) {
-      // A backfill can land exactly on an empty placeholder stranded in the
+      // A record can land exactly on an empty placeholder stranded in the
       // middle of the day (openPlaceholderForDate only finds the tail one).
       // Fill that placeholder in place instead of blocking it as a self-conflict.
       if (!planned && isPlaceholderEntry(conflict)) {
@@ -587,22 +654,54 @@ export function createSheetController(deps) {
       deps.render();
       return;
     }
-    const nowTs = nowStr();
-    let completed = null;
     if (placeholder) {
       placeholder.ts = checked.ts;
       placeholder.what = what;
       placeholder.tags = [tag];
       delete placeholder.longConfirm;
       delete placeholder.planned;
-      completed = placeholder;
     } else {
-      completed = { id: deps.uid(), ts: checked.ts, what, tags: [tag] };
-      d.entries.push(completed);
+      d.entries.push({ id: deps.uid(), ts: checked.ts, what, tags: [tag] });
     }
-    if (checked.ts.slice(0, 10) === todayStr()) ensureOpenPlaceholderAt(d.entries, nowTs, completed.id, deps.uid);
+    // Single normalization out: coalesce redundant boundaries + re-ensure today's
+    // tail placeholder so the next record's default start can never collide.
+    normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
     deps.save(d);
     deps.setSelectedDate(checked.ts.slice(0, 10));
+    closeForm();
+    deps.render();
+  }
+
+  // 「补/切」: bounded insert into a segment. Carve [start, end) as the new label,
+  // restoring the segment's original label at end (see entry_model.carveInsert).
+  function saveBackfill(panel) {
+    const startScope = (panel && panel.querySelector('[data-role="backfill-start-mount"]')) || panel;
+    const endScope = (panel && panel.querySelector('[data-role="backfill-end-mount"]')) || panel;
+    const startChecked = validateTs(document.getElementById('form-ts').value);
+    if (!startChecked.ok) { setTimeInputError(startScope, startChecked.msg); return; }
+    setTimeInputError(startScope, '');
+    const endChecked = validateTs(document.getElementById('form-end-ts').value);
+    if (!endChecked.ok) { setTimeInputError(endScope, endChecked.msg); return; }
+    if (endChecked.ts <= startChecked.ts) { setTimeInputError(endScope, '结束时间要晚于开始时间。'); return; }
+    setTimeInputError(endScope, '');
+    const what = document.getElementById('form-what').value.trim();
+    if (!what) { document.getElementById('form-what').focus(); return; }
+    const ctag = document.getElementById('form-ctag').value.trim();
+    const tag = ctag || formTag || '未知';
+    const d = deps.load();
+    // Cross-point guard: the window must lie within a single segment, else the
+    // "restore original label at end" is ambiguous and would swallow a record.
+    const crosser = d.entries.find(e => !e.planned && normalizeTimestamp(e.ts) && e.ts > startChecked.ts && e.ts < endChecked.ts);
+    if (crosser) {
+      showInlineError(panel, '这段里已有其它记录，请缩小范围或分两次补。');
+      return;
+    }
+    if (ctag) rememberTag(ctag, formBucket, d.entries);
+    const created = carveInsert(d.entries, { start: startChecked.ts, end: endChecked.ts, what, tag, createId: deps.uid });
+    if (!created) { showInlineError(panel, '这段时间无法补录，请检查起止时间。'); return; }
+    normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
+    deps.save(d);
+    deps.setSelectedDate(startChecked.ts.slice(0, 10));
     closeForm();
     deps.render();
   }
@@ -661,6 +760,7 @@ export function createSheetController(deps) {
       entry.tags = [tag];
       if (planned) entry.planned = true;
       else delete entry.planned;
+      normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
       deps.save(d);
     }
     deps.setSelectedDate(checked.ts.slice(0, 10));

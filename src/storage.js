@@ -108,10 +108,9 @@ export function addChipTag(tag, bucket) {
   const config = loadConfig();
   const existing = config.chips.find(chip => chip.name === name);
   if (existing) {
-    if (existing.bucket !== bucket) {
-      existing.bucket = bucket;
-      saveConfig(config);
-    }
+    // Recording an existing chip never re-buckets it: the chip's current bucket
+    // wins (「同名按 chip 归类」). Silently moving it here retroactively reclassified
+    // all history (v30 fix). Re-bucketing is an explicit config-page action only.
     return config;
   }
   if (config.mainline.includes(name)) return config;

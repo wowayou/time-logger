@@ -487,7 +487,59 @@ test('editing an existing record persists content and tag (① commitEdit single
   await expect(page.locator('#timeline')).toContainText('改后的内容');
 });
 
+test('editing a long-note record keeps the save button on screen (SE2 textarea cap)', async ({ page }) => {
+  // iPhone SE2-ish width; the edit sheet renders the wheel picker inline, so a
+  // long note growing an uncapped textarea used to push the save ✓ off-screen.
+  await boot(page, 375, 'long-note', false, FIXED_NOW);
+
+  await page.getByRole('button', { name: '编辑记录' }).click();
+  const what = page.locator('[data-role="edit-what"]');
+  await expect(what).toBeVisible();
+
+  const metrics = await page.evaluate(() => {
+    const ta = document.querySelector('[data-role="edit-what"]');
+    const save = document.querySelector('.form-sheet-actions .save-btn');
+    const panel = document.querySelector('.form-sheet-panel');
+    const s = save.getBoundingClientRect();
+    return {
+      taHeight: ta.getBoundingClientRect().height,
+      taScrollHeight: ta.scrollHeight,
+      capped: ta.classList.contains('ta-capped'),
+      saveLeft: s.left,
+      saveRight: s.right,
+      saveTop: s.top,
+      saveBottom: s.bottom,
+      panelRight: panel.getBoundingClientRect().right,
+      viewW: window.innerWidth,
+      viewH: window.innerHeight
+    };
+  });
+  // The textarea is capped well below its full content height and marked scrollable.
+  expect(metrics.taScrollHeight).toBeGreaterThan(metrics.taHeight + 20);
+  expect(metrics.capped).toBe(true);
+  // The panel must not blow out past the viewport width (grid/flex min-content
+  // guard) — this is what shoved the save ✓ off the right edge on SE2.
+  expect(metrics.panelRight).toBeLessThanOrEqual(metrics.viewW + 1);
+  // The save ✓ stays fully within the viewport on all sides — reachable.
+  expect(metrics.saveTop).toBeGreaterThanOrEqual(0);
+  expect(metrics.saveBottom).toBeLessThanOrEqual(metrics.viewH + 1);
+  expect(metrics.saveLeft).toBeGreaterThanOrEqual(0);
+  expect(metrics.saveRight).toBeLessThanOrEqual(metrics.viewW + 1);
+
+  // And editing still persists through the ✓.
+  await what.fill('短内容');
+  await page.getByRole('button', { name: '保存修改' }).click();
+  const saved = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(e => e.id === 'today-long')
+  );
+  expect(saved.what).toBe('短内容');
+});
+
 test('② backfill on today forces log mode even when plan pref leaked', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('timelog.recordMode', 'plan'));
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+
+  // Backfill the gap before the first record on *today*. Previously the leaked
   await page.addInitScript(() => localStorage.setItem('timelog.recordMode', 'plan'));
   await boot(page, 768, 'two-records', false, FIXED_NOW);
 
@@ -508,27 +560,62 @@ test('② backfill on today forces log mode even when plan pref leaked', async (
   expect(saved.tags).toEqual(['求职推进']);
 });
 
-test('③ backfill fills a middle placeholder instead of self-conflicting', async ({ page }) => {
+test('③ backfilling a middle placeholder fills it in place via its 补/切 button', async ({ page }) => {
   await boot(page, 768, 'mid-placeholder', false, FIXED_NOW);
 
-  // Open the form via the early gap, then drive the start time exactly onto the
-  // stranded mid-day empty placeholder (09:00). The tail-only
-  // openPlaceholderForDate doesn't see it, so without the local merge
-  // findTimeConflict would block the save as a same-minute self-conflict.
-  await page.getByRole('button', { name: '补录这段未记录时间' }).first().click();
-  await page.locator('[data-action="toggle-start-time"]').click();
-  await page.locator('[data-role="text"]').fill('2026-06-29 09:00');
-  await page.locator('[data-role="text"]').blur();
+  // The stranded mid-day placeholder (09:00→11:00) now carries its own 补/切
+  // button, prefilled with the segment bounds. carveInsert reuses the placeholder
+  // (start == its ts) so it fills in place and keeps id 'mid-open'.
+  await page.locator('[data-action="backfill-seg"][data-ts="2026-06-29T09:00"]').click();
+  await expect(page.locator('#form-sheet-title')).toContainText('补录');
   await page.locator('#form-what').fill('补中段');
   await page.getByRole('button', { name: '选择标签：求职推进' }).click();
   await page.getByRole('button', { name: '保存时间记录' }).click();
   await expect(page.locator('#form-sheet')).toBeHidden();
 
   const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
-  // The placeholder is filled in place (no duplicate at 09:00, no new id explosion).
   const atNine = entries.filter(e => e.ts === '2026-06-29T09:00');
   expect(atNine).toHaveLength(1);
   expect(atNine[0]).toMatchObject({ id: 'mid-open', what: '补中段', tags: ['求职推进'] });
+});
+
+test('splitting a labeled segment carves three parts and leaves neighbors intact', async ({ page }) => {
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+
+  // 写代码 spans 09:00→10:00. Carve 09:20→09:40 as a different activity; the
+  // original 写代码 must resume at 09:40 and 改bug (10:00) must be untouched.
+  await page.locator('[data-action="backfill-seg"][data-ts="2026-06-29T09:00"]').click();
+  await page.locator('[data-role="backfill-start-mount"] [data-role="text"]').fill('2026-06-29 09:20');
+  await page.locator('[data-role="backfill-start-mount"] [data-role="text"]').blur();
+  await page.locator('[data-role="backfill-end-mount"] [data-role="text"]').fill('2026-06-29 09:40');
+  await page.locator('[data-role="backfill-end-mount"] [data-role="text"]').blur();
+  await page.locator('#form-what').fill('刷会手机');
+  await page.locator('#form-ctag').fill('刷手机');
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  await expect(page.locator('#form-sheet')).toBeHidden();
+
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries
+    .filter(e => !e.planned).sort((a, b) => (a.ts < b.ts ? -1 : 1)));
+  const slices = entries.map(e => `${e.ts.slice(11)}|${(e.tags[0] || '')}`);
+  expect(slices).toContain('09:00|求职推进');
+  expect(slices).toContain('09:20|刷手机');
+  expect(slices).toContain('09:40|求职推进');
+  // The carve never touched the next real record.
+  expect(entries.find(e => e.ts === '2026-06-29T10:00')).toMatchObject({ what: '改 bug', tags: ['求职推进'] });
+});
+
+test('deleting a standalone middle record turns its span 未记录, never the previous label', async ({ page }) => {
+  await boot(page, 768, 'three-labels', false, FIXED_NOW);
+  page.on('dialog', dialog => dialog.accept());
+
+  // 睡一会 | 写代码 | 吃早饭. Deleting 写代码 (distinct neighbors) must not stretch
+  // 睡觉 over 09:00→10:00 — that span becomes an honest 未记录 placeholder.
+  await page.locator('.entry[data-id="tl-b"] [data-action="delete-entry"]').click();
+
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.filter(e => !e.planned));
+  expect(entries.find(e => e.id === 'tl-b')).toMatchObject({ what: '', tags: [] });
+  expect(entries.find(e => e.id === 'tl-a')).toMatchObject({ tags: ['睡觉'] });
+  expect(entries.find(e => e.id === 'tl-c')).toMatchObject({ tags: ['吃饭'] });
 });
 
 test('⑥ confirming a plan onto a taken now-minute nudges forward', async ({ page }) => {

@@ -36,6 +36,16 @@ export async function boot(page, width, state, share = false, now = '', selected
     if (state === 'one-record') {
       entries.push({ id: 'today-1', ts: `${dateKey(today)}T00:05`, what: '响应式测试记录', tags: ['求职推进'] });
     }
+    if (state === 'long-note') {
+      // A record whose note is long enough that an uncapped autosized textarea
+      // would grow taller than the SE2 viewport and push the save ✓ off-screen.
+      entries.push({
+        id: 'today-long',
+        ts: `${dateKey(today)}T09:00`,
+        what: Array.from({ length: 40 }, (_, i) => `第${i + 1}行超长内容需要换行占满整个屏幕宽度测试`).join('\n'),
+        tags: ['求职推进']
+      });
+    }
     if (state === 'two-records') {
       entries.push(
         { id: 'today-1', ts: `${dateKey(today)}T09:00`, what: '写代码', tags: ['求职推进'] },
@@ -58,6 +68,15 @@ export async function boot(page, width, state, share = false, now = '', selected
         { id: 'mid-a', ts: `${dateKey(today)}T08:00`, what: '早间', tags: ['求职推进'] },
         { id: 'mid-open', ts: `${dateKey(today)}T09:00`, what: '', tags: [] },
         { id: 'mid-c', ts: `${dateKey(today)}T11:00`, what: '上午', tags: ['求职推进'] }
+      );
+    }
+    if (state === 'three-labels') {
+      // Three back-to-back records with DISTINCT tags, for smart-delete: deleting
+      // the middle must turn its span 未记录, never relabel it as the previous one.
+      entries.push(
+        { id: 'tl-a', ts: `${dateKey(today)}T08:00`, what: '睡一会', tags: ['睡觉'] },
+        { id: 'tl-b', ts: `${dateKey(today)}T09:00`, what: '写代码', tags: ['求职推进'] },
+        { id: 'tl-c', ts: `${dateKey(today)}T10:00`, what: '吃早饭', tags: ['吃饭'] }
       );
     }
     if (state === 'yesterday-residual') {

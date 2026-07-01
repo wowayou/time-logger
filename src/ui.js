@@ -103,7 +103,7 @@ export function renderTimeline(items, opts = {}) {
     el.innerHTML = '<div class="empty-tip">点击上方「+ 记一条」开始记录，或切换日期查看历史。</div>';
     return;
   }
-  el.innerHTML = [...allItems].reverse().map(({ e, start, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs, planned: isPlanned }) => {
+  el.innerHTML = [...allItems].reverse().map(({ e, start, end, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs, planned: isPlanned }) => {
     if (isPlanned) {
       const displayTag = (e.tags || [])[0] || '未知';
       const tagClass = ` e-tag-${bucketForTag(displayTag)}`;
@@ -124,6 +124,7 @@ export function renderTimeline(items, opts = {}) {
     }
     if (!e) {
       const gapTs = localDateTimeKey(start);
+      const gapEnd = localDateTimeKey(end);
       return `<div class="entry gap" data-gap-ts="${esc(gapTs)}">
         <div class="e-body">
           <div class="e-time">${hhmm(start)}</div>
@@ -131,26 +132,36 @@ export function renderTimeline(items, opts = {}) {
           <div class="e-meta">
             <span class="e-tag e-tag-unrecorded">#未记录</span>
             <span class="e-dur">${fmtMins(mins)}</span>
-            <button class="mini-btn" type="button" data-action="backfill-gap" data-ts="${esc(gapTs)}" data-tip="在这段未记录时间补一条；结束会自动接到下一条记录。" aria-label="补录这段未记录时间">补一下</button>
+            <button class="mini-btn" type="button" data-action="backfill-seg" data-ts="${esc(gapTs)}" data-end="${esc(gapEnd)}" data-tip="在这段未记录时间补一条；结束会自动接回原状态。" aria-label="补录这段未记录时间">补一下</button>
           </div>
         </div>
       </div>`;
     }
     const isPlaceholder = typeof e.what === 'string' && e.what.trim() === '';
+    // Only the live now-segment reads "进行中"; a middle/past placeholder (e.g.
+    // left by a smart delete) is honestly just "未记录".
+    const activePlaceholder = isPlaceholder && isOngoing;
     const displayTag = isPlaceholder ? '未记录' : tag;
     const tagClass = ` e-tag-${isPlaceholder ? 'unrecorded' : bucketForTag(tag)}`;
     const entryClass = `entry${isPlaceholder ? ' placeholder' : ''}${sheetEditId === e.id ? ' sheet-editing' : ''}`;
     const durStr = timelineDurationLabel(mins, isOngoing, unrecorded || isPlaceholder, pendingConfirm);
     const confirmText = confirmSegmentLabel(e.ts, endTs);
     const startLabel = start ? hhmm(start) : hhmm(e.ts);
+    const segStartTs = start ? localDateTimeKey(start) : e.ts;
+    const segEndTs = end ? localDateTimeKey(end) : '';
+    const splitLabel = (isPlaceholder || unrecorded) ? '补一下' : '切一刀';
+    const splitBtn = segEndTs
+      ? `<button class="mini-btn" type="button" data-action="backfill-seg" data-ts="${esc(segStartTs)}" data-end="${esc(segEndTs)}" data-tip="在这段里补录或切分一段；结束自动接回原标签。" aria-label="在这段里补录或切分">${splitLabel}</button>`
+      : '';
     return `<div class="${entryClass}" data-id="${esc(e.id)}">
       <div class="e-body">
         <div class="e-time">${startLabel}</div>
-        <div class="e-what">${esc(isPlaceholder ? '进行中·还没记' : e.what)}</div>
+        <div class="e-what">${esc(isPlaceholder ? (activePlaceholder ? '进行中·还没记' : '未记录') : e.what)}</div>
         <div class="e-meta">
           ${displayTag ? `<span class="e-tag${tagClass}">#${esc(displayTag)}</span>` : ''}
           <span class="e-dur">${durStr}</span>
           ${confirmable ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" data-tip="确认后按这个标签统计；相邻时间变化会自动失效。" aria-label="${esc(confirmText)}">${esc(confirmText)}</button>` : ''}
+          ${splitBtn}
         </div>
       </div>
       <div class="e-btns">
@@ -246,18 +257,19 @@ export function renderFormSheet(opts) {
   const bucket = opts && opts.bucket ? opts.bucket : (isEdit ? bucketForTag(tag, config) : (opts && opts.defaultBucket) || 'job');
   const recordMode = opts && opts.recordMode ? opts.recordMode : 'log';
   const isPlan = !isEdit && !isHistoryDay && recordMode === 'plan';
+  const isBackfill = !isEdit && Boolean(opts && opts.backfill);
   const isEditPlanned = isEdit && e && e.planned;
   const isKnownPickerTag = config.mainline.includes(tag) || config.chips.some(chip => chip.name === tag);
   const bucketSeg = renderBucketSeg(isEdit ? 'edit' : 'form', bucket);
   const chips = renderTagPicker(isEdit ? 'edit' : 'form', tag, config, bucket);
-  const recordModeSeg = isEdit || isHistoryDay || (opts && opts.backfill) ? '' : renderRecordModeSeg(recordMode);
-  const title = isEdit ? '编辑' : (isPlan ? '计划' : (isToday ? '记一条' : '补记'));
+  const recordModeSeg = isEdit || isHistoryDay || isBackfill ? '' : renderRecordModeSeg(recordMode);
+  const title = isEdit ? '编辑' : (isBackfill ? '补录' : (isPlan ? '计划' : (isToday ? '记一条' : '补记')));
   const summary = isEdit
     ? `${hhmm(e.ts)}${tag ? ` · #${esc(tag)}` : ''}`
-    : (isPlan ? daySummary : (isToday ? '刚才这一阵' : daySummary));
+    : (isBackfill ? daySummary : (isPlan ? daySummary : (isToday ? '刚才这一阵' : daySummary)));
   const whatText = isEdit
     ? (esc(e.what) || '未填写')
-    : (isPlan ? '写下计划要做什么' : (isToday ? '写下刚才做了什么' : '写下这一段做了什么'));
+    : (isBackfill ? '写下这一段做了什么' : (isPlan ? '写下计划要做什么' : (isToday ? '写下刚才做了什么' : '写下这一段做了什么')));
   const whatFieldLabel = isPlan || isEditPlanned ? '计划做什么' : '做了什么';
   const whatPlaceholder = isPlan || isEditPlanned ? '准备面试 / 写方案…' : (isEdit ? '做了什么' : '写邮件 / 刷手机 / 准备面试…');
   const saveAction = isEdit ? 'commit-edit' : 'save-entry';
@@ -305,7 +317,21 @@ export function renderFormSheet(opts) {
         ${whatInput}
       </div>
       ${tagBlock}`;
-  const newBody = `
+  const backfillTimeSection = `
+      <input type="hidden" id="form-ts">
+      <input type="hidden" id="form-end-ts">
+      <div class="fl backfill-time">
+        <div class="fl-label">开始</div>
+        <div data-role="backfill-start-mount"></div>
+      </div>
+      <div class="fl backfill-time">
+        <div class="fl-label">结束</div>
+        <div data-role="backfill-end-mount"></div>
+        <div class="form-hint" data-role="backfill-duration"></div>
+      </div>
+      <div class="form-hint">在这段里补录/切分一段；结束之后自动接回原来的状态，其它段不受影响。</div>
+      <div class="form-inline-error" data-role="conflict-error" hidden></div>`;
+  const logTimeSection = `
       ${recordModeSeg}
       <input type="hidden" id="form-ts">
       <div class="form-time-row"${isPlan ? ' hidden' : ''} data-role="log-time-row">
@@ -320,7 +346,9 @@ export function renderFormSheet(opts) {
       <div class="form-inline-error" data-role="conflict-error" hidden></div>
       <div class="fl start-time-section" data-role="start-time-section" hidden>
         <div data-role="form-wheel-mount"></div>
-      </div>
+      </div>`;
+  const newBody = `
+      ${isBackfill ? backfillTimeSection : logTimeSection}
       <div class="fl">
         <div class="fl-label" data-role="what-label">${whatFieldLabel}</div>
         ${whatInput}

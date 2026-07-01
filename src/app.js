@@ -1,8 +1,9 @@
 import {
   addOneMinute,
   defaultFormTimestamp,
-  ensureOpenPlaceholderAt,
   findTimeConflict,
+  isPlaceholderEntry,
+  normalizeEntries,
   settlementEndFor as getSettlementEndFor
 } from './entry_model.js';
 import {
@@ -262,6 +263,7 @@ import {
       render();
       return;
     }
+    normalizeEntries(d, { todayKey: todayStr(), createId: uid });
     save(d);
     render();
   }
@@ -270,7 +272,37 @@ import {
   function delEntry(id) {
     if (!confirm('删除这条记录？')) return;
     const d = load();
-    d.entries = d.entries.filter(e => e.id !== id);
+    const entry = d.entries.find(e => e.id === id);
+    if (!entry) {
+      if (sheetEditId === id) sheetController.closeEditSheet();
+      render();
+      return;
+    }
+    const dayKey = entry.ts.slice(0, 10);
+    const sameDay = d.entries
+      .filter(x => !x.planned && x.id !== id && normalizeTimestamp(x.ts) && x.ts.slice(0, 10) === dayKey)
+      .sort((a, b) => (a.ts < b.ts ? -1 : 1));
+    let prev = null;
+    let next = null;
+    for (const x of sameDay) {
+      if (x.ts < entry.ts) prev = x;
+      else if (x.ts > entry.ts && !next) next = x;
+    }
+    const prevReal = Boolean(prev) && !isPlaceholderEntry(prev);
+    const neighborsMatch = prevReal && next && !isPlaceholderEntry(next) && primaryTag(prev) === primaryTag(next);
+    // Smart delete: if removing would silently stretch a real previous label over
+    // the freed span (standalone activity), convert this entry to 未记录 instead.
+    // Otherwise remove it and let normalizeEntries coalesce — which heals a
+    // carve-undo (identical neighbors) and folds placeholders back together.
+    if (!isPlaceholderEntry(entry) && prevReal && !neighborsMatch) {
+      entry.what = '';
+      entry.tags = [];
+      delete entry.longConfirm;
+      delete entry.planned;
+    } else {
+      d.entries = d.entries.filter(e => e.id !== id);
+    }
+    normalizeEntries(d, { todayKey: todayStr(), createId: uid });
     save(d);
     if (sheetEditId === id) sheetController.closeEditSheet();
     render();
@@ -289,9 +321,7 @@ import {
     while (findTimeConflict(d.entries, entry.ts, entry.id)) {
       entry.ts = addOneMinute(entry.ts);
     }
-    if (entry.ts.slice(0, 10) === todayStr()) {
-      ensureOpenPlaceholderAt(d.entries, nowStr(), entry.id, uid);
-    }
+    normalizeEntries(d, { todayKey: todayStr(), createId: uid });
     save(d);
     render();
   }
@@ -399,7 +429,7 @@ import {
       if (action === 'shift-period') shiftPeriod(Number(el.dataset.delta || 0));
       if (action === 'today') goToday();
       if (action === 'open-form') sheetController.openForm();
-      if (action === 'backfill-gap') sheetController.openFormSheet({ mode: 'new', ts: el.dataset.ts, backfill: true });
+      if (action === 'backfill-seg') sheetController.openFormSheet({ mode: 'new', ts: el.dataset.ts, endTs: el.dataset.end, backfill: true });
       if (action === 'switch-activity') sheetController.switchActivity();
       if (action === 'open-help') openHelp();
       if (action === 'open-backup') openBackup();

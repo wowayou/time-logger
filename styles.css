@@ -389,7 +389,7 @@
     }
 
     /* Form */
-    .fl { margin-bottom: 11px; }
+    .fl { margin-bottom: 11px; min-width: 0; }
     .fl-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
     .inp {
       width: 100%;
@@ -412,6 +412,10 @@
       line-height: 1.35;
       white-space: pre-wrap;
     }
+    /* When a long note would grow the textarea past the viewport cap (esp. iOS
+       keyboard shrinking visualViewport), autosize adds this so it scrolls
+       internally instead of pushing the save ✓ off-screen. */
+    .ta.ta-capped { overflow-y: auto; -webkit-overflow-scrolling: touch; }
     .edit-what-input { margin-bottom: 8px; }
     .edit-tag-input { margin-bottom: 10px; }
 
@@ -1035,6 +1039,12 @@
       position: relative;
       display: flex;
       flex-direction: column;
+      /* min-width:0 stops the panel (a grid item of .form-sheet) from expanding
+         to its min-content: a tall textarea's intrinsic min-content otherwise
+         blows the panel out to max-width (600px) on a 375px screen, shoving the
+         save ✓ off the right edge — the SE2 "can't edit" bug. Same discipline as
+         the view-tabs minmax(0,1fr) guard. */
+      min-width: 0;
       max-height: min(var(--vvh, 92dvh), 720px, calc(100dvh - env(safe-area-inset-top) - 8px));
       width: 100%;
       max-width: 600px;
@@ -1092,6 +1102,9 @@
     }
     .form-sheet-body {
       display: grid;
+      /* Pin the single column to the container so tall/long content scrolls
+         instead of widening the panel past the screen (see .form-sheet-panel). */
+      grid-template-columns: minmax(0, 1fr);
       gap: 12px;
       padding-top: 14px;
       padding-bottom: calc(16px + env(safe-area-inset-bottom));

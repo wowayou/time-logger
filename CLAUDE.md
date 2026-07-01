@@ -41,7 +41,7 @@
 - `src/stats.js`：保持统计逻辑集中；不访问 DOM / navigator；桶归类只能通过 `storage.js` 的配置 helper；日边界规则必须在这里测试。
 - `src/pickers.js`：只负责时间选择器 DOM；不直接保存业务数据。
 - `src/ui.js`：只负责模板、图标、tooltip helper 和 DOM 渲染；不做数据持久化。
-- `src/entry_model.js`：只放记录日期模型、续记默认起点、占位条、结算点、同刻冲突和 `+1min` 等纯/低副作用 helper；不访问 DOM / localStorage。
+- `src/entry_model.js`：只放记录日期模型、续记默认起点、占位条、结算点、同刻冲突、`+1min`、补录有界插入（`carveInsert`）、无冗余边界归一化（`coalesceRedundant`）和写后统一出口（`normalizeEntries`，恒保今天尾占位）等纯/低副作用 helper；不访问 DOM / localStorage。
 - `src/io_actions.js`：只处理当前视图摘要、复制、下载、导入、分享；通过显式依赖接收 `load/save/render/state`，不拥有全局状态。
 - `src/sheet_controller.js`：只处理新建/编辑/config/import sheet、focus trap、picker 重挂载和表单保存；通过显式依赖读写状态和持久化。
 - `src/app.js`：只负责启动、状态组合、导航、渲染调度、事件委托、测试 API 和 Service Worker 注册。
@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v29` / manifest `version: "29"`。
+当前版本：`timelog-v30` / manifest `version: "30"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -183,3 +183,4 @@ git diff --check
 | v27 | 2026-06-30 | 修复表单 sheet 第一项被 head 阴影裁切（head 改全宽 margin 覆盖、去 box-shadow 下溢）；补录/编辑默认桶不再落 unrecorded 导致自定义标签静默不固定、污染统计（桶兜底 job + 按 ts 取最后一条）；自定义标签输入即显示为该桶选中草稿 chip（统一「当前标签」）；删除死代码 summarizeEntriesByDay/hasEntriesOnDate |
 | v28 | 2026-07-01 | 热修编辑静默不落库：`commitEdit` 之前用两次 `load()`（改 A 图、存 B 图），导致编辑标签/内容/时间全部丢失、看似"修改功能没实现"；改为单次 `load()`、在被保存的图里取 entry。详见 `docs/postmortems.md` P1 |
 | v29 | 2026-07-01 | ⑧ 表单遮罩跟随 visualViewport，iOS 键盘不再把保存 ✓ 顶出屏外；② 补录强制「已发生」并隐藏计划开关（修计划模式泄漏致补录静默失败）；③ 补录落在中间空占位条时就地并入而非报自冲突；④ 被拦的保存把内联/时间错误 `scrollIntoView` 到视野内；⑤ 滚轮日期窗口动态包含打开值（修窗口外日期被静默改到边界），超 `MAX_WINDOW_DAYS` 钉边界项；⑥ confirmPlanned 落「现在」撞同刻时静默 +1min 顺推到空位；首屏闪烁：内联启动脚本预先解析 theme-color、揭露加淡入。详见 `docs/postmortems.md` |
+| v30 | 2026-07-01 | 底层时间模型重梳：点存储 + 区间 UX + 无冗余边界归一化。补录改「起点+终点」有界插入（`carveInsert`），每段都有「补/切」按钮，切分自动补回原标签、不牵连其它段；写路径统一收敛到 `normalizeEntries`（去冗余边界 + 恒保今天尾占位），修热路径被迫 +1min；删除改智能（两侧同标签愈合、否则转未记录），不再静默并入前段；`addChipTag` 不再记录时静默改桶（同名按 chip 归类）；中间/历史占位显示「未记录」而非「进行中」；bug1 修 sheet 打开先小后大（viewport 先于揭露）；P13 修 SE2 编辑长记录表单溢出屏外（面板 `min-width:0` + body `minmax(0,1fr)` + textarea 按 visualViewport 封顶）。详见 `docs/postmortems.md` P9–P13 |
