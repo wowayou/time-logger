@@ -1015,6 +1015,29 @@
       white-space: nowrap;
     }
 
+    /* Cross-tab conflict banner — fixed at top, above form sheet (z-index 90) */
+    .cross-tab-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 90;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    }
+    .cross-tab-banner[hidden] { display: none; }
+    .cross-tab-banner span {
+      flex: 1;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
     /* Form sheet */
     .form-sheet {
       position: fixed;

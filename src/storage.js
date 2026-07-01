@@ -182,7 +182,15 @@ export function load() {
 }
 
 export function save(d) {
-  localStorage.setItem(KEY, JSON.stringify(d));
+  try {
+    localStorage.setItem(KEY, JSON.stringify(d));
+  } catch (e) {
+    if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+      console.error('[timelog] 存储已满，本次保存失败。请导出备份后删除旧数据。');
+      return;
+    }
+    throw e;
+  }
 }
 
 export function uid() {

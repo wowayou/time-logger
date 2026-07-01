@@ -2,7 +2,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:ui": "playwright test"
+    "test:ui": "playwright test",
+    "test:stress": "playwright test tests/stress.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1"

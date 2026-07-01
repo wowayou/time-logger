@@ -209,6 +209,8 @@ import {
     lastIntervalSignature = dataSignature();
   }
   function renderChrome() {
+    const crossTabBanner = document.getElementById('cross-tab-banner');
+    if (crossTabBanner) crossTabBanner.hidden = true;
     document.querySelectorAll('#view-tabs button').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.view === state.view);
     });
@@ -439,7 +441,7 @@ import {
       if (action === 'pick-form-bucket') sheetController.pickBucket(el);
       if (action === 'pick-record-mode') sheetController.pickRecordMode(el);
       if (action === 'save-entry') sheetController.saveEntry();
-      if (action === 'close-form') sheetController.closeForm();
+      if (action === 'close-form') { sheetController.closeForm(); renderIfCrossTabPending(); }
       if (action === 'use-conflict-plus-new' || action === 'use-conflict-plus-edit') sheetController.useConflictPlusMinute(el);
       if (action === 'edit-conflict-entry') sheetController.editConflictEntry(el.dataset.id);
       if (action === 'start-edit') sheetController.startEdit(el.dataset.id);
@@ -460,6 +462,10 @@ import {
       if (action === 'confirm-import-shift') ioActions.confirmImportShift();
       if (action === 'share-json') ioActions.shareJSON();
       if (action === 'update-app') applyUpdate();
+      if (action === 'dismiss-cross-tab-banner') {
+        const b = document.getElementById('cross-tab-banner');
+        if (b) b.hidden = true;
+      }
     });
     document.getElementById('import-file').addEventListener('change', ioActions.handleImport);
     document.addEventListener('input', e => {
@@ -473,7 +479,7 @@ import {
     });
 
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { sheetController.cancelEdit(); sheetController.closeForm(); }
+      if (e.key === 'Escape') { sheetController.cancelEdit(); sheetController.closeForm(); renderIfCrossTabPending(); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         if (sheetEditId) { sheetController.commitEdit(sheetEditId); return; }
         if (sheetController.isFormOpen()) sheetController.saveEntry();
@@ -481,6 +487,20 @@ import {
     });
     window.addEventListener('resize', sheetController.handleResponsiveResize, { passive: true });
     window.addEventListener('orientationchange', sheetController.handleResponsiveResize, { passive: true });
+    window.addEventListener('storage', e => {
+      if (e.key !== 'timelog.v1') return;
+      if (sheetEditId || sheetController.isFormOpen() || sheetController.getSheetMode()) {
+        const b = document.getElementById('cross-tab-banner');
+        if (b) b.hidden = false;
+      } else {
+        render();
+      }
+    });
+  }
+
+  function renderIfCrossTabPending() {
+    const b = document.getElementById('cross-tab-banner');
+    if (b && !b.hidden) render();
   }
 
   // --- Register SW ---
