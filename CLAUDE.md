@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v31` / manifest `version: "31"`。
+当前版本：`timelog-v32` / manifest `version: "32"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -185,3 +185,4 @@ git diff --check
 | v29 | 2026-07-01 | ⑧ 表单遮罩跟随 visualViewport，iOS 键盘不再把保存 ✓ 顶出屏外；② 补录强制「已发生」并隐藏计划开关（修计划模式泄漏致补录静默失败）；③ 补录落在中间空占位条时就地并入而非报自冲突；④ 被拦的保存把内联/时间错误 `scrollIntoView` 到视野内；⑤ 滚轮日期窗口动态包含打开值（修窗口外日期被静默改到边界），超 `MAX_WINDOW_DAYS` 钉边界项；⑥ confirmPlanned 落「现在」撞同刻时静默 +1min 顺推到空位；首屏闪烁：内联启动脚本预先解析 theme-color、揭露加淡入。详见 `docs/postmortems.md` |
 | v30 | 2026-07-01 | 底层时间模型重梳：点存储 + 区间 UX + 无冗余边界归一化。补录改「起点+终点」有界插入（`carveInsert`），每段都有「补/切」按钮，切分自动补回原标签、不牵连其它段；写路径统一收敛到 `normalizeEntries`（去冗余边界 + 恒保今天尾占位），修热路径被迫 +1min；删除改智能（两侧同标签愈合、否则转未记录），不再静默并入前段；`addChipTag` 不再记录时静默改桶（同名按 chip 归类）；中间/历史占位显示「未记录」而非「进行中」；bug1 修 sheet 打开先小后大（viewport 先于揭露）；P13 修 SE2 编辑长记录表单溢出屏外（面板 `min-width:0` + body `minmax(0,1fr)` + textarea 按 visualViewport 封顶）。详见 `docs/postmortems.md` P9–P13 |
 | v31 | 2026-07-01 | 版权保护 + 抖动热修 + 治理审计：全部运行时文件加 AGPL-3.0-or-later + `© 2026 wowayou` 文件头，`LICENSE` 落地 AGPL 全文，README/decisions 记双许可姿态；P14 修 iOS 编辑保存后一拍二次重排（`settleThenTeardown`：键盘在场时 blur→等 visualViewport 稳→单帧 close+render，桌面/headless 保持同步；`.sheet-closing` 过渡护栏），线上真机自验；`AGENTS.md` 收缩为指针（唯一真源指向 `CLAUDE.md`）；新增根级 `CONTRIBUTING.md`（「该不该加」决策清单 + 本地真机调试）；审计过时文档 drift；推广策略 park 到 `docs/decisions.md`。详见 `docs/postmortems.md` P14 |
+| v32 | 2026-07-03 | P15 修 SE2 刷新「空白页+漂浮按钮」闪烁：启动门闩收窄到 JS 渲染区（`#add-btn`/`.ruler`/`.tl-head`/`#timeline`），静态骨架随 HTML 直出；P16 修 iOS 键盘开合表单二排抖动：visualViewport 事件风暴 settle（60ms 静默/400ms 兜底）后单帧落位 + `.vv-glide` 短滑，settle 后持焦控件收回折叠区；取消/遮罩/Esc 关闭同走 `settleThenTeardown`，teardown 队列防 Esc 双路径重入；编辑模板 `edit-wheel` 挂点内联清理。详见 `docs/postmortems.md` P15–P16 |

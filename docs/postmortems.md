@@ -224,6 +224,41 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ---
 
+## P15 · SE2 刷新「空白页 + 两个漂浮按钮」（v32）
+
+**确诊日期**：2026-07-03 · **状态**：先修后验（v32）· **严重度**：低（体验）
+
+**现象**：SE2 等慢设备刷新时，模块加载期间页面短暂呈现「一片空白 + 底部两个漂浮按钮」再整页蹦出。P8（v29）只柔化了揭露动画，没治住形态本身。
+
+**根因**：启动门闩 `body:not(.app-ready) .app { opacity: 0 }` 把整个 `.app`（header、tabs、date-nav 等纯静态骨架）都藏了，而 `.footer` 在 `.app` **之外**、不受门闩控制——于是 JS 加载慢的那几百毫秒里，用户看到的是「静态骨架全隐身、只剩 footer 按钮悬空」。
+
+**修法**：门闩收窄到只藏 JS 渲染区：`body:not(.app-ready) :is(#add-btn, .ruler, .tl-head, #timeline) { opacity: 0 }`。静态骨架（header、view tabs、date-nav 壳、footer）随 HTML 解析直接绘制；数据区在首次 `render()` 之后一起淡入（`render` 先于 `app-ready` 执行，揭露时内容已正确——包括非天视图下 `#add-btn` 保持隐藏）。`prefers-reduced-motion` 下无过渡。
+
+**护栏**：UI smoke `reload starts with has-entries boot state and reaches app-ready` 继续把关启动链路；「闪」的主观形态需真机验（同 P8）。
+
+**经验**：门闩类样式的作用域必须和「谁真的没准备好」对齐——藏多了（静态骨架）制造新的空白闪烁，藏少了露出未渲染数据。骨架能静态直出的就不要挂在 JS ready 上。
+
+---
+
+## P16 · iOS 键盘开合表单二排抖动（v32）
+
+**确诊日期**：2026-07-03 · **状态**：先修后验（v32）· **严重度**：低（体验）
+
+**现象**：iPhone 上打开/收起软键盘时，打开中的表单 sheet 肉眼可见地跳 2-3 次才停稳（「二排抖动」）。P14（v31）治的是**保存关闭**路径；这条是键盘动画**进行中**的跟踪抖动，以及取消/遮罩/Esc 关闭路径尚未接入 settle。
+
+**根因**：iOS 用一串离散的 `visualViewport` resize/scroll 事件表现键盘动画；`syncVisualViewport` 每个事件都写一次 `--vvt/--vvh`，sheet 就跟着每个中间值重排一次，被看成连跳。
+
+**修法**：
+1. **跟踪侧 settle**（P14 settle 思路的镜像）：`resize/scroll` 只进 `scheduleVisualViewportSync`，风暴静默 60ms（400ms 上限兜底防话痨 viewport 永不静默）后一次性落最终几何；`.vv-glide` 把这剩下的一跳变成 0.18-0.25s 的短滑（`prefers-reduced-motion` 下无过渡）。打开时的首次同步保持**同步**（P12：第一帧必须正确）；`.sheet-closing` 在场时 teardown 拥有几何权，调度器让位。settle 后把持焦的 input/textarea `scrollIntoView` 收回（可能大幅变矮的）可视折叠区内，不压在键盘底下。
+2. **关闭路径补全**：`closeForm`（取消/遮罩/Esc）与 `cancelEdit` 同走 `settleThenTeardown`，键盘在场时不再两跳关闭。
+3. **teardown 队列**：Esc 会先后触发 `cancelEdit` **和** `closeForm`——第二次调用到达时已 blur、`softKeyboardUp()` 为假，会绕过等待同步执行、在 teardown 中途重入。`settleThenTeardown` 改为队列：teardown 等待中时后来者入队，settle 后单帧内按序执行。
+
+**护栏**：需线上真机帧步验证（同 P12/P14，headless 无软键盘）。桌面 / headless / 无键盘路径全部保持同步，51 条 UI smoke 全绿不 flake。
+
+**经验**：`visualViewport` 在 iOS 键盘动画期是事件风暴不是单事件，逐事件写布局变量等于把中间帧全部演出来；跟踪侧和 teardown 侧要用同一套「等静默、单帧落位」纪律，且两侧必须明确几何权属（`.sheet-closing` 为界），否则互相覆盖。
+
+---
+
 ## 协作约束补记（v28）
 
 - 多步改动走主线程；避免并发 fan-out 子代理 / workflow（上游会 429，串行 workflow 亦然）。已同步进 `CLAUDE.md` / `AGENTS.md`「开发与维护红线」。

@@ -99,7 +99,18 @@
       flex-direction: column;
       overflow-x: hidden;
     }
-    body:not(.app-ready) .app { opacity: 0; }
+    /* P15: boot latch narrowed to the JS-rendered regions only. Hiding all of
+       .app while .footer (outside it) stayed visible painted "a blank page
+       with two floating buttons" during module load on slow devices — the SE2
+       refresh flash. Static chrome (header, tabs, date-nav shell, footer) now
+       paints with the HTML parse; the data regions fade in together after the
+       first render() (render runs before app-ready, so they reveal already
+       correct — including add-btn hidden on non-day views). */
+    body:not(.app-ready) :is(#add-btn, .ruler, .tl-head, #timeline) { opacity: 0; }
+    :is(#add-btn, .ruler, .tl-head, #timeline) { transition: opacity 0.18s ease; }
+    @media (prefers-reduced-motion: reduce) {
+      :is(#add-btn, .ruler, .tl-head, #timeline) { transition: none; }
+    }
     button { touch-action: manipulation; }
     .app {
       width: 100%;
@@ -108,13 +119,6 @@
       margin: 0 auto;
       padding: env(safe-area-inset-top) clamp(12px, 4vw, 16px) 18px;
       container-type: inline-size;
-      /* Soften the app-ready reveal so the first paint fades in instead of
-         snapping 0→1 (reads as a flash on slower devices like iPhone SE2). */
-      opacity: 1;
-      transition: opacity 0.18s ease;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .app { transition: none; }
     }
 
     /* Header */
@@ -1059,6 +1063,17 @@
       align-items: end;
     }
     .form-sheet[hidden] { display: none; }
+    /* P16: present only for the one-shot settled-geometry write after a
+       keyboard burst — turns the single remaining snap into a short glide.
+       (.sheet-closing still wins during teardown and kills all transitions.) */
+    .form-sheet.vv-glide { transition: top 0.18s ease-out, height 0.18s ease-out; }
+    .form-sheet.vv-glide .form-sheet-panel {
+      transition: transform 0.25s ease-out, opacity 0.2s ease, max-height 0.18s ease-out;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .form-sheet.vv-glide,
+      .form-sheet.vv-glide .form-sheet-panel { transition: none; }
+    }
     .form-sheet-backdrop {
       position: absolute;
       inset: 0;

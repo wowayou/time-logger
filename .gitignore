@@ -15,8 +15,11 @@ timelog-*.json
 *.gif
 *.heic
 *.avif
+*.mp4
+*.mov
 screenshots/
 ui_snapshots/
+bug-screenrecordings/
 
 # Local temp and OS files.
 .DS_Store

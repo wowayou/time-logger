@@ -28,6 +28,9 @@ export function createSheetController(deps) {
   let sheetLastFocus = null;
   let sheetTrapController = null;
   let sheetResizeTimer = null;
+  let vvSettleTimer = null;
+  let vvSettleCap = null;
+  let teardownQueue = null;
   let formTag = '';
   let formBucket = 'job';
   let editBucket = 'job';
@@ -172,20 +175,66 @@ export function createSheetController(deps) {
     root.style.removeProperty('--vvh');
   }
 
+  // P16: iOS animates the soft keyboard with a burst of discrete visualViewport
+  // resize/scroll events; writing --vvt/--vvh on every event made the open
+  // sheet visibly jump 2-3 times per keyboard open/close (the "二排抖动").
+  // Mirror of P14's settle idea on the tracking side: wait for the burst to go
+  // quiet (60ms; 400ms cap so a chatty viewport can't stall forever), then
+  // apply the final geometry once — .vv-glide turns that single snap into one
+  // short slide. The initial sync on open stays synchronous (P12: first frame
+  // must be correct), and the teardown path owns geometry while .sheet-closing
+  // is up, so the scheduler stands down there.
+  function clearViewportSettleTimers() {
+    clearTimeout(vvSettleTimer);
+    clearTimeout(vvSettleCap);
+    vvSettleTimer = null;
+    vvSettleCap = null;
+  }
+
+  function scheduleVisualViewportSync() {
+    if (document.body.classList.contains('sheet-closing')) return;
+    clearTimeout(vvSettleTimer);
+    vvSettleTimer = setTimeout(applySettledViewport, 60);
+    if (!vvSettleCap) vvSettleCap = setTimeout(applySettledViewport, 400);
+  }
+
+  function applySettledViewport() {
+    clearViewportSettleTimers();
+    if (document.body.classList.contains('sheet-closing')) return;
+    const sheet = document.getElementById('form-sheet');
+    const open = Boolean(sheet && !sheet.hidden);
+    if (open) {
+      sheet.classList.add('vv-glide');
+      setTimeout(() => sheet.classList.remove('vv-glide'), 260);
+    }
+    syncVisualViewport();
+    // Once the keyboard has settled, keep the focused control inside the
+    // (possibly much shorter) fold instead of under the keyboard.
+    const active = document.activeElement;
+    const panel = open ? sheet.querySelector('.form-sheet-panel') : null;
+    if (panel && active instanceof HTMLElement && panel.contains(active)
+        && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) {
+      active.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
   function attachVisualViewport() {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
     if (!vv) return;
     syncVisualViewport();
-    vv.addEventListener('resize', syncVisualViewport);
-    vv.addEventListener('scroll', syncVisualViewport);
+    vv.addEventListener('resize', scheduleVisualViewportSync);
+    vv.addEventListener('scroll', scheduleVisualViewportSync);
   }
 
   function detachVisualViewport() {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
     if (vv) {
-      vv.removeEventListener('resize', syncVisualViewport);
-      vv.removeEventListener('scroll', syncVisualViewport);
+      vv.removeEventListener('resize', scheduleVisualViewportSync);
+      vv.removeEventListener('scroll', scheduleVisualViewportSync);
     }
+    clearViewportSettleTimers();
+    const sheet = document.getElementById('form-sheet');
+    if (sheet) sheet.classList.remove('vv-glide');
     clearVisualViewport();
   }
 
@@ -367,10 +416,18 @@ export function createSheetController(deps) {
   // visible second jump on save. Only engaged when a keyboard is actually up;
   // desktop/headless run `run()` immediately so UI smoke never sees a deferral.
   function settleThenTeardown(run) {
+    // A teardown is already waiting for the keyboard: join it instead of
+    // running synchronously (Escape fires cancelEdit AND closeForm — the
+    // second call arrives after blur, when softKeyboardUp() is false again).
+    if (teardownQueue) { teardownQueue.push(run); return; }
     if (!softKeyboardUp()) { run(); return; }
     const vv = window.visualViewport;
     const active = document.activeElement;
+    teardownQueue = [run];
     document.body.classList.add('sheet-closing');
+    // The teardown owns geometry from here; drop any pending settled-sync so
+    // the still-visible sheet can't grow to the restored viewport mid-close.
+    clearViewportSettleTimers();
     if (active && typeof active.blur === 'function') active.blur();
     let done = false;
     let settleTimer = null;
@@ -382,7 +439,9 @@ export function createSheetController(deps) {
       clearTimeout(settleTimer);
       clearTimeout(cap);
       requestAnimationFrame(() => {
-        run();
+        const queued = teardownQueue || [];
+        teardownQueue = null;
+        queued.forEach(fn => fn());
         requestAnimationFrame(() => document.body.classList.remove('sheet-closing'));
       });
     };
@@ -464,8 +523,12 @@ export function createSheetController(deps) {
   }
 
   function closeForm() {
-    const mode = closeFormSheet();
-    if (mode === 'edit') deps.render();
+    // Cancel/backdrop/Esc with the keyboard up had the same two-jump close as
+    // the save paths (P14/P16); settle first, then tear down in one frame.
+    settleThenTeardown(() => {
+      const mode = closeFormSheet();
+      if (mode === 'edit') deps.render();
+    });
   }
 
   function openForm() {
@@ -489,9 +552,11 @@ export function createSheetController(deps) {
   }
 
   function cancelEdit() {
-    const changed = Boolean(deps.getSheetEditId() || getSheetMode() === 'edit');
-    closeEditSheet();
-    if (changed) deps.render();
+    settleThenTeardown(() => {
+      const changed = Boolean(deps.getSheetEditId() || getSheetMode() === 'edit');
+      closeEditSheet();
+      if (changed) deps.render();
+    });
   }
 
   function pickTag(el) {

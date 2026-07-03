@@ -283,7 +283,6 @@ export function renderFormSheet(opts) {
   const tsInput = isEdit
     ? `<input type="hidden" data-role="edit-ts" value="${esc(e.ts)}">`
     : '<input type="hidden" id="form-ts">';
-  const wheelMount = isEdit ? '<div data-role="edit-wheel"></div>' : '<div id="form-wheel-mount"></div>';
   const whatInput = isEdit
     ? `<textarea class="inp ta edit-what-input" data-role="edit-what" rows="2" placeholder="${esc(whatPlaceholder)}">${esc(e.what)}</textarea>`
     : `<textarea class="inp ta" id="form-what" rows="2" placeholder="${esc(whatPlaceholder)}"></textarea>`;
@@ -313,7 +312,7 @@ export function renderFormSheet(opts) {
       <div class="fl">
         <div class="fl-label">时间（可改，补录用）</div>
         ${tsInput}
-        ${wheelMount}
+        <div data-role="edit-wheel"></div>
       </div>
       <div class="form-inline-error" data-role="conflict-error" hidden></div>
       <div class="fl">
