@@ -41,6 +41,19 @@
     --shadow-2: 0 4px 14px rgba(0,0,0,0.30);
     --shadow-3: 0 18px 52px rgba(0,0,0,0.46);
   }
+  /* 第三档：暗·石墨 —— D 的结构令牌 × A 石墨的冷色板（A 暗色板已过校验，surface #16171e） */
+  html[data-theme="graphite"] {
+    --bg: #0e0f13; --surface: #16171e; --inset: #12131a;
+    --text: #e8e9f1; --text-2: #9fa1b8; --text-3: #6c6e85;
+    --job: #8b7cff; --job-soft: rgba(139,124,255,0.14);
+    --maintain: #46a878; --maintain-soft: rgba(70,168,120,0.14);
+    --leak: #c9803c; --leak-soft: rgba(201,128,60,0.16);
+    --track: #262838; --danger: #e0596b;
+    --sep: rgba(255,255,255,0.08);
+    --shadow-1: 0 1px 2px rgba(0,0,0,0.40);
+    --shadow-2: 0 4px 16px rgba(0,0,0,0.35);
+    --shadow-3: 0 16px 48px rgba(0,0,0,0.50);
+  }
   :root {
     /* 字阶取 B 与 A 的中间档：13/14/15/18/22/32 —— 比 B 密一号，比 A 松一号 */
     --fs-cap: 13px; --fs-ui: 14px; --fs-body: 15px; --fs-title: 18px; --fs-num: 22px; --fs-hero: 32px;
@@ -151,7 +164,7 @@
   <div class="page-head">
     <h1>提案 D · 融合</h1>
     <span class="tagline">宣纸暖基底 × 收紧信息卡 × 边界时间胶囊 × 原生语法表单</span>
-    <button class="theme-toggle" id="tt" type="button">切换亮/暗</button>
+    <button class="theme-toggle" id="tt" type="button">亮·宣纸 → 切换</button>
   </div>
   <p class="note">
     针对你的反馈定制：色调与信息块取 B、密度收紧一档（卡片高度约 −22%，同屏约 7 条）、
@@ -355,9 +368,16 @@
   </div>
 </div>
 <script>
-  document.getElementById('tt').addEventListener('click', () => {
+  // 三档循环：同一套结构令牌（圆角/字阶/间距/海拔模型），只换色板——
+  // 「暗·石墨」= D 的结构 × A 的冷色板，用于对比 A/D 的争议到底在结构还是色温。
+  const THEMES = [['light', '亮·宣纸'], ['dark', '暗·暖'], ['graphite', '暗·石墨']];
+  const tt = document.getElementById('tt');
+  tt.addEventListener('click', () => {
     const h = document.documentElement;
-    h.dataset.theme = h.dataset.theme === 'light' ? 'dark' : 'light';
+    const i = THEMES.findIndex(t => t[0] === (h.dataset.theme || 'light'));
+    const next = THEMES[(i + 1) % THEMES.length];
+    h.dataset.theme = next[0];
+    tt.textContent = next[1] + ' → 切换';
   });
 </script>
 </body>
