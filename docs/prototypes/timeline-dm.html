@@ -80,7 +80,7 @@
   .tl { position: relative; user-select: none; -webkit-user-select: none; }
   .seg-block {
     position: relative; display: flex; gap: 12px;
-    border-left: 3px solid var(--track); padding: 0 4px 0 14px; margin-left: 50px;
+    border-left: 3px solid var(--track); padding: 0 4px 0 14px; margin-left: 66px;
     transition: height 200ms cubic-bezier(.3,.7,.4,1);
     cursor: pointer; border-radius: 0 10px 10px 0; overflow: hidden;
   }
@@ -102,27 +102,30 @@
   .fixbtn { pointer-events: auto; border: none; background: var(--job-soft); color: var(--job); font-size: 12px; font-weight: 600; font-family: inherit; border-radius: 7px; padding: 4px 11px; cursor: pointer; }
   .now-lab { color: var(--job); font-weight: 600; }
 
-  /* 边界手柄：命中区限定在左侧胶囊栏（78×44），段主体保持可点，也缩小 touch-action:none 的滚动冲突面 */
+  /* 静轴动标：边界时间在阅读态就是安静的文字（rail 本来就要显示它，零额外 chrome）；
+     命中区仍是 66×44 隐形热区；按下瞬间才浮出胶囊态。段主体保持可点。 */
   .handle {
-    position: absolute; left: 0; width: 78px; height: 44px; margin-top: -22px;
+    position: absolute; left: 0; width: 66px; height: 44px; margin-top: -22px;
     display: flex; align-items: center; z-index: 5;
     touch-action: none; cursor: ns-resize; background: transparent; border: none; padding: 0;
   }
   .handle .pill {
-    display: inline-flex; align-items: center; gap: 5px;
-    background: var(--raised); border: 1px solid var(--hairline-strong);
-    color: var(--text-2); border-radius: 999px; padding: 3px 10px 3px 8px;
+    display: inline-flex; align-items: center; gap: 4px;
+    background: transparent; border: 1px solid transparent;
+    color: var(--text-3); border-radius: 999px; padding: 3px 8px 3px 6px;
     font-size: 12px; font-weight: 600; font-family: inherit; font-variant-numeric: tabular-nums;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.28);
-    transition: transform var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+    transition: transform var(--t-fast), color var(--t-fast), background var(--t-fast);
   }
-  .handle .pill svg { width: 10px; height: 14px; stroke: var(--text-3); stroke-width: 2; stroke-linecap: round; fill: none; }
+  .handle .pill svg { width: 9px; height: 13px; stroke: var(--text-3); stroke-width: 2; stroke-linecap: round; fill: none; opacity: 0.55; }
   .handle:focus-visible { outline: none; }
   .handle:focus-visible .pill { border-color: var(--job); color: var(--job); }
-  .handle.active .pill { transform: scale(1.12); border-color: var(--job); color: var(--text); background: var(--job); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
-  .handle.active .pill svg { stroke: rgba(255,255,255,0.8); }
+  /* 选中某段时，它两端的时间亮起提示可拖 */
+  .handle.hl .pill { color: var(--job); }
+  .handle.hl .pill svg { stroke: var(--job); opacity: 0.9; }
+  .handle.active .pill { transform: scale(1.15); color: #fff; background: var(--job); border-color: var(--job); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+  .handle.active .pill svg { stroke: rgba(255,255,255,0.85); opacity: 1; }
   .handle.fixed { pointer-events: none; }
-  .handle.fixed .pill { box-shadow: none; background: transparent; border-color: transparent; color: var(--text-3); padding-left: 0; }
+  .handle.fixed .pill svg { display: none; }
 
   /* 拖动时的浮动时间气泡 */
   .bubble {
@@ -200,7 +203,7 @@
     </div>
   </div>
   <p class="hint">
-    <b>拖</b>时间胶囊改边界（默认 5min 吸附；拖动中手指<b>向右挪开 &gt;48px 进入 1min 精调</b>，挪回恢复粗档）· <b>点</b>空隙补录 · <b>点</b>任意段改文字/标签 · 胶囊聚焦后 ↑↓ 微调 5min、Shift+↑↓ 精调 1min。右上角切换表单形态，分别在两种形态里点文本框，感受 iOS 键盘行为差异。
+    <b>按住左侧任一时间</b>即变把手可拖（阅读态就是安静的文字；默认 5min 吸附，拖动中手指<b>向右挪开 &gt;48px 进入 1min 精调</b>，挪回恢复粗档）· <b>点</b>空隙补录 · <b>点</b>任意段改文字/标签（选中段两端时间会亮起提示可拖）· 时间聚焦后 ↑↓ 微调 5min、Shift+↑↓ 精调 1min。右上角切换表单形态，分别在两种形态里点文本框，感受 iOS 键盘行为差异。
   </p>
 
   <div class="day-card">
@@ -283,7 +286,7 @@
   const PX_PER_MIN = 2;      // 拖动映射：2px = 1min（5min 吸附 = 10px）
   const SNAP = 5;            // 分钟吸附
   const MIN_SEG = 5;         // 相邻边界最小间隔
-  const H_MIN = 44, H_MAX = 200; // 段高钳制（布局用）
+  const H_MIN = 54, H_MAX = 200; // 段高钳制（54 保证两行内容不被裁）
   const pad = n => String(n).padStart(2, '0');
   const hhmm = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
   const fmt = m => m >= 60 ? `${Math.floor(m/60)}h${m%60 ? pad(m%60)+'m' : ''}` : `${m}m`;
@@ -468,8 +471,18 @@
     openForm(Number(block.dataset.idx));
   });
 
+  function setHlHandles(idx) {
+    tl.querySelectorAll('.handle.hl').forEach(x => x.classList.remove('hl'));
+    if (idx < 0) return;
+    [idx, idx + 1].forEach(i => {
+      const h = tl.querySelector(`.handle[data-idx="${i}"]`);
+      if (h) h.classList.add('hl');
+    });
+  }
+
   function openForm(idx) {
     editIdx = idx;
+    setHlHandles(idx);
     const s = segs()[idx];
     const isGap = s.p.bucket === 'un';
     // 进行中尾段 = 「+ 记一条」的落点：点它就是记刚才这一阵，同一套表单
@@ -499,6 +512,7 @@
     overlay.classList.remove('in');
     setTimeout(() => { overlay.className = 'overlay'; }, 300);
     editIdx = -1;
+    setHlHandles(-1);
   }
   document.getElementById('f-cancel').addEventListener('click', closeForm);
   document.getElementById('backdrop').addEventListener('click', closeForm);
