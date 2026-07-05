@@ -1,13 +1,13 @@
 {
   "name": "时间尺",
-  "version": "32",
+  "version": "33",
   "short_name": "时间尺",
   "description": "求职主线时间记录仪 — 每天看清时间进了哪里",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0d0d14",
-  "theme_color": "#0d0d14",
+  "background_color": "#0e0f13",
+  "theme_color": "#0e0f13",
   "lang": "zh",
   "icons": [
     {

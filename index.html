@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="时间尺">
-  <meta name="theme-color" content="#0d0d14" id="meta-theme-color">
+  <meta name="theme-color" content="#0e0f13" id="meta-theme-color">
   <script>
     (() => {
       try {
@@ -25,7 +25,7 @@
           ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
           : pref;
         const meta = document.getElementById('meta-theme-color');
-        if (meta) meta.setAttribute('content', effective === 'light' ? '#f7f7fa' : '#0d0d14');
+        if (meta) meta.setAttribute('content', effective === 'light' ? '#f7f5f1' : '#0e0f13');
       } catch {}
     })();
   </script>

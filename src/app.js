@@ -105,7 +105,7 @@ import {
       html.setAttribute('data-theme', pref);
     }
     const effective = pref === 'auto' ? getSysPref() : pref;
-    document.getElementById('meta-theme-color').setAttribute('content', effective === 'light' ? '#f7f7fa' : '#0d0d14');
+    document.getElementById('meta-theme-color').setAttribute('content', effective === 'light' ? '#f7f5f1' : '#0e0f13');
     document.querySelectorAll('#theme-seg button').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.theme === pref);
     });
