@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<!--
+  时间尺 (time-logger) — 阶段0 直接操纵时间轴可交互原型（仅内存 demo 数据，不读写 localStorage，非运行时资产）
+  Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
+  SPDX-License-Identifier: AGPL-3.0-or-later
+
+  验证目标（在 iPhone SE2 真机上逐项试）：
+  1. 拖段边界改时间：手感、5min 吸附、拖动时页面不跟着滚
+  2. 点空隙「补一下」：一步进补录
+  3. 点任意段：呼出编辑（改文字/标签）
+  4. 右上角切换「sheet / 全屏」两种表单形态，分别聚焦文本框感受 iOS 键盘行为
+-->
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>直接操纵时间轴 · 原型</title>
+<style>
+  :root {
+    --bg: #0e0f13; --surface: #16171e; --raised: #1d1f29; --inset: #12131a;
+    --hairline: rgba(255,255,255,0.07); --hairline-strong: rgba(255,255,255,0.13);
+    --text: #e8e9f1; --text-2: #9fa1b8; --text-3: #6c6e85;
+    --job: #8b7cff; --job-soft: rgba(139,124,255,0.14);
+    --maintain: #46a878; --maintain-soft: rgba(70,168,120,0.14);
+    --leak: #c9803c; --leak-soft: rgba(201,128,60,0.16);
+    --track: #262838; --danger: #e0596b;
+    --r-ctl: 8px; --r-card: 12px; --r-sheet: 16px;
+    --t-fast: 120ms cubic-bezier(.3,.7,.4,1); --t-med: 260ms cubic-bezier(.32,.72,0,1);
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f4f4f7; --surface: #ffffff; --raised: #ffffff; --inset: #ececf1;
+      --hairline: rgba(20,20,40,0.09); --hairline-strong: rgba(20,20,40,0.18);
+      --text: #191a23; --text-2: #5d5f75; --text-3: #8f91a6;
+      --job: #6053e8; --job-soft: rgba(96,83,232,0.10);
+      --maintain: #2f8f66; --maintain-soft: rgba(47,143,102,0.10);
+      --leak: #b56a24; --leak-soft: rgba(181,106,36,0.12);
+      --track: #dcdde6; --danger: #d0475a;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.5; min-height: 100svh;
+    padding: max(14px, env(safe-area-inset-top)) 14px 40px;
+  }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  .top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .top h1 { font-size: 17px; font-weight: 650; }
+  .top .sp { flex: 1; }
+  .seg2 { display: inline-flex; background: var(--inset); border: 1px solid var(--hairline); border-radius: 8px; padding: 2px; gap: 2px; }
+  .seg2 button { border: none; background: transparent; color: var(--text-2); font-size: 12px; font-family: inherit; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+  .seg2 button.on { background: var(--raised); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.25); }
+  .hint { color: var(--text-3); font-size: 12px; line-height: 1.55; margin-bottom: 14px; }
+  .hint b { color: var(--text-2); font-weight: 600; }
+
+  /* 今日大数字 + 尺子（联动演示） */
+  .day-card { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-card); padding: 14px 16px; margin-bottom: 16px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.04); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .stat .lab { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); margin-bottom: 1px; }
+  .stat .lab i { width: 8px; height: 8px; border-radius: 3px; }
+  .stat .val { font-size: 28px; font-weight: 650; letter-spacing: -0.015em; line-height: 1.15; }
+  .stat .val small { font-size: 14px; font-weight: 550; color: var(--text-2); }
+  .bar { display: flex; height: 9px; border-radius: 5px; overflow: hidden; gap: 2px; margin-bottom: 8px; }
+  .bar i:first-child { border-radius: 5px 0 0 5px; }
+  .bar i:last-child { border-radius: 0 5px 5px 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 12px; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 7px; height: 7px; border-radius: 2.5px; }
+
+  /* ===== 直接操纵时间轴 ===== */
+  .tl-cap { font-size: 12px; color: var(--text-3); margin-bottom: 8px; display: flex; justify-content: space-between; }
+  .tl { position: relative; user-select: none; -webkit-user-select: none; }
+  .seg-block {
+    position: relative; display: flex; gap: 12px;
+    border-left: 3px solid var(--track); padding: 0 4px 0 14px; margin-left: 50px;
+    transition: height 200ms cubic-bezier(.3,.7,.4,1);
+    cursor: pointer; border-radius: 0 10px 10px 0; overflow: hidden;
+  }
+  .tl.dragging .seg-block { transition: none; cursor: ns-resize; }
+  .seg-block:active { background: var(--raised); }
+  .seg-block.job { border-left-color: var(--job); background: linear-gradient(90deg, var(--job-soft), transparent 72%); }
+  .seg-block.maintain { border-left-color: var(--maintain); background: linear-gradient(90deg, var(--maintain-soft), transparent 72%); }
+  .seg-block.leak { border-left-color: var(--leak); background: linear-gradient(90deg, var(--leak-soft), transparent 72%); }
+  .seg-block.gap { border-left-style: dashed; border-left-color: var(--hairline-strong); background: transparent; }
+  .seg-inner { flex: 1; min-width: 0; padding: 8px 0 6px; display: flex; flex-direction: column; justify-content: center; pointer-events: none; }
+  .seg-what { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .seg-block.gap .seg-what, .seg-block.placeholder .seg-what { color: var(--text-3); }
+  .seg-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; margin-top: 1px; }
+  .tagchip { padding: 1px 8px; border-radius: 7px; font-size: 11px; pointer-events: none; }
+  .tagchip.job { background: var(--job-soft); color: var(--job); }
+  .tagchip.maintain { background: var(--maintain-soft); color: var(--maintain); }
+  .tagchip.leak { background: var(--leak-soft); color: var(--leak); }
+  .tagchip.un { background: var(--inset); color: var(--text-3); }
+  .fixbtn { pointer-events: auto; border: none; background: var(--job-soft); color: var(--job); font-size: 12px; font-weight: 600; font-family: inherit; border-radius: 7px; padding: 4px 11px; cursor: pointer; }
+  .now-lab { color: var(--job); font-weight: 600; }
+
+  /* 边界手柄：命中区限定在左侧胶囊栏（78×44），段主体保持可点，也缩小 touch-action:none 的滚动冲突面 */
+  .handle {
+    position: absolute; left: 0; width: 78px; height: 44px; margin-top: -22px;
+    display: flex; align-items: center; z-index: 5;
+    touch-action: none; cursor: ns-resize; background: transparent; border: none; padding: 0;
+  }
+  .handle .pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--raised); border: 1px solid var(--hairline-strong);
+    color: var(--text-2); border-radius: 999px; padding: 3px 10px 3px 8px;
+    font-size: 12px; font-weight: 600; font-family: inherit; font-variant-numeric: tabular-nums;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.28);
+    transition: transform var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+  }
+  .handle .pill svg { width: 10px; height: 14px; stroke: var(--text-3); stroke-width: 2; stroke-linecap: round; fill: none; }
+  .handle:focus-visible { outline: none; }
+  .handle:focus-visible .pill { border-color: var(--job); color: var(--job); }
+  .handle.active .pill { transform: scale(1.12); border-color: var(--job); color: var(--text); background: var(--job); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+  .handle.active .pill svg { stroke: rgba(255,255,255,0.8); }
+  .handle.fixed { pointer-events: none; }
+  .handle.fixed .pill { box-shadow: none; background: transparent; border-color: transparent; color: var(--text-3); padding-left: 0; }
+
+  /* 拖动时的浮动时间气泡 */
+  .bubble {
+    position: fixed; z-index: 60; pointer-events: none; display: none;
+    background: var(--job); color: #fff; font-size: 17px; font-weight: 700;
+    font-variant-numeric: tabular-nums; border-radius: 10px; padding: 6px 12px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.45); transform: translate(-50%, -140%);
+  }
+  .bubble small { display: block; font-size: 10px; font-weight: 500; opacity: 0.85; text-align: center; }
+
+  .resetrow { margin-top: 18px; display: flex; gap: 8px; }
+  .resetrow button { border: 1px solid var(--hairline-strong); background: transparent; color: var(--text-2); font-size: 12px; font-family: inherit; border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+
+  /* ===== 表单：sheet 形态 ===== */
+  .overlay { position: fixed; inset: 0; z-index: 40; display: none; }
+  .overlay.open { display: block; }
+  .backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); opacity: 0; transition: opacity var(--t-med); }
+  .overlay.in .backdrop { opacity: 1; }
+  .panel {
+    position: absolute; left: 0; right: 0; bottom: 0; margin: 0 auto; max-width: 480px;
+    background: var(--surface); border: 1px solid var(--hairline-strong); border-bottom: none;
+    border-radius: var(--r-sheet) var(--r-sheet) 0 0; padding: 0 16px calc(18px + env(safe-area-inset-bottom));
+    transform: translateY(104%); transition: transform var(--t-med);
+    box-shadow: 0 -16px 48px rgba(0,0,0,0.4);
+  }
+  .overlay.in .panel { transform: translateY(0); }
+  /* 全屏形态 */
+  .overlay.full .backdrop { display: none; }
+  .overlay.full .panel {
+    top: 0; bottom: 0; max-width: none; border-radius: 0; border: none;
+    padding-top: max(10px, env(safe-area-inset-top));
+    transform: translateX(102%); box-shadow: none; overflow-y: auto;
+  }
+  .overlay.full.in .panel { transform: translateX(0); }
+  .overlay.full .panel > .inner { max-width: 480px; margin: 0 auto; }
+  .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--hairline-strong); margin: 8px auto 4px; }
+  .overlay.full .grab { visibility: hidden; }
+  .f-head { display: flex; align-items: center; gap: 10px; padding: 6px 0 12px; border-bottom: 1px solid var(--hairline); margin-bottom: 13px; }
+  .f-head .t { flex: 1; min-width: 0; }
+  .f-head .t b { display: block; font-size: 15px; font-weight: 600; }
+  .f-head .t span { font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .f-icon { width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--hairline-strong); background: transparent; color: var(--text-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex: 0 0 40px; }
+  .f-icon.save { background: var(--job); border-color: var(--job); color: #fff; }
+  .f-icon svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .f-body { display: grid; gap: 12px; }
+  .f-cap { font-size: 12px; color: var(--text-3); }
+  .f-note { font-size: 12px; color: var(--text-3); background: var(--inset); border-radius: 8px; padding: 8px 10px; }
+  .f-note b { color: var(--text-2); }
+  textarea.f-inp {
+    background: var(--inset); border: 1px solid transparent; border-radius: 8px;
+    padding: 11px 12px; font-size: 16px; color: var(--text); font-family: inherit;
+    min-height: 56px; resize: none; width: 100%; line-height: 1.4;
+  }
+  textarea.f-inp:focus { outline: none; border-color: var(--job); background: var(--surface); }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { min-height: 38px; padding: 8px 14px; border-radius: 19px; border: 1px solid var(--hairline-strong); background: transparent; color: var(--text-2); font-size: 13px; font-family: inherit; cursor: pointer; transition: all var(--t-fast); }
+  .chip.on { background: var(--job-soft); border-color: var(--job); color: var(--job); font-weight: 600; }
+  .chip.m.on { background: var(--maintain-soft); border-color: var(--maintain); color: var(--maintain); }
+  .chip.l.on { background: var(--leak-soft); border-color: var(--leak); color: var(--leak); }
+  input.f-tag { background: var(--inset); border: 1px solid transparent; border-radius: 8px; padding: 10px 12px; font-size: 16px; color: var(--text); font-family: inherit; width: 100%; }
+  input.f-tag:focus { outline: none; border-color: var(--job); }
+  @media (prefers-reduced-motion: reduce) {
+    .panel, .backdrop, .seg-block, .handle .pill { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>直接操纵时间轴</h1>
+    <div class="sp"></div>
+    <div class="seg2" role="group" aria-label="表单形态">
+      <button type="button" id="mode-sheet" class="on" aria-label="表单用底部 sheet">sheet</button>
+      <button type="button" id="mode-full" aria-label="表单用全屏页">全屏</button>
+    </div>
+  </div>
+  <p class="hint">
+    <b>拖</b>时间胶囊改边界（5min 吸附，两侧段联动）· <b>点</b>空隙补录 · <b>点</b>任意段改文字/标签 · 键盘焦点到胶囊后 ↑↓ 也可微调。右上角切换表单形态，分别在两种形态里点文本框，感受 iOS 键盘行为差异。
+  </p>
+
+  <div class="day-card">
+    <div class="stats">
+      <div class="stat">
+        <div class="lab"><i style="background:var(--job)"></i>今日主线</div>
+        <div class="val" id="stat-job">--</div>
+      </div>
+      <div class="stat">
+        <div class="lab"><i style="background:var(--leak)"></i>漏损</div>
+        <div class="val" id="stat-leak">--</div>
+      </div>
+    </div>
+    <div class="bar" id="bar" aria-hidden="true"></div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="tl-cap"><span>7月5日 · 00:00 → 现在 16:02</span><span>拖一拖试试</span></div>
+  <div class="tl" id="tl"></div>
+
+  <div class="resetrow">
+    <button type="button" id="reset">重置 demo 数据</button>
+  </div>
+</div>
+
+<div class="bubble" id="bubble"><span id="bubble-time">09:05</span><small id="bubble-ctx"></small></div>
+
+<div class="overlay" id="overlay">
+  <div class="backdrop" id="backdrop"></div>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="f-title">
+    <div class="inner">
+      <div class="grab"></div>
+      <div class="f-head">
+        <div class="t"><b id="f-title">编辑这段</b><span id="f-sub"></span></div>
+        <button class="f-icon" type="button" id="f-cancel" aria-label="取消"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/></svg></button>
+        <button class="f-icon save" type="button" id="f-save" aria-label="保存"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></button>
+      </div>
+      <div class="f-body">
+        <div class="f-note" id="f-note"><b>时间在时间轴上拖</b>——表单只管内容和标签。</div>
+        <div>
+          <div class="f-cap" style="margin-bottom:5px">做了什么</div>
+          <textarea class="f-inp" id="f-what" rows="2" placeholder="写邮件 / 刷手机 / 准备面试…"></textarea>
+        </div>
+        <div>
+          <div class="f-cap" style="margin-bottom:6px">标签</div>
+          <div class="chips" id="f-chips"></div>
+        </div>
+        <div>
+          <div class="f-cap" style="margin-bottom:5px">自定义标签（可选）</div>
+          <input class="f-tag" id="f-ctag" type="text" placeholder="自定义标签">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  // ===== 内存 demo 模型（点存储，分钟制，绝不碰 localStorage） =====
+  const NOW = 16 * 60 + 2; // 16:02 固定“现在”
+  const TAGS = [
+    { name: '求职推进', bucket: 'job' },
+    { name: '吃饭', bucket: 'maintain' },
+    { name: '睡觉', bucket: 'maintain' },
+    { name: '刷手机', bucket: 'leak' }
+  ];
+  const initial = () => ([
+    { t: 0,   what: '睡觉', tag: '睡觉', bucket: 'maintain' },
+    { t: 490, what: '早饭', tag: '吃饭', bucket: 'maintain' },
+    { t: 520, what: '刷手机', tag: '刷手机', bucket: 'leak' },
+    { t: 545, what: '改简历，重写项目描述', tag: '求职推进', bucket: 'job' },
+    { t: 690, what: '', tag: '', bucket: 'un' },            // 未记录空隙
+    { t: 730, what: '午饭', tag: '吃饭', bucket: 'maintain' },
+    { t: 770, what: '投递 6 家 + 跟进 2 封回复', tag: '求职推进', bucket: 'job' },
+    { t: 920, what: '', tag: '', bucket: 'un', ongoing: true } // 进行中占位
+  ]);
+  let points = initial();
+
+  const PX_PER_MIN = 2;      // 拖动映射：2px = 1min（5min 吸附 = 10px）
+  const SNAP = 5;            // 分钟吸附
+  const MIN_SEG = 5;         // 相邻边界最小间隔
+  const H_MIN = 44, H_MAX = 200; // 段高钳制（布局用）
+  const pad = n => String(n).padStart(2, '0');
+  const hhmm = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+  const fmt = m => m >= 60 ? `${Math.floor(m/60)}h${m%60 ? pad(m%60)+'m' : ''}` : `${m}m`;
+
+  const tl = document.getElementById('tl');
+  const bubble = document.getElementById('bubble');
+
+  function segs() {
+    const out = [];
+    for (let i = 0; i < points.length; i++) {
+      const end = i + 1 < points.length ? points[i + 1].t : NOW;
+      out.push({ i, start: points[i].t, end, mins: end - points[i].t, p: points[i] });
+    }
+    return out;
+  }
+
+  function layoutH(mins) { return Math.max(H_MIN, Math.min(H_MAX, mins * 1.1)); }
+
+  // ===== 渲染 =====
+  function render() {
+    const list = segs();
+    tl.innerHTML = '';
+    list.forEach(s => {
+      // 边界手柄（第一条 00:00 固定，不可拖）
+      const h = document.createElement('button');
+      h.type = 'button';
+      h.className = 'handle' + (s.i === 0 ? ' fixed' : '');
+      h.dataset.idx = s.i;
+      h.setAttribute('aria-label', `边界 ${hhmm(s.start)}，拖动或用上下方向键调整`);
+      h.innerHTML = `<span class="pill"><svg viewBox="0 0 10 16"><path d="M2 5.5 5 2.5l3 3"/><path d="M2 10.5l3 3 3-3"/></svg>${hhmm(s.start)}</span>`;
+      tl.appendChild(h);
+
+      const el = document.createElement('div');
+      const cls = s.p.bucket === 'un' ? 'gap' : s.p.bucket;
+      el.className = `seg-block ${cls}` + (s.p.ongoing ? ' placeholder' : '');
+      el.style.height = layoutH(s.mins) + 'px';
+      el.dataset.idx = s.i;
+      const isGap = s.p.bucket === 'un' && !s.p.ongoing;
+      const what = s.p.ongoing ? '进行中 · 还没记'
+        : (isGap ? '这一段还没记' : s.p.what);
+      const chip = s.p.bucket === 'un'
+        ? '<span class="tagchip un">#未记录</span>'
+        : `<span class="tagchip ${s.p.bucket}">#${s.p.tag}</span>`;
+      const dur = s.p.ongoing
+        ? `<span class="now-lab">现在 · ${fmt(s.mins)}</span>`
+        : `<span>${fmt(s.mins)}</span>`;
+      el.innerHTML = `<div class="seg-inner">
+          <div class="seg-what">${what}</div>
+          <div class="seg-meta">${chip}${dur}${isGap ? '<button class="fixbtn" type="button">补一下</button>' : ''}</div>
+        </div>`;
+      tl.appendChild(el);
+    });
+    renderStats();
+  }
+
+  function renderStats() {
+    const tot = { job: 0, maintain: 0, leak: 0, un: 0 };
+    segs().forEach(s => { tot[s.p.bucket] += s.mins; });
+    const total = NOW;
+    document.getElementById('stat-job').innerHTML = big(tot.job);
+    document.getElementById('stat-leak').innerHTML = big(tot.leak);
+    const bar = document.getElementById('bar');
+    bar.innerHTML = ['job', 'maintain', 'leak', 'un'].map(b =>
+      `<i style="flex:${tot[b]};background:var(--${b === 'un' ? 'track' : b})"></i>`).join('');
+    const pct = v => Math.round(v / total * 100) + '%';
+    document.getElementById('legend').innerHTML =
+      `<span><i style="background:var(--job)"></i>主线 ${pct(tot.job)}</span>
+       <span><i style="background:var(--maintain)"></i>维持 ${pct(tot.maintain)}</span>
+       <span><i style="background:var(--leak)"></i>漏损 ${pct(tot.leak)}</span>
+       <span><i style="background:var(--track)"></i>未记录 ${pct(tot.un)}</span>
+       <span style="margin-left:auto">共 ${fmt(total)}</span>`;
+  }
+  function big(mins) {
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return h ? `${h}<small>h</small>${m ? pad(m) + '<small>m</small>' : ''}` : `${m}<small>m</small>`;
+  }
+
+  // ===== 拖拽边界 =====
+  let drag = null;
+  tl.addEventListener('pointerdown', e => {
+    const h = e.target.closest('.handle');
+    if (!h || h.classList.contains('fixed')) return;
+    e.preventDefault();
+    const idx = Number(h.dataset.idx);
+    const prevEl = tl.querySelector(`.seg-block[data-idx="${idx - 1}"]`);
+    const selfEl = tl.querySelector(`.seg-block[data-idx="${idx}"]`);
+    drag = {
+      idx, h,
+      startY: e.clientY,
+      t0: points[idx].t,
+      lo: points[idx - 1].t + MIN_SEG,
+      hi: (idx + 1 < points.length ? points[idx + 1].t : NOW) - MIN_SEG,
+      prevEl, selfEl,
+      prevH0: prevEl.offsetHeight, selfH0: selfEl.offsetHeight,
+      last: points[idx].t
+    };
+    h.setPointerCapture(e.pointerId);
+    h.classList.add('active');
+    tl.classList.add('dragging');
+    showBubble(e, points[idx].t, idx);
+  });
+  tl.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dy = e.clientY - drag.startY;
+    let t = drag.t0 + Math.round(dy / PX_PER_MIN / SNAP) * SNAP;
+    t = Math.max(drag.lo, Math.min(drag.hi, t));
+    const dpx = (t - drag.t0) * PX_PER_MIN;
+    // 拖动中直接改两侧像素高（不经钳制布局），手指与手柄不脱节
+    drag.prevEl.style.height = Math.max(24, drag.prevH0 + dpx) + 'px';
+    drag.selfEl.style.height = Math.max(24, drag.selfH0 - dpx) + 'px';
+    if (t !== drag.last) {
+      drag.last = t;
+      drag.h.querySelector('.pill').lastChild.textContent = hhmm(t);
+    }
+    showBubble(e, t, drag.idx);
+  });
+  const endDrag = e => {
+    if (!drag) return;
+    points[drag.idx].t = drag.last;
+    drag.h.classList.remove('active');
+    tl.classList.remove('dragging');
+    bubble.style.display = 'none';
+    drag = null;
+    render();
+  };
+  tl.addEventListener('pointerup', endDrag);
+  tl.addEventListener('pointercancel', endDrag);
+
+  function showBubble(e, t, idx) {
+    bubble.style.display = 'block';
+    bubble.style.left = Math.min(window.innerWidth - 70, Math.max(70, e.clientX)) + 'px';
+    bubble.style.top = e.clientY + 'px';
+    document.getElementById('bubble-time').textContent = hhmm(t);
+    const prev = points[idx - 1];
+    const label = prev ? (prev.bucket === 'un' ? '未记录' : prev.what || prev.tag) : '';
+    document.getElementById('bubble-ctx').textContent =
+      `↑ ${label.slice(0, 8)} ${fmt(t - prev.t)}`;
+  }
+
+  // 键盘微调（±5min）
+  tl.addEventListener('keydown', e => {
+    const h = e.target.closest('.handle');
+    if (!h || h.classList.contains('fixed')) return;
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    const idx = Number(h.dataset.idx);
+    const lo = points[idx - 1].t + MIN_SEG;
+    const hi = (idx + 1 < points.length ? points[idx + 1].t : NOW) - MIN_SEG;
+    const next = Math.max(lo, Math.min(hi, points[idx].t + (e.key === 'ArrowUp' ? -SNAP : SNAP)));
+    if (next !== points[idx].t) {
+      points[idx].t = next;
+      render();
+      tl.querySelector(`.handle[data-idx="${idx}"]`).focus();
+    }
+  });
+
+  // ===== 点段 / 点空隙 → 表单 =====
+  let formMode = 'sheet'; // 'sheet' | 'full'
+  let editIdx = -1;
+  const overlay = document.getElementById('overlay');
+  const modeSheet = document.getElementById('mode-sheet');
+  const modeFull = document.getElementById('mode-full');
+  modeSheet.addEventListener('click', () => setFormMode('sheet'));
+  modeFull.addEventListener('click', () => setFormMode('full'));
+  function setFormMode(m) {
+    formMode = m;
+    modeSheet.classList.toggle('on', m === 'sheet');
+    modeFull.classList.toggle('on', m === 'full');
+  }
+
+  tl.addEventListener('click', e => {
+    if (drag) return;
+    const block = e.target.closest('.seg-block');
+    if (!block) return;
+    openForm(Number(block.dataset.idx));
+  });
+
+  function openForm(idx) {
+    editIdx = idx;
+    const s = segs()[idx];
+    const isGap = s.p.bucket === 'un';
+    document.getElementById('f-title').textContent = isGap ? '补一下' : '编辑这段';
+    document.getElementById('f-sub').textContent = `${hhmm(s.start)} – ${s.p.ongoing ? '现在' : hhmm(s.end)} · ${fmt(s.mins)}`;
+    document.getElementById('f-what').value = isGap ? '' : s.p.what;
+    document.getElementById('f-ctag').value = '';
+    renderChips(s.p.tag);
+    overlay.className = 'overlay open' + (formMode === 'full' ? ' full' : '');
+    requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('in')));
+  }
+  function renderChips(sel) {
+    document.getElementById('f-chips').innerHTML = TAGS.map(t => {
+      const cls = t.bucket === 'maintain' ? 'm' : (t.bucket === 'leak' ? 'l' : '');
+      return `<button class="chip ${cls}${t.name === sel ? ' on' : ''}" type="button" data-tag="${t.name}" data-bucket="${t.bucket}">${t.name}</button>`;
+    }).join('');
+  }
+  document.getElementById('f-chips').addEventListener('click', e => {
+    const c = e.target.closest('.chip');
+    if (!c) return;
+    document.querySelectorAll('#f-chips .chip').forEach(x => x.classList.remove('on'));
+    c.classList.add('on');
+    document.getElementById('f-ctag').value = '';
+  });
+  function closeForm() {
+    overlay.classList.remove('in');
+    setTimeout(() => { overlay.className = 'overlay'; }, 300);
+    editIdx = -1;
+  }
+  document.getElementById('f-cancel').addEventListener('click', closeForm);
+  document.getElementById('backdrop').addEventListener('click', closeForm);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeForm(); });
+  document.getElementById('f-save').addEventListener('click', () => {
+    if (editIdx < 0) return closeForm();
+    const p = points[editIdx];
+    const what = document.getElementById('f-what').value.trim();
+    const ctag = document.getElementById('f-ctag').value.trim();
+    const selChip = document.querySelector('#f-chips .chip.on');
+    if (what) {
+      p.what = what;
+      if (ctag) { p.tag = ctag; p.bucket = 'job'; }
+      else if (selChip) { p.tag = selChip.dataset.tag; p.bucket = selChip.dataset.bucket; }
+      else { p.tag = '未知'; p.bucket = 'job'; }
+      delete p.ongoing;
+    }
+    closeForm();
+    render();
+  });
+
+  document.getElementById('reset').addEventListener('click', () => { points = initial(); render(); });
+
+  render();
+})();
+</script>
+</body>
+</html>

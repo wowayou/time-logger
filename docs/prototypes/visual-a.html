@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<!--
+  时间尺 (time-logger) — 阶段0 视觉提案 A「石墨」（仅 demo 数据，非运行时资产）
+  Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
+  SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+<html lang="zh" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>提案 A · 石墨 — 时间尺视觉语言</title>
+<style>
+  /* ===== 提案 A 令牌层 ===== */
+  :root, html[data-theme="dark"] {
+    --bg: #0e0f13; --surface: #16171e; --raised: #1d1f29; --inset: #12131a;
+    --hairline: rgba(255,255,255,0.07); --hairline-strong: rgba(255,255,255,0.12);
+    --text: #e8e9f1; --text-2: #9fa1b8; --text-3: #6c6e85;
+    --job: #8b7cff; --job-soft: rgba(139,124,255,0.14);
+    --maintain: #46a878; --maintain-soft: rgba(70,168,120,0.14);
+    --leak: #c9803c; --leak-soft: rgba(201,128,60,0.16);
+    --track: #262838; --danger: #e0596b;
+    --shadow-1: 0 1px 2px rgba(0,0,0,0.4);
+    --shadow-2: 0 4px 16px rgba(0,0,0,0.35);
+    --shadow-3: 0 16px 48px rgba(0,0,0,0.5);
+    --top-light: inset 0 1px 0 rgba(255,255,255,0.045);
+  }
+  html[data-theme="light"] {
+    --bg: #f4f4f7; --surface: #ffffff; --raised: #ffffff; --inset: #ececf1;
+    --hairline: rgba(20,20,40,0.09); --hairline-strong: rgba(20,20,40,0.16);
+    --text: #191a23; --text-2: #5d5f75; --text-3: #8f91a6;
+    --job: #6053e8; --job-soft: rgba(96,83,232,0.10);
+    --maintain: #2f8f66; --maintain-soft: rgba(47,143,102,0.10);
+    --leak: #b56a24; --leak-soft: rgba(181,106,36,0.12);
+    --track: #dcdde6; --danger: #d0475a;
+    --shadow-1: 0 1px 2px rgba(25,26,35,0.08);
+    --shadow-2: 0 4px 14px rgba(25,26,35,0.08);
+    --shadow-3: 0 16px 44px rgba(25,26,35,0.16);
+    --top-light: none;
+  }
+  :root {
+    /* 字阶：12 / 13 / 15 / 17 / 22 / 30（数字大字 30 半粗、比例数字） */
+    --fs-cap: 12px; --fs-ui: 13px; --fs-body: 15px; --fs-title: 17px; --fs-num: 22px; --fs-hero: 30px;
+    /* 间距节奏：4 基准 */
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 28px;
+    /* 圆角：8 控件 / 12 卡片 / 16 sheet */
+    --r-ctl: 8px; --r-card: 12px; --r-sheet: 16px;
+    /* 动效 */
+    --t-fast: 120ms cubic-bezier(.3,.7,.4,1); --t-med: 220ms cubic-bezier(.3,.7,.4,1);
+    --control-h: 44px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', system-ui, sans-serif;
+    font-size: var(--fs-body); line-height: 1.5; padding: 24px 16px 64px;
+  }
+  .page { max-width: 920px; margin: 0 auto; }
+  .page-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+  .page-head h1 { font-size: 22px; }
+  .page-head .tagline { color: var(--text-2); font-size: var(--fs-ui); }
+  .theme-toggle {
+    margin-left: auto; height: 36px; padding: 0 14px; border-radius: var(--r-ctl);
+    border: 1px solid var(--hairline-strong); background: var(--surface); color: var(--text);
+    font-size: var(--fs-ui); font-family: inherit; cursor: pointer;
+  }
+  .note { color: var(--text-3); font-size: var(--fs-cap); margin-bottom: 24px; }
+  .cols { display: grid; grid-template-columns: 1fr; gap: 32px; }
+  @media (min-width: 860px) { .cols { grid-template-columns: 400px 1fr; align-items: start; } }
+  h2 { font-size: var(--fs-title); margin: 0 0 12px; }
+  section { margin-bottom: 28px; }
+
+  /* 令牌展示 */
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .sw { border-radius: var(--r-ctl); border: 1px solid var(--hairline); overflow: hidden; background: var(--surface); }
+  .sw i { display: block; height: 44px; }
+  .sw b { display: block; font-size: 11px; font-weight: 500; color: var(--text-2); padding: 5px 8px; font-variant-numeric: tabular-nums; }
+  .typerow { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-card); padding: 12px 16px; box-shadow: var(--top-light); }
+  .typerow span { color: var(--text-2); }
+  .radii { display: flex; gap: 12px; align-items: flex-end; }
+  .radii div { background: var(--surface); border: 1px solid var(--hairline-strong); width: 72px; height: 48px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-2); }
+
+  /* ===== 手机框 ===== */
+  .phone {
+    width: 375px; max-width: 100%; margin: 0 auto; background: var(--bg);
+    border: 1px solid var(--hairline-strong); border-radius: 28px; padding: 18px 14px 0;
+    box-shadow: var(--shadow-3); overflow: hidden;
+  }
+  .hdr { display: flex; align-items: center; gap: 8px; padding: 6px 2px 14px; }
+  .logo { width: 28px; height: 28px; border-radius: 7px; background: linear-gradient(135deg, var(--job), #5b4bd4); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 700; }
+  .hdr b { font-size: var(--fs-title); font-weight: 650; letter-spacing: 0.01em; }
+  .hdr-sp { flex: 1; }
+  .hbtn { width: 34px; height: 34px; border-radius: var(--r-ctl); border: none; background: transparent; color: var(--text-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+  .hbtn:hover { background: var(--raised); color: var(--text); }
+  .hbtn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  .tabs { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--inset); border-radius: var(--r-ctl); padding: 2px; gap: 2px; margin-bottom: var(--s2); }
+  .tabs button { border: none; background: transparent; color: var(--text-2); font-family: inherit; font-size: var(--fs-ui); padding: 7px 0; border-radius: 6px; cursor: pointer; transition: background var(--t-fast), color var(--t-fast); }
+  .tabs button.on { background: var(--raised); color: var(--text); box-shadow: var(--shadow-1), var(--top-light); }
+  .datenav { display: grid; grid-template-columns: 40px 1fr 40px; gap: var(--s2); margin-bottom: var(--s4); }
+  .datenav .nav { height: 38px; border-radius: var(--r-ctl); border: 1px solid var(--hairline); background: var(--surface); color: var(--text-2); font-size: 15px; cursor: pointer; }
+  .datenav .cur { height: 38px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: var(--r-ctl); border: 1px solid var(--hairline); background: var(--surface); font-size: var(--fs-ui); font-variant-numeric: tabular-nums; color: var(--text); }
+  .datenav .cur em { font-style: normal; color: var(--text-3); font-size: var(--fs-cap); }
+
+  /* v35 预览：今日大数字 + 尺子 */
+  .day-card { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-card); box-shadow: var(--shadow-1), var(--top-light); padding: var(--s4); margin-bottom: var(--s3); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); margin-bottom: var(--s4); }
+  .stat .lab { display: flex; align-items: center; gap: 6px; font-size: var(--fs-cap); color: var(--text-2); margin-bottom: 2px; }
+  .stat .lab i { width: 8px; height: 8px; border-radius: 3px; display: inline-block; }
+  .stat .val { font-size: var(--fs-hero); font-weight: 650; letter-spacing: -0.015em; line-height: 1.15; }
+  .stat .val small { font-size: var(--fs-body); font-weight: 550; color: var(--text-2); margin-left: 1px; }
+  .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px; background: transparent; margin-bottom: var(--s2); }
+  .bar i { display: block; }
+  .bar i:first-child { border-radius: 5px 0 0 5px; }
+  .bar i:last-child { border-radius: 0 5px 5px 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 14px; font-size: var(--fs-cap); color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 7px; height: 7px; border-radius: 2.5px; }
+
+  .add {
+    width: 100%; height: 46px; border: none; border-radius: var(--r-card);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--job) 92%, #fff), var(--job));
+    color: #fff; font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer;
+    box-shadow: var(--shadow-2); margin-bottom: var(--s4);
+    transition: transform var(--t-fast), box-shadow var(--t-fast);
+  }
+  .add:active { transform: scale(0.985); }
+
+  /* 时间轴：连续体形态（左侧时刻轴 + 边界点） */
+  .tl-cap { font-size: var(--fs-cap); color: var(--text-3); letter-spacing: 0.05em; margin-bottom: var(--s2); }
+  .tl { position: relative; margin-left: 46px; border-left: 2px solid var(--track); padding-bottom: 18px; }
+  .seg { position: relative; padding: 7px 0 7px 14px; }
+  .seg::before { content: ""; position: absolute; left: -5px; top: 16px; width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); border: 2px solid var(--bg); }
+  .seg.job::before { background: var(--job); } .seg.maintain::before { background: var(--maintain); }
+  .seg.leak::before { background: var(--leak); } .seg.gap::before { background: var(--track); }
+  .seg time { position: absolute; left: -46px; top: 11px; width: 36px; text-align: right; font-size: var(--fs-cap); color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .seg .what { font-size: var(--fs-body); }
+  .seg .meta { display: flex; align-items: center; gap: 8px; font-size: var(--fs-cap); color: var(--text-2); margin-top: 1px; }
+  .tagchip { padding: 1px 8px; border-radius: 7px; font-size: 11px; }
+  .tagchip.job { background: var(--job-soft); color: var(--job); }
+  .tagchip.maintain { background: var(--maintain-soft); color: var(--maintain); }
+  .tagchip.leak { background: var(--leak-soft); color: var(--leak); }
+  .tagchip.un { background: var(--inset); color: var(--text-3); }
+  .seg.gap .what { color: var(--text-3); }
+  .seg.gap { border-radius: var(--r-ctl); }
+  .seg.gap:hover { background: var(--raised); }
+  .fix { margin-left: auto; border: none; background: var(--job-soft); color: var(--job); font-size: 11px; font-family: inherit; border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+  .now-dot::before { box-shadow: 0 0 0 4px var(--job-soft); background: var(--job); }
+  .now-lab { color: var(--job); font-size: var(--fs-cap); font-weight: 600; }
+
+  .foot { display: flex; gap: var(--s2); padding: 10px 2px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--hairline); margin: 4px -14px 0; padding-left: 14px; padding-right: 14px; background: var(--bg); }
+  .foot button { flex: 1; height: 36px; border-radius: var(--r-ctl); border: 1px solid var(--hairline); background: transparent; color: var(--text-2); font-size: var(--fs-ui); font-family: inherit; cursor: pointer; }
+
+  /* sheet 快照 */
+  .sheet-demo { width: 375px; max-width: 100%; margin: 16px auto 0; background: var(--raised); border: 1px solid var(--hairline-strong); border-radius: var(--r-sheet) var(--r-sheet) 0 0; box-shadow: var(--shadow-3), var(--top-light); overflow: hidden; }
+  .sh-grab { width: 36px; height: 4px; border-radius: 2px; background: var(--hairline-strong); margin: 8px auto 4px; }
+  .sh-head { display: flex; align-items: center; gap: 10px; padding: 6px 16px 12px; border-bottom: 1px solid var(--hairline); }
+  .sh-head .t { flex: 1; }
+  .sh-head .t b { display: block; font-size: var(--fs-body); font-weight: 600; }
+  .sh-head .t span { font-size: var(--fs-cap); color: var(--text-2); }
+  .sh-icon { width: 38px; height: 38px; border-radius: var(--r-ctl); border: 1px solid var(--hairline-strong); background: transparent; color: var(--text-2); display: inline-flex; align-items: center; justify-content: center; }
+  .sh-icon.save { background: var(--job); border-color: var(--job); color: #fff; box-shadow: var(--shadow-1); }
+  .sh-icon svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .sh-body { padding: 14px 16px 22px; display: grid; gap: 12px; }
+  .timerow { display: flex; align-items: center; gap: 8px; background: var(--inset); border-radius: var(--r-ctl); padding: 11px 12px; font-variant-numeric: tabular-nums; font-size: var(--fs-body); }
+  .timerow b { color: var(--job); font-weight: 600; border-bottom: 1.5px dashed color-mix(in srgb, var(--job) 55%, transparent); cursor: pointer; }
+  .timerow span { color: var(--text-2); font-size: var(--fs-ui); }
+  .sh-inp { background: var(--inset); border: 1px solid transparent; border-radius: var(--r-ctl); padding: 11px 12px; font-size: 16px; color: var(--text); font-family: inherit; min-height: 52px; }
+  .sh-inp:focus { outline: none; border-color: var(--job); background: var(--surface); }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { min-height: 36px; padding: 7px 13px; border-radius: 18px; border: 1px solid var(--hairline-strong); background: transparent; color: var(--text-2); font-size: var(--fs-ui); font-family: inherit; cursor: pointer; transition: all var(--t-fast); }
+  .chip.on { background: var(--job-soft); border-color: var(--job); color: var(--job); font-weight: 550; }
+  .chip.m.on { background: var(--maintain-soft); border-color: var(--maintain); color: var(--maintain); }
+  .cap { font-size: var(--fs-cap); color: var(--text-3); }
+  .fine { color: var(--text-3); font-size: var(--fs-cap); margin-top: 18px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-head">
+    <h1>提案 A · 石墨</h1>
+    <span class="tagline">冷峻工具感 · 暗色优先 · 海拔代替描边 · 紧凑信息密度</span>
+    <button class="theme-toggle" id="tt" type="button">切换亮/暗</button>
+  </div>
+  <p class="note">仅使用固定 demo 数据。三色分类板已过 dataviz 六项校验（明/暗两套 surface 均 PASS）。未记录灰按「未填充轨道」处理，不参与分类板校验。</p>
+
+  <div class="cols">
+    <div>
+      <section>
+        <h2>色板</h2>
+        <div class="swatches">
+          <div class="sw"><i style="background:var(--bg)"></i><b>bg</b></div>
+          <div class="sw"><i style="background:var(--surface)"></i><b>surface</b></div>
+          <div class="sw"><i style="background:var(--raised)"></i><b>raised</b></div>
+          <div class="sw"><i style="background:var(--job)"></i><b>主线 job</b></div>
+          <div class="sw"><i style="background:var(--maintain)"></i><b>维持</b></div>
+          <div class="sw"><i style="background:var(--leak)"></i><b>漏损</b></div>
+          <div class="sw"><i style="background:var(--track)"></i><b>未记录</b></div>
+          <div class="sw"><i style="background:var(--danger)"></i><b>danger</b></div>
+        </div>
+      </section>
+      <section>
+        <h2>字阶</h2>
+        <div class="typerow">
+          <span style="font-size:12px">12 说明</span>
+          <span style="font-size:13px">13 控件</span>
+          <span style="font-size:15px">15 正文</span>
+          <span style="font-size:17px">17 标题</span>
+          <span style="font-size:22px;font-weight:650">22 数字</span>
+          <span style="font-size:30px;font-weight:650;color:var(--text)">3<small style="font-size:15px">h</small>55<small style="font-size:15px">m</small></span>
+        </div>
+      </section>
+      <section>
+        <h2>圆角 &amp; 间距</h2>
+        <div class="radii">
+          <div style="border-radius:8px">8 控件</div>
+          <div style="border-radius:12px">12 卡片</div>
+          <div style="border-radius:16px">16 sheet</div>
+        </div>
+        <p class="cap" style="margin-top:8px">间距 4 基准：4 / 8 / 12 / 16 / 20 / 28。数字一律 tabular-nums（大数字除外，用比例数字）。</p>
+      </section>
+      <section>
+        <h2>要点</h2>
+        <p class="cap" style="line-height:1.7">
+          1px 描边全部降为 hairline（7–12% 透明白/黑），层级靠 surface→raised 两级海拔 + 顶部高光。<br>
+          时间轴改「连续体」：左侧时刻列 + 边界点在轴线上——为 v34 拖拽边界铺垫视觉模型。<br>
+          编辑/删除常驻按钮撤除，点段进入编辑（原型页演示）。<br>
+          主题切换收进右上角图标，header 一行完成。
+        </p>
+      </section>
+    </div>
+
+    <div>
+      <h2>「今日」屏</h2>
+      <div class="phone">
+        <div class="hdr">
+          <div class="logo">时</div><b>时间尺</b>
+          <div class="hdr-sp"></div>
+          <button class="hbtn" type="button" aria-label="主题"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg></button>
+          <button class="hbtn" type="button" aria-label="说明"><svg viewBox="0 0 24 24"><path d="M9.1 9a3 3 0 1 1 5.8 1c-.6 1.3-2.1 1.7-2.7 2.8"/><path d="M12 17h.01"/></svg></button>
+          <button class="hbtn" type="button" aria-label="配置"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.6a7 7 0 0 0-2 1.2l-2.3-1-2 3.5 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.5 2.3-1a7 7 0 0 0 2 1.2l.4 2.6h4l.4-2.6a7 7 0 0 0 2-1.2l2.3 1 2-3.5-2-1.5c.1-.4.1-.8.1-1.2Z"/></svg></button>
+        </div>
+        <div class="tabs">
+          <button class="on" type="button">天</button><button type="button">周</button><button type="button">月</button><button type="button">年</button>
+        </div>
+        <div class="datenav">
+          <button class="nav" type="button" aria-label="前一天">‹</button>
+          <div class="cur">7月5日 周日 <em>今天</em></div>
+          <button class="nav" type="button" aria-label="后一天">›</button>
+        </div>
+
+        <div class="day-card">
+          <div class="stats">
+            <div class="stat">
+              <div class="lab"><i style="background:var(--job)"></i>今日主线</div>
+              <div class="val">3<small>h</small>55<small>m</small></div>
+            </div>
+            <div class="stat">
+              <div class="lab"><i style="background:var(--leak)"></i>漏损</div>
+              <div class="val">25<small>m</small></div>
+            </div>
+          </div>
+          <div class="bar" aria-hidden="true">
+            <i style="flex:235;background:var(--job)"></i>
+            <i style="flex:590;background:var(--maintain)"></i>
+            <i style="flex:25;background:var(--leak)"></i>
+            <i style="flex:70;background:var(--track)"></i>
+          </div>
+          <div class="legend">
+            <span><i style="background:var(--job)"></i>主线 26%</span>
+            <span><i style="background:var(--maintain)"></i>维持 64%</span>
+            <span><i style="background:var(--leak)"></i>漏损 3%</span>
+            <span><i style="background:var(--track)"></i>未记录 8%</span>
+            <span style="margin-left:auto">共 15h20m</span>
+          </div>
+        </div>
+
+        <button class="add" type="button">＋ 记一条</button>
+
+        <div class="tl-cap">当日时间轴 · 新的在上</div>
+        <div class="tl">
+          <div class="seg job now-dot">
+            <time>15:20</time>
+            <div class="what" style="color:var(--text-3)">进行中 · 还没记</div>
+            <div class="meta"><span class="now-lab">现在 42m</span></div>
+          </div>
+          <div class="seg job">
+            <time>12:50</time>
+            <div class="what">投递 6 家 + 跟进 2 封回复</div>
+            <div class="meta"><span class="tagchip job">#求职推进</span><span>2h30m</span></div>
+          </div>
+          <div class="seg maintain">
+            <time>12:10</time>
+            <div class="what">午饭</div>
+            <div class="meta"><span class="tagchip maintain">#吃饭</span><span>40m</span></div>
+          </div>
+          <div class="seg gap">
+            <time>11:30</time>
+            <div class="what">这一段还没记</div>
+            <div class="meta"><span class="tagchip un">#未记录</span><span>40m</span><button class="fix" type="button">补一下</button></div>
+          </div>
+          <div class="seg job">
+            <time>09:05</time>
+            <div class="what">改简历，重写项目描述</div>
+            <div class="meta"><span class="tagchip job">#求职推进</span><span>2h25m</span></div>
+          </div>
+          <div class="seg leak">
+            <time>08:40</time>
+            <div class="what">刷手机</div>
+            <div class="meta"><span class="tagchip leak">#刷手机</span><span>25m</span></div>
+          </div>
+          <div class="seg maintain">
+            <time>08:10</time>
+            <div class="what">早饭</div>
+            <div class="meta"><span class="tagchip maintain">#吃饭</span><span>30m</span></div>
+          </div>
+          <div class="seg maintain">
+            <time>00:00</time>
+            <div class="what">睡觉</div>
+            <div class="meta"><span class="tagchip maintain">#睡觉</span><span>8h10m</span></div>
+          </div>
+        </div>
+
+        <div class="foot">
+          <button type="button">摘要</button>
+          <button type="button">备份</button>
+        </div>
+      </div>
+
+      <h2 style="margin-top:28px">表单 sheet 快照</h2>
+      <div class="sheet-demo">
+        <div class="sh-grab"></div>
+        <div class="sh-head">
+          <div class="t"><b>记一条 · 刚才这一阵</b><span>写下刚才做了什么</span></div>
+          <button class="sh-icon" type="button" aria-label="取消"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/></svg></button>
+          <button class="sh-icon save" type="button" aria-label="保存"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></button>
+        </div>
+        <div class="sh-body">
+          <div class="timerow"><b>15:20</b><span>→ 现在 · 已 42m</span></div>
+          <div class="sh-inp" contenteditable="false">投递 6 家 + 跟进 2 封回复</div>
+          <div class="cap">标签</div>
+          <div class="chips">
+            <button class="chip on" type="button">求职推进</button>
+            <button class="chip m" type="button">吃饭</button>
+            <button class="chip m" type="button">睡觉</button>
+            <button class="chip" type="button">刷手机</button>
+            <button class="chip" type="button">＋ 自定义</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="fine">提案 A 的取舍：信息密度最高、与现有暗色基底最连续；观感偏「专业工具」，情绪温度低。适合把时间尺当仪表盘用的人。</p>
+    </div>
+  </div>
+</div>
+<script>
+  document.getElementById('tt').addEventListener('click', () => {
+    const h = document.documentElement;
+    h.dataset.theme = h.dataset.theme === 'dark' ? 'light' : 'dark';
+  });
+</script>
+</body>
+</html>
