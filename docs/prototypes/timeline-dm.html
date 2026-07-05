@@ -47,6 +47,11 @@
     padding: max(14px, env(safe-area-inset-top)) 14px 40px;
   }
   .wrap { max-width: 480px; margin: 0 auto; }
+  /* 桌面端给一个设备感边框，避免裸列在大空页里发怪 */
+  @media (min-width: 720px) {
+    body { padding-top: 44px; }
+    .wrap { border: 1px solid var(--hairline-strong); border-radius: 26px; padding: 22px 20px 28px; box-shadow: 0 24px 64px rgba(0,0,0,0.30); }
+  }
   .top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
   .top h1 { font-size: 17px; font-weight: 650; }
   .top .sp { flex: 1; }
@@ -195,7 +200,7 @@
     </div>
   </div>
   <p class="hint">
-    <b>拖</b>时间胶囊改边界（5min 吸附，两侧段联动）· <b>点</b>空隙补录 · <b>点</b>任意段改文字/标签 · 键盘焦点到胶囊后 ↑↓ 也可微调。右上角切换表单形态，分别在两种形态里点文本框，感受 iOS 键盘行为差异。
+    <b>拖</b>时间胶囊改边界（默认 5min 吸附；拖动中手指<b>向右挪开 &gt;48px 进入 1min 精调</b>，挪回恢复粗档）· <b>点</b>空隙补录 · <b>点</b>任意段改文字/标签 · 胶囊聚焦后 ↑↓ 微调 5min、Shift+↑↓ 精调 1min。右上角切换表单形态，分别在两种形态里点文本框，感受 iOS 键盘行为差异。
   </p>
 
   <div class="day-card">
@@ -368,6 +373,7 @@
     drag = {
       idx, h,
       startY: e.clientY,
+      startX: e.clientX,
       t0: points[idx].t,
       lo: points[idx - 1].t + MIN_SEG,
       hi: (idx + 1 < points.length ? points[idx + 1].t : NOW) - MIN_SEG,
@@ -383,8 +389,13 @@
   tl.addEventListener('pointermove', e => {
     if (!drag) return;
     const dy = e.clientY - drag.startY;
-    let t = drag.t0 + Math.round(dy / PX_PER_MIN / SNAP) * SNAP;
+    // 游标精调：手指横向挪开 >48px 时吸附降到 1min（模型本就是分钟精度，
+    // 只是 2px/min 的直拖映射下 1min=2px 低于触控抖动，所以粗档默认 5min）
+    const fine = (e.clientX - drag.startX) > 48;
+    const snap = fine ? 1 : SNAP;
+    let t = drag.t0 + Math.round(dy / PX_PER_MIN / snap) * snap;
     t = Math.max(drag.lo, Math.min(drag.hi, t));
+    drag.fine = fine;
     const dpx = (t - drag.t0) * PX_PER_MIN;
     // 拖动中直接改两侧像素高（不经钳制布局），手指与手柄不脱节
     drag.prevEl.style.height = Math.max(24, drag.prevH0 + dpx) + 'px';
@@ -415,7 +426,7 @@
     const prev = points[idx - 1];
     const label = prev ? (prev.bucket === 'un' ? '未记录' : prev.what || prev.tag) : '';
     document.getElementById('bubble-ctx').textContent =
-      `↑ ${label.slice(0, 8)} ${fmt(t - prev.t)}`;
+      `↑ ${label.slice(0, 8)} ${fmt(t - prev.t)}${drag && drag.fine ? ' · 精调1min' : ''}`;
   }
 
   // 键盘微调（±5min）
@@ -427,7 +438,8 @@
     const idx = Number(h.dataset.idx);
     const lo = points[idx - 1].t + MIN_SEG;
     const hi = (idx + 1 < points.length ? points[idx + 1].t : NOW) - MIN_SEG;
-    const next = Math.max(lo, Math.min(hi, points[idx].t + (e.key === 'ArrowUp' ? -SNAP : SNAP)));
+    const step = e.shiftKey ? 1 : SNAP;
+    const next = Math.max(lo, Math.min(hi, points[idx].t + (e.key === 'ArrowUp' ? -step : step)));
     if (next !== points[idx].t) {
       points[idx].t = next;
       render();
@@ -460,7 +472,9 @@
     editIdx = idx;
     const s = segs()[idx];
     const isGap = s.p.bucket === 'un';
-    document.getElementById('f-title').textContent = isGap ? '补一下' : '编辑这段';
+    // 进行中尾段 = 「+ 记一条」的落点：点它就是记刚才这一阵，同一套表单
+    document.getElementById('f-title').textContent =
+      s.p.ongoing ? '记一条 · 进行中这段' : (isGap ? '补一下' : '编辑这段');
     document.getElementById('f-sub').textContent = `${hhmm(s.start)} – ${s.p.ongoing ? '现在' : hhmm(s.end)} · ${fmt(s.mins)}`;
     document.getElementById('f-what').value = isGap ? '' : s.p.what;
     document.getElementById('f-ctag').value = '';

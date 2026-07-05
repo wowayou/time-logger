@@ -66,6 +66,8 @@
   .note { color: var(--text-3); font-size: var(--fs-cap); margin-bottom: 24px; }
   .cols { display: grid; grid-template-columns: 1fr; gap: 32px; }
   @media (min-width: 860px) { .cols { grid-template-columns: 400px 1fr; align-items: start; } }
+  /* grid 子项 min-width:0：swatches auto-fill 的 min-content 会把 375px 视口撑出横向滚动（老坑第三次） */
+  .cols > * { min-width: 0; }
   h2 { font-size: var(--fs-title); margin: 0 0 12px; }
   section { margin-bottom: 28px; }
 
