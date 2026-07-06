@@ -19,7 +19,7 @@ for (const width of VIEWPORTS) {
 }
 
 for (const share of [false, true]) {
-  test(`footer does not overflow when share is ${share ? 'available' : 'hidden'}`, async ({ page }) => {
+  test(`more sheet keeps layout when share is ${share ? 'available' : 'hidden'}`, async ({ page }) => {
     await boot(page, 320, 'one-record', share);
     await openBackupMenu(page);
     if (share) await expect(page.locator('#share-btn')).toBeVisible();
@@ -41,7 +41,7 @@ test('new entry shows continuation context and recomputes start', async ({ page 
   await expect(panel).toBeFocused();
   await expect(page.locator('[data-role="start-time-label"]')).toHaveText('10:00');
   await expect(page.locator('[data-role="duration-label"]')).not.toBeEmpty();
-  const tooltipVisibility = await page.locator('.form-sheet-actions .icon-btn').first()
+  const tooltipVisibility = await page.locator('.tl-handle:not(.fixed)').first()
     .evaluate(btn => getComputedStyle(btn, '::after').visibility);
   expect(tooltipVisibility).toBe('hidden');
 
@@ -161,8 +161,9 @@ test('closed cross-day segment is sliced into the selected day timeline', async 
   await expect(page.locator('#ruler')).toContainText('维持 20.5%');
   await expect(page.locator('#ruler')).not.toContainText('未记录 100%');
 
-  const visibleTimes = await page.locator('.entry .e-time').allTextContents();
-  expect(visibleTimes).toEqual(['02:35', '00:00']);
+  // v34 rail 时序自上而下：00:00 的跨日承接段在前，02:35 的进行中段在后。
+  const visibleTimes = await page.locator('.tl-rail [data-role="pill-time"]').allTextContents();
+  expect(visibleTimes).toEqual(['00:00', '02:35']);
 });
 
 test('same-minute placeholder save reuses timestamp without duplicate', async ({ page }) => {
@@ -191,15 +192,13 @@ test('new entry still shows inline same-time conflict', async ({ page }) => {
   await expect(page.locator('[data-role="conflict-error"]')).toContainText('用+1min');
 });
 
-test('help close icon and import shift dialog stay custom', async ({ page }) => {
+test('help close is a text button and import shift dialog stays custom', async ({ page }) => {
   await boot(page, 375, 'empty');
   await page.getByRole('button', { name: '打开说明' }).click();
   await expect(page.locator('.help-body')).toBeVisible();
   await expect(page.locator('.form-sheet-panel')).toBeFocused();
-  await expect(page.locator('.form-sheet-actions [data-action="close-form"] svg path')).toHaveCount(2);
-  const helpTooltipVisibility = await page.locator('.form-sheet-actions [data-action="close-form"]')
-    .evaluate(btn => getComputedStyle(btn, '::after').visibility);
-  expect(helpTooltipVisibility).toBe('hidden');
+  // v34 C 语法：sheet 头部是「关闭」文字按钮，不再是 icon。
+  await expect(page.getByRole('button', { name: '关闭说明' })).toHaveText('关闭');
 
   await page.keyboard.press('Escape');
   const chooserPromise = page.waitForEvent('filechooser');
@@ -350,6 +349,7 @@ test('planned-only day has honest ruler copy and confirm opens placeholder', asy
 test('summary includes a plan section for day view', async ({ page, context }) => {
   await boot(page, 768, 'planned-only', false, FIXED_NOW);
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await openBackupMenu(page);
   await page.getByRole('button', { name: '复制当前视图摘要' }).click();
   const text = await page.evaluate(() => navigator.clipboard.readText());
   expect(text).toContain('## 计划');
@@ -358,6 +358,7 @@ test('summary includes a plan section for day view', async ({ page, context }) =
 
 test('config rename migrates existing tags and removes replacement UI', async ({ page }) => {
   await boot(page, 768, 'custom-chip', false, FIXED_NOW);
+  await openBackupMenu(page);
   await page.getByRole('button', { name: '配置标签' }).click();
   await expect(page.locator('#form-sheet-title')).toHaveText('标签高级设置');
   await expect(page.locator('.config-body')).not.toContainText('替换');
@@ -427,8 +428,8 @@ test('sheet controls stay inside rounded panel bounds', async ({ page }) => {
     const panel = document.querySelector('.form-sheet-panel').getBoundingClientRect();
     const head = document.querySelector('.form-sheet-head');
     const headRect = head.getBoundingClientRect();
-    const close = document.querySelector('.form-sheet-actions .icon-btn').getBoundingClientRect();
-    const first = document.querySelector('.backup-sheet-btns .copy-btn').getBoundingClientRect();
+    const close = document.querySelector('.sh-cancel').getBoundingClientRect();
+    const first = document.querySelector('.more-body .cell-btn').getBoundingClientRect();
     return {
       closeTop: close.top,
       closeRight: close.right,
@@ -465,8 +466,8 @@ test('reload starts with has-entries boot state and reaches app-ready', async ({
 test('editing an existing record persists content and tag (① commitEdit single load)', async ({ page }) => {
   await boot(page, 768, 'one-record', false, FIXED_NOW);
 
-  // Open the existing record's edit sheet.
-  await page.getByRole('button', { name: '编辑记录' }).click();
+  // v34: 点段即编辑。
+  await page.locator('.seg-block[data-id="today-1"]').click();
   const what = page.locator('[data-role="edit-what"]');
   await expect(what).toBeVisible();
   await expect(what).toHaveValue('响应式测试记录');
@@ -492,13 +493,13 @@ test('editing a long-note record keeps the save button on screen (SE2 textarea c
   // long note growing an uncapped textarea used to push the save ✓ off-screen.
   await boot(page, 375, 'long-note', false, FIXED_NOW);
 
-  await page.getByRole('button', { name: '编辑记录' }).click();
+  await page.locator('.seg-block[data-id="today-long"]').click();
   const what = page.locator('[data-role="edit-what"]');
   await expect(what).toBeVisible();
 
   const metrics = await page.evaluate(() => {
     const ta = document.querySelector('[data-role="edit-what"]');
-    const save = document.querySelector('.form-sheet-actions .save-btn');
+    const save = document.querySelector('.sh-done');
     const panel = document.querySelector('.form-sheet-panel');
     const s = save.getBoundingClientRect();
     return {
@@ -610,7 +611,9 @@ test('deleting a standalone middle record turns its span 未记录, never the pr
 
   // 睡一会 | 写代码 | 吃早饭. Deleting 写代码 (distinct neighbors) must not stretch
   // 睡觉 over 09:00→10:00 — that span becomes an honest 未记录 placeholder.
-  await page.locator('.entry[data-id="tl-b"] [data-action="delete-entry"]').click();
+  // v34: 删除入口在编辑 sheet 里（rail 上无逐条按钮）。
+  await page.locator('.seg-block[data-id="tl-b"]').click();
+  await page.getByRole('button', { name: '删除这条记录' }).click();
 
   const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.filter(e => !e.planned));
   expect(entries.find(e => e.id === 'tl-b')).toMatchObject({ what: '', tags: [] });
@@ -634,4 +637,42 @@ test('⑥ confirming a plan onto a taken now-minute nudges forward', async ({ pa
   expect(confirmed.ts).not.toBe('2026-06-29T12:34');
   const stamps = entries.map(e => e.ts);
   expect(new Set(stamps).size).toBe(stamps.length);
+});
+
+test('v34 dragging a boundary handle snaps to 5min and persists', async ({ page }) => {
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+  const handle = page.locator('.tl-handle[data-id="today-2"]');
+  await expect(handle).toBeVisible();
+  const box = await handle.boundingBox();
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  // 24px ÷ 2px/min = 12min → 5min 吸附到 +10min。
+  await page.mouse.move(cx, cy + 24, { steps: 4 });
+  await page.mouse.up();
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(entries.find(e => e.id === 'today-2').ts).toBe('2026-06-29T10:10');
+  // 拖后重排：把手回到钳制布局并显示新时间。
+  await expect(page.locator('.tl-handle[data-id="today-2"] [data-role="pill-time"]')).toHaveText('10:10');
+});
+
+test('v34 keyboard arrows nudge a boundary (5min, Shift=1min)', async ({ page }) => {
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+  await page.locator('.tl-handle[data-id="today-2"]').focus();
+  await page.keyboard.press('ArrowUp');
+  let ts = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(e => e.id === 'today-2').ts);
+  expect(ts).toBe('2026-06-29T09:55');
+  await page.locator('.tl-handle[data-id="today-2"]').focus();
+  await page.keyboard.press('Shift+ArrowDown');
+  ts = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(e => e.id === 'today-2').ts);
+  expect(ts).toBe('2026-06-29T09:56');
+});
+
+test('v34 tapping a gap opens the bounded backfill sheet', async ({ page }) => {
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+  await page.locator('.seg-block.gap').click();
+  await expect(page.locator('#form-sheet-title')).toContainText('补录');
+  await expect(page.locator('#form-ts')).toHaveValue('2026-06-29T00:00');
+  await expect(page.locator('#form-end-ts')).toHaveValue('2026-06-29T09:00');
 });

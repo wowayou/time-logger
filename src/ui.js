@@ -7,6 +7,7 @@ import { formatPercent } from './stats.js';
 import {
   BUCKETS,
   BUCKET_ORDER,
+  THEME_KEY,
   bucketForTag,
   chipGroups,
   countEntriesWithTag,
@@ -87,93 +88,130 @@ export function confirmSegmentLabel(startTs, endTs) {
 }
 
 
+// 静轴动标 rail：时序自上而下，段高半比例钳制；边界时间文字即拖拽把手
+// （阅读态零 chrome，active 才浮胶囊）。点段=编辑、点隙=补录、点尾段=记一条，
+// 手势与落库在 src/timeline_gestures.js。
+const RAIL_H_MIN = 54;
+const RAIL_H_MAX = 200;
+const RAIL_MIN_SEG = 5;
+
+function railHeight(mins) {
+  return Math.max(RAIL_H_MIN, Math.min(RAIL_H_MAX, Math.round(mins * 1.1)));
+}
+
+function minuteOfDay(d) {
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+function plannedCard(e) {
+  const displayTag = (e.tags || [])[0] || '未知';
+  const tagClass = ` e-tag-${bucketForTag(displayTag)}`;
+  return `<div class="entry planned" data-id="${esc(e.id)}">
+    <div class="e-body">
+      <div class="e-time">${hhmm(e.ts)}</div>
+      <div class="e-what">${esc(e.what || '未填写')}</div>
+      <div class="e-meta">
+        <span class="e-tag e-tag-planned${tagClass}">计划·#${esc(displayTag)}</span>
+      </div>
+    </div>
+    <div class="e-btns">
+      <button class="icon-btn save-btn" type="button" data-action="confirm-planned" data-id="${esc(e.id)}" data-tip="标记为已发生" aria-label="标记计划为已发生">${iconSvg('check')}</button>
+      <button class="icon-btn" type="button" data-action="start-edit" data-id="${esc(e.id)}" data-tip="编辑计划" aria-label="编辑计划">${iconSvg('edit')}</button>
+      <button class="icon-btn dbtn" type="button" data-action="delete-entry" data-id="${esc(e.id)}" data-tip="删除计划" aria-label="删除计划">${iconSvg('trash')}</button>
+    </div>
+  </div>`;
+}
+
+function railSegment(seg, i, prev) {
+  const { e, start, end, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs } = seg;
+  const startMin = minuteOfDay(start);
+  const endMin = startMin + mins;
+  const isGap = !e;
+  const isPlaceholder = !isGap && typeof e.what === 'string' && e.what.trim() === '';
+  const activePlaceholder = isPlaceholder && isOngoing;
+  const segStartTs = localDateTimeKey(start);
+  const segEndTs = end ? localDateTimeKey(end) : '';
+  const draggable = Boolean(e && !e.planned && e.ts === segStartTs);
+  const timeLabel = hhmm(start);
+  const arrows = draggable
+    ? '<svg viewBox="0 0 10 16" aria-hidden="true" focusable="false"><path d="M2 5.5 5 2.5l3 3"></path><path d="M2 10.5l3 3 3-3"></path></svg>'
+    : '';
+  const pill = `<span class="pill">${arrows}<span data-role="pill-time">${timeLabel}</span></span>`;
+  let handle;
+  if (draggable) {
+    const prevStartMin = prev ? minuteOfDay(prev.start) : null;
+    const lo = prev ? Math.min(prevStartMin + RAIL_MIN_SEG, startMin) : 0;
+    const hi = Math.max(endMin - RAIL_MIN_SEG, startMin);
+    const ctxLabel = prev
+      ? (prev.e
+        ? (((prev.e.what || '').trim()) || (typeof prev.e.what === 'string' && prev.e.what.trim() === '' ? '未记录' : prev.tag))
+        : '未记录')
+      : '';
+    handle = `<button class="tl-handle" type="button" data-idx="${i}" data-id="${esc(e.id)}" data-date="${esc(e.ts.slice(0, 10))}" data-min="${startMin}" data-lo="${lo}" data-hi="${hi}"${prevStartMin === null ? '' : ` data-prev-start="${prevStartMin}"`} data-ctx="${esc(ctxLabel)}" data-tip="按住拖动改这个边界时间；聚焦后 ↑↓ 调 5 分钟，Shift+↑↓ 调 1 分钟。" aria-label="边界时间 ${timeLabel}，拖动或用上下方向键调整">${pill}</button>`;
+  } else {
+    handle = `<span class="tl-handle fixed" aria-hidden="true">${pill}</span>`;
+  }
+  const bucket = isGap || isPlaceholder ? 'unrecorded' : bucketForTag(tag);
+  const cls = ['seg-block', `sb-${bucket}`];
+  if (isGap) cls.push('gap');
+  if (isPlaceholder) cls.push('placeholder');
+  if (e && seg.sheetEditing) cls.push('sheet-editing');
+  const whatText = isGap
+    ? '这一段还没记'
+    : (isPlaceholder ? (activePlaceholder ? '进行中·还没记' : '未记录') : e.what);
+  const displayTag = isGap || isPlaceholder ? '未记录' : tag;
+  const tagClass = isGap || isPlaceholder ? 'e-tag-unrecorded' : `e-tag-${bucket}`;
+  const durStr = timelineDurationLabel(mins, isOngoing, unrecorded || isPlaceholder || isGap, pendingConfirm);
+  const confirmText = e ? confirmSegmentLabel(e.ts, endTs) : '';
+  const confirmBtn = confirmable && e
+    ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" data-tip="确认后按这个标签统计；相邻时间变化会自动失效。" aria-label="${esc(confirmText)}">${esc(confirmText)}</button>`
+    : '';
+  let splitBtn = '';
+  if (segEndTs && !activePlaceholder) {
+    const splitLabel = (isGap || isPlaceholder || unrecorded) ? '补一下' : '切一刀';
+    const splitAria = isGap ? '补录这段未记录时间' : '在这段里补录或切分';
+    splitBtn = `<button class="mini-btn" type="button" data-action="backfill-seg" data-ts="${esc(segStartTs)}" data-end="${esc(segEndTs)}" data-tip="在这段里补录或切分一段；结束自动接回原状态。" aria-label="${splitAria}">${splitLabel}</button>`;
+  }
+  const endLabel = isOngoing ? '现在' : hhmm(end);
+  const tapHint = isGap || (isPlaceholder && !activePlaceholder) ? '点按补录' : (activePlaceholder ? '点按记一条' : '点按编辑');
+  const dataAttrs = [
+    'data-action="seg-tap"',
+    `data-idx="${i}"`,
+    e ? `data-id="${esc(e.id)}"` : '',
+    `data-ts="${esc(segStartTs)}"`,
+    `data-end="${esc(segEndTs)}"`,
+    isGap ? 'data-gap="1"' : '',
+    isPlaceholder ? 'data-placeholder="1"' : '',
+    activePlaceholder ? 'data-ongoing="1"' : ''
+  ].filter(Boolean).join(' ');
+  return `${handle}<div class="${cls.join(' ')}" ${dataAttrs} role="button" tabindex="0" style="height:${railHeight(mins)}px" aria-label="${timeLabel} 到 ${endLabel}，${esc(isGap || isPlaceholder ? whatText : (e.what || displayTag))}，${tapHint}">
+    <div class="seg-inner">
+      <div class="seg-what">${esc(whatText)}</div>
+      <div class="seg-meta">
+        <span class="e-tag ${tagClass}">#${esc(displayTag)}</span>
+        <span class="e-dur">${durStr}</span>
+        ${confirmBtn}${splitBtn}
+      </div>
+    </div>
+  </div>`;
+}
+
 export function renderTimeline(items, opts = {}) {
   const { sheetEditId = null, plannedItems = [] } = opts;
   const el = document.getElementById('timeline');
-  const planned = (plannedItems || []).map(e => ({
-    e,
-    start: new Date(e.ts),
-    mins: 0,
-    isOngoing: false,
-    unrecorded: false,
-    pendingConfirm: false,
-    confirmable: false,
-    tag: (e.tags || [])[0] || '未知',
-    endTs: '',
-    planned: true
-  }));
-  const allItems = [...items, ...planned];
-  if (!allItems.length) {
+  const planned = plannedItems || [];
+  if (!items.length && !planned.length) {
     el.innerHTML = '<div class="empty-tip">点击上方「+ 记一条」开始记录，或切换日期查看历史。</div>';
     return;
   }
-  el.innerHTML = [...allItems].reverse().map(({ e, start, end, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs, planned: isPlanned }) => {
-    if (isPlanned) {
-      const displayTag = (e.tags || [])[0] || '未知';
-      const tagClass = ` e-tag-${bucketForTag(displayTag)}`;
-      return `<div class="entry planned" data-id="${esc(e.id)}">
-        <div class="e-body">
-          <div class="e-time">${hhmm(e.ts)}</div>
-          <div class="e-what">${esc(e.what || '未填写')}</div>
-          <div class="e-meta">
-            <span class="e-tag e-tag-planned${tagClass}">计划·#${esc(displayTag)}</span>
-          </div>
-        </div>
-        <div class="e-btns">
-          <button class="icon-btn save-btn" type="button" data-action="confirm-planned" data-id="${esc(e.id)}" data-tip="标记为已发生" aria-label="标记计划为已发生">${iconSvg('check')}</button>
-          <button class="icon-btn" type="button" data-action="start-edit" data-id="${esc(e.id)}" data-tip="编辑计划" aria-label="编辑计划">${iconSvg('edit')}</button>
-          <button class="icon-btn dbtn" type="button" data-action="delete-entry" data-id="${esc(e.id)}" data-tip="删除计划" aria-label="删除计划">${iconSvg('trash')}</button>
-        </div>
-      </div>`;
-    }
-    if (!e) {
-      const gapTs = localDateTimeKey(start);
-      const gapEnd = localDateTimeKey(end);
-      return `<div class="entry gap" data-gap-ts="${esc(gapTs)}">
-        <div class="e-body">
-          <div class="e-time">${hhmm(start)}</div>
-          <div class="e-what">这一段还没记，要补吗？</div>
-          <div class="e-meta">
-            <span class="e-tag e-tag-unrecorded">#未记录</span>
-            <span class="e-dur">${fmtMins(mins)}</span>
-            <button class="mini-btn" type="button" data-action="backfill-seg" data-ts="${esc(gapTs)}" data-end="${esc(gapEnd)}" data-tip="在这段未记录时间补一条；结束会自动接回原状态。" aria-label="补录这段未记录时间">补一下</button>
-          </div>
-        </div>
-      </div>`;
-    }
-    const isPlaceholder = typeof e.what === 'string' && e.what.trim() === '';
-    // Only the live now-segment reads "进行中"; a middle/past placeholder (e.g.
-    // left by a smart delete) is honestly just "未记录".
-    const activePlaceholder = isPlaceholder && isOngoing;
-    const displayTag = isPlaceholder ? '未记录' : tag;
-    const tagClass = ` e-tag-${isPlaceholder ? 'unrecorded' : bucketForTag(tag)}`;
-    const entryClass = `entry${isPlaceholder ? ' placeholder' : ''}${sheetEditId === e.id ? ' sheet-editing' : ''}`;
-    const durStr = timelineDurationLabel(mins, isOngoing, unrecorded || isPlaceholder, pendingConfirm);
-    const confirmText = confirmSegmentLabel(e.ts, endTs);
-    const startLabel = start ? hhmm(start) : hhmm(e.ts);
-    const segStartTs = start ? localDateTimeKey(start) : e.ts;
-    const segEndTs = end ? localDateTimeKey(end) : '';
-    const splitLabel = (isPlaceholder || unrecorded) ? '补一下' : '切一刀';
-    const splitBtn = segEndTs
-      ? `<button class="mini-btn" type="button" data-action="backfill-seg" data-ts="${esc(segStartTs)}" data-end="${esc(segEndTs)}" data-tip="在这段里补录或切分一段；结束自动接回原标签。" aria-label="在这段里补录或切分">${splitLabel}</button>`
-      : '';
-    return `<div class="${entryClass}" data-id="${esc(e.id)}">
-      <div class="e-body">
-        <div class="e-time">${startLabel}</div>
-        <div class="e-what">${esc(isPlaceholder ? (activePlaceholder ? '进行中·还没记' : '未记录') : e.what)}</div>
-        <div class="e-meta">
-          ${displayTag ? `<span class="e-tag${tagClass}">#${esc(displayTag)}</span>` : ''}
-          <span class="e-dur">${durStr}</span>
-          ${confirmable ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" data-tip="确认后按这个标签统计；相邻时间变化会自动失效。" aria-label="${esc(confirmText)}">${esc(confirmText)}</button>` : ''}
-          ${splitBtn}
-        </div>
-      </div>
-      <div class="e-btns">
-        <button class="icon-btn" type="button" data-action="start-edit" data-id="${esc(e.id)}" data-tip="编辑记录" aria-label="编辑记录">${iconSvg('edit')}</button>
-        <button class="icon-btn dbtn" type="button" data-action="delete-entry" data-id="${esc(e.id)}" data-tip="删除记录" aria-label="删除记录">${iconSvg('trash')}</button>
-      </div>
-    </div>`;
+  const rail = items.map((seg, i) => {
+    if (seg.e && sheetEditId === seg.e.id) seg.sheetEditing = true;
+    return railSegment(seg, i, i > 0 ? items[i - 1] : null);
   }).join('');
+  const plannedHtml = planned.length
+    ? `<div class="tl-label planned-label">计划</div>${planned.map(plannedCard).join('')}`
+    : '';
+  el.innerHTML = `<div class="tl-rail">${rail}</div>${plannedHtml}`;
 }
 
 export function renderSummaryRows(rows) {
@@ -219,24 +257,50 @@ export function renderRecordModeSeg(selectedMode = 'log') {
   </div>`;
 }
 
-export function renderBackupSheet(opts = {}) {
-  const shareSupported = Boolean(opts.shareSupported);
+// C 语法 sheet 头：抓手条 + 左取消/右完成文字按钮 + 居中标题。
+// 可见文字按钮不加 data-tip（红线：文字按钮不强制 tooltip）。
+export function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '', doneAction = '', doneAria = '', doneId = '' }) {
+  const done = doneText
+    ? `<button class="sh-done" type="button" data-action="${doneAction}"${doneId} aria-label="${esc(doneAria || doneText)}">${esc(doneText)}</button>`
+    : '<span class="sh-spacer" aria-hidden="true"></span>';
   return `
-    <div class="form-sheet-head">
-      <div class="form-sheet-summary">
-        <div class="form-sheet-title" id="form-sheet-title">备份</div>
-        <div class="form-sheet-what">完整 JSON 备份与导入</div>
+    <div class="sh-grab" aria-hidden="true"></div>
+    <div class="form-sheet-head sh-head">
+      <button class="sh-cancel" type="button" data-action="${cancelAction}" aria-label="${esc(cancelAria || cancelText)}">${esc(cancelText)}</button>
+      <div class="sh-title" id="form-sheet-title">${title}</div>
+      ${done}
+    </div>`;
+}
+
+const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
+
+export function renderMoreSheet(opts = {}) {
+  const shareSupported = Boolean(opts.shareSupported);
+  let themePref = 'auto';
+  try { themePref = localStorage.getItem(THEME_KEY) || 'auto'; } catch {}
+  const themeBtn = (value, label) =>
+    `<button type="button" data-action="theme" data-theme="${value}" class="${themePref === value ? 'active' : ''}" aria-label="主题：${label}">${label}</button>`;
+  return `
+    ${sheetHead({ title: '更多', cancelText: '关闭', cancelAction: 'close-form', cancelAria: '关闭更多菜单' })}
+    <div class="form-sheet-body more-body">
+      <div class="cell-group">
+        <button class="cell-btn" id="summary-btn" type="button" data-action="copy-summary" aria-label="复制当前视图摘要">复制当前视图摘要${cellChevron}</button>
       </div>
-      <div class="form-sheet-actions">
-        <button class="icon-btn cancel-btn" type="button" data-action="close-form" data-tip="关闭备份" aria-label="关闭备份">${iconSvg('close')}</button>
+      <div class="form-hint">摘要只含当前视图，可贴给 AI；下面四项均为完整 JSON 备份，全部在本机完成。</div>
+      <div class="cell-group">
+        <button class="cell-btn" id="copy-btn" type="button" data-action="copy-json" aria-label="复制完整 JSON 备份">复制 JSON 备份${cellChevron}</button>
+        <button class="cell-btn" type="button" data-action="download-json" aria-label="下载 JSON 备份">下载备份${cellChevron}</button>
+        <button class="cell-btn" type="button" data-action="import-json" aria-label="导入 JSON 备份">导入备份${cellChevron}</button>
+        <button class="cell-btn" id="share-btn" type="button" data-action="share-json" aria-label="分享 JSON 备份"${shareSupported ? '' : ' hidden'}>分享备份${cellChevron}</button>
       </div>
-    </div>
-    <div class="form-sheet-body backup-sheet-body">
-      <div class="backup-sheet-btns">
-        <button class="copy-btn" id="copy-btn" type="button" data-action="copy-json" aria-label="复制完整 JSON 备份">复制 JSON</button>
-        <button class="copy-btn" type="button" data-action="download-json" aria-label="下载 JSON 备份">下载</button>
-        <button class="copy-btn" type="button" data-action="import-json" aria-label="导入 JSON 备份">导入</button>
-        <button class="copy-btn" id="share-btn" type="button" data-action="share-json" aria-label="分享 JSON 备份"${shareSupported ? '' : ' hidden'}>分享</button>
+      <div class="cell-group">
+        <button class="cell-btn" type="button" data-action="open-tag-config" aria-label="配置标签">标签高级设置${cellChevron}</button>
+        <div class="cell-row"><span>主题</span>
+          <div class="seg theme-seg" id="theme-seg" role="group" aria-label="主题">
+            ${themeBtn('auto', '自动')}${themeBtn('light', '亮色')}${themeBtn('dark', '暗色')}
+          </div>
+        </div>
+        <button class="cell-btn" type="button" data-action="open-help" aria-label="打开说明">说明${cellChevron}</button>
       </div>
     </div>`;
 }
@@ -245,7 +309,7 @@ export function renderFormSheet(opts) {
   if (opts && opts.mode === 'help') return renderHelpSheet();
   if (opts && opts.mode === 'config') return renderConfigSheet(opts.config || loadConfig(), opts);
   if (opts && opts.mode === 'import-shift') return renderImportShiftDialog(opts);
-  if (opts && opts.mode === 'backup') return renderBackupSheet(opts);
+  if (opts && opts.mode === 'more') return renderMoreSheet(opts);
   const mode = opts && opts.mode === 'edit' ? 'edit' : 'new';
   const e = opts && opts.entry;
   const isEdit = mode === 'edit';
@@ -278,7 +342,6 @@ export function renderFormSheet(opts) {
   const whatPlaceholder = isPlan || isEditPlanned ? '准备面试 / 写方案…' : (isEdit ? '做了什么' : '写邮件 / 刷手机 / 准备面试…');
   const saveAction = isEdit ? 'commit-edit' : 'save-entry';
   const saveId = isEdit ? ` data-id="${esc(e.id)}"` : '';
-  const saveTip = isEdit ? '保存修改' : '保存记录';
   const saveLabel = isEdit ? '保存修改' : '保存时间记录';
   const tsInput = isEdit
     ? `<input type="hidden" data-role="edit-ts" value="${esc(e.ts)}">`
@@ -308,18 +371,30 @@ export function renderFormSheet(opts) {
         ${datalist}
         <div class="form-hint" data-role="mainline-hint">${bucketHint(bucket)}</div>
       </div>`;
-  const editBody = `
+  // 编辑已发生记录：表单只管内容和标签，时间在时间轴上拖边界（v34 语义统一）。
+  // 只有计划条仍在表单里改时间（它不在 rail 上，没有可拖的边界）。
+  const editTimeSection = isEditPlanned
+    ? `
       <div class="fl">
-        <div class="fl-label">时间（可改，补录用）</div>
+        <div class="fl-label">计划时间（可改）</div>
         ${tsInput}
         <div data-role="edit-wheel"></div>
       </div>
-      <div class="form-inline-error" data-role="conflict-error" hidden></div>
+      <div class="form-inline-error" data-role="conflict-error" hidden></div>`
+    : `
+      ${tsInput}
+      <div class="cell-group">
+        <div class="cell-row"><span>开始</span><span class="cell-value">${isEdit ? hhmm(e.ts) : ''}</span></div>
+        <div class="cell-row"><span>改时间</span><span class="cell-value">关掉表单，在时间轴上拖边界</span></div>
+      </div>`;
+  const editBody = `
+      ${editTimeSection}
       <div class="fl">
         <div class="fl-label">${whatFieldLabel}</div>
         ${whatInput}
       </div>
-      ${tagBlock}`;
+      ${tagBlock}
+      ${isEdit ? `<button class="cell-danger" type="button" data-action="delete-entry" data-id="${esc(e.id)}" aria-label="删除这条${isEditPlanned ? '计划' : '记录'}">删除这条${isEditPlanned ? '计划' : '记录'}</button>` : ''}`;
   const backfillTimeSection = `
       <input type="hidden" id="form-ts">
       <input type="hidden" id="form-end-ts">
@@ -358,17 +433,18 @@ export function renderFormSheet(opts) {
       </div>
       ${tagBlock}`;
   return `
-    <div class="form-sheet-head">
-      <div class="form-sheet-summary">
-        <div class="form-sheet-title" id="form-sheet-title">${title} · ${summary}</div>
-        <div class="form-sheet-what">${whatText}</div>
-      </div>
-      <div class="form-sheet-actions">
-        <button class="icon-btn cancel-btn" type="button" data-action="${isEdit ? 'cancel-edit' : 'close-form'}" data-tip="${isEdit ? '取消编辑' : '取消记录'}" aria-label="${isEdit ? '取消编辑' : '取消新增记录'}">${iconSvg('undo')}</button>
-        <button class="icon-btn save-btn" type="button" data-action="${saveAction}"${saveId} data-tip="${saveTip}" aria-label="${saveLabel}">${iconSvg('check')}</button>
-      </div>
-    </div>
+    ${sheetHead({
+      title: `${title} · ${summary}`,
+      cancelText: '取消',
+      cancelAction: isEdit ? 'cancel-edit' : 'close-form',
+      cancelAria: isEdit ? '取消编辑' : '取消新增记录',
+      doneText: '完成',
+      doneAction: saveAction,
+      doneAria: saveLabel,
+      doneId: saveId
+    })}
     <div class="form-sheet-body">
+      <div class="form-sheet-what form-lede">${whatText}</div>
       ${isEdit ? editBody : newBody}
     </div>`;
 }
@@ -401,21 +477,13 @@ export function renderTagPicker(prefix, selectedTag, config = loadConfig(), buck
 
 export function renderHelpSheet() {
   return `
-    <div class="form-sheet-head">
-      <div class="form-sheet-summary">
-        <div class="form-sheet-title" id="form-sheet-title">说明</div>
-        <div class="form-sheet-what">打点模型、本地备份、4 桶统计</div>
-      </div>
-      <div class="form-sheet-actions">
-        <button class="icon-btn cancel-btn" type="button" data-action="close-form" data-tip="关闭说明" aria-label="关闭说明">${iconSvg('close')}</button>
-      </div>
-    </div>
+    ${sheetHead({ title: '说明', cancelText: '关闭', cancelAction: 'close-form', cancelAria: '关闭说明' })}
     <div class="form-sheet-body help-body">
-      <section><h2>怎么记</h2><p>点「+ 记一条」记录刚才这一阵，或切换「计划中」安排未来事项；保存后自动开一段未记录的进行中。</p></section>
+      <section><h2>怎么记</h2><p>点「+ 记一条」或点时间轴最下方的进行中段，记录刚才这一阵；点任意段可改内容和标签；按住段左侧的时间文字拖动，直接改边界时间；点空隙一步补录。</p></section>
       <section><h2>4 桶</h2><p>先选归类桶，再选标签：主线=求职推进和自定义主线；维持=睡觉、吃饭、通勤等必要消耗；漏损=逃避娱乐；未记录=未知、孤儿标签和待确认长段。</p></section>
       <section><h2>计划</h2><p>计划条不计入 4 桶统计；时间到了可点「发生了」转为已发生记录。</p></section>
       <section><h2>3 小时确认</h2><p>超过 3 小时的非睡觉片段先进入未记录；确认后才按标签统计。睡觉默认 longOk，不要求确认。</p></section>
-      <section><h2>备份与合并</h2><p>底栏「备份」含复制、下载、分享、导入完整 JSON；摘要只导出当前视图，适合贴给 AI。</p></section>
+      <section><h2>备份与合并</h2><p>右上角「···」更多菜单含复制、下载、分享、导入完整 JSON；摘要只导出当前视图，适合贴给 AI。</p></section>
       <section><h2>双设备时区</h2><p>时间按设备壁钟保存，不做自动转换。导入时可整体平移 ±N 小时来对齐。</p></section>
       <section><h2>屏幕与隐私</h2><p>本应用不会主动保持屏幕常亮；数据只存在本机浏览器。</p></section>
     </div>`;
@@ -425,16 +493,7 @@ export function renderImportShiftDialog(opts = {}) {
   const value = opts.importShiftHours !== undefined ? opts.importShiftHours : '0';
   const hint = opts.importShiftHint || '导入前可把所有时间整体平移。例：iPhone 记在 UTC+8、电脑 UTC-5，填 -13；留空或 0 不平移。';
   return `
-    <div class="form-sheet-head">
-      <div class="form-sheet-summary">
-        <div class="form-sheet-title" id="form-sheet-title">导入时区平移</div>
-        <div class="form-sheet-what">按小时整体移动导入记录的时间</div>
-      </div>
-      <div class="form-sheet-actions">
-        <button class="icon-btn cancel-btn" type="button" data-action="cancel-import-shift" data-tip="取消导入" aria-label="取消导入">${iconSvg('undo')}</button>
-        <button class="icon-btn save-btn" type="button" data-action="confirm-import-shift" data-tip="确认导入" aria-label="确认导入">${iconSvg('check')}</button>
-      </div>
-    </div>
+    ${sheetHead({ title: '导入时区平移', cancelText: '取消', cancelAction: 'cancel-import-shift', cancelAria: '取消导入', doneText: '导入', doneAction: 'confirm-import-shift', doneAria: '确认导入' })}
     <div class="form-sheet-body import-shift-body">
       <div class="form-hint">${esc(hint)}</div>
       <div class="fl">
@@ -473,18 +532,9 @@ export function renderConfigSheet(config = loadConfig(), opts = {}) {
       return count ? `${esc(name)}（${count} 条）` : esc(name);
     }).join('、')}</div>` : '';
   return `
-    <div class="form-sheet-head">
-      <div class="form-sheet-summary">
-        <div class="form-sheet-title" id="form-sheet-title">标签高级设置</div>
-        <div class="form-sheet-what">改名会同步迁移历史记录</div>
-      </div>
-      <div class="form-sheet-actions">
-        <button class="icon-btn cancel-btn" type="button" data-action="close-form" data-tip="取消配置" aria-label="取消配置">${iconSvg('undo')}</button>
-        <button class="icon-btn save-btn" type="button" data-action="save-tag-config" data-tip="保存配置" aria-label="保存标签配置">${iconSvg('check')}</button>
-      </div>
-    </div>
+    ${sheetHead({ title: '标签高级设置', cancelText: '取消', cancelAction: 'close-form', cancelAria: '取消配置', doneText: '保存', doneAction: 'save-tag-config', doneAria: '保存标签配置' })}
     <div class="form-sheet-body config-body">
-      <div class="form-hint">录入时先选桶；自定义标签在同桶第二次使用后自动固定。内置标签不会在这里删除，可改名、改桶或设置超长段免确认。</div>
+      <div class="form-hint">改名会同步迁移历史记录。录入时先选桶；自定义标签在同桶第二次使用后自动固定。内置标签不会在这里删除，可改名、改桶或设置超长段免确认。</div>
       ${mainlineHint}
       ${section('maintain', '维持标签')}
       ${section('leak', '漏损标签')}

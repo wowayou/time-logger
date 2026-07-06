@@ -136,9 +136,10 @@ export async function boot(page, width, state, share = false, now = '', selected
   await page.waitForFunction(() => document.body.classList.contains('app-ready'));
 }
 
+// v34: 摘要/备份/配置/主题/说明收进 header「···」更多 sheet；名字保留少改调用点。
 export async function openBackupMenu(page) {
-  await page.getByRole('button', { name: '打开备份菜单' }).click();
-  await expect(page.locator('#form-sheet-title')).toHaveText('备份');
+  await page.getByRole('button', { name: '打开更多菜单' }).click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
 }
 
 export async function expectNoHorizontalOverflow(page) {
@@ -146,7 +147,8 @@ export async function expectNoHorizontalOverflow(page) {
     const doc = document.documentElement;
     const nav = document.querySelector('.date-nav').getBoundingClientRect();
     const period = document.querySelector('#period-label').getBoundingClientRect();
-    const footer = document.querySelector('.footer').getBoundingClientRect();
+    const rail = document.querySelector('.tl-rail');
+    const railRect = rail ? rail.getBoundingClientRect() : null;
     return {
       scrollWidth: doc.scrollWidth,
       clientWidth: doc.clientWidth,
@@ -154,8 +156,8 @@ export async function expectNoHorizontalOverflow(page) {
       navRight: nav.right,
       periodLeft: period.left,
       periodRight: period.right,
-      footerLeft: footer.left,
-      footerRight: footer.right,
+      railLeft: railRect ? railRect.left : 0,
+      railRight: railRect ? railRect.right : 0,
       viewport: window.innerWidth
     };
   });
@@ -164,6 +166,6 @@ export async function expectNoHorizontalOverflow(page) {
   expect(metrics.navRight).toBeLessThanOrEqual(metrics.viewport + 1);
   expect(metrics.periodLeft).toBeGreaterThanOrEqual(-1);
   expect(metrics.periodRight).toBeLessThanOrEqual(metrics.viewport + 1);
-  expect(metrics.footerLeft).toBeGreaterThanOrEqual(-1);
-  expect(metrics.footerRight).toBeLessThanOrEqual(metrics.viewport + 1);
+  expect(metrics.railLeft).toBeGreaterThanOrEqual(-1);
+  expect(metrics.railRight).toBeLessThanOrEqual(metrics.viewport + 1);
 }

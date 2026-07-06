@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "33"
+EXPECTED_VERSION = "34"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -22,6 +22,7 @@ REQUIRED_RUNTIME_ASSETS = [
     "src/entry_model.js",
     "src/io_actions.js",
     "src/sheet_controller.js",
+    "src/timeline_gestures.js",
     "src/time.js",
     "src/storage.js",
     "src/stats.js",
@@ -194,6 +195,7 @@ def audit_runtime_imports(errors: list[str]) -> None:
         "src/entry_model.js",
         "src/io_actions.js",
         "src/sheet_controller.js",
+        "src/timeline_gestures.js",
         "src/time.js",
         "src/storage.js",
         "src/stats.js",
@@ -218,9 +220,10 @@ def audit_index(errors: list[str]) -> None:
     entry_model = read_text("src/entry_model.js")
     io_actions = read_text("src/io_actions.js")
     sheet_controller = read_text("src/sheet_controller.js")
+    timeline_gestures = read_text("src/timeline_gestures.js")
     ui = read_text("src/ui.js")
     pickers = read_text("src/pickers.js")
-    runtime = "\n".join([html, css, app, entry_model, io_actions, sheet_controller, ui, pickers])
+    runtime = "\n".join([html, css, app, entry_model, io_actions, sheet_controller, timeline_gestures, ui, pickers])
 
     if "title=" in runtime:
         fail(errors, "runtime files must not use native title= tooltips")
@@ -265,7 +268,7 @@ def audit_index(errors: list[str]) -> None:
         if "data-tip=" not in attrs:
             fail(errors, f"icon button is missing data-tip near byte {match.start()}")
 
-    for tip in ("编辑记录", "删除记录", "保存修改", "取消编辑"):
+    for tip in ("编辑计划", "删除计划", "标记为已发生"):
         if f'data-tip="{tip}"' not in runtime and f"'{tip}'" not in runtime:
             fail(errors, f"icon action tooltip is missing or not short: {tip}")
 
@@ -274,10 +277,17 @@ def audit_index(errors: list[str]) -> None:
     open_form = re.search(r"function\s+openForm\(\)\s*\{(?P<body>.*?)\n\s*\}", runtime, re.DOTALL)
     if open_form and "openFormSheet({ mode: 'new' })" not in open_form.group("body"):
         fail(errors, "opening the add form must use the unified form sheet")
-    if "--footer-space" in runtime:
-        fail(errors, "footer must stay in document flow; do not restore manual --footer-space padding")
-    if not re.search(r"\.footer\s*\{[^}]*position:\s*sticky", css, re.DOTALL):
-        fail(errors, "footer must use sticky positioning in document flow")
+    # v34: footer retired — low-frequency actions live in the header ··· more sheet.
+    if 'class="footer"' in html or re.search(r"\n\s*\.footer\s*\{", css):
+        fail(errors, "footer is retired in v34; do not reintroduce a sticky footer")
+    if 'data-action="open-more"' not in html:
+        fail(errors, "header must expose the ··· more-sheet entry (open-more)")
+    if "switch-activity" in runtime:
+        fail(errors, "switch-activity entry was consolidated into tapping the ongoing tail segment")
+    if not re.search(r"\.tl-handle\s*\{[^}]*touch-action:\s*none", css, re.DOTALL):
+        fail(errors, "rail drag handles must scope touch-action: none to .tl-handle only")
+    if re.search(r"(?:\.seg-block|\.tl-rail|#timeline)\s*\{[^}]*touch-action:\s*none", css, re.DOTALL):
+        fail(errors, "touch-action: none must stay on handles; segments/rail must keep normal scrolling")
     if not re.search(r"\.view-tabs\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)", css, re.DOTALL):
         fail(errors, "view tabs must use a stable four-column grid")
     if "container-type: inline-size" not in css or "@container (max-width: 390px)" not in css:

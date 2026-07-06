@@ -4,7 +4,6 @@
 // Commercial licensing available on request; contact via the repository above.
 import { formatPercent, sortedEntriesFrom } from './stats.js';
 import { fmtDateTime, fmtMins, fmtPlainMins, fmtTs, hhmm, p2 } from './time.js';
-import { setButtonTip } from './ui.js';
 
 export function createIoActions(deps) {
   let importShiftMinutes = 0;
@@ -173,11 +172,11 @@ export function createIoActions(deps) {
 
   function copyJSON() {
     const json = JSON.stringify(exportData(), null, 2);
-    copyText(json, document.getElementById('copy-btn'), '✓ 已复制', '复制 JSON');
+    copyText(json, document.getElementById('copy-btn'), '✓ 已复制', '复制 JSON 备份');
   }
 
   function copyCurrentViewSummary() {
-    copyText(buildCurrentViewSummaryMarkdown(), document.getElementById('summary-btn'), '✓ 已复制', '摘要');
+    copyText(buildCurrentViewSummaryMarkdown(), document.getElementById('summary-btn'), '✓ 已复制', '复制当前视图摘要');
   }
 
   function downloadJSON() {
@@ -309,12 +308,11 @@ export function createIoActions(deps) {
     const supported = canUseSystemShare();
     btn.hidden = !supported;
     btn.setAttribute('aria-disabled', supported ? 'false' : 'true');
-    if (supported) setButtonTip(btn, '打开系统分享面板，优先分享 JSON 文件；文件分享不可用时改为分享文本。', '分享 JSON 备份');
   }
 
-  function openBackupSheet() {
+  function openMoreSheet() {
     deps.openFormSheet({
-      mode: 'backup',
+      mode: 'more',
       shareSupported: canUseSystemShare()
     });
   }
@@ -343,7 +341,7 @@ export function createIoActions(deps) {
     confirmImportShift,
     handleImport,
     updateShareAvailability,
-    openBackupSheet,
+    openMoreSheet,
     shareJSON,
     exportData
   };

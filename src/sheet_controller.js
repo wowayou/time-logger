@@ -315,7 +315,7 @@ export function createSheetController(deps) {
 
   function openFormSheet(opts) {
     const requestedMode = opts && opts.mode;
-    const mode = ['edit', 'help', 'config', 'import-shift', 'backup'].includes(requestedMode) ? requestedMode : 'new';
+    const mode = ['edit', 'help', 'config', 'import-shift', 'more'].includes(requestedMode) ? requestedMode : 'new';
     const id = opts && opts.id;
     const entry = mode === 'edit' ? deps.load().entries.find(e => e.id === id) : null;
     if (mode === 'edit' && !entry) return;
@@ -375,11 +375,15 @@ export function createSheetController(deps) {
     lockBodyForSheet();
     sheet.hidden = false;
     if (mode === 'edit') {
-      const tsEl = panel.querySelector('[data-role="edit-ts"]');
-      mountTimePicker(panel.querySelector('[data-role="edit-wheel"]'), ts, v => {
-        tsEl.value = v;
-      });
-      sheetTimeMounted = true;
+      // v34: 已发生记录的时间在时间轴上拖，编辑表单只有计划条才有时间轮。
+      const editWheel = panel.querySelector('[data-role="edit-wheel"]');
+      if (editWheel) {
+        const tsEl = panel.querySelector('[data-role="edit-ts"]');
+        mountTimePicker(editWheel, ts, v => {
+          tsEl.value = v;
+        });
+        sheetTimeMounted = true;
+      }
     } else if (mode === 'new') {
       if (formBackfill) mountBackfillPickers(panel, ts, formBackfillEnd);
       else mountNewTimePicker(panel, ts);
@@ -535,8 +539,8 @@ export function createSheetController(deps) {
     openFormSheet({ mode: 'new' });
   }
 
-  function openBackupSheet() {
-    openFormSheet({ mode: 'backup' });
+  function openMoreSheet(opts = {}) {
+    openFormSheet({ mode: 'more', ...opts });
   }
 
   function openEditSheet(id) {
@@ -819,12 +823,6 @@ export function createSheetController(deps) {
     settleThenTeardown(() => { closeForm(); deps.render(); });
   }
 
-  function switchActivity() {
-    deps.state.view = 'day';
-    deps.setSelectedDate(todayStr());
-    openFormSheet({ mode: 'new' });
-  }
-
   function getEditingBox(id = deps.getSheetEditId()) {
     return Array.from(document.querySelectorAll('.entry.editing, .form-sheet-panel'))
       .find(el => el.dataset.id === String(id));
@@ -837,46 +835,51 @@ export function createSheetController(deps) {
   function commitEdit(id) {
     const box = getEditingBox(id);
     if (!box) return;
-    const tsEl = box.querySelector('[data-role="edit-ts"]');
     const whatEl = box.querySelector('[data-role="edit-what"]');
     const chipBox = box.querySelector('[data-role="edit-chips"]');
     const customEl = box.querySelector('[data-role="edit-custom-tag"]');
-    const timeScope = box.querySelector('[data-role="edit-wheel"]') || box;
     const d = deps.load();
     const entry = d.entries.find(e => e.id === id);
-    const planned = Boolean(entry && entry.planned);
-    const checked = validateTsForMode(tsEl ? tsEl.value : '', {
-      planned,
-      dateKey: (tsEl && tsEl.value || '').slice(0, 10) || deps.state.selectedDate
-    });
-    if (!checked.ok) {
-      setTimeInputError(timeScope, checked.msg);
-      const focusEl = timeScope.querySelector('[data-role="text"], [data-role="date"]');
-      if (focusEl) focusEl.focus();
-      return;
+    if (!entry) return;
+    const planned = Boolean(entry.planned);
+    // v34: 已发生记录的时间只在时间轴上拖，编辑表单不再改 ts（也就没有同刻
+    // 冲突路径）；只有计划条仍在这里改时间并保留冲突守卫。
+    let nextTs = entry.ts;
+    if (planned) {
+      const tsEl = box.querySelector('[data-role="edit-ts"]');
+      const timeScope = box.querySelector('[data-role="edit-wheel"]') || box;
+      const checked = validateTsForMode(tsEl ? tsEl.value : '', {
+        planned,
+        dateKey: (tsEl && tsEl.value || '').slice(0, 10) || deps.state.selectedDate
+      });
+      if (!checked.ok) {
+        setTimeInputError(timeScope, checked.msg);
+        const focusEl = timeScope.querySelector('[data-role="text"], [data-role="date"]');
+        if (focusEl) focusEl.focus();
+        return;
+      }
+      setTimeInputError(timeScope, '');
+      const conflict = findTimeConflict(d.entries, checked.ts, id);
+      if (conflict) {
+        showInlineError(box, conflictMessage(conflict, checked.ts, 'use-conflict-plus-edit'));
+        return;
+      }
+      nextTs = checked.ts;
     }
-    setTimeInputError(timeScope, '');
     const what = whatEl ? whatEl.value.trim() : '';
     if (!what) { if (whatEl) whatEl.focus(); return; }
     const sel = chipBox ? chipBox.querySelector('.chip.sel') : null;
     const ctag = customEl ? customEl.value.trim() : '';
     const tag = ctag || (sel ? sel.dataset.tag : '未知');
-    const conflict = findTimeConflict(d.entries, checked.ts, id);
-    if (conflict) {
-      showInlineError(box, conflictMessage(conflict, checked.ts, 'use-conflict-plus-edit'));
-      return;
-    }
     if (ctag) rememberTag(ctag, editBucket, d.entries.filter(item => item.id !== id));
-    if (entry) {
-      entry.ts = checked.ts;
-      entry.what = what;
-      entry.tags = [tag];
-      if (planned) entry.planned = true;
-      else delete entry.planned;
-      normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
-      deps.save(d);
-    }
-    deps.setSelectedDate(checked.ts.slice(0, 10));
+    entry.ts = nextTs;
+    entry.what = what;
+    entry.tags = [tag];
+    if (planned) entry.planned = true;
+    else delete entry.planned;
+    normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
+    deps.save(d);
+    deps.setSelectedDate(nextTs.slice(0, 10));
     settleThenTeardown(() => { closeEditSheet(); deps.render(); });
   }
 
@@ -938,7 +941,7 @@ export function createSheetController(deps) {
   return {
     openForm,
     openFormSheet,
-    openBackupSheet,
+    openMoreSheet,
     isFormOpen,
     getSheetMode,
     closeForm,
@@ -954,7 +957,6 @@ export function createSheetController(deps) {
     pickEditTag,
     commitEdit,
     saveEntry,
-    switchActivity,
     autosizeTextareas,
     updateMainlineHint,
     syncCustomDraft,

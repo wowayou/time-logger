@@ -8,6 +8,7 @@
 - `styles.css`：全部样式
 - `src/app.js`：启动、状态组合、导航、渲染调度、事件委托、测试 API 和 Service Worker 注册
 - `src/entry_model.js`：记录日期模型、续记默认起点、占位条、结算点、同刻冲突和 `+1min` helper
+- `src/timeline_gestures.js`：时间轴把手拖拽、键盘微调与拖后边界落库
 - `src/io_actions.js`：当前视图摘要、复制、下载、导入、分享等本地 IO 动作
 - `src/sheet_controller.js`：新建/编辑/config/import sheet、focus trap、picker 重挂载和表单保存
 - `src/time.js`：本地日期解析、格式化、周期范围
@@ -42,6 +43,7 @@
 - `src/pickers.js`：只负责时间选择器 DOM；不直接保存业务数据。
 - `src/ui.js`：只负责模板、图标、tooltip helper 和 DOM 渲染；不做数据持久化。
 - `src/entry_model.js`：只放记录日期模型、续记默认起点、占位条、结算点、同刻冲突、`+1min`、补录有界插入（`carveInsert`）、无冗余边界归一化（`coalesceRedundant`）和写后统一出口（`normalizeEntries`，恒保今天尾占位）等纯/低副作用 helper；不访问 DOM / localStorage。
+- `src/timeline_gestures.js`：只处理 rail 把手的 pointer 拖拽、键盘微调与拖后落库；通过显式依赖接收 `load/save/uid/render`；落库必经 `normalizeEntries`，不渲染模板、不碰配置。
 - `src/io_actions.js`：只处理当前视图摘要、复制、下载、导入、分享；通过显式依赖接收 `load/save/render/state`，不拥有全局状态。
 - `src/sheet_controller.js`：只处理新建/编辑/config/import sheet、focus trap、picker 重挂载和表单保存；通过显式依赖读写状态和持久化。
 - `src/app.js`：只负责启动、状态组合、导航、渲染调度、事件委托、测试 API 和 Service Worker 注册。
@@ -56,7 +58,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v33` / manifest `version: "33"`。
+当前版本：`timelog-v34` / manifest `version: "34"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -69,21 +71,23 @@
 
 ## UI 红线
 
-- 响应式默认用 container query、CSS Grid/Flex 和 sticky 文档流布局；禁止按 iPhone/iPad/设备名堆叠 viewport 补丁。
-- Header 排版固定为三行信息架构：第一行站点标识、可选日期、紧凑主题切换、说明/配置/GitHub；第二行天/周/月/年视图切换；第三行 `< 当前周期 >` 与回到今天按钮；不要把日期导航塞回第一行。
-- 窄屏第一行优先保留站点标识、主题切换和说明入口；空间不足时可以隐藏日期文字。
+- 响应式默认用 container query、CSS Grid/Flex 和文档流布局；禁止按 iPhone/iPad/设备名堆叠 viewport 补丁。
+- Header 排版固定为三行信息架构：第一行站点标识、说明、GitHub 和「···」更多入口；第二行天/周/月/年视图切换；第三行 `< 当前周期 >` 与回到今天按钮；不要把日期导航塞回第一行。
+- 低频动作（摘要、备份四项、标签高级设置、主题、说明）收纳在「···」更多 sheet 的 cell 分组里；footer 已退役，不得重新引入常驻底栏；分享 cell 默认 hidden，由能力检测后再显示。
+- 窄屏第一行优先保留站点标识和「···」入口；空间不足时可以隐藏站点标题文字。
 - 窄屏日期导航必须允许两行：上一段/周期/下一段一行，回到今天/本周/本月/今年独立一行；周视图窄屏周期标题可用短格式，完整日期保留在可访问标签中。
-- Footer 必须在文档流内 sticky 到底部，备份操作必须用响应式 grid，不得固定五按钮单行硬挤；分享按钮默认 hidden，由能力检测后再显示，避免首屏布局跳动。
+- 日视图时间轴是直接操纵 rail：时序自上而下、段高半比例钳制（54–200px）；点段=编辑（表单只管内容/标签）、点空隙或中间占位=补录、点进行中尾段=记一条（「+ 记一条」是它的快捷方式）；边界时间文字即拖拽把手（66×44 热区，阅读态无 chrome，active 才浮胶囊）。
+- rail 拖拽红线：`touch-action: none` 只允许作用在 `.tl-handle` 把手上，段主体和页面必须保持正常滚动；默认 5min 吸附、拖动中横向右移进入 1min 精调；把手聚焦后 ↑↓=5min、Shift+↑↓=1min；拖界与键盘微调的落库必须经 `normalizeEntries` 单一出口；已发生记录的 `ts` 不再从编辑表单修改（计划条除外）。
 - 表单 sheet 只按宽度适配：`>=720px` 居中 dialog，`<720px` bottom sheet；不要用 `pointer:fine` 决定视觉布局。
+- 统一 sheet 头部语法：抓手条 + 左「取消/关闭」右「完成/保存」文字按钮 + 居中标题；正文低频列表用 cell 分组（inset 底 + 内分隔线）。
 - 时间选择器只按宽度选择 wheel/desktop picker；打开表单后跨断点 resize 或旋转屏幕时，必须按当前宽度重挂载，不能停留在旧 picker。
 - 禁止 `title=`，避免原生 tooltip 与自定义 tooltip 叠加。
 - 可见文字按钮不强制 tooltip；图标按钮必须同时有短 `data-tip` 和 `aria-label`。
 - tooltip 默认不能生成会撑宽页面的盒子；hover 延迟 800ms 后显示，移开立即隐藏；`focus-visible` 必须无延迟显示；触屏不能靠 hover 触发 tooltip。
-- 图标语义固定：编辑=铅笔，保存=对勾，删除=垃圾桶，取消=回退/撤销箭头，关闭只读页=细线 ×。
+- 图标语义固定（约束所有仍在用图标的地方，如计划卡）：编辑=铅笔，保存=对勾，删除=垃圾桶，取消=回退/撤销箭头，关闭只读页=细线 ×。
 - 删除/取消禁用 x、`×`、`✕`，包括图标定义、按钮文本和渲染模板。
-- 时间轴记录操作和编辑态保存/取消使用图标；底部备份栏、添加表单按钮继续用文字。
 - 输入字号不低于 16px，避免移动端聚焦放大。
-- 统一表单 sheet 打开后先把焦点收进 sheet 容器，首个 Tab 进入内部控件；“做了什么”是 textarea，Enter 必须换行，只有 Cmd/Ctrl+Enter 或 ✓ 按钮保存；定时刷新不能打断新增或编辑中的输入。
+- 统一表单 sheet 打开后先把焦点收进 sheet 容器，首个 Tab 进入内部控件；“做了什么”是 textarea，Enter 必须换行，只有 Cmd/Ctrl+Enter 或「完成」按钮保存；定时刷新不能打断新增或编辑中的输入。
 
 ## 隐私红线
 
@@ -132,23 +136,24 @@ git diff --check
 
 浏览器手动检查：
 
-1. 桌面鼠标 hover 图标按钮约 800ms 后只出现自定义 tooltip，移开立即隐藏；键盘 Tab 到图标按钮时 tooltip 立即出现，不出现原生 title。
-2. 编辑、删除、保存、取消均为图标；取消不是 x，删除不是 x。
-3. 移动端新增/编辑输入不自动放大；textarea 回车换行，Cmd/Ctrl+Enter 或 ✓ 保存。
+1. 桌面鼠标 hover 图标按钮/把手约 800ms 后只出现自定义 tooltip，移开立即隐藏；键盘 Tab 到图标按钮时 tooltip 立即出现，不出现原生 title。
+2. sheet 头部为「取消/完成」文字按钮；计划卡编辑=铅笔、删除=垃圾桶；取消不是 x，删除不是 x。
+3. 移动端新增/编辑输入不自动放大；textarea 回车换行，Cmd/Ctrl+Enter 或「完成」保存。
 4. 新增或编辑时，定时刷新不打断输入；无数据变化的 60s tick 不重绘页面。
 5. Ruler/摘要显示主线、维持、漏损、未记录 4 桶；睡觉 6h 不待确认，吃饭 6h 待确认。
-6. 同时刻新增/编辑出现内联冲突提示，可编辑原条或用 +1min。
-7. 下载、导入、分享、摘要、复制仍保持文字入口并可用；导出文件名带秒，JSON 按 `ts` 升序。
+6. 同时刻新增出现内联冲突提示，可编辑原条或用 +1min。
+7. 「···」更多菜单里下载、导入、分享、摘要、复制均可用；导出文件名带秒，JSON 按 `ts` 升序。
 8. PWA 更新链路：改 `index.html` 后升 CACHE 号；旧页面应出现“更新应用”，点击后加载新版，本机 `localStorage['timelog.v1']` 保留。
 9. 午夜后重开仍停在上次所看日期；历史日续记无右邻时结束显示 24:00，不漏到当前时间。
+10. rail：按住边界时间可拖、5min 吸附、右移精调 1min，拖动中页面不跟滚；点段开编辑、点空隙开补录、点尾段开记一条；拖后统计立即跟着变。
 
 响应式手动矩阵：
 
-1. 320-375px：header 第一行不横向溢出，日期可隐藏；date-nav 两行不溢出；footer 3+2 或 3+1 换行不遮挡内容。
-2. 360/390/412/430px：不刷新页面连续切换宽度，header/footer/date-nav 立即自适应。
-3. 768px：sheet 居中，footer 单行或自然列布局，内容不被底栏盖住。
+1. 320-375px：header 第一行不横向溢出，标题可隐藏；date-nav 两行不溢出；rail 段与把手不溢出。
+2. 360/390/412/430px：不刷新页面连续切换宽度，header/date-nav/rail 立即自适应。
+3. 768px：sheet 居中，内容不被遮挡。
 4. 横竖屏切换：打开新建/编辑 sheet 后切换宽度，时间 picker 使用当前宽度对应形态。
-5. 分享能力有/无：分享按钮显示/隐藏时 footer 不跳动、不留空列。
+5. 分享能力有/无：更多菜单里分享 cell 显示/隐藏，分组不留空缝。
 
 ## CHANGELOG
 
@@ -187,3 +192,4 @@ git diff --check
 | v31 | 2026-07-01 | 版权保护 + 抖动热修 + 治理审计：全部运行时文件加 AGPL-3.0-or-later + `© 2026 wowayou` 文件头，`LICENSE` 落地 AGPL 全文，README/decisions 记双许可姿态；P14 修 iOS 编辑保存后一拍二次重排（`settleThenTeardown`：键盘在场时 blur→等 visualViewport 稳→单帧 close+render，桌面/headless 保持同步；`.sheet-closing` 过渡护栏），线上真机自验；`AGENTS.md` 收缩为指针（唯一真源指向 `CLAUDE.md`）；新增根级 `CONTRIBUTING.md`（「该不该加」决策清单 + 本地真机调试）；审计过时文档 drift；推广策略 park 到 `docs/decisions.md`。详见 `docs/postmortems.md` P14 |
 | v32 | 2026-07-03 | P15 修 SE2 刷新「空白页+漂浮按钮」闪烁：启动门闩收窄到 JS 渲染区（`#add-btn`/`.ruler`/`.tl-head`/`#timeline`），静态骨架随 HTML 直出；P16 修 iOS 键盘开合表单二排抖动：visualViewport 事件风暴 settle（60ms 静默/400ms 兜底）后单帧落位 + `.vv-glide` 短滑，settle 后持焦控件收回折叠区；取消/遮罩/Esc 关闭同走 `settleThenTeardown`，teardown 队列防 Esc 双路径重入；编辑模板 `edit-wheel` 挂点内联清理。详见 `docs/postmortems.md` P15–P16 |
 | v33 | 2026-07-05 | 视觉令牌全量重写（阶段0 提案 D 定稿，UI 重构豁免轮）：`styles.css` 建立结构令牌层（圆角 12/16/22、动效 140/280ms、字阶令牌、阴影/顶光海拔），双色板换新——暗=石墨冷 `#0e0f13`、亮=宣纸暖 `#f7f5f1`，三桶彩色均过 dataviz 六项校验；描边整体降级为 hairline/透明占位、卡片改阴影海拔、chip 胶囊化、尺子色条 2px 缝+圆角端、sheet 进场动画（`@starting-style` 渐进增强）；`theme-color` 常量同步（index.html/app.js/manifest）；行为零变更，选择器与 P13–P16 护栏原样保留，51 条 UI smoke 全绿 |
+| v34 | 2026-07-06 | 直接操纵时间轴（静轴动标 rail，UI 重构豁免轮）：日视图改时序 rail，边界时间文字即拖拽把手（66×44 热区、5min 吸附、横移精调 1min、键盘 ↑↓/Shift 微调），拖界经 `normalizeEntries` 落库，新模块 `src/timeline_gestures.js`；语义统一——点段=编辑、点空隙/占位=补录、点尾段=记一条，「切换活动」入口收敛；编辑表单去时间轮（计划条除外）、内置删除；footer 退役，header「···」更多 sheet 收纳摘要/备份四项/标签设置/主题/说明；sheet 头部统一「取消/完成」文字按钮 + cell 分组（C 语法 × B 皮肤）；结构性 UI 红线同版本重写，精神性红线不动 |
