@@ -95,7 +95,7 @@ const RAIL_H_MIN = 54;
 const RAIL_H_MAX = 200;
 const RAIL_MIN_SEG = 5;
 
-function railHeight(mins) {
+export function railHeight(mins) {
   return Math.max(RAIL_H_MIN, Math.min(RAIL_H_MAX, Math.round(mins * 1.1)));
 }
 
@@ -147,7 +147,7 @@ function railSegment(seg, i, prev) {
         ? (((prev.e.what || '').trim()) || (typeof prev.e.what === 'string' && prev.e.what.trim() === '' ? '未记录' : prev.tag))
         : '未记录')
       : '';
-    handle = `<button class="tl-handle" type="button" data-idx="${i}" data-id="${esc(e.id)}" data-date="${esc(e.ts.slice(0, 10))}" data-min="${startMin}" data-lo="${lo}" data-hi="${hi}"${prevStartMin === null ? '' : ` data-prev-start="${prevStartMin}"`} data-ctx="${esc(ctxLabel)}" data-tip="按住拖动改这个边界时间；聚焦后 ↑↓ 调 5 分钟，Shift+↑↓ 调 1 分钟。" aria-label="边界时间 ${timeLabel}，拖动或用上下方向键调整">${pill}</button>`;
+    handle = `<button class="tl-handle" type="button" data-idx="${i}" data-id="${esc(e.id)}" data-date="${esc(e.ts.slice(0, 10))}" data-min="${startMin}" data-lo="${lo}" data-hi="${hi}" data-end-min="${endMin}"${prevStartMin === null ? '' : ` data-prev-start="${prevStartMin}"`} data-ctx="${esc(ctxLabel)}" data-tip="按住拖动改这个边界时间；聚焦后 ↑↓ 调 5 分钟，Shift+↑↓ 调 1 分钟。" aria-label="边界时间 ${timeLabel}，拖动或用上下方向键调整">${pill}</button>`;
   } else {
     handle = `<span class="tl-handle fixed" aria-hidden="true">${pill}</span>`;
   }

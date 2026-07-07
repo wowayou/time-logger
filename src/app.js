@@ -59,6 +59,7 @@ import {
   todayStr
 } from './time.js';
 import {
+  railHeight,
   renderRuler,
   renderSummaryRows,
   renderTimeline,
@@ -397,7 +398,7 @@ import {
     render
   });
 
-  const timelineGestures = createTimelineGestures({ load, save, uid, render });
+  const timelineGestures = createTimelineGestures({ load, save, uid, render, railHeight });
 
   // --- App update prompt ---
   function showUpdatePrompt(registration) {

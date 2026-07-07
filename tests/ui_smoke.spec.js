@@ -657,6 +657,44 @@ test('v34 dragging a boundary handle snaps to 5min and persists', async ({ page 
   await expect(page.locator('.tl-handle[data-id="today-2"] [data-role="pill-time"]')).toHaveText('10:10');
 });
 
+test('v35 dragging a boundary keeps neighboring segments static until settle, then eases to the new height', async ({ page }) => {
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+  // today-1's boundary sits between two whole-minute entries (00:00 gap / 09:00–10:00),
+  // unlike today-2's which borders the ongoing "now" segment carrying fractional
+  // seconds — picking this handle keeps the expected-height math exact.
+  const handle = page.locator('.tl-handle[data-id="today-1"]');
+  await expect(handle).toBeVisible();
+  const prevBlock = page.locator('.seg-block[data-idx="0"]');
+  const selfBlock = page.locator('.seg-block[data-idx="1"]');
+  const prevBefore = await prevBlock.evaluate(el => el.style.height);
+  const selfBefore = await selfBlock.evaluate(el => el.style.height);
+
+  // 期望值直接算自把手自带的 dataset（data-min/data-prev-start/data-end-min），
+  // 与实现同一套 railHeight 钳制公式，不依赖 fixture 具体数字。
+  const railHeight = mins => Math.max(54, Math.min(200, Math.round(mins * 1.1)));
+  const prevStart = Number(await handle.getAttribute('data-prev-start'));
+  const endMin = Number(await handle.getAttribute('data-end-min'));
+  const newStart = Number(await handle.getAttribute('data-min')) + 10; // 24px÷2px/min→12min，5min 吸附到 +10min
+  const expectedPrevHeight = `${railHeight(newStart - prevStart)}px`;
+  const expectedSelfHeight = `${railHeight(endMin - newStart)}px`;
+
+  const box = await handle.boundingBox();
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx, cy + 24, { steps: 4 });
+  // 真·静轴动标：拖动中两段高度必须与拖前完全一致——轴不动，只有把手数字在变。
+  expect(await prevBlock.evaluate(el => el.style.height)).toBe(prevBefore);
+  expect(await selfBlock.evaluate(el => el.style.height)).toBe(selfBefore);
+  await expect(page.locator('.tl-handle[data-id="today-1"] [data-role="pill-time"]')).toHaveText('09:10');
+
+  await page.mouse.up();
+  // 松手落库后 settle：两段过渡到按新时长算出的钳制高度，不是拖前旧值也不弹回。
+  await expect(page.locator('.seg-block[data-idx="0"]')).toHaveCSS('height', expectedPrevHeight);
+  await expect(page.locator('.seg-block[data-idx="1"]')).toHaveCSS('height', expectedSelfHeight);
+});
+
 test('v34 keyboard arrows nudge a boundary (5min, Shift=1min)', async ({ page }) => {
   await boot(page, 768, 'two-records', false, FIXED_NOW);
   await page.locator('.tl-handle[data-id="today-2"]').focus();

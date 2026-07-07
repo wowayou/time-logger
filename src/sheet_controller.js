@@ -30,6 +30,8 @@ export function createSheetController(deps) {
   let sheetResizeTimer = null;
   let vvSettleTimer = null;
   let vvSettleCap = null;
+  let vvGlideOffTimer = null;
+  let vvRafId = null;
   let teardownQueue = null;
   let formTag = '';
   let formBucket = 'job';
@@ -154,7 +156,10 @@ export function createSheetController(deps) {
     if (endMount) mountTimePicker(endMount, e, v => { endTsEl.value = v; paintBackfillDuration(panel); });
   }
 
-  function syncVisualViewport() {
+  // Light geometry-only write: cheap enough to call on every burst event
+  // (see scheduleVisualViewportSync below). Split out from syncVisualViewport
+  // so the burst path never pays for autosize on every frame.
+  function writeViewportVars() {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
     if (!vv) return;
     const root = document.documentElement;
@@ -163,6 +168,10 @@ export function createSheetController(deps) {
     // the sticky head (with save ✓) stays on-screen. See docs/postmortems.md ⑧.
     root.style.setProperty('--vvt', `${Math.max(0, vv.offsetTop)}px`);
     root.style.setProperty('--vvh', `${vv.height}px`);
+  }
+
+  function syncVisualViewport() {
+    writeViewportVars();
     // The keyboard opening/closing changes the viewport height the textarea cap
     // is derived from; re-run autosize so a long note re-clamps to the new fold.
     const openSheet = document.querySelector('#form-sheet:not([hidden]) .form-sheet-panel');
@@ -175,38 +184,68 @@ export function createSheetController(deps) {
     root.style.removeProperty('--vvh');
   }
 
-  // P16: iOS animates the soft keyboard with a burst of discrete visualViewport
-  // resize/scroll events; writing --vvt/--vvh on every event made the open
-  // sheet visibly jump 2-3 times per keyboard open/close (the "二排抖动").
-  // Mirror of P14's settle idea on the tracking side: wait for the burst to go
-  // quiet (60ms; 400ms cap so a chatty viewport can't stall forever), then
-  // apply the final geometry once — .vv-glide turns that single snap into one
-  // short slide. The initial sync on open stays synchronous (P12: first frame
-  // must be correct), and the teardown path owns geometry while .sheet-closing
-  // is up, so the scheduler stands down there.
+  // P16/P18: iOS animates the soft keyboard with a burst of discrete
+  // visualViewport resize/scroll events. P16 waited for the burst to go quiet
+  // (60ms; 400ms cap) before writing geometry at all, which stopped the
+  // "二排抖动" (2-3 visible jumps) but left the sheet parked on stale geometry
+  // for the whole keyboard animation — long enough for iOS to shove the fixed
+  // sheet's head off-screen while revealing the focused control (P18: "表单
+  // 遮挡"). Fix: keep writing geometry on every burst event (rAF-batched to at
+  // most once per frame), but do it while .vv-glide's CSS transition is
+  // already engaged, so the discrete writes become one continuous slide
+  // instead of either "stale then snap" (old bug) or "jump 2-3 times" (P16's
+  // original bug). The settle timers below now only own the FINAL pass:
+  // autosize (needs the fold to have stopped moving) and keeping the focused
+  // control in view.
   function clearViewportSettleTimers() {
     clearTimeout(vvSettleTimer);
     clearTimeout(vvSettleCap);
+    clearTimeout(vvGlideOffTimer);
+    if (vvRafId !== null) cancelAnimationFrame(vvRafId);
     vvSettleTimer = null;
     vvSettleCap = null;
+    vvGlideOffTimer = null;
+    vvRafId = null;
+  }
+
+  function ensureGlide() {
+    const sheet = document.getElementById('form-sheet');
+    if (!sheet || sheet.hidden) return;
+    sheet.classList.add('vv-glide');
+    clearTimeout(vvGlideOffTimer);
+    vvGlideOffTimer = null;
+  }
+
+  function scheduleGlideOff() {
+    const sheet = document.getElementById('form-sheet');
+    if (!sheet) return;
+    clearTimeout(vvGlideOffTimer);
+    vvGlideOffTimer = setTimeout(() => sheet.classList.remove('vv-glide'), 260);
   }
 
   function scheduleVisualViewportSync() {
     if (document.body.classList.contains('sheet-closing')) return;
+    ensureGlide();
+    if (vvRafId === null) {
+      vvRafId = requestAnimationFrame(() => {
+        vvRafId = null;
+        if (document.body.classList.contains('sheet-closing')) return;
+        writeViewportVars();
+      });
+    }
     clearTimeout(vvSettleTimer);
     vvSettleTimer = setTimeout(applySettledViewport, 60);
     if (!vvSettleCap) vvSettleCap = setTimeout(applySettledViewport, 400);
   }
 
   function applySettledViewport() {
-    clearViewportSettleTimers();
+    clearTimeout(vvSettleTimer);
+    clearTimeout(vvSettleCap);
+    vvSettleTimer = null;
+    vvSettleCap = null;
     if (document.body.classList.contains('sheet-closing')) return;
     const sheet = document.getElementById('form-sheet');
     const open = Boolean(sheet && !sheet.hidden);
-    if (open) {
-      sheet.classList.add('vv-glide');
-      setTimeout(() => sheet.classList.remove('vv-glide'), 260);
-    }
     syncVisualViewport();
     // Once the keyboard has settled, keep the focused control inside the
     // (possibly much shorter) fold instead of under the keyboard.
@@ -216,6 +255,7 @@ export function createSheetController(deps) {
         && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) {
       active.scrollIntoView({ block: 'nearest' });
     }
+    if (open) scheduleGlideOff();
   }
 
   function attachVisualViewport() {

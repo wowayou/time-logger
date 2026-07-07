@@ -2,21 +2,23 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-// 直接操纵时间轴：边界时间文字即把手，按住可拖、聚焦可用方向键微调。
-// 只移动「边界点」本身；落库统一走 normalizeEntries（v30 写路径纪律）。
+// 真·静轴动标：拖动中轴（相邻段高度）完全不动，只有把手数字和浮动气泡跟手指变；
+// 松手落库后现存两段柔和过渡到新高度（沿用既有 200ms CSS transition），过渡
+// settle 完再整体 render()。只移动「边界点」本身；落库统一走 normalizeEntries。
 import { normalizeEntries } from './entry_model.js';
 import { p2, todayStr } from './time.js';
 
 const PX_PER_MIN = 2;      // 拖拽映射：2px = 1min（5min 吸附 = 10px）
 const SNAP = 5;            // 默认吸附步长（分钟）
 const FINE_AFTER_PX = 48;  // 拖动中手指右移超过该值 → 1min 精调，挪回恢复粗档
-const MIN_LIVE_H = 24;     // 拖动中相邻段的最小实时像素高
+const SETTLE_MS = 260;     // 落库后等段高过渡完成再 render 的兜底时限（略大于 CSS 200ms）
 
 const hhmm = mins => `${p2(Math.floor(mins / 60))}:${p2(mins % 60)}`;
 const fmtDur = mins => (mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60 ? p2(mins % 60) + 'm' : ''}` : `${mins}m`);
 
 export function createTimelineGestures(deps) {
   let drag = null;
+  let pendingSettle = null; // 落库后待 settle 的 finish 回调，供下一次 pointerdown 抢先 flush
 
   function bubbleEl() {
     let el = document.getElementById('drag-bubble');
@@ -31,11 +33,16 @@ export function createTimelineGestures(deps) {
     return el;
   }
 
+  // 气泡横向锚定在把手所在的静止列（不再跟手指横移，避免精调时飘到段文字上）；
+  // 纵向仍跟手指，方便远离把手做粗调时看到当前值，clamp 进视口避免出屏。
   function showBubble(e, minute, handle, fine) {
     const el = bubbleEl();
     el.style.display = 'block';
-    el.style.left = `${Math.min(window.innerWidth - 70, Math.max(70, e.clientX))}px`;
-    el.style.top = `${e.clientY}px`;
+    const rect = handle.getBoundingClientRect();
+    const anchorX = Math.min(window.innerWidth - 70, Math.max(70, rect.right + 12));
+    const anchorY = Math.min(window.innerHeight - 60, Math.max(60, e.clientY));
+    el.style.left = `${anchorX}px`;
+    el.style.top = `${anchorY}px`;
     el.querySelector('[data-role="bubble-time"]').textContent = hhmm(minute);
     const ctx = handle.dataset.ctx || '';
     const prevStart = Number(handle.dataset.prevStart);
@@ -75,8 +82,52 @@ export function createTimelineGestures(deps) {
     };
   }
 
+  // 落库后让现存的两段 DOM 节点过渡到新时长对应的钳制高度（seg-block 自带
+  // 200ms height transition），settle 完再整体 render 画回真实布局/统计。
+  function applySettledHeights(handle, prevEl, selfEl, newStart) {
+    const prevStartAttr = handle.dataset.prevStart;
+    if (prevEl && prevStartAttr !== undefined && prevStartAttr !== '') {
+      const prevMins = newStart - Number(prevStartAttr);
+      prevEl.style.height = `${deps.railHeight(prevMins)}px`;
+    }
+    const endMinAttr = handle.dataset.endMin;
+    if (selfEl && endMinAttr !== undefined && endMinAttr !== '') {
+      const selfMins = Number(endMinAttr) - newStart;
+      selfEl.style.height = `${deps.railHeight(selfMins)}px`;
+    }
+  }
+
+  function settleThenRender(prevEl, selfEl) {
+    const reduced = typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) { pendingSettle = null; deps.render(); return; }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (prevEl) prevEl.removeEventListener('transitionend', onEnd);
+      if (selfEl) selfEl.removeEventListener('transitionend', onEnd);
+      if (pendingSettle === finish) pendingSettle = null;
+      deps.render();
+    };
+    const onEnd = ev => { if (ev.propertyName === 'height') finish(); };
+    if (prevEl) prevEl.addEventListener('transitionend', onEnd);
+    if (selfEl) selfEl.addEventListener('transitionend', onEnd);
+    const timer = setTimeout(finish, SETTLE_MS);
+    pendingSettle = finish;
+  }
+
   function onPointerDown(e) {
-    const handle = e.target.closest('.tl-handle');
+    let target = e.target;
+    if (pendingSettle) {
+      // 上一次拖拽还在等段高 settle：先 flush（清定时器+立即 render），
+      // 再按同一屏幕坐标重新命中——render 换了 DOM，e.target 指向的旧节点已脱树。
+      const finish = pendingSettle;
+      finish();
+      target = document.elementFromPoint(e.clientX, e.clientY);
+    }
+    const handle = target ? target.closest('.tl-handle') : null;
     if (!handle || handle.classList.contains('fixed') || drag) return;
     const container = handle.closest('#timeline');
     if (!container) return;
@@ -97,9 +148,7 @@ export function createTimelineGestures(deps) {
       last: t0,
       moved: false,
       prevEl,
-      selfEl,
-      prevH0: prevEl ? prevEl.offsetHeight : 0,
-      selfH0: selfEl ? selfEl.offsetHeight : 0
+      selfEl
     };
     handle.setPointerCapture(e.pointerId);
     handle.classList.add('active');
@@ -117,10 +166,8 @@ export function createTimelineGestures(deps) {
     let t = drag.t0 + Math.round(dy / PX_PER_MIN / snap) * snap;
     t = Math.max(drag.lo, Math.min(drag.hi, t));
     drag.moved = drag.moved || t !== drag.t0;
-    // 拖动中直接改两侧段的像素高（不经钳制布局重排），手指与把手不脱节。
-    const dpx = (t - drag.t0) * PX_PER_MIN;
-    if (drag.prevEl) drag.prevEl.style.height = `${Math.max(MIN_LIVE_H, drag.prevH0 + dpx)}px`;
-    if (drag.selfEl) drag.selfEl.style.height = `${Math.max(MIN_LIVE_H, drag.selfH0 - dpx)}px`;
+    // 真·静轴动标：拖动中不改任何段的高度，段与轴完全静止；只有把手数字
+    // 和浮动气泡随手指变化，松手后再统一过渡（见 applySettledHeights）。
     if (t !== drag.last) {
       drag.last = t;
       const pillTime = drag.handle.querySelector('[data-role="pill-time"]');
@@ -131,7 +178,7 @@ export function createTimelineGestures(deps) {
 
   function onPointerEnd(e) {
     if (!drag || e.pointerId !== drag.pointerId) return;
-    const { handle, container, last } = drag;
+    const { handle, container, last, prevEl, selfEl } = drag;
     const committed = drag.moved && last !== drag.t0
       ? commitBoundary(handle.dataset.id, handle.dataset.date, last)
       : false;
@@ -139,8 +186,12 @@ export function createTimelineGestures(deps) {
     container.classList.remove('dragging');
     hideBubble();
     drag = null;
-    // 无论是否落库都重排：恢复钳制布局，把库里真实状态画回来。
-    if (committed || e.type !== 'pointercancel') deps.render();
+    if (committed) {
+      applySettledHeights(handle, prevEl, selfEl, last);
+      settleThenRender(prevEl, selfEl);
+    } else if (e.type !== 'pointercancel') {
+      deps.render();
+    }
   }
 
   function onKeyDown(e) {
