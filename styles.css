@@ -899,136 +899,12 @@
       gap: 8px;
       min-height: 34px;
     }
+    .switch-btn {
+      min-height: 30px;
+      flex: 0 0 auto;
+    }
     #timeline { min-height: 160px; }
     html[data-boot="has-entries"] #timeline { min-height: 360px; }
-
-    /* v34 静轴动标 rail：时序自上而下；边界时间文字即把手（66×44 隐形热区，
-       touch-action:none 仅限把手，段主体照常滚动/点击）。 */
-    .tl-rail {
-      position: relative;
-      padding-top: 22px;
-      user-select: none;
-      -webkit-user-select: none;
-    }
-    .seg-block {
-      position: relative;
-      display: flex;
-      gap: 12px;
-      border-left: 3px solid var(--track);
-      padding: 0 4px 0 14px;
-      margin-left: 66px;
-      border-radius: 0 10px 10px 0;
-      overflow: hidden;
-      cursor: pointer;
-      transition: height 200ms cubic-bezier(0.3, 0.7, 0.4, 1);
-    }
-    .tl-rail.dragging .seg-block { cursor: ns-resize; }
-    .seg-block:active { background: var(--input); }
-    .seg-block:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .sb-job { border-left-color: var(--accent); background: linear-gradient(90deg, var(--accent-bg), transparent 72%); }
-    .sb-maintain { border-left-color: var(--maintain); background: linear-gradient(90deg, var(--maintain-bg), transparent 72%); }
-    .sb-leak { border-left-color: var(--leak); background: linear-gradient(90deg, var(--leak-bg), transparent 72%); }
-    .sb-unrecorded { border-left-color: var(--border); }
-    .seg-block.gap,
-    .seg-block.placeholder { border-left-style: dashed; }
-    .seg-block.sheet-editing { outline: 1px solid var(--accent); }
-    .seg-inner {
-      flex: 1;
-      min-width: 0;
-      padding: 8px 0 6px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      pointer-events: none;
-    }
-    .seg-what {
-      font-size: var(--fs-body);
-      color: var(--text);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .seg-block.gap .seg-what,
-    .seg-block.placeholder .seg-what { color: var(--muted); }
-    .seg-meta {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-top: 2px;
-      min-width: 0;
-    }
-    .seg-meta .mini-btn { pointer-events: auto; }
-    .tl-handle {
-      position: absolute;
-      left: 0;
-      width: 66px;
-      height: 44px;
-      margin-top: -22px;
-      display: flex;
-      align-items: center;
-      z-index: 5;
-      touch-action: none;
-      cursor: ns-resize;
-      background: transparent;
-      border: none;
-      padding: 0;
-      font-family: inherit;
-    }
-    .tl-handle.fixed { pointer-events: none; cursor: default; }
-    .tl-handle .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      color: var(--faint);
-      border: 1px solid transparent;
-      border-radius: 999px;
-      padding: 3px 8px 3px 6px;
-      font-size: var(--fs-cap);
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
-      transition: transform var(--t-fast), color var(--t-fast), background var(--t-fast);
-    }
-    .tl-handle .pill svg {
-      width: 9px;
-      height: 13px;
-      stroke: var(--faint);
-      stroke-width: 2;
-      stroke-linecap: round;
-      fill: none;
-      opacity: 0.55;
-    }
-    .tl-handle:focus-visible { outline: none; }
-    .tl-handle:focus-visible .pill { border-color: var(--accent); color: var(--accent); }
-    .tl-handle.active .pill {
-      transform: scale(1.15);
-      color: #fff;
-      background: var(--accent);
-      border-color: var(--accent);
-      box-shadow: var(--shadow-2);
-    }
-    .tl-handle.active .pill svg { stroke: rgba(255,255,255,0.85); opacity: 1; }
-    .drag-bubble {
-      position: fixed;
-      z-index: 95;
-      pointer-events: none;
-      display: none;
-      background: var(--accent);
-      color: #fff;
-      font-size: 17px;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
-      border-radius: 10px;
-      padding: 6px 12px;
-      box-shadow: var(--shadow-3);
-      transform: translate(-50%, -140%);
-      text-align: center;
-    }
-    .drag-bubble small { display: block; font-size: 10px; font-weight: 500; opacity: 0.85; }
-    .planned-label { margin-top: 14px; margin-bottom: 8px; }
-    @media (prefers-reduced-motion: reduce) {
-      .seg-block, .tl-handle .pill { transition: none; }
-    }
     .entry {
       background: var(--card);
       border-radius: var(--r-card);
@@ -1250,7 +1126,11 @@
       .form-sheet.vv-glide .form-sheet-panel { transition: none; }
     }
     .form-sheet-backdrop {
-      position: absolute;
+      /* P19: fixed (not absolute-within-.form-sheet) so the scrim always covers
+         the full layout viewport, even the instant the keyboard collapses and
+         --vvh/--vvt haven't caught up yet — otherwise that lagging strip below
+         .form-sheet showed raw page instead of the dimmed overlay. */
+      position: fixed;
       inset: 0;
       background: rgba(0,0,0,0.42);
       transition: opacity 0.2s ease;
@@ -1276,6 +1156,22 @@
       padding: 0 16px;
       box-shadow: var(--shadow-3);
       transition: transform 0.25s ease-out, opacity 0.2s ease;
+    }
+    /* P19: a "skirt" below the panel painted in the same card background —
+       when the iOS keyboard collapses faster than --vvh grows back, this
+       stands in for the not-yet-arrived full-height panel instead of exposing
+       raw page underneath, so the form reads as already full-screen while the
+       geometry settles. Sits off-screen (below the real viewport bottom) once
+       the panel is already full height, so it's a no-op in the resting state. */
+    .form-sheet-panel::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      height: 50vh;
+      background: var(--card);
+      pointer-events: none;
     }
     /* v33: sheet 进场动画（纯 CSS 渐进增强；hidden→显示时从 @starting-style 过渡进来。
        关闭仍走 hidden 瞬断；P14 teardown 与 vv-glide 不受影响。旧浏览器无此规则=直接弹出。 */

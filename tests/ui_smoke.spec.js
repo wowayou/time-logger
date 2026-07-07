@@ -41,7 +41,7 @@ test('new entry shows continuation context and recomputes start', async ({ page 
   await expect(panel).toBeFocused();
   await expect(page.locator('[data-role="start-time-label"]')).toHaveText('10:00');
   await expect(page.locator('[data-role="duration-label"]')).not.toBeEmpty();
-  const tooltipVisibility = await page.locator('.tl-handle:not(.fixed)').first()
+  const tooltipVisibility = await page.locator('.icon-btn').first()
     .evaluate(btn => getComputedStyle(btn, '::after').visibility);
   expect(tooltipVisibility).toBe('hidden');
 
@@ -161,9 +161,8 @@ test('closed cross-day segment is sliced into the selected day timeline', async 
   await expect(page.locator('#ruler')).toContainText('维持 20.5%');
   await expect(page.locator('#ruler')).not.toContainText('未记录 100%');
 
-  // v34 rail 时序自上而下：00:00 的跨日承接段在前，02:35 的进行中段在后。
-  const visibleTimes = await page.locator('.tl-rail [data-role="pill-time"]').allTextContents();
-  expect(visibleTimes).toEqual(['00:00', '02:35']);
+  const visibleTimes = await page.locator('.entry .e-time').allTextContents();
+  expect(visibleTimes).toEqual(['02:35', '00:00']);
 });
 
 test('same-minute placeholder save reuses timestamp without duplicate', async ({ page }) => {
@@ -466,8 +465,8 @@ test('reload starts with has-entries boot state and reaches app-ready', async ({
 test('editing an existing record persists content and tag (① commitEdit single load)', async ({ page }) => {
   await boot(page, 768, 'one-record', false, FIXED_NOW);
 
-  // v34: 点段即编辑。
-  await page.locator('.seg-block[data-id="today-1"]').click();
+  // Open the existing record's edit sheet.
+  await page.getByRole('button', { name: '编辑记录' }).click();
   const what = page.locator('[data-role="edit-what"]');
   await expect(what).toBeVisible();
   await expect(what).toHaveValue('响应式测试记录');
@@ -493,7 +492,7 @@ test('editing a long-note record keeps the save button on screen (SE2 textarea c
   // long note growing an uncapped textarea used to push the save ✓ off-screen.
   await boot(page, 375, 'long-note', false, FIXED_NOW);
 
-  await page.locator('.seg-block[data-id="today-long"]').click();
+  await page.locator('.entry[data-id="today-long"] [data-action="start-edit"]').click();
   const what = page.locator('[data-role="edit-what"]');
   await expect(what).toBeVisible();
 
@@ -611,9 +610,7 @@ test('deleting a standalone middle record turns its span 未记录, never the pr
 
   // 睡一会 | 写代码 | 吃早饭. Deleting 写代码 (distinct neighbors) must not stretch
   // 睡觉 over 09:00→10:00 — that span becomes an honest 未记录 placeholder.
-  // v34: 删除入口在编辑 sheet 里（rail 上无逐条按钮）。
-  await page.locator('.seg-block[data-id="tl-b"]').click();
-  await page.getByRole('button', { name: '删除这条记录' }).click();
+  await page.locator('.entry[data-id="tl-b"] [data-action="delete-entry"]').click();
 
   const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.filter(e => !e.planned));
   expect(entries.find(e => e.id === 'tl-b')).toMatchObject({ what: '', tags: [] });
@@ -639,78 +636,21 @@ test('⑥ confirming a plan onto a taken now-minute nudges forward', async ({ pa
   expect(new Set(stamps).size).toBe(stamps.length);
 });
 
-test('v34 dragging a boundary handle snaps to 5min and persists', async ({ page }) => {
+test('tapping a gap card opens the bounded backfill sheet', async ({ page }) => {
   await boot(page, 768, 'two-records', false, FIXED_NOW);
-  const handle = page.locator('.tl-handle[data-id="today-2"]');
-  await expect(handle).toBeVisible();
-  const box = await handle.boundingBox();
-  const cx = box.x + box.width / 2;
-  const cy = box.y + box.height / 2;
-  await page.mouse.move(cx, cy);
-  await page.mouse.down();
-  // 24px ÷ 2px/min = 12min → 5min 吸附到 +10min。
-  await page.mouse.move(cx, cy + 24, { steps: 4 });
-  await page.mouse.up();
-  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
-  expect(entries.find(e => e.id === 'today-2').ts).toBe('2026-06-29T10:10');
-  // 拖后重排：把手回到钳制布局并显示新时间。
-  await expect(page.locator('.tl-handle[data-id="today-2"] [data-role="pill-time"]')).toHaveText('10:10');
-});
-
-test('v35 dragging a boundary keeps neighboring segments static until settle, then eases to the new height', async ({ page }) => {
-  await boot(page, 768, 'two-records', false, FIXED_NOW);
-  // today-1's boundary sits between two whole-minute entries (00:00 gap / 09:00–10:00),
-  // unlike today-2's which borders the ongoing "now" segment carrying fractional
-  // seconds — picking this handle keeps the expected-height math exact.
-  const handle = page.locator('.tl-handle[data-id="today-1"]');
-  await expect(handle).toBeVisible();
-  const prevBlock = page.locator('.seg-block[data-idx="0"]');
-  const selfBlock = page.locator('.seg-block[data-idx="1"]');
-  const prevBefore = await prevBlock.evaluate(el => el.style.height);
-  const selfBefore = await selfBlock.evaluate(el => el.style.height);
-
-  // 期望值直接算自把手自带的 dataset（data-min/data-prev-start/data-end-min），
-  // 与实现同一套 railHeight 钳制公式，不依赖 fixture 具体数字。
-  const railHeight = mins => Math.max(54, Math.min(200, Math.round(mins * 1.1)));
-  const prevStart = Number(await handle.getAttribute('data-prev-start'));
-  const endMin = Number(await handle.getAttribute('data-end-min'));
-  const newStart = Number(await handle.getAttribute('data-min')) + 10; // 24px÷2px/min→12min，5min 吸附到 +10min
-  const expectedPrevHeight = `${railHeight(newStart - prevStart)}px`;
-  const expectedSelfHeight = `${railHeight(endMin - newStart)}px`;
-
-  const box = await handle.boundingBox();
-  const cx = box.x + box.width / 2;
-  const cy = box.y + box.height / 2;
-  await page.mouse.move(cx, cy);
-  await page.mouse.down();
-  await page.mouse.move(cx, cy + 24, { steps: 4 });
-  // 真·静轴动标：拖动中两段高度必须与拖前完全一致——轴不动，只有把手数字在变。
-  expect(await prevBlock.evaluate(el => el.style.height)).toBe(prevBefore);
-  expect(await selfBlock.evaluate(el => el.style.height)).toBe(selfBefore);
-  await expect(page.locator('.tl-handle[data-id="today-1"] [data-role="pill-time"]')).toHaveText('09:10');
-
-  await page.mouse.up();
-  // 松手落库后 settle：两段过渡到按新时长算出的钳制高度，不是拖前旧值也不弹回。
-  await expect(page.locator('.seg-block[data-idx="0"]')).toHaveCSS('height', expectedPrevHeight);
-  await expect(page.locator('.seg-block[data-idx="1"]')).toHaveCSS('height', expectedSelfHeight);
-});
-
-test('v34 keyboard arrows nudge a boundary (5min, Shift=1min)', async ({ page }) => {
-  await boot(page, 768, 'two-records', false, FIXED_NOW);
-  await page.locator('.tl-handle[data-id="today-2"]').focus();
-  await page.keyboard.press('ArrowUp');
-  let ts = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(e => e.id === 'today-2').ts);
-  expect(ts).toBe('2026-06-29T09:55');
-  await page.locator('.tl-handle[data-id="today-2"]').focus();
-  await page.keyboard.press('Shift+ArrowDown');
-  ts = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(e => e.id === 'today-2').ts);
-  expect(ts).toBe('2026-06-29T09:56');
-});
-
-test('v34 tapping a gap opens the bounded backfill sheet', async ({ page }) => {
-  await boot(page, 768, 'two-records', false, FIXED_NOW);
-  await page.locator('.seg-block.gap').click();
+  await page.locator('.entry.gap [data-action="backfill-seg"]').click();
   await expect(page.locator('#form-sheet-title')).toContainText('补录');
   await expect(page.locator('#form-ts')).toHaveValue('2026-06-29T00:00');
   await expect(page.locator('#form-end-ts')).toHaveValue('2026-06-29T09:00');
+});
+
+test('editing a record can change its start time via the wheel', async ({ page }) => {
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+  await page.locator('.entry[data-id="today-1"] [data-action="start-edit"]').click();
+  await page.locator('[data-role="edit-wheel"] [data-role="text"]').fill('2026-06-29 09:10');
+  await page.locator('[data-role="edit-wheel"] [data-role="text"]').blur();
+  await page.getByRole('button', { name: '保存修改' }).click();
+  await expect(page.locator('#form-sheet')).toBeHidden();
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(entries.find(e => e.id === 'today-1').ts).toBe('2026-06-29T09:10');
 });

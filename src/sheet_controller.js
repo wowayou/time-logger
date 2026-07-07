@@ -415,7 +415,6 @@ export function createSheetController(deps) {
     lockBodyForSheet();
     sheet.hidden = false;
     if (mode === 'edit') {
-      // v34: 已发生记录的时间在时间轴上拖，编辑表单只有计划条才有时间轮。
       const editWheel = panel.querySelector('[data-role="edit-wheel"]');
       if (editWheel) {
         const tsEl = panel.querySelector('[data-role="edit-ts"]');
@@ -863,6 +862,12 @@ export function createSheetController(deps) {
     settleThenTeardown(() => { closeForm(); deps.render(); });
   }
 
+  function switchActivity() {
+    deps.state.view = 'day';
+    deps.setSelectedDate(todayStr());
+    openFormSheet({ mode: 'new' });
+  }
+
   function getEditingBox(id = deps.getSheetEditId()) {
     return Array.from(document.querySelectorAll('.entry.editing, .form-sheet-panel'))
       .find(el => el.dataset.id === String(id));
@@ -875,51 +880,46 @@ export function createSheetController(deps) {
   function commitEdit(id) {
     const box = getEditingBox(id);
     if (!box) return;
+    const tsEl = box.querySelector('[data-role="edit-ts"]');
     const whatEl = box.querySelector('[data-role="edit-what"]');
     const chipBox = box.querySelector('[data-role="edit-chips"]');
     const customEl = box.querySelector('[data-role="edit-custom-tag"]');
+    const timeScope = box.querySelector('[data-role="edit-wheel"]') || box;
     const d = deps.load();
     const entry = d.entries.find(e => e.id === id);
-    if (!entry) return;
-    const planned = Boolean(entry.planned);
-    // v34: 已发生记录的时间只在时间轴上拖，编辑表单不再改 ts（也就没有同刻
-    // 冲突路径）；只有计划条仍在这里改时间并保留冲突守卫。
-    let nextTs = entry.ts;
-    if (planned) {
-      const tsEl = box.querySelector('[data-role="edit-ts"]');
-      const timeScope = box.querySelector('[data-role="edit-wheel"]') || box;
-      const checked = validateTsForMode(tsEl ? tsEl.value : '', {
-        planned,
-        dateKey: (tsEl && tsEl.value || '').slice(0, 10) || deps.state.selectedDate
-      });
-      if (!checked.ok) {
-        setTimeInputError(timeScope, checked.msg);
-        const focusEl = timeScope.querySelector('[data-role="text"], [data-role="date"]');
-        if (focusEl) focusEl.focus();
-        return;
-      }
-      setTimeInputError(timeScope, '');
-      const conflict = findTimeConflict(d.entries, checked.ts, id);
-      if (conflict) {
-        showInlineError(box, conflictMessage(conflict, checked.ts, 'use-conflict-plus-edit'));
-        return;
-      }
-      nextTs = checked.ts;
+    const planned = Boolean(entry && entry.planned);
+    const checked = validateTsForMode(tsEl ? tsEl.value : '', {
+      planned,
+      dateKey: (tsEl && tsEl.value || '').slice(0, 10) || deps.state.selectedDate
+    });
+    if (!checked.ok) {
+      setTimeInputError(timeScope, checked.msg);
+      const focusEl = timeScope.querySelector('[data-role="text"], [data-role="date"]');
+      if (focusEl) focusEl.focus();
+      return;
     }
+    setTimeInputError(timeScope, '');
     const what = whatEl ? whatEl.value.trim() : '';
     if (!what) { if (whatEl) whatEl.focus(); return; }
     const sel = chipBox ? chipBox.querySelector('.chip.sel') : null;
     const ctag = customEl ? customEl.value.trim() : '';
     const tag = ctag || (sel ? sel.dataset.tag : '未知');
+    const conflict = findTimeConflict(d.entries, checked.ts, id);
+    if (conflict) {
+      showInlineError(box, conflictMessage(conflict, checked.ts, 'use-conflict-plus-edit'));
+      return;
+    }
     if (ctag) rememberTag(ctag, editBucket, d.entries.filter(item => item.id !== id));
-    entry.ts = nextTs;
-    entry.what = what;
-    entry.tags = [tag];
-    if (planned) entry.planned = true;
-    else delete entry.planned;
-    normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
-    deps.save(d);
-    deps.setSelectedDate(nextTs.slice(0, 10));
+    if (entry) {
+      entry.ts = checked.ts;
+      entry.what = what;
+      entry.tags = [tag];
+      if (planned) entry.planned = true;
+      else delete entry.planned;
+      normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
+      deps.save(d);
+    }
+    deps.setSelectedDate(checked.ts.slice(0, 10));
     settleThenTeardown(() => { closeEditSheet(); deps.render(); });
   }
 
@@ -996,6 +996,7 @@ export function createSheetController(deps) {
     editConflictEntry,
     pickEditTag,
     commitEdit,
+    switchActivity,
     saveEntry,
     autosizeTextareas,
     updateMainlineHint,

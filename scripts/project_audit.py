@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "35"
+EXPECTED_VERSION = "36"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -22,7 +22,6 @@ REQUIRED_RUNTIME_ASSETS = [
     "src/entry_model.js",
     "src/io_actions.js",
     "src/sheet_controller.js",
-    "src/timeline_gestures.js",
     "src/time.js",
     "src/storage.js",
     "src/stats.js",
@@ -195,7 +194,6 @@ def audit_runtime_imports(errors: list[str]) -> None:
         "src/entry_model.js",
         "src/io_actions.js",
         "src/sheet_controller.js",
-        "src/timeline_gestures.js",
         "src/time.js",
         "src/storage.js",
         "src/stats.js",
@@ -220,10 +218,9 @@ def audit_index(errors: list[str]) -> None:
     entry_model = read_text("src/entry_model.js")
     io_actions = read_text("src/io_actions.js")
     sheet_controller = read_text("src/sheet_controller.js")
-    timeline_gestures = read_text("src/timeline_gestures.js")
     ui = read_text("src/ui.js")
     pickers = read_text("src/pickers.js")
-    runtime = "\n".join([html, css, app, entry_model, io_actions, sheet_controller, timeline_gestures, ui, pickers])
+    runtime = "\n".join([html, css, app, entry_model, io_actions, sheet_controller, ui, pickers])
 
     if "title=" in runtime:
         fail(errors, "runtime files must not use native title= tooltips")
@@ -282,12 +279,6 @@ def audit_index(errors: list[str]) -> None:
         fail(errors, "footer is retired in v34; do not reintroduce a sticky footer")
     if 'data-action="open-more"' not in html:
         fail(errors, "header must expose the ··· more-sheet entry (open-more)")
-    if "switch-activity" in runtime:
-        fail(errors, "switch-activity entry was consolidated into tapping the ongoing tail segment")
-    if not re.search(r"\.tl-handle\s*\{[^}]*touch-action:\s*none", css, re.DOTALL):
-        fail(errors, "rail drag handles must scope touch-action: none to .tl-handle only")
-    if re.search(r"(?:\.seg-block|\.tl-rail|#timeline)\s*\{[^}]*touch-action:\s*none", css, re.DOTALL):
-        fail(errors, "touch-action: none must stay on handles; segments/rail must keep normal scrolling")
     if not re.search(r"\.view-tabs\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)", css, re.DOTALL):
         fail(errors, "view tabs must use a stable four-column grid")
     if "container-type: inline-size" not in css or "@container (max-width: 390px)" not in css:

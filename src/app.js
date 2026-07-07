@@ -27,7 +27,6 @@ import {
 } from './storage.js';
 import { createIoActions } from './io_actions.js';
 import { createSheetController } from './sheet_controller.js';
-import { createTimelineGestures } from './timeline_gestures.js';
 import {
   GAP,
   addBucket,
@@ -59,7 +58,6 @@ import {
   todayStr
 } from './time.js';
 import {
-  railHeight,
   renderRuler,
   renderSummaryRows,
   renderTimeline,
@@ -234,6 +232,8 @@ import {
       canPlanOnDate && preferPlan ? '打开表单，安排接下来要做的事。' : '打开表单，记录刚才这一阵。',
       canPlanOnDate && preferPlan ? '计划一条新的时间记录' : '记一条新的时间记录'
     );
+    const switchBtn = document.getElementById('switch-btn');
+    if (switchBtn) switchBtn.hidden = state.view !== 'day';
     const periodNames = { day: '天', week: '周', month: '月', year: '年' };
     const todayLabels = { day: '回到今天', week: '回到本周', month: '回到本月', year: '回到今年' };
     const todayTip = `回到包含今天的当前${periodNames[state.view]}。`;
@@ -349,19 +349,6 @@ import {
     ioActions.openMoreSheet();
   }
 
-  // 直接操纵语义（v34）：点空隙/中间占位=补录、点进行中尾段=记一条、点真实段=编辑。
-  function handleSegTap(el) {
-    if (el.dataset.ongoing) {
-      sheetController.openForm();
-      return;
-    }
-    if (el.dataset.gap || el.dataset.placeholder) {
-      sheetController.openFormSheet({ mode: 'new', ts: el.dataset.ts, endTs: el.dataset.end, backfill: true });
-      return;
-    }
-    if (el.dataset.id) sheetController.startEdit(el.dataset.id);
-  }
-
   const sheetController = createSheetController({
     state,
     load,
@@ -397,8 +384,6 @@ import {
     closeForm: () => sheetController.closeForm(),
     render
   });
-
-  const timelineGestures = createTimelineGestures({ load, save, uid, render, railHeight });
 
   // --- App update prompt ---
   function showUpdatePrompt(registration) {
@@ -450,8 +435,8 @@ import {
       if (action === 'shift-period') shiftPeriod(Number(el.dataset.delta || 0));
       if (action === 'today') goToday();
       if (action === 'open-form') sheetController.openForm();
-      if (action === 'seg-tap') handleSegTap(el);
       if (action === 'backfill-seg') sheetController.openFormSheet({ mode: 'new', ts: el.dataset.ts, endTs: el.dataset.end, backfill: true });
+      if (action === 'switch-activity') sheetController.switchActivity();
       if (action === 'open-help') openHelp();
       if (action === 'open-more') openMore();
       if (action === 'open-tag-config') openTagConfig();
@@ -503,14 +488,7 @@ import {
         if (sheetEditId) { sheetController.commitEdit(sheetEditId); return; }
         if (sheetController.isFormOpen()) sheetController.saveEntry();
       }
-      // rail 段是 div[role=button]（内部还有 mini-btn，不能嵌套 <button>）：
-      // 键盘激活在这里补齐。
-      if ((e.key === 'Enter' || e.key === ' ') && e.target instanceof HTMLElement && e.target.matches('.seg-block[data-action="seg-tap"]')) {
-        e.preventDefault();
-        handleSegTap(e.target);
-      }
     });
-    timelineGestures.attach(document.getElementById('timeline'));
     window.addEventListener('resize', sheetController.handleResponsiveResize, { passive: true });
     window.addEventListener('orientationchange', sheetController.handleResponsiveResize, { passive: true });
     window.addEventListener('storage', e => {

@@ -147,8 +147,8 @@ export async function expectNoHorizontalOverflow(page) {
     const doc = document.documentElement;
     const nav = document.querySelector('.date-nav').getBoundingClientRect();
     const period = document.querySelector('#period-label').getBoundingClientRect();
-    const rail = document.querySelector('.tl-rail');
-    const railRect = rail ? rail.getBoundingClientRect() : null;
+    const timeline = document.querySelector('#timeline');
+    const timelineRect = timeline ? timeline.getBoundingClientRect() : null;
     return {
       scrollWidth: doc.scrollWidth,
       clientWidth: doc.clientWidth,
@@ -156,8 +156,8 @@ export async function expectNoHorizontalOverflow(page) {
       navRight: nav.right,
       periodLeft: period.left,
       periodRight: period.right,
-      railLeft: railRect ? railRect.left : 0,
-      railRight: railRect ? railRect.right : 0,
+      timelineLeft: timelineRect ? timelineRect.left : 0,
+      timelineRight: timelineRect ? timelineRect.right : 0,
       viewport: window.innerWidth
     };
   });
@@ -166,6 +166,6 @@ export async function expectNoHorizontalOverflow(page) {
   expect(metrics.navRight).toBeLessThanOrEqual(metrics.viewport + 1);
   expect(metrics.periodLeft).toBeGreaterThanOrEqual(-1);
   expect(metrics.periodRight).toBeLessThanOrEqual(metrics.viewport + 1);
-  expect(metrics.railLeft).toBeGreaterThanOrEqual(-1);
-  expect(metrics.railRight).toBeLessThanOrEqual(metrics.viewport + 1);
+  expect(metrics.timelineLeft).toBeGreaterThanOrEqual(-1);
+  expect(metrics.timelineRight).toBeLessThanOrEqual(metrics.viewport + 1);
 }

@@ -88,130 +88,93 @@ export function confirmSegmentLabel(startTs, endTs) {
 }
 
 
-// 静轴动标 rail：时序自上而下，段高半比例钳制；边界时间文字即拖拽把手
-// （阅读态零 chrome，active 才浮胶囊）。点段=编辑、点隙=补录、点尾段=记一条，
-// 手势与落库在 src/timeline_gestures.js。
-const RAIL_H_MIN = 54;
-const RAIL_H_MAX = 200;
-const RAIL_MIN_SEG = 5;
-
-export function railHeight(mins) {
-  return Math.max(RAIL_H_MIN, Math.min(RAIL_H_MAX, Math.round(mins * 1.1)));
-}
-
-function minuteOfDay(d) {
-  return d.getHours() * 60 + d.getMinutes();
-}
-
-function plannedCard(e) {
-  const displayTag = (e.tags || [])[0] || '未知';
-  const tagClass = ` e-tag-${bucketForTag(displayTag)}`;
-  return `<div class="entry planned" data-id="${esc(e.id)}">
-    <div class="e-body">
-      <div class="e-time">${hhmm(e.ts)}</div>
-      <div class="e-what">${esc(e.what || '未填写')}</div>
-      <div class="e-meta">
-        <span class="e-tag e-tag-planned${tagClass}">计划·#${esc(displayTag)}</span>
-      </div>
-    </div>
-    <div class="e-btns">
-      <button class="icon-btn save-btn" type="button" data-action="confirm-planned" data-id="${esc(e.id)}" data-tip="标记为已发生" aria-label="标记计划为已发生">${iconSvg('check')}</button>
-      <button class="icon-btn" type="button" data-action="start-edit" data-id="${esc(e.id)}" data-tip="编辑计划" aria-label="编辑计划">${iconSvg('edit')}</button>
-      <button class="icon-btn dbtn" type="button" data-action="delete-entry" data-id="${esc(e.id)}" data-tip="删除计划" aria-label="删除计划">${iconSvg('trash')}</button>
-    </div>
-  </div>`;
-}
-
-function railSegment(seg, i, prev) {
-  const { e, start, end, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs } = seg;
-  const startMin = minuteOfDay(start);
-  const endMin = startMin + mins;
-  const isGap = !e;
-  const isPlaceholder = !isGap && typeof e.what === 'string' && e.what.trim() === '';
-  const activePlaceholder = isPlaceholder && isOngoing;
-  const segStartTs = localDateTimeKey(start);
-  const segEndTs = end ? localDateTimeKey(end) : '';
-  const draggable = Boolean(e && !e.planned && e.ts === segStartTs);
-  const timeLabel = hhmm(start);
-  const arrows = draggable
-    ? '<svg viewBox="0 0 10 16" aria-hidden="true" focusable="false"><path d="M2 5.5 5 2.5l3 3"></path><path d="M2 10.5l3 3 3-3"></path></svg>'
-    : '';
-  const pill = `<span class="pill">${arrows}<span data-role="pill-time">${timeLabel}</span></span>`;
-  let handle;
-  if (draggable) {
-    const prevStartMin = prev ? minuteOfDay(prev.start) : null;
-    const lo = prev ? Math.min(prevStartMin + RAIL_MIN_SEG, startMin) : 0;
-    const hi = Math.max(endMin - RAIL_MIN_SEG, startMin);
-    const ctxLabel = prev
-      ? (prev.e
-        ? (((prev.e.what || '').trim()) || (typeof prev.e.what === 'string' && prev.e.what.trim() === '' ? '未记录' : prev.tag))
-        : '未记录')
-      : '';
-    handle = `<button class="tl-handle" type="button" data-idx="${i}" data-id="${esc(e.id)}" data-date="${esc(e.ts.slice(0, 10))}" data-min="${startMin}" data-lo="${lo}" data-hi="${hi}" data-end-min="${endMin}"${prevStartMin === null ? '' : ` data-prev-start="${prevStartMin}"`} data-ctx="${esc(ctxLabel)}" data-tip="按住拖动改这个边界时间；聚焦后 ↑↓ 调 5 分钟，Shift+↑↓ 调 1 分钟。" aria-label="边界时间 ${timeLabel}，拖动或用上下方向键调整">${pill}</button>`;
-  } else {
-    handle = `<span class="tl-handle fixed" aria-hidden="true">${pill}</span>`;
-  }
-  const bucket = isGap || isPlaceholder ? 'unrecorded' : bucketForTag(tag);
-  const cls = ['seg-block', `sb-${bucket}`];
-  if (isGap) cls.push('gap');
-  if (isPlaceholder) cls.push('placeholder');
-  if (e && seg.sheetEditing) cls.push('sheet-editing');
-  const whatText = isGap
-    ? '这一段还没记'
-    : (isPlaceholder ? (activePlaceholder ? '进行中·还没记' : '未记录') : e.what);
-  const displayTag = isGap || isPlaceholder ? '未记录' : tag;
-  const tagClass = isGap || isPlaceholder ? 'e-tag-unrecorded' : `e-tag-${bucket}`;
-  const durStr = timelineDurationLabel(mins, isOngoing, unrecorded || isPlaceholder || isGap, pendingConfirm);
-  const confirmText = e ? confirmSegmentLabel(e.ts, endTs) : '';
-  const confirmBtn = confirmable && e
-    ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" data-tip="确认后按这个标签统计；相邻时间变化会自动失效。" aria-label="${esc(confirmText)}">${esc(confirmText)}</button>`
-    : '';
-  let splitBtn = '';
-  if (segEndTs && !activePlaceholder) {
-    const splitLabel = (isGap || isPlaceholder || unrecorded) ? '补一下' : '切一刀';
-    const splitAria = isGap ? '补录这段未记录时间' : '在这段里补录或切分';
-    splitBtn = `<button class="mini-btn" type="button" data-action="backfill-seg" data-ts="${esc(segStartTs)}" data-end="${esc(segEndTs)}" data-tip="在这段里补录或切分一段；结束自动接回原状态。" aria-label="${splitAria}">${splitLabel}</button>`;
-  }
-  const endLabel = isOngoing ? '现在' : hhmm(end);
-  const tapHint = isGap || (isPlaceholder && !activePlaceholder) ? '点按补录' : (activePlaceholder ? '点按记一条' : '点按编辑');
-  const dataAttrs = [
-    'data-action="seg-tap"',
-    `data-idx="${i}"`,
-    e ? `data-id="${esc(e.id)}"` : '',
-    `data-ts="${esc(segStartTs)}"`,
-    `data-end="${esc(segEndTs)}"`,
-    isGap ? 'data-gap="1"' : '',
-    isPlaceholder ? 'data-placeholder="1"' : '',
-    activePlaceholder ? 'data-ongoing="1"' : ''
-  ].filter(Boolean).join(' ');
-  return `${handle}<div class="${cls.join(' ')}" ${dataAttrs} role="button" tabindex="0" style="height:${railHeight(mins)}px" aria-label="${timeLabel} 到 ${endLabel}，${esc(isGap || isPlaceholder ? whatText : (e.what || displayTag))}，${tapHint}">
-    <div class="seg-inner">
-      <div class="seg-what">${esc(whatText)}</div>
-      <div class="seg-meta">
-        <span class="e-tag ${tagClass}">#${esc(displayTag)}</span>
-        <span class="e-dur">${durStr}</span>
-        ${confirmBtn}${splitBtn}
-      </div>
-    </div>
-  </div>`;
-}
-
 export function renderTimeline(items, opts = {}) {
   const { sheetEditId = null, plannedItems = [] } = opts;
   const el = document.getElementById('timeline');
-  const planned = plannedItems || [];
-  if (!items.length && !planned.length) {
+  const planned = (plannedItems || []).map(e => ({
+    e,
+    start: new Date(e.ts),
+    mins: 0,
+    isOngoing: false,
+    unrecorded: false,
+    pendingConfirm: false,
+    confirmable: false,
+    tag: (e.tags || [])[0] || '未知',
+    endTs: '',
+    planned: true
+  }));
+  const allItems = [...items, ...planned];
+  if (!allItems.length) {
     el.innerHTML = '<div class="empty-tip">点击上方「+ 记一条」开始记录，或切换日期查看历史。</div>';
     return;
   }
-  const rail = items.map((seg, i) => {
-    if (seg.e && sheetEditId === seg.e.id) seg.sheetEditing = true;
-    return railSegment(seg, i, i > 0 ? items[i - 1] : null);
+  el.innerHTML = [...allItems].reverse().map(({ e, start, end, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs, planned: isPlanned }) => {
+    if (isPlanned) {
+      const displayTag = (e.tags || [])[0] || '未知';
+      const tagClass = ` e-tag-${bucketForTag(displayTag)}`;
+      return `<div class="entry planned" data-id="${esc(e.id)}">
+        <div class="e-body">
+          <div class="e-time">${hhmm(e.ts)}</div>
+          <div class="e-what">${esc(e.what || '未填写')}</div>
+          <div class="e-meta">
+            <span class="e-tag e-tag-planned${tagClass}">计划·#${esc(displayTag)}</span>
+          </div>
+        </div>
+        <div class="e-btns">
+          <button class="icon-btn save-btn" type="button" data-action="confirm-planned" data-id="${esc(e.id)}" data-tip="标记为已发生" aria-label="标记计划为已发生">${iconSvg('check')}</button>
+          <button class="icon-btn" type="button" data-action="start-edit" data-id="${esc(e.id)}" data-tip="编辑计划" aria-label="编辑计划">${iconSvg('edit')}</button>
+          <button class="icon-btn dbtn" type="button" data-action="delete-entry" data-id="${esc(e.id)}" data-tip="删除计划" aria-label="删除计划">${iconSvg('trash')}</button>
+        </div>
+      </div>`;
+    }
+    if (!e) {
+      const gapTs = localDateTimeKey(start);
+      const gapEnd = localDateTimeKey(end);
+      return `<div class="entry gap" data-gap-ts="${esc(gapTs)}">
+        <div class="e-body">
+          <div class="e-time">${hhmm(start)}</div>
+          <div class="e-what">这一段还没记，要补吗？</div>
+          <div class="e-meta">
+            <span class="e-tag e-tag-unrecorded">#未记录</span>
+            <span class="e-dur">${fmtMins(mins)}</span>
+            <button class="mini-btn" type="button" data-action="backfill-seg" data-ts="${esc(gapTs)}" data-end="${esc(gapEnd)}" data-tip="在这段未记录时间补一条；结束会自动接回原状态。" aria-label="补录这段未记录时间">补一下</button>
+          </div>
+        </div>
+      </div>`;
+    }
+    const isPlaceholder = typeof e.what === 'string' && e.what.trim() === '';
+    // Only the live now-segment reads "进行中"; a middle/past placeholder (e.g.
+    // left by a smart delete) is honestly just "未记录".
+    const activePlaceholder = isPlaceholder && isOngoing;
+    const displayTag = isPlaceholder ? '未记录' : tag;
+    const tagClass = ` e-tag-${isPlaceholder ? 'unrecorded' : bucketForTag(tag)}`;
+    const entryClass = `entry${isPlaceholder ? ' placeholder' : ''}${sheetEditId === e.id ? ' sheet-editing' : ''}`;
+    const durStr = timelineDurationLabel(mins, isOngoing, unrecorded || isPlaceholder, pendingConfirm);
+    const confirmText = confirmSegmentLabel(e.ts, endTs);
+    const startLabel = start ? hhmm(start) : hhmm(e.ts);
+    const segStartTs = start ? localDateTimeKey(start) : e.ts;
+    const segEndTs = end ? localDateTimeKey(end) : '';
+    const splitLabel = (isPlaceholder || unrecorded) ? '补一下' : '切一刀';
+    const splitBtn = segEndTs
+      ? `<button class="mini-btn" type="button" data-action="backfill-seg" data-ts="${esc(segStartTs)}" data-end="${esc(segEndTs)}" data-tip="在这段里补录或切分一段；结束自动接回原标签。" aria-label="在这段里补录或切分">${splitLabel}</button>`
+      : '';
+    return `<div class="${entryClass}" data-id="${esc(e.id)}">
+      <div class="e-body">
+        <div class="e-time">${startLabel}</div>
+        <div class="e-what">${esc(isPlaceholder ? (activePlaceholder ? '进行中·还没记' : '未记录') : e.what)}</div>
+        <div class="e-meta">
+          ${displayTag ? `<span class="e-tag${tagClass}">#${esc(displayTag)}</span>` : ''}
+          <span class="e-dur">${durStr}</span>
+          ${confirmable ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" data-tip="确认后按这个标签统计；相邻时间变化会自动失效。" aria-label="${esc(confirmText)}">${esc(confirmText)}</button>` : ''}
+          ${splitBtn}
+        </div>
+      </div>
+      <div class="e-btns">
+        <button class="icon-btn" type="button" data-action="start-edit" data-id="${esc(e.id)}" data-tip="编辑记录" aria-label="编辑记录">${iconSvg('edit')}</button>
+        <button class="icon-btn dbtn" type="button" data-action="delete-entry" data-id="${esc(e.id)}" data-tip="删除记录" aria-label="删除记录">${iconSvg('trash')}</button>
+      </div>
+    </div>`;
   }).join('');
-  const plannedHtml = planned.length
-    ? `<div class="tl-label planned-label">计划</div>${planned.map(plannedCard).join('')}`
-    : '';
-  el.innerHTML = `<div class="tl-rail">${rail}</div>${plannedHtml}`;
 }
 
 export function renderSummaryRows(rows) {
@@ -371,22 +334,13 @@ export function renderFormSheet(opts) {
         ${datalist}
         <div class="form-hint" data-role="mainline-hint">${bucketHint(bucket)}</div>
       </div>`;
-  // 编辑已发生记录：表单只管内容和标签，时间在时间轴上拖边界（v34 语义统一）。
-  // 只有计划条仍在表单里改时间（它不在 rail 上，没有可拖的边界）。
-  const editTimeSection = isEditPlanned
-    ? `
+  const editTimeSection = `
       <div class="fl">
-        <div class="fl-label">计划时间（可改）</div>
+        <div class="fl-label">${isEditPlanned ? '计划时间（可改）' : '开始时间'}</div>
         ${tsInput}
         <div data-role="edit-wheel"></div>
       </div>
-      <div class="form-inline-error" data-role="conflict-error" hidden></div>`
-    : `
-      ${tsInput}
-      <div class="cell-group">
-        <div class="cell-row"><span>开始</span><span class="cell-value">${isEdit ? hhmm(e.ts) : ''}</span></div>
-        <div class="cell-row"><span>改时间</span><span class="cell-value">关掉表单，在时间轴上拖边界</span></div>
-      </div>`;
+      <div class="form-inline-error" data-role="conflict-error" hidden></div>`;
   const editBody = `
       ${editTimeSection}
       <div class="fl">
