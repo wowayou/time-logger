@@ -661,6 +661,29 @@ test('tapping a gap card opens the bounded backfill sheet', async ({ page }) => 
   await expect(page.locator('#form-end-ts')).toHaveValue('2026-06-29T09:00');
 });
 
+test('wheel columns paint above the highlight band (P22)', async ({ page }) => {
+  // 亮色 --accent-bg 不透明：高亮带若盖在列文字上方，选中行整行被涂掉。
+  // paint 可见性无法直接断言（elementFromPoint 跳过 pointer-events:none），
+  // 断言层序不变量：列必须建立高于高亮带的堆叠层。
+  await page.emulateMedia({ colorScheme: 'light' });
+  await boot(page, 375, 'two-records', false, FIXED_NOW);
+  await page.locator('.entry.gap [data-action="backfill-seg"]').click();
+  await expect(page.locator('.wheel-picker').first()).toBeVisible();
+  const stacking = await page.evaluate(() => {
+    const col = document.querySelector('.wheel-col');
+    const hl = document.querySelector('.wheel-highlight');
+    const colStyle = getComputedStyle(col);
+    const hlStyle = getComputedStyle(hl);
+    return {
+      colPosition: colStyle.position,
+      colZ: Number(colStyle.zIndex),
+      hlZ: Number(hlStyle.zIndex)
+    };
+  });
+  expect(stacking.colPosition).not.toBe('static');
+  expect(stacking.colZ).toBeGreaterThan(stacking.hlZ);
+});
+
 test('editing a record can change its start time via the wheel', async ({ page }) => {
   await boot(page, 768, 'two-records', false, FIXED_NOW);
   await page.locator('.entry[data-id="today-1"] [data-action="start-edit"]').click();

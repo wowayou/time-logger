@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v38` / manifest `version: "38"`。
+当前版本：`timelog-v39` / manifest `version: "39"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -64,6 +64,7 @@
 2. `manifest.webmanifest` 的 `version`
 3. `sw.js` 的 `FILES` 运行时缓存列表
 4. `scripts/project_audit.py` 的 `EXPECTED_VERSION`、`REQUIRED_RUNTIME_ASSETS` 和运行时 import 检查列表
+5. `src/ui.js` 的 `APP_VERSION`（更多 sheet 底部展示的版本号，audit 脚本校验同步）
 
 运行时资产必须进 SW 缓存；文档和开发脚本不进缓存。
 
@@ -138,6 +139,7 @@ git diff --check
 3. 移动端新增/编辑输入不自动放大；textarea 回车换行，Cmd/Ctrl+Enter 或「完成」保存。
 4. 新增或编辑时，定时刷新不打断输入；无数据变化的 60s tick 不重绘页面。
 5. Ruler/摘要显示主线、维持、漏损、未记录 4 桶；睡觉 6h 不待确认，吃饭 6h 待确认。
+5a. 亮色+暗色各打开一次带滚轮的 sheet（新建/编辑/补录），选中行文字可见、不被高亮带涂掉（P22）。
 6. 同时刻新增出现内联冲突提示，可编辑原条或用 +1min。
 7. 「···」更多菜单里下载、导入、分享、摘要、复制均可用；导出文件名带秒，JSON 按 `ts` 升序。
 8. PWA 更新链路：改 `index.html` 后升 CACHE 号；旧页面应出现“更新应用”，点击后加载新版，本机 `localStorage['timelog.v1']` 保留。
@@ -195,3 +197,4 @@ git diff --check
 | v36 | 2026-07-07 | 日视图回退 v33 卡片列表（v34/v35 直接操纵 rail 观感不及预期）：删除 `src/timeline_gestures.js` 与全部 rail CSS/dataset，`renderTimeline` 恢复按时间倒序的卡片模板（真实段/占位段/空隙段/计划段），编辑图标开编辑 sheet、删除图标智能删除；编辑表单恢复可在时间轮里改任意已发生记录的开始时间（不再仅限计划条），`commitEdit` 恢复同刻冲突校验；`switchActivity`／「切换活动」按钮回归；v34 引入的「···」更多菜单、footer 退役、sheet 头部「取消/完成」文字按钮语法保留不变。同时修 P19（键盘收起瞬间表单底部露出空白）：`.form-sheet-backdrop` 改 `position: fixed` 恒盖满视口，`.form-sheet-panel` 加同色「裙边」伪元素兜住几何未追上时的空档；P14/P16/P18 的 settle/burst 时序机制不变。详见 `docs/postmortems.md` P19 |
 | v37 | 2026-07-08 | SE2 真机三缺陷热修：① P21 更多菜单「分享备份」行被分组拦腰裁掉——iOS WebKit 对 grid auto 轨道内 button 的 min-height 计量缺陷致行流累计下溢 ~28px 被 `overflow: hidden` 裁切；`.cell-group` 改块级流 + 行显式 `width: 100%`，Playwright 补「行必须完整落在分组内」断言；② 标签高级设置压缩为 cell 语法——每个 chip 改两行式 cell（名称+桶 select 一行，longOk+条数一行）收进 `cell-group`，删 ≤390px 单列坍缩，单行高约减半，`saveTagConfig` 选择器零改动；③ P20 键盘收起后表单二段式落位根治——P19 只涂掉了裸露区、面板内容位移仍在；改「失焦即预测」：`focusout` 时键盘在场且焦点未落回文本控件即直写终态几何（`--vvt:0/--vvh:innerHeight`）+ 终态高度重排 textarea，`vvPredictionHold`（700ms 上限）挡住收起中途的过渡 vv 事件防回拽，settle 落权威值收尾；save/取消/Esc 的 teardown 路径不受影响。顺带修 P19 裙边在 ≥720px 居中 dialog 下方露出卡片色矩形（裙边只服务贴边 bottom sheet，桌面断点 `content: none`）。详见 `docs/postmortems.md` P20–P21 |
 | v38 | 2026-07-08 | 全项目收敛（审计轮，零新功能）：header 收敛——删重复 GitHub 图标与「?」按钮（说明收进「···」，站点图标即仓库入口），smoke 说明用例改经更多菜单；帮助页「怎么记」重写为 v36 卡片语义（清 v34 rail 残留文案）；README 演示图按当前 UI + 固定 demo 数据重生成（替换 v9 时代英文截图）；死代码清理（`clampEndToNow`、5 个未调用 icon 定义、`--green` 令牌、`.edit-context`/`.edit-actions`、`.entry.editing` 残留选择器）；`.mini-btn` 透明伪元素扩 44px 热区（视觉不变，T11）；压测 A 类加预热导航修单次冷启动误报并纠正 P90 注释；文档收敛（README 功能清单/文件地图、ROADMAP 去过时编号、audit-2026-07 结果标注、原型索引「已回退/已采纳」标注）；`.gitignore` 补 `memory/` |
+| v39 | 2026-07-08 | P22 热修：亮色主题下时间滚轮选中行文字被高亮带整行涂掉（v33 令牌重写把亮色 `--accent-bg` 改为不透明色，暴露 `.wheel-highlight` 一直压在文字上方的层序错误；暗色半透明掩盖三个版本）——高亮带垫到文字层下（列 `z-index:1`/带 `z-index:0`，iOS 原生滚轮同层序）；Playwright 补层序不变量断言；更多 sheet 底部加「时间尺 vN」版本号小字（真机核对零成本），`project_audit.py` 校验 `APP_VERSION` 与版本四联动同步。P20/P21 经真机核对确认在 v37/v38 上仍存在，列入下一轮重诊断。详见 `docs/postmortems.md` P22 |

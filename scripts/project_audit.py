@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "38"
+EXPECTED_VERSION = "39"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -114,6 +114,16 @@ def audit_service_worker(errors: list[str]) -> None:
     for src in ["./" + src for src in [*REQUIRED_RUNTIME_ASSETS, *REQUIRED_ICON_SIZES]]:
         if src not in sw:
             fail(errors, f"sw.js FILES must cache runtime asset {src}")
+
+
+def audit_app_version_string(errors: list[str]) -> None:
+    # 更多 sheet 底部展示的版本号（真机核对用）必须与 CACHE/manifest 同步。
+    ui = read_text("src/ui.js")
+    match = re.search(r"const\s+APP_VERSION\s*=\s*['\"](\d+)['\"]", ui)
+    if not match:
+        fail(errors, "src/ui.js must declare APP_VERSION = 'N'")
+    elif match.group(1) != EXPECTED_VERSION:
+        fail(errors, f"src/ui.js APP_VERSION must be {EXPECTED_VERSION!r}")
 
 
 def audit_demo_assets(errors: list[str]) -> None:
@@ -334,6 +344,7 @@ def main() -> int:
     errors: list[str] = []
     audit_manifest(errors)
     audit_service_worker(errors)
+    audit_app_version_string(errors)
     audit_demo_assets(errors)
     audit_smoke_scripts(errors)
     audit_npm_metadata(errors)

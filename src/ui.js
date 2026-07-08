@@ -232,6 +232,9 @@ export function sheetHead({ title, cancelText, cancelAction, cancelAria, doneTex
 
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
+// 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
+const APP_VERSION = '39';
+
 export function renderMoreSheet(opts = {}) {
   const shareSupported = Boolean(opts.shareSupported);
   let themePref = 'auto';
@@ -260,6 +263,7 @@ export function renderMoreSheet(opts = {}) {
         </div>
         <button class="cell-btn" type="button" data-action="open-help" aria-label="打开说明">说明${cellChevron}</button>
       </div>
+      <div class="app-version">时间尺 v${APP_VERSION}</div>
     </div>`;
 }
 

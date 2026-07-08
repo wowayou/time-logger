@@ -588,6 +588,10 @@
     }
     .wheel-col {
       flex: 1;
+      /* 必须压在 .wheel-highlight 之上：亮色 --accent-bg 不透明，
+         高亮带盖在文字上会吞掉选中行（P22）。 */
+      position: relative;
+      z-index: 1;
       overflow-y: scroll;
       scroll-snap-type: y mandatory;
       scrollbar-width: none;
@@ -628,7 +632,7 @@
       border-bottom: 1px solid var(--accent);
       background: var(--accent-bg);
       pointer-events: none;
-      z-index: 1;
+      z-index: 0;
     }
     .wheel-actions {
       display: flex;
@@ -1262,6 +1266,12 @@
     }
     .cell-danger:active { opacity: 0.75; }
     .more-body { gap: 10px; }
+    .app-version {
+      text-align: center;
+      color: var(--faint);
+      font-size: var(--fs-cap);
+      padding: 2px 0 6px;
+    }
     .form-sheet-body {
       display: grid;
       /* Pin the single column to the container so tall/long content scrolls
