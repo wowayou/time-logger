@@ -327,7 +327,7 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ## P21 · 更多菜单最后一行被分组拦腰裁掉（v37）
 
-**确诊日期**：2026-07-07 · **状态**：先修后验（v37）· **严重度**：中（备份入口不可用）
+**确诊日期**：2026-07-07 · **状态**：已验（2026-07-08 SE2 真机确认排版正常）· **严重度**：中（备份入口不可用）
 
 **现象**：SE2 真机（用户截图）：更多菜单里备份 cell 分组的第四行「分享备份」在分组圆角底边处被水平裁掉约一半，按钮残缺、难以点按。桌面与 headless Chromium 均不复现。
 
@@ -338,6 +338,8 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 **护栏**：Playwright 补断言——更多 sheet 每个可见 cell 行的 boundingBox 必须完整落在其父 `.cell-group` 内（Chromium 上防布局回归；WebKit 侧仍需真机兜底）。
 
 **经验**：跨引擎的布局原语差异（grid 轨道计量 × 表单元素内在尺寸）只在真机暴露；cell 分组这类「圆角容器 + overflow: hidden + 定高行」的组合，布局机制越朴素越安全——能用块级流就不用 grid。
+
+**验证补记（2026-07-08）**：SE2 真机（iOS 18.6.2 Safari）确认 v39 排版正常，块级流修复有效。本地 Playwright WebKitGTK 用 v36 旧样式也**不复现**该 grid 裁行——此缺陷属 iOS 构建的 WebKit 特有，本地 WebKit 可覆盖大部分排版差异但不是 100% 等价。另：用户同时报告「分享备份」cell 消失——经考古 v36→v39 显隐判定（`typeof navigator.share === 'function'`）逐字节未变，属设备侧能力应答变化（iOS 18.6 Safari 标签页报无 `navigator.share`，与平台常识相悖），已在 v40 加 `?vvdebug=1` 能力探针 HUD 实测取证，独立跟踪。
 
 ---
 

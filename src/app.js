@@ -58,6 +58,7 @@ import {
   todayStr
 } from './time.js';
 import {
+  APP_VERSION,
   renderRuler,
   renderSummaryRows,
   renderTimeline,
@@ -571,10 +572,48 @@ import {
     startTickTimer();
   }
 
+  // --- vv 诊断 HUD（?vvdebug=1 启用；P20 键盘时序与分享能力真机取证，无参数时零成本） ---
+  function initVvDebugHud() {
+    let enabled = false;
+    try { enabled = new URLSearchParams(window.location.search).has('vvdebug'); } catch {}
+    if (!enabled) return;
+    const hud = document.createElement('div');
+    hud.setAttribute('aria-hidden', 'true');
+    hud.style.cssText = 'position:fixed;left:4px;right:4px;top:max(4px,env(safe-area-inset-top));'
+      + 'z-index:2147483647;pointer-events:none;font:10px/1.45 ui-monospace,Menlo,monospace;'
+      + 'color:#7cff5e;background:rgba(0,0,0,0.72);border-radius:8px;padding:5px 7px;'
+      + 'white-space:pre-wrap;word-break:break-all';
+    document.body.appendChild(hud);
+    const t0 = performance.now();
+    const lines = [];
+    const vv = window.visualViewport;
+    const standalone = Boolean(
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+      || navigator.standalone
+    );
+    const header = () =>
+      `v${APP_VERSION} share:${typeof navigator.share} canShare:${typeof navigator.canShare} standalone:${standalone}\n`
+      + `inner:${window.innerHeight} vv:${vv ? `${Math.round(vv.height)}@${Math.round(vv.offsetTop)}` : 'n/a'}`;
+    const paint = () => { hud.textContent = `${header()}\n──\n${lines.join('\n')}`; };
+    window.__vvlog = msg => {
+      lines.push(`${String(Math.round(performance.now() - t0)).padStart(6)} ${msg}`);
+      if (lines.length > 16) lines.shift();
+      paint();
+    };
+    if (vv) {
+      vv.addEventListener('resize', () => window.__vvlog(`vv:resize h=${Math.round(vv.height)} top=${Math.round(vv.offsetTop)}`));
+      vv.addEventListener('scroll', () => window.__vvlog(`vv:scroll h=${Math.round(vv.height)} top=${Math.round(vv.offsetTop)}`));
+    }
+    document.addEventListener('focusin', e => window.__vvlog(`focusin ${e.target && e.target.tagName}`));
+    document.addEventListener('focusout', e => window.__vvlog(`focusout ${e.target && e.target.tagName}`));
+    window.__vvlog('HUD ready');
+  }
+
   if (window.__TIMELOG_TEST__) {
     exposeTestApi();
   } else {
     registerActions();
     registerServiceWorker();
+    initVvDebugHud();
     init();
   }

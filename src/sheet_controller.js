@@ -170,6 +170,7 @@ export function createSheetController(deps) {
     // the sticky head (with save ✓) stays on-screen. See docs/postmortems.md ⑧.
     root.style.setProperty('--vvt', `${Math.max(0, vv.offsetTop)}px`);
     root.style.setProperty('--vvh', `${vv.height}px`);
+    window.__vvlog?.(`write --vvt=${Math.max(0, Math.round(vv.offsetTop))} --vvh=${Math.round(vv.height)}`);
   }
 
   function syncVisualViewport() {
@@ -229,6 +230,7 @@ export function createSheetController(deps) {
   function ensureGlide() {
     const sheet = document.getElementById('form-sheet');
     if (!sheet || sheet.hidden) return;
+    if (!sheet.classList.contains('vv-glide')) window.__vvlog?.('glide ON');
     sheet.classList.add('vv-glide');
     clearTimeout(vvGlideOffTimer);
     vvGlideOffTimer = null;
@@ -238,7 +240,7 @@ export function createSheetController(deps) {
     const sheet = document.getElementById('form-sheet');
     if (!sheet) return;
     clearTimeout(vvGlideOffTimer);
-    vvGlideOffTimer = setTimeout(() => sheet.classList.remove('vv-glide'), 260);
+    vvGlideOffTimer = setTimeout(() => { window.__vvlog?.('glide OFF'); sheet.classList.remove('vv-glide'); }, 260);
   }
 
   function scheduleVisualViewportSync() {
@@ -249,7 +251,7 @@ export function createSheetController(deps) {
         vvRafId = null;
         if (document.body.classList.contains('sheet-closing')) return;
         // P20: mid-collapse events must not drag the predicted geometry back.
-        if (predictionBlocksWrite()) return;
+        if (predictionBlocksWrite()) { window.__vvlog?.('write BLOCKED (predict hold)'); return; }
         writeViewportVars();
       });
     }
@@ -268,12 +270,14 @@ export function createSheetController(deps) {
     // would yank the sheet back down. Check again shortly; the prediction
     // deadline bounds this loop.
     if (predictionBlocksWrite()) {
+      window.__vvlog?.('settle deferred (hold)');
       vvSettleTimer = setTimeout(applySettledViewport, 60);
       return;
     }
     vvPredictionHold = false;
     const sheet = document.getElementById('form-sheet');
     const open = Boolean(sheet && !sheet.hidden);
+    window.__vvlog?.('SETTLE apply');
     syncVisualViewport();
     // Once the keyboard has settled, keep the focused control inside the
     // (possibly much shorter) fold instead of under the keyboard.
@@ -293,6 +297,7 @@ export function createSheetController(deps) {
   // keyboard and lands as one continuous slide instead of a hang-then-jump
   // (P19 only painted over the exposed strip; the content itself still jumped).
   function predictKeyboardCollapse(sheet) {
+    window.__vvlog?.(`PREDICT collapse → vvh=${window.innerHeight}`);
     vvPredictionHold = true;
     vvPredictionDeadline = Date.now() + 700;
     ensureGlide();
@@ -319,14 +324,14 @@ export function createSheetController(deps) {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
     // At focusout time the keyboard is still on screen; if it isn't (desktop,
     // hardware keyboard, headless), there is nothing to predict.
-    if (!vv || (window.innerHeight - vv.height) <= 120) return;
+    if (!vv || (window.innerHeight - vv.height) <= 120) { window.__vvlog?.('focusout: kb not up, no predict'); return; }
     requestAnimationFrame(() => {
       if (document.body.classList.contains('sheet-closing') || teardownQueue) return;
       if (sheet.hidden) return;
       const active = document.activeElement;
       // Focus hopped to another text control inside the sheet: keyboard stays.
       if (active instanceof HTMLElement && sheet.contains(active)
-          && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return;
+          && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) { window.__vvlog?.('predict skip (focus stayed)'); return; }
       predictKeyboardCollapse(sheet);
     });
   }
@@ -339,6 +344,7 @@ export function createSheetController(deps) {
     // Keyboard is coming back: drop the prediction, resume normal tracking.
     if (to instanceof HTMLElement && sheet.contains(to)
         && (to.tagName === 'TEXTAREA' || to.tagName === 'INPUT')) {
+      window.__vvlog?.('focusin text → hold cleared');
       vvPredictionHold = false;
     }
   }
@@ -554,9 +560,10 @@ export function createSheetController(deps) {
     // running synchronously (Escape fires cancelEdit AND closeForm — the
     // second call arrives after blur, when softKeyboardUp() is false again).
     if (teardownQueue) { teardownQueue.push(run); return; }
-    if (!softKeyboardUp()) { run(); return; }
+    if (!softKeyboardUp()) { window.__vvlog?.('TEARDOWN sync (kb down)'); run(); return; }
     const vv = window.visualViewport;
     const active = document.activeElement;
+    window.__vvlog?.('TEARDOWN start (kb up)');
     teardownQueue = [run];
     document.body.classList.add('sheet-closing');
     // The teardown owns geometry from here; drop any pending settled-sync so
@@ -569,6 +576,7 @@ export function createSheetController(deps) {
     const finish = () => {
       if (done) return;
       done = true;
+      window.__vvlog?.('TEARDOWN finish');
       vv.removeEventListener('resize', onResize);
       clearTimeout(settleTimer);
       clearTimeout(cap);

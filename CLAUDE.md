@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v39` / manifest `version: "39"`。
+当前版本：`timelog-v40` / manifest `version: "40"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -198,3 +198,4 @@ git diff --check
 | v37 | 2026-07-08 | SE2 真机三缺陷热修：① P21 更多菜单「分享备份」行被分组拦腰裁掉——iOS WebKit 对 grid auto 轨道内 button 的 min-height 计量缺陷致行流累计下溢 ~28px 被 `overflow: hidden` 裁切；`.cell-group` 改块级流 + 行显式 `width: 100%`，Playwright 补「行必须完整落在分组内」断言；② 标签高级设置压缩为 cell 语法——每个 chip 改两行式 cell（名称+桶 select 一行，longOk+条数一行）收进 `cell-group`，删 ≤390px 单列坍缩，单行高约减半，`saveTagConfig` 选择器零改动；③ P20 键盘收起后表单二段式落位根治——P19 只涂掉了裸露区、面板内容位移仍在；改「失焦即预测」：`focusout` 时键盘在场且焦点未落回文本控件即直写终态几何（`--vvt:0/--vvh:innerHeight`）+ 终态高度重排 textarea，`vvPredictionHold`（700ms 上限）挡住收起中途的过渡 vv 事件防回拽，settle 落权威值收尾；save/取消/Esc 的 teardown 路径不受影响。顺带修 P19 裙边在 ≥720px 居中 dialog 下方露出卡片色矩形（裙边只服务贴边 bottom sheet，桌面断点 `content: none`）。详见 `docs/postmortems.md` P20–P21 |
 | v38 | 2026-07-08 | 全项目收敛（审计轮，零新功能）：header 收敛——删重复 GitHub 图标与「?」按钮（说明收进「···」，站点图标即仓库入口），smoke 说明用例改经更多菜单；帮助页「怎么记」重写为 v36 卡片语义（清 v34 rail 残留文案）；README 演示图按当前 UI + 固定 demo 数据重生成（替换 v9 时代英文截图）；死代码清理（`clampEndToNow`、5 个未调用 icon 定义、`--green` 令牌、`.edit-context`/`.edit-actions`、`.entry.editing` 残留选择器）；`.mini-btn` 透明伪元素扩 44px 热区（视觉不变，T11）；压测 A 类加预热导航修单次冷启动误报并纠正 P90 注释；文档收敛（README 功能清单/文件地图、ROADMAP 去过时编号、audit-2026-07 结果标注、原型索引「已回退/已采纳」标注）；`.gitignore` 补 `memory/` |
 | v39 | 2026-07-08 | P22 热修：亮色主题下时间滚轮选中行文字被高亮带整行涂掉（v33 令牌重写把亮色 `--accent-bg` 改为不透明色，暴露 `.wheel-highlight` 一直压在文字上方的层序错误；暗色半透明掩盖三个版本）——高亮带垫到文字层下（列 `z-index:1`/带 `z-index:0`，iOS 原生滚轮同层序）；Playwright 补层序不变量断言；更多 sheet 底部加「时间尺 vN」版本号小字（真机核对零成本），`project_audit.py` 校验 `APP_VERSION` 与版本四联动同步。P20/P21 经真机核对确认在 v37/v38 上仍存在，列入下一轮重诊断。详见 `docs/postmortems.md` P22 |
+| v40 | 2026-07-08 | vv 诊断 HUD（`?vvdebug=1` 启用，无参数零成本）：页面顶部悬浮面板显示能力探针（`navigator.share`/`canShare`/standalone/版本号）+ 最近 16 条事件时间线（原始 vv resize/scroll、focusin/out、几何写入、P20 预测/挡写/settle、glide 开关、teardown 阶段），`sheet_controller` 在决策点埋 `window.__vvlog?.()` 守卫日志——用于 SE2 真机取证两件事：P20 键盘收起跳变的事件时序（录屏逐帧比对）与「分享备份消失」（iOS 18.6 Safari 报 `navigator.share` 缺失，代码侧 v36→v39 判定逐字节未变，属设备侧能力应答变化，待 HUD 实测）。P21 状态更新：v39 真机确认排版正常（v37 块级流修复有效）；本地 WebKitGTK 不复现 v36 grid 裁行，该缺陷属 iOS 构建特有 |
