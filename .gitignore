@@ -38,3 +38,6 @@ __pycache__/
 
 # Local toolkit notes (business planning, private).
 toolkit/
+
+# Agent session notes (budget/handoff info, private).
+memory/

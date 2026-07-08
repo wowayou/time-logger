@@ -72,11 +72,6 @@ export function startOfYear(d) {
   return new Date(d.getFullYear(), 0, 1);
 }
 
-export function clampEndToNow(end) {
-  const now = new Date();
-  return end > now ? now : end;
-}
-
 export function minsBetweenDates(a, b) {
   return Math.max(0, (b - a) / 60000);
 }

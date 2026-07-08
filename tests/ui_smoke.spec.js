@@ -208,6 +208,8 @@ test('new entry still shows inline same-time conflict', async ({ page }) => {
 
 test('help close is a text button and import shift dialog stays custom', async ({ page }) => {
   await boot(page, 375, 'empty');
+  // v38：header「?」已删，说明入口在「···」更多菜单里。
+  await openBackupMenu(page);
   await page.getByRole('button', { name: '打开说明' }).click();
   await expect(page.locator('.help-body')).toBeVisible();
   await expect(page.locator('.form-sheet-panel')).toBeFocused();

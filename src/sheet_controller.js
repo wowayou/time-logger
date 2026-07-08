@@ -797,7 +797,7 @@ export function createSheetController(deps) {
   }
 
   function useConflictPlusMinute(el) {
-    const panel = el.closest('.form-sheet-panel, .entry.editing');
+    const panel = el.closest('.form-sheet-panel');
     const mode = panel && panel.dataset.mode;
     const nextTs = addOneMinute(el.dataset.ts || '');
     const input = mode === 'edit' ? panel.querySelector('[data-role="edit-ts"]') : panel.querySelector('#form-ts');
@@ -827,7 +827,7 @@ export function createSheetController(deps) {
   }
 
   function updateMainlineHint(input) {
-    const box = input.closest('.form-sheet-panel, .entry.editing');
+    const box = input.closest('.form-sheet-panel');
     const hint = box ? box.querySelector('[data-role="mainline-hint"]') : null;
     if (!hint) return;
     const value = input.value.trim();
@@ -848,7 +848,7 @@ export function createSheetController(deps) {
   }
 
   function syncCustomDraft(input) {
-    const panel = input.closest('.form-sheet-panel, .entry.editing');
+    const panel = input.closest('.form-sheet-panel');
     if (!panel) return;
     const isEdit = panel.dataset.mode === 'edit';
     const chipRoot = panel.querySelector('#form-chips, [data-role="edit-chips"]');
@@ -960,7 +960,7 @@ export function createSheetController(deps) {
   }
 
   function getEditingBox(id = deps.getSheetEditId()) {
-    return Array.from(document.querySelectorAll('.entry.editing, .form-sheet-panel'))
+    return Array.from(document.querySelectorAll('.form-sheet-panel'))
       .find(el => el.dataset.id === String(id));
   }
 

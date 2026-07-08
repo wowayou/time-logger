@@ -37,8 +37,6 @@
       --maintain-bg: rgba(70,168,120,0.14);
       --leak: #c9803c;
       --leak-bg: rgba(201,128,60,0.16);
-      --green: var(--maintain);
-      --green-bg: var(--maintain-bg);
       --text: #e8e9f1;
       --muted: #9fa1b8;
       --faint: #6c6e85;
@@ -62,8 +60,6 @@
         --maintain-bg: #e9f4ee;
         --leak: #c4703a;
         --leak-bg: #f8ede4;
-        --green: var(--maintain);
-        --green-bg: var(--maintain-bg);
         --text: #33323b;
         --muted: #77747f;
         --faint: #a09da8;
@@ -87,8 +83,6 @@
       --maintain-bg: #e9f4ee;
       --leak: #c4703a;
       --leak-bg: #f8ede4;
-      --green: var(--maintain);
-      --green-bg: var(--maintain-bg);
       --text: #33323b;
       --muted: #77747f;
       --faint: #a09da8;
@@ -110,8 +104,6 @@
       --maintain-bg: rgba(70,168,120,0.14);
       --leak: #c9803c;
       --leak-bg: rgba(201,128,60,0.16);
-      --green: var(--maintain);
-      --green-bg: var(--maintain-bg);
       --text: #e8e9f1;
       --muted: #9fa1b8;
       --faint: #6c6e85;
@@ -175,7 +167,6 @@
       gap: 8px;
     }
     .hdr-icon-link,
-    .github-link,
     .hdr-action-btn {
       width: 44px;
       height: 44px;
@@ -195,7 +186,6 @@
       font-family: inherit;
     }
     .hdr-icon-link:active,
-    .github-link:active,
     .hdr-action-btn:active { background: var(--input); }
     .hdr-icon {
       display: block;
@@ -212,22 +202,11 @@
       letter-spacing: 0.01em;
       white-space: nowrap;
     }
-    .github-link {
-      opacity: 0.72;
-      transition: opacity 0.2s ease, background 0.2s ease;
-    }
     .hdr-actions {
       display: inline-flex;
       align-items: center;
       gap: 2px;
       color: var(--text);
-    }
-    .github-link:hover,
-    .github-link:focus-visible { opacity: 1; }
-    .github-icon {
-      display: block;
-      width: 20px;
-      height: 20px;
     }
     .seg {
       display: inline-flex;
@@ -917,7 +896,6 @@
       min-width: 0;
       box-shadow: var(--shadow-1), var(--top-light);
     }
-    .entry.editing { border-color: var(--accent); }
     .entry.sheet-editing { border-color: var(--accent); }
     .entry.placeholder { border-color: var(--border); }
     .entry.gap { border-style: dashed; border-color: var(--border); background: transparent; box-shadow: none; }
@@ -981,31 +959,8 @@
     }
     .icon-btn:active { background: var(--input); }
     .icon-btn.dbtn { color: var(--danger); }
-    .edit-context {
-      display: grid;
-      gap: 2px;
-      padding-bottom: 10px;
-      margin-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-    }
-    .edit-actions {
-      justify-content: flex-end;
-      min-height: var(--icon-btn);
-      margin-top: 8px;
-    }
-    .edit-actions .icon-btn {
-      border: 1px solid var(--border);
-    }
-    .edit-actions .save-btn {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
-    }
-    .edit-actions .cancel-btn {
-      background: transparent;
-      color: var(--muted);
-    }
     .mini-btn {
+      position: relative;
       min-width: 0;
       min-height: 30px;
       padding: 2px 11px;
@@ -1019,6 +974,12 @@
       cursor: pointer;
       white-space: normal;
       overflow-wrap: anywhere;
+    }
+    /* 视觉高 30px 不变，透明伪元素把可点区扩到 44px（触控目标红线，T11）。 */
+    .mini-btn::before {
+      content: '';
+      position: absolute;
+      inset: -7px 0;
     }
     .mini-btn:active { opacity: 0.75; }
     .time-toggle {

@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v37` / manifest `version: "37"`。
+当前版本：`timelog-v38` / manifest `version: "38"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -70,7 +70,7 @@
 ## UI 红线
 
 - 响应式默认用 container query、CSS Grid/Flex 和文档流布局；禁止按 iPhone/iPad/设备名堆叠 viewport 补丁。
-- Header 排版固定为三行信息架构：第一行站点标识、说明、GitHub 和「···」更多入口；第二行天/周/月/年视图切换；第三行 `< 当前周期 >` 与回到今天按钮；不要把日期导航塞回第一行。
+- Header 排版固定为三行信息架构：第一行站点标识（图标即 GitHub 入口）和「···」更多入口；第二行天/周/月/年视图切换；第三行 `< 当前周期 >` 与回到今天按钮；不要把日期导航塞回第一行；说明入口在「···」更多菜单里，不放回 header。
 - 低频动作（摘要、备份四项、标签高级设置、主题、说明）收纳在「···」更多 sheet 的 cell 分组里；footer 已退役，不得重新引入常驻底栏；分享 cell 默认 hidden，由能力检测后再显示。
 - 窄屏第一行优先保留站点标识和「···」入口；空间不足时可以隐藏站点标题文字。
 - 窄屏日期导航必须允许两行：上一段/周期/下一段一行，回到今天/本周/本月/今年独立一行；周视图窄屏周期标题可用短格式，完整日期保留在可访问标签中。
@@ -194,3 +194,4 @@ git diff --check
 | v35 | 2026-07-07 | SE2 真机验收热修（两处）：① rail 拖把手改真·静轴动标——v34 拖动中直接改相邻段像素高，真实一天大段（如 12h+ 睡眠）撞 200px 钳制上限后松手原路回弹（drag-space≠layout-space 结构矛盾，demo 原型均匀数据未暴露）；改为拖动中两段高度纹丝不动、只有把手数字和气泡随手指变，松手落库后柔和过渡到新高度；气泡横向锚定把手静止点，不再跟手指飘到段文字上；② 键盘弹出遮挡——P16 settle 策略在键盘动画期间不写视口几何，导致 sheet 头部（取消/完成）被顶出视口约 150–300ms 后才回位；改为 burst 期间逐帧写入几何但恒挂 `.vv-glide` 过渡（离散事件合成连续滑动），settle 定时器收窄为收尾（autosize + 保持焦点控件在视野内）；详见 `docs/postmortems.md` P17–P18 |
 | v36 | 2026-07-07 | 日视图回退 v33 卡片列表（v34/v35 直接操纵 rail 观感不及预期）：删除 `src/timeline_gestures.js` 与全部 rail CSS/dataset，`renderTimeline` 恢复按时间倒序的卡片模板（真实段/占位段/空隙段/计划段），编辑图标开编辑 sheet、删除图标智能删除；编辑表单恢复可在时间轮里改任意已发生记录的开始时间（不再仅限计划条），`commitEdit` 恢复同刻冲突校验；`switchActivity`／「切换活动」按钮回归；v34 引入的「···」更多菜单、footer 退役、sheet 头部「取消/完成」文字按钮语法保留不变。同时修 P19（键盘收起瞬间表单底部露出空白）：`.form-sheet-backdrop` 改 `position: fixed` 恒盖满视口，`.form-sheet-panel` 加同色「裙边」伪元素兜住几何未追上时的空档；P14/P16/P18 的 settle/burst 时序机制不变。详见 `docs/postmortems.md` P19 |
 | v37 | 2026-07-08 | SE2 真机三缺陷热修：① P21 更多菜单「分享备份」行被分组拦腰裁掉——iOS WebKit 对 grid auto 轨道内 button 的 min-height 计量缺陷致行流累计下溢 ~28px 被 `overflow: hidden` 裁切；`.cell-group` 改块级流 + 行显式 `width: 100%`，Playwright 补「行必须完整落在分组内」断言；② 标签高级设置压缩为 cell 语法——每个 chip 改两行式 cell（名称+桶 select 一行，longOk+条数一行）收进 `cell-group`，删 ≤390px 单列坍缩，单行高约减半，`saveTagConfig` 选择器零改动；③ P20 键盘收起后表单二段式落位根治——P19 只涂掉了裸露区、面板内容位移仍在；改「失焦即预测」：`focusout` 时键盘在场且焦点未落回文本控件即直写终态几何（`--vvt:0/--vvh:innerHeight`）+ 终态高度重排 textarea，`vvPredictionHold`（700ms 上限）挡住收起中途的过渡 vv 事件防回拽，settle 落权威值收尾；save/取消/Esc 的 teardown 路径不受影响。顺带修 P19 裙边在 ≥720px 居中 dialog 下方露出卡片色矩形（裙边只服务贴边 bottom sheet，桌面断点 `content: none`）。详见 `docs/postmortems.md` P20–P21 |
+| v38 | 2026-07-08 | 全项目收敛（审计轮，零新功能）：header 收敛——删重复 GitHub 图标与「?」按钮（说明收进「···」，站点图标即仓库入口），smoke 说明用例改经更多菜单；帮助页「怎么记」重写为 v36 卡片语义（清 v34 rail 残留文案）；README 演示图按当前 UI + 固定 demo 数据重生成（替换 v9 时代英文截图）；死代码清理（`clampEndToNow`、5 个未调用 icon 定义、`--green` 令牌、`.edit-context`/`.edit-actions`、`.entry.editing` 残留选择器）；`.mini-btn` 透明伪元素扩 44px 热区（视觉不变，T11）；压测 A 类加预热导航修单次冷启动误报并纠正 P90 注释；文档收敛（README 功能清单/文件地图、ROADMAP 去过时编号、audit-2026-07 结果标注、原型索引「已回退/已采纳」标注）；`.gitignore` 补 `memory/` |

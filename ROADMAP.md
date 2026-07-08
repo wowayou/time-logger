@@ -4,7 +4,7 @@
 >
 > - `docs/roadmap.md` —— 路线图（全部 gated：满 28 天真实记录 + 求职有实质进展前，只记录、不开工）
 > - `docs/decisions.md` —— 决策记录（评估过但当前不落地的方向与理由）
-> - `docs/postmortems.md` —— 排查记录（已修 / 已确诊待修的真实 bug，最新到 P16）
+> - `docs/postmortems.md` —— 排查记录（已修 / 已确诊待修的真实 bug）
 >
 > 历史「本轮已处理」明细见 `CLAUDE.md` 的 CHANGELOG 表。
 >

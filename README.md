@@ -1,7 +1,7 @@
 # 时间尺
 
 > Status: active  
-> Updated: 2026-07-03
+> Updated: 2026-07-08
 > Intended user: 求职主线时间记录和每日复盘的个人使用者。  
 > Operating boundary: 本地静态 PWA，只记录时间去向，不做云同步、账号管理、KPI 考核或投资/合规判断。  
 > Risks and failure modes: 忘记记录导致“未记录”偏高、长时间间隔被整体计为未记录、周/月/年视图诱发过度复盘、浏览器本地数据被清理。  
@@ -10,7 +10,7 @@
 
 ![固定演示数据的移动端时间轴](docs/assets/demo-mobile-timeline.png)
 
-![固定演示数据的移动端编辑抽屉](docs/assets/demo-mobile-edit-drawer.png)
+![固定演示数据的移动端编辑表单](docs/assets/demo-mobile-edit-drawer.png)
 
 ## 和「屏幕使用时间」类工具的区别
 
@@ -70,7 +70,7 @@ Android Chrome：打开页面 → 菜单 → 添加到主屏幕。
 | 文件 | 作用 |
 |---|---|
 | `index.html` | DOM 壳、PWA/meta 引用、`styles.css` 和 `src/app.js` 模块入口 |
-| `styles.css` | 全部样式，包含主题、布局、控件、sheet、footer 和响应式规则 |
+| `styles.css` | 全部样式，包含主题、布局、控件、sheet、更多菜单和响应式规则 |
 | `src/app.js` | 启动、状态组合、导航、渲染调度、事件委托和 Service Worker 注册 |
 | `src/entry_model.js` | 记录日期模型、续记默认起点、占位条、结算点、同刻冲突、补录有界插入（`carveInsert`）、无冗余边界归一化（`coalesceRedundant`）和写后统一出口（`normalizeEntries`）helper |
 | `src/io_actions.js` | 当前视图摘要、复制、下载、导入、分享等本地 IO 动作 |
@@ -87,7 +87,7 @@ Android Chrome：打开页面 → 菜单 → 添加到主屏幕。
 | `icon.svg` | 应用源图标 |
 | `icons/` | PWA、maskable 和 Apple touch PNG 图标 |
 | `docs/assets/` | README 固定演示数据截图，不放真实记录 |
-| `ROADMAP.md` | 已知问题修复状态和后续非本轮事项 |
+| `ROADMAP.md` | 文档指针：postmortems / decisions / roadmap 导航 |
 | `scripts/project_audit.py` | 开发期红线审计脚本，零运行时依赖 |
 | `scripts/confirm_logic_smoke.py` | 确认逻辑、百分比格式和日边界 smoke，调用本机 `node` 执行真实 ES modules |
 
@@ -136,7 +136,9 @@ git diff --check
 
 ## 功能清单
 
-- 记录 / 编辑 / 删除条目，4 桶标签分类
+- 记录 / 编辑 / 删除条目，4 桶标签分类；删除是智能删除（两侧同标签自动愈合，否则转未记录）
+- 段内有界补录与切分：空隙卡「补一下」、段落卡「补一下/切一刀」，结束自动接回原标签
+- 计划模式：计划条不计入 4 桶统计，时间到可点「发生了」转为已发生记录
 - 超过 3h 的非 `longOk` 明确标签段需确认后才按标签统计
 - 天 / 周 / 月 / 年视图：天视图可编辑，周/月/年只读汇总并可下钻
 - 移动端日期滚轮选择器（补录用），支持触控、鼠标滚轮、方向键
@@ -145,6 +147,7 @@ git diff --check
 - 时间尺：主线 / 维持 / 漏损 / 未记录 占比可视化
 - 桌面鼠标悬停 tooltip 延迟约 800ms 显示，移开立即隐藏；键盘 `focus-visible` 立即显示；触屏不显示 hover tooltip
 - 自动 / 亮色 / 暗色分段主题控件
+- 低频动作收纳在「···」更多菜单：摘要、备份四项、标签高级设置、主题、说明
 - 数据完整备份（复制 JSON / 下载文件 / 系统分享可用时分享；导出按 `ts` 升序且文件名带秒）
 - JSON 导入按 id 合并去重，可根据备份时区 meta 建议整体平移 ±N 小时来对齐双设备壁钟
 - 当前视图摘要复制（Markdown，可直接贴给 AI）

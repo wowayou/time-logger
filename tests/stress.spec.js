@@ -38,7 +38,10 @@ function generateEntries(count) {
 }
 
 // ─── A 类：数据规模压测 ────────────────────────────────────────────────────────
-// Pass/fail thresholds are P90 wall-clock from page.goto() to app-ready.
+// Pass/fail thresholds are single-run wall-clock from page.goto() to app-ready,
+// measured on a warmed-up page (one throwaway navigation first) — not a true P90.
+// The warm-up avoids cold-start flakes: first-ever chromium navigation in a run
+// can pay 400ms+ of process/cache setup that has nothing to do with app code.
 // Measured on localhost so network is negligible; the cost is parse + render.
 const SCALE_CASES = [
   { count: 500,  label: '小压 500 条  (~1 个月)',  thresholdMs: 300  },
@@ -54,6 +57,10 @@ test.describe('A 类：数据规模', () => {
         localStorage.clear();
         localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
       }, { entries });
+
+      // Warm-up navigation: absorb one-time browser/process costs before timing.
+      await page.goto('/');
+      await page.waitForFunction(() => document.body.classList.contains('app-ready'));
 
       const t0 = Date.now();
       await page.goto('/');

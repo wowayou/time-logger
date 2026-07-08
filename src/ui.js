@@ -24,12 +24,7 @@ export function iconSvg(name) {
   const icons = {
     edit: '<path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>',
     trash: '<path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path>',
-    check: '<path d="M20 6 9 17l-5-5"></path>',
-    undo: '<path d="M9 14 4 9l5-5"></path>',
-    plus: '<path d="M12 5v14"></path><path d="M5 12h14"></path>',
-    help: '<path d="M9.1 9a3 3 0 1 1 5.8 1c-.6 1.3-2.1 1.7-2.7 2.8"></path><path d="M12 17h.01"></path>',
-    close: '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>',
-    settings: '<path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 0 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 0 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 0 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z"></path>'
+    check: '<path d="M20 6 9 17l-5-5"></path>'
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[name] || ''}</svg>`;
 }
@@ -433,7 +428,7 @@ export function renderHelpSheet() {
   return `
     ${sheetHead({ title: '说明', cancelText: '关闭', cancelAction: 'close-form', cancelAria: '关闭说明' })}
     <div class="form-sheet-body help-body">
-      <section><h2>怎么记</h2><p>点「+ 记一条」或点时间轴最下方的进行中段，记录刚才这一阵；点任意段可改内容和标签；按住段左侧的时间文字拖动，直接改边界时间；点空隙一步补录。</p></section>
+      <section><h2>怎么记</h2><p>点「+ 记一条」或「切换活动」记录刚才这一阵；卡片右侧铅笔改内容、标签和开始时间，垃圾桶智能删除（两侧同标签自动愈合，否则转未记录）；空隙卡「补一下」、段落卡「补一下/切一刀」做有界补录或切分。</p></section>
       <section><h2>4 桶</h2><p>先选归类桶，再选标签：主线=求职推进和自定义主线；维持=睡觉、吃饭、通勤等必要消耗；漏损=逃避娱乐；未记录=未知、孤儿标签和待确认长段。</p></section>
       <section><h2>计划</h2><p>计划条不计入 4 桶统计；时间到了可点「发生了」转为已发生记录。</p></section>
       <section><h2>3 小时确认</h2><p>超过 3 小时的非睡觉片段先进入未记录；确认后才按标签统计。睡觉默认 longOk，不要求确认。</p></section>
