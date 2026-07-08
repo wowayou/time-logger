@@ -25,6 +25,21 @@ for (const share of [false, true]) {
     if (share) await expect(page.locator('#share-btn')).toBeVisible();
     else await expect(page.locator('#share-btn')).toBeHidden();
     await expectNoHorizontalOverflow(page);
+    // P21: every visible cell row must sit fully inside its own cell-group —
+    // the group must never clip a trailing row (更多菜单「分享备份」被拦腰裁半).
+    const clipped = await page.evaluate(() => {
+      const out = [];
+      document.querySelectorAll('.more-body .cell-group').forEach(group => {
+        const g = group.getBoundingClientRect();
+        group.querySelectorAll(':scope > *').forEach(row => {
+          if (row.hidden) return;
+          const r = row.getBoundingClientRect();
+          if (r.bottom > g.bottom + 1 || r.top < g.top - 1) out.push(row.textContent.trim().slice(0, 12));
+        });
+      });
+      return out;
+    });
+    expect(clipped).toEqual([]);
   });
 }
 

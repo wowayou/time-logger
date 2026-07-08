@@ -459,25 +459,29 @@ export function renderImportShiftDialog(opts = {}) {
 
 export function renderConfigSheet(config = loadConfig(), opts = {}) {
   const entries = opts.entries || [];
+  // 每个 chip 一个两行式 cell：第一行名称输入 + 桶 select，第二行 longOk 勾选
+  // 与记录条数说明。cell-group 供 inset 底和 hairline 分隔（与更多菜单同语法）。
   const row = chip => {
     const count = countEntriesWithTag(entries, chip.name);
     return `<div class="cfg-row" data-original-name="${esc(chip.name)}">
-      <div class="cfg-row-left">
+      <div class="cfg-line">
         <input class="inp cfg-name" type="text" value="${esc(chip.name)}" aria-label="标签名称">
-        <label class="cfg-long"><input type="checkbox" class="cfg-long-ok"${chip.longOk ? ' checked' : ''}> 超长段免确认</label>
-        ${count ? `<span class="form-hint">${count} 条记录</span>` : ''}
+        <select class="inp cfg-bucket" aria-label="桶">
+          <option value="maintain"${chip.bucket === 'maintain' ? ' selected' : ''}>维持</option>
+          <option value="leak"${chip.bucket === 'leak' ? ' selected' : ''}>漏损</option>
+        </select>
       </div>
-      <select class="inp cfg-bucket" aria-label="桶">
-        <option value="maintain"${chip.bucket === 'maintain' ? ' selected' : ''}>维持</option>
-        <option value="leak"${chip.bucket === 'leak' ? ' selected' : ''}>漏损</option>
-      </select>
+      <div class="cfg-sub">
+        <label class="cfg-long"><input type="checkbox" class="cfg-long-ok"${chip.longOk ? ' checked' : ''}> 超长段免确认</label>
+        ${count ? `<span class="cfg-count">${count} 条记录</span>` : ''}
+      </div>
     </div>`;
   };
   const section = (bucket, title) => {
     const chips = config.chips.filter(chip => chip.bucket === bucket);
     return `<section class="cfg-section">
       <div class="chip-group-label">${title}</div>
-      <div class="cfg-list" data-role="config-chips">${chips.map(row).join('')}</div>
+      <div class="cfg-list cell-group" data-role="config-chips">${chips.map(row).join('')}</div>
     </section>`;
   };
   const mainlineHint = config.mainline.length

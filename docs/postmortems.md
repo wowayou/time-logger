@@ -309,6 +309,38 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ---
 
+## P20 · 键盘收起后表单二段式落位（v37，P16/P19 续篇）
+
+**确诊日期**：2026-07-07 · **状态**：先修后验（v37）· **严重度**：低（体验，短暂但连修三轮）
+
+**现象**：v36 上线后 SE2 真机复验（用户录屏）：点键盘「完成」收起键盘后，表单不再露出空白（P19 已修），但面板本体仍有肉眼可见的「悬停一拍 → 再滑到全屏」的二段式落位——P19 的裙边只是把裸露区涂成了卡片色，**面板内容（头部、正文）本身的位移一点没少**。
+
+**根因**：几何写入（`--vvt`/`--vvh`）是 `visualViewport` 事件驱动的，而键盘**收起**方向的事件稀疏/迟到——事件到达之前面板停在键盘还在时的旧几何上，事件到了才开始 0.18s 的 `.vv-glide` 滑动。P16→P18→P19 三轮都在优化「事件到达之后怎么动」，没人质疑「为什么要等事件」。而收起动画的终态其实**在失焦瞬间就完全已知**：body 被 `position: fixed` 锁定时布局视口=无键盘可视视口，终态恒为 `--vvt: 0 / --vvh: window.innerHeight`。
+
+**修法**：失焦即预测（`predictKeyboardCollapse`）。`focusout` 自 sheet 内文本控件、且此刻键盘确在场（`innerHeight - vv.height > 120`）、且一帧后焦点没有落回 sheet 内另一文本控件（键盘不走）时：立即挂 `.vv-glide` 并直写终态几何 + 用终态高度重排 textarea（`autosizeTextareas` 加 `viewHOverride` 参数）——面板增长与键盘离场动画同步发生、被离场键盘遮住，感知为一次连续滑动。配套「防回拽」：`vvPredictionHold` 期间（700ms 硬上限）rAF 写入与 settle 权威写入若发现键盘还没收完（vv 仍报缩小高度）则跳过/顺延，否则中途的过渡事件会把面板拽回中间高度；键盘收完后 settle 落权威值（≈预测值，无可见变化）并清 hold。`focusin` 回到文本控件即清 hold（键盘回来了）。save/取消/Esc 路径不受影响：`settleThenTeardown` 先挂 `sheet-closing` 再显式 blur，`onSheetFocusOut` 对 `sheet-closing`/`teardownQueue` 直接让路。
+
+**护栏**：桌面/headless 无键盘 → 高度差检查不过 → 全程 no-op，既有 Playwright 用例全绿即无回归；本条唯一有效验证是 SE2 线上真机（含「textarea 间切换焦点不触发预测」的反向用例）。
+
+**经验**：同一症状（键盘开合的表单跳变）连修三轮 P16→P18/P19→P20，每轮只验证了自己改的那一侧。事件驱动的跟随策略有天然下界——事件不来就只能停在旧状态；当终态可以被**预测**时，别等事件，直接向终态动画，让事件只做校验。
+
+---
+
+## P21 · 更多菜单最后一行被分组拦腰裁掉（v37）
+
+**确诊日期**：2026-07-07 · **状态**：先修后验（v37）· **严重度**：中（备份入口不可用）
+
+**现象**：SE2 真机（用户截图）：更多菜单里备份 cell 分组的第四行「分享备份」在分组圆角底边处被水平裁掉约一半，按钮残缺、难以点按。桌面与 headless Chromium 均不复现。
+
+**根因（推断）**：`.cell-group { display: grid; overflow: hidden }`，行是 `min-height: 48px` 的 `<button>`（内容自然高 ≈41px）。iOS WebKit 对 grid auto 轨道内 button 条目的 `min-height` 存在计量缺陷：**轨道按内容高计量、条目按 min-height 绘制**，每行欠账 ~7px，四行累计 ~28px，行流整体下溢出分组，最后一行被 `overflow: hidden`（圆角裁切所需）拦腰截断——与截图裁切量吻合。含 `.cell-row`（div，自然高更高）的第三分组欠账少、不易察觉。
+
+**修法**：`.cell-group` 去掉 `display: grid` 改普通块级流（行自身已是 `display: flex` 的块级盒，常规流中 `min-height` 恒被尊重，不经过任何轨道计量），并给 `.cell-btn`/`.cell-row` 显式 `width: 100%`（button 在块级流中可能收缩适应）。整类 bug 结构性消除，分隔线（absolute `::before`）与 `[hidden]` 行为不变。
+
+**护栏**：Playwright 补断言——更多 sheet 每个可见 cell 行的 boundingBox 必须完整落在其父 `.cell-group` 内（Chromium 上防布局回归；WebKit 侧仍需真机兜底）。
+
+**经验**：跨引擎的布局原语差异（grid 轨道计量 × 表单元素内在尺寸）只在真机暴露；cell 分组这类「圆角容器 + overflow: hidden + 定高行」的组合，布局机制越朴素越安全——能用块级流就不用 grid。
+
+---
+
 ## 协作约束补记（v28）
 
 - 多步改动走主线程；避免并发 fan-out 子代理 / workflow（上游会 429，串行 workflow 亦然）。已同步进 `CLAUDE.md` / `AGENTS.md`「开发与维护红线」。

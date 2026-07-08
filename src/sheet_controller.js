@@ -32,6 +32,8 @@ export function createSheetController(deps) {
   let vvSettleCap = null;
   let vvGlideOffTimer = null;
   let vvRafId = null;
+  let vvPredictionHold = false;
+  let vvPredictionDeadline = 0;
   let teardownQueue = null;
   let formTag = '';
   let formBucket = 'job';
@@ -206,6 +208,22 @@ export function createSheetController(deps) {
     vvSettleCap = null;
     vvGlideOffTimer = null;
     vvRafId = null;
+    vvPredictionHold = false;
+  }
+
+  // P20: after a blur the keyboard-collapse end state is fully known, so
+  // predictKeyboardCollapse() glides the sheet there immediately. While the
+  // keyboard is still mid-collapse, vv events report intermediate (shrunken)
+  // heights — writing those would drag the sheet back down. This gate blocks
+  // geometry writes for that window; a hard deadline keeps it from wedging.
+  function predictionBlocksWrite() {
+    if (!vvPredictionHold) return false;
+    if (Date.now() > vvPredictionDeadline) {
+      vvPredictionHold = false;
+      return false;
+    }
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    return Boolean(vv && (window.innerHeight - vv.height) > 120);
   }
 
   function ensureGlide() {
@@ -230,6 +248,8 @@ export function createSheetController(deps) {
       vvRafId = requestAnimationFrame(() => {
         vvRafId = null;
         if (document.body.classList.contains('sheet-closing')) return;
+        // P20: mid-collapse events must not drag the predicted geometry back.
+        if (predictionBlocksWrite()) return;
         writeViewportVars();
       });
     }
@@ -244,6 +264,14 @@ export function createSheetController(deps) {
     vvSettleTimer = null;
     vvSettleCap = null;
     if (document.body.classList.contains('sheet-closing')) return;
+    // P20: the keyboard is still mid-collapse — stamping this stale geometry
+    // would yank the sheet back down. Check again shortly; the prediction
+    // deadline bounds this loop.
+    if (predictionBlocksWrite()) {
+      vvSettleTimer = setTimeout(applySettledViewport, 60);
+      return;
+    }
+    vvPredictionHold = false;
     const sheet = document.getElementById('form-sheet');
     const open = Boolean(sheet && !sheet.hidden);
     syncVisualViewport();
@@ -258,12 +286,71 @@ export function createSheetController(deps) {
     if (open) scheduleGlideOff();
   }
 
+  // P20: the collapse's end state is fully known at blur time — body is locked
+  // position:fixed, so layout viewport == keyboardless visual viewport. Glide
+  // there NOW, in sync with the keyboard's own exit animation, instead of
+  // waiting for sparse/late vv events: the growth happens behind the departing
+  // keyboard and lands as one continuous slide instead of a hang-then-jump
+  // (P19 only painted over the exposed strip; the content itself still jumped).
+  function predictKeyboardCollapse(sheet) {
+    vvPredictionHold = true;
+    vvPredictionDeadline = Date.now() + 700;
+    ensureGlide();
+    const root = document.documentElement;
+    root.style.setProperty('--vvt', '0px');
+    root.style.setProperty('--vvh', `${window.innerHeight}px`);
+    // Re-clamp textareas to the final fold in the same slide, so they don't
+    // grow a second time when the settle pass lands.
+    const panel = sheet.querySelector('.form-sheet-panel');
+    if (panel) autosizeTextareas(panel, window.innerHeight);
+    // Own the finish even if iOS fires no further vv events.
+    clearTimeout(vvSettleTimer);
+    vvSettleTimer = setTimeout(applySettledViewport, 120);
+    if (!vvSettleCap) vvSettleCap = setTimeout(applySettledViewport, 400);
+  }
+
+  function onSheetFocusOut(e) {
+    if (document.body.classList.contains('sheet-closing') || teardownQueue) return;
+    const sheet = document.getElementById('form-sheet');
+    if (!sheet || sheet.hidden) return;
+    const from = e.target;
+    if (!(from instanceof HTMLElement) || !sheet.contains(from)) return;
+    if (from.tagName !== 'TEXTAREA' && from.tagName !== 'INPUT') return;
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    // At focusout time the keyboard is still on screen; if it isn't (desktop,
+    // hardware keyboard, headless), there is nothing to predict.
+    if (!vv || (window.innerHeight - vv.height) <= 120) return;
+    requestAnimationFrame(() => {
+      if (document.body.classList.contains('sheet-closing') || teardownQueue) return;
+      if (sheet.hidden) return;
+      const active = document.activeElement;
+      // Focus hopped to another text control inside the sheet: keyboard stays.
+      if (active instanceof HTMLElement && sheet.contains(active)
+          && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return;
+      predictKeyboardCollapse(sheet);
+    });
+  }
+
+  function onSheetFocusIn(e) {
+    if (!vvPredictionHold) return;
+    const sheet = document.getElementById('form-sheet');
+    if (!sheet || sheet.hidden) return;
+    const to = e.target;
+    // Keyboard is coming back: drop the prediction, resume normal tracking.
+    if (to instanceof HTMLElement && sheet.contains(to)
+        && (to.tagName === 'TEXTAREA' || to.tagName === 'INPUT')) {
+      vvPredictionHold = false;
+    }
+  }
+
   function attachVisualViewport() {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
     if (!vv) return;
     syncVisualViewport();
     vv.addEventListener('resize', scheduleVisualViewportSync);
     vv.addEventListener('scroll', scheduleVisualViewportSync);
+    document.addEventListener('focusout', onSheetFocusOut);
+    document.addEventListener('focusin', onSheetFocusIn);
   }
 
   function detachVisualViewport() {
@@ -272,6 +359,8 @@ export function createSheetController(deps) {
       vv.removeEventListener('resize', scheduleVisualViewportSync);
       vv.removeEventListener('scroll', scheduleVisualViewportSync);
     }
+    document.removeEventListener('focusout', onSheetFocusOut);
+    document.removeEventListener('focusin', onSheetFocusIn);
     clearViewportSettleTimers();
     const sheet = document.getElementById('form-sheet');
     if (sheet) sheet.classList.remove('vv-glide');
@@ -320,14 +409,16 @@ export function createSheetController(deps) {
     }, { signal: sheetTrapController.signal });
   }
 
-  function autosizeTextareas(scope = document) {
+  function autosizeTextareas(scope = document, viewHOverride = 0) {
     // Grow to fit content, but CAP the height so a long note can never push the
     // rest of the form (or the save ✓) past the visible area — on iPhone SE2 with
     // the soft keyboard up the visual viewport is ~250px, so an uncapped textarea
     // full of text swallows the whole panel and the record becomes uneditable.
     // Past the cap the textarea scrolls internally (overflow-y auto below).
+    // viewHOverride: P20 的失焦预测路径在键盘还没收完时就按"收起后的终态高度"
+    // 重排 textarea，避免 settle 时 textarea 再长一截造成面板内二次位移。
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
-    const viewH = (vv && vv.height) || (typeof window !== 'undefined' ? window.innerHeight : 0) || 0;
+    const viewH = viewHOverride || (vv && vv.height) || (typeof window !== 'undefined' ? window.innerHeight : 0) || 0;
     const cap = viewH ? Math.max(88, Math.round(viewH * 0.32)) : 200;
     scope.querySelectorAll('textarea.ta').forEach(textarea => {
       textarea.style.height = 'auto';
