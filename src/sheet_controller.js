@@ -325,14 +325,16 @@ export function createSheetController(deps) {
     if (from.tagName !== 'TEXTAREA' && from.tagName !== 'INPUT') return;
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
     if (!vv) return;
-    // P23: iOS 18 点键盘「完成」时 vv.height 的 getter 瞬间恢复、resize 事件却迟
-    // ~700ms 才派发——「键盘还在场」(kbUp) 探不到这次收起；但我们写进 CSS 的几何
-    // 还停在键盘态 (varsStale)。两种情况都必须立即滑向终态，否则面板挂在旧几何
-    // 上等迟到的事件（真机录屏实测悬停 728ms 后跳一次）。
-    const kbUp = (window.innerHeight - vv.height) > 120;
+    // P23 二诊（v42）：只信「我写进 CSS 的几何」，绝不拿 vv.height getter 做判断——
+    // SE2 上点键盘「完成」时，getter 在 focusout 那一刻落在收起动画中途的死区(~430)，
+    // 既非键盘态 318 也非终态 544，两侧 120px 阈值都够不着；v41 的 varsStale（比 getter）
+    // 因此漏判，面板挂旧几何等迟到 ~710ms 的 resize 才跳（录屏 HUD 实测）。而我们上次写的
+    // --vvh=318 明确是键盘态：text 控件刚失焦 + 自写几何仍是键盘高度 = 键盘正在走，立即
+    // 预测到终态。判据用稳定量 innerHeight 对比自写量，不掺 getter。
     const writtenVvh = parseFloat(document.documentElement.style.getPropertyValue('--vvh'));
-    const varsStale = Number.isFinite(writtenVvh) && (vv.height - writtenVvh) > 120;
-    if (!kbUp && !varsStale) { window.__vvlog?.('focusout: kb not up, no predict'); return; }
+    const writtenIsKbState = Number.isFinite(writtenVvh) && (window.innerHeight - writtenVvh) > 120;
+    const kbUp = (window.innerHeight - vv.height) > 120;  // 兜底：getter 确实读到键盘高度时
+    if (!kbUp && !writtenIsKbState) { window.__vvlog?.('focusout: geometry not kb-state, no predict'); return; }
     requestAnimationFrame(() => {
       if (document.body.classList.contains('sheet-closing') || teardownQueue) return;
       if (sheet.hidden) return;
@@ -526,6 +528,14 @@ export function createSheetController(deps) {
     // initial syncVisualViewport.
     lockBodyForSheet();
     sheet.hidden = false;
+    if (mode === 'more' && window.__vvlog) {
+      // P24 取证：真机开「更多」时把分享按钮的自渲染状态打进 HUD——若这里报 hidden=false
+      // disp=flex 而屏幕上没有，则页面外抑制实锤（cosmetic filter / VPN 过滤），代码侧已尽。
+      const sb = panel.querySelector('#backup-send-btn');
+      window.__vvlog(sb
+        ? `more: send-btn hidden=${sb.hasAttribute('hidden')} disp=${getComputedStyle(sb).display} navShare=${typeof navigator.share}`
+        : 'more: send-btn ABSENT');
+    }
     if (mode === 'edit') {
       const editWheel = panel.querySelector('[data-role="edit-wheel"]');
       if (editWheel) {

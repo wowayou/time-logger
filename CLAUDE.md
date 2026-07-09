@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v41` / manifest `version: "41"`。
+当前版本：`timelog-v42` / manifest `version: "42"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -200,3 +200,4 @@ git diff --check
 | v39 | 2026-07-08 | P22 热修：亮色主题下时间滚轮选中行文字被高亮带整行涂掉（v33 令牌重写把亮色 `--accent-bg` 改为不透明色，暴露 `.wheel-highlight` 一直压在文字上方的层序错误；暗色半透明掩盖三个版本）——高亮带垫到文字层下（列 `z-index:1`/带 `z-index:0`，iOS 原生滚轮同层序）；Playwright 补层序不变量断言；更多 sheet 底部加「时间尺 vN」版本号小字（真机核对零成本），`project_audit.py` 校验 `APP_VERSION` 与版本四联动同步。P20/P21 经真机核对确认在 v37/v38 上仍存在，列入下一轮重诊断。详见 `docs/postmortems.md` P22 |
 | v40 | 2026-07-08 | vv 诊断 HUD（`?vvdebug=1` 启用，无参数零成本）：页面顶部悬浮面板显示能力探针（`navigator.share`/`canShare`/standalone/版本号）+ 最近 16 条事件时间线（原始 vv resize/scroll、focusin/out、几何写入、P20 预测/挡写/settle、glide 开关、teardown 阶段），`sheet_controller` 在决策点埋 `window.__vvlog?.()` 守卫日志——用于 SE2 真机取证两件事：P20 键盘收起跳变的事件时序（录屏逐帧比对）与「分享备份消失」（iOS 18.6 Safari 报 `navigator.share` 缺失，代码侧 v36→v39 判定逐字节未变，属设备侧能力应答变化，待 HUD 实测）。P21 状态更新：v39 真机确认排版正常（v37 块级流修复有效）；本地 WebKitGTK 不复现 v36 grid 裁行，该缺陷属 iOS 构建特有 |
 | v41 | 2026-07-09 | P23（P20 真根因，HUD 录屏确诊）：iOS 18 点键盘「完成」时 `visualViewport.height` getter 瞬间恢复、resize 事件迟 ~728ms 才派发；v37 预测门闩 `innerHeight-vv.height>120` 在 focusout 读到差值≈0 误判「键盘不在」→ 预测从不启动 → 面板挂旧几何等迟到事件（连修四轮的真相）；门闩改双条件 `kbUp`（键盘在场）**或** `varsStale`（`vv.height-已写入的--vvh>120`，即「我写的几何还停在键盘态」）——探「我写的状态是否过时」而非「世界当前状态」。P24：更多菜单「分享备份」真机消失——HUD 实测 `share:function` 能力在、代码 v36→v39 逐字节未变，强嫌疑=内容拦截器按名隐藏 `#share-btn`；防御性改 id → `backup-share-btn`（ui.js/io_actions/ui_smoke 同步），用户 aA 菜单关拦截器可 A/B 实锤。sheet 导航栈：config/help/import-shift 若从「更多」下钻进入，取消/保存/Esc/遮罩返回「更多」而非整层关闭（`returnToMore` 标志）；修 help 测试 + 新增导航返回栈回归。详见 `docs/postmortems.md` P23–P24 |
+| v42 | 2026-07-09 | 真机热修二诊。P23：v41 修法失手——SE2 真机 HUD 复录仍 `no predict`、面板仍跳，因 v41 的 `varsStale` 又拿 getter `vv.height` 做判断，而 focusout 那刻 getter 落在收起中途的死区(~430)，两侧 120px 阈值都够不着；改纯自写几何 `writtenIsKbState = innerHeight-已写入的--vvh > 120`（稳定量对比自写量，全程不读 getter），`318 vs 544 → 226>120` 预测在 focusout 立即触发。P24：v41「内容拦截器按名隐藏 `#share-btn`」假说被推翻（用户否认开拦截器）——本地 `share_probe.mjs` WebKit+Chromium 双引擎注入真 `navigator.share` 均 `display:flex` 可见，证明代码渲染无辜、真机消失＝页面外装饰性抑制（状态栏 VPN 徽标为头号来源）；v41 改名保留子串 "share" 故未规避，v42 去尽令牌（id `backup-send-btn`、data-action `send-backup`）+ `openFormSheet` more 渲染后加 HUD 分享探针取证，待用户关 VPN A/B。详见 `docs/postmortems.md` P23–P24 |

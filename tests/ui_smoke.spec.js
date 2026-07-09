@@ -22,8 +22,8 @@ for (const share of [false, true]) {
   test(`more sheet keeps layout when share is ${share ? 'available' : 'hidden'}`, async ({ page }) => {
     await boot(page, 320, 'one-record', share);
     await openBackupMenu(page);
-    if (share) await expect(page.locator('#backup-share-btn')).toBeVisible();
-    else await expect(page.locator('#backup-share-btn')).toBeHidden();
+    if (share) await expect(page.locator('#backup-send-btn')).toBeVisible();
+    else await expect(page.locator('#backup-send-btn')).toBeHidden();
     await expectNoHorizontalOverflow(page);
     // P21: every visible cell row must sit fully inside its own cell-group —
     // the group must never clip a trailing row (更多菜单「分享备份」被拦腰裁半).

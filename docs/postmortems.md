@@ -359,9 +359,9 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ---
 
-## P23 · 键盘收起跳变的真根因：getter 新鲜、事件迟到（v41，P20 续篇）
+## P23 · 键盘收起跳变的真根因：getter 新鲜、事件迟到（v41 确诊，v42 二诊修复，P20 续篇）
 
-**确诊日期**：2026-07-09 · **状态**：已修（v41），待 SE2 真机回归 · **严重度**：低（体验，短暂但连修四轮）
+**确诊日期**：2026-07-09 · **状态**：v41 修法失手（仍读 getter、中死区），v42 改自写几何二诊 · **严重度**：低（体验，短暂但连修五轮）
 
 **现象**：P16→P18→P19→P20 四轮之后，SE2（iOS 18.6.2 Safari）真机点键盘「完成」收起键盘时，表单面板仍「悬停一拍再跳到全屏」。P20 的失焦预测（`predictKeyboardCollapse`）看似正确却从未触发。
 
@@ -383,25 +383,25 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 **护栏**：桌面/headless 无键盘 → 两条件都不过 → 全程 no-op，既有 Playwright 用例全绿即无回归；`?vvdebug=1` HUD 常备，真机复现时录屏可逐帧复查事件时序。唯一有效验证仍是 SE2 线上真机：升 v41 后用 `?vvdebug=1` 复录同样操作，时间线应在 `focusout` 后立刻出现预测落位（`PREDICT collapse`），不再有 728ms 悬停。
 
-**经验**：事件驱动几何跟随的最后一课——**getter 与事件可以不同步**。当「读值」与「收事件」给出矛盾答案时，与其去判断难以捉摸的「世界当前状态」（本例：键盘到底在不在），不如判断确定可知的「我上一次写进 DOM 的状态是否已经过时」，据此决定是否重写。同一症状连修四轮，每轮都在优化「怎么跟随事件」，直到 HUD 让「事件根本没按时来」这件事显形。
+**经验**：事件驱动几何跟随的最后一课——**getter 与事件可以不同步**。当「读值」与「收事件」给出矛盾答案时，与其去判断难以捉摸的「世界当前状态」（本例：键盘到底在不在），不如判断确定可知的「我上一次写进 DOM 的状态是否已经过时」，据此决定是否重写。
+
+**v42 二诊（v41 修法为何仍失手）**：v41 上线后 SE2 真机 HUD 复录，`focusout` 仍打印「no predict」、面板仍跳。因为 v41 的第二条件 `varsStale = vv.height − 已写入 --vvh > 120` **又把 getter `vv.height` 掺了进来**。SE2 上 `focusout` 那一刻 getter 返回的既不是键盘态 318 也不是终态 544，而是**收起动画中途的 ~430**，正好落进死区：`kbUp = 544−430 = 114 < 120`、`varsStale = 430−318 = 112 < 120`，两侧都够不着，预测又没触发，`resize` 迟到 710ms 后才 snap。教训被自己犯了一遍：postmortem 写「探自写状态优于探世界状态」，实现时却把「自写状态」的判断建立在不可靠的 getter 上。**v42 真修**：判据改为纯自写几何——`writtenIsKbState = innerHeight − 已写入 --vvh > 120`，用稳定量 `innerHeight`（布局视口，`position:fixed` 锁 body 时恒定）对比自写量 `--vvh`，**全程不读 getter**。`writtenVvh=318, innerHeight=544 → 226 > 120 → 预测在 focusout 立即触发`。`kbUp` 仅作 getter 确读到键盘高度时的兜底。同一症状五轮的终章：探「我写的状态」就要用稳定量做对比，别让不可靠的读值从后门溜回判断里。
 
 ---
 
-## P24 · 「分享备份」入口在真机消失（v41）
+## P24 · 「分享备份」入口在真机消失（v41 假说被推翻，v42 取证）
 
-**确诊日期**：2026-07-09 · **状态**：防御性修复（v41），待用户 A/B 确证 · **严重度**：中（备份分享入口不可达）
+**确诊日期**：2026-07-09 · **状态**：本地双引擎复现证明代码渲染可见 → 页面外抑制；v42 去尽 "share" 令牌 + HUD 探针，待用户关 VPN A/B · **严重度**：中（备份分享入口不可达）
 
-**现象**：SE2（iOS 18.6.2 Safari 标签页）真机上，更多菜单里的「分享备份」cell 彻底不出现。桌面、headless、本地 WebKit 均不复现。
+**现象**：SE2（iOS 18.6.2 Safari 标签页，状态栏全程有 VPN 徽标）真机上，更多菜单里的「分享备份」cell 彻底不出现（分组无空档、非裁切）。桌面、headless、本地 WebKit 均不复现。用户明确否认开过 Safari 内容拦截器，并指出分享按钮此前一直在、是在 P21 裁行修复之后才消失。
 
-**取证与排除**：v40 `?vvdebug=1` HUD 能力探针实测 `share:function canShare:function`——设备**能力存在**；代码考古显隐判定（`typeof navigator.share === 'function'` → `btn.hidden`）v36→v39 逐字节未变；CSS `.cell-btn[hidden]` 规则完好。三者都排除后，一个「能力在、代码没变、按钮却没了」的组合只剩一种解释来源：**页面之外**。
+**取证与排除（硬证据）**：① v40/v41 HUD 能力探针实测 `share:function canShare:function`——设备**能力在**；② `git show 51b7556`（v37 P21 裁行修复）**没碰**分享渲染或 `updateShareAvailability`，显隐门闩来自 v24、`updateShareAvailability` 来自 v22，均早于裁行修复——用户的时间关联是巧合；③ 本地写 `share_probe.mjs`，**WebKit + Chromium 各一次**注入真 `navigator.share`，分享按钮均 `present=true, hidden=false, display=flex`——代码在 `navigator.share` 为函数时**必然渲染可见**。设备能力在 + 代码渲染可见 + 按钮却 `display:none`，只剩一种来源：**页面之外的装饰性抑制**（cosmetic filter 注入 `display:none !important`），VPN 徽标是头号来源（其内置去广告/去社交规则用户未必视作「内容拦截器」）。
 
-**强假说**：用户设备装了 VPN/广告拦截类 app，其 Safari 内容拦截器的「去分享/去社交」装饰规则按 `id` 精确命中并隐藏 `#share-btn`（`"share-btn"` 是这类规则表的经典目标名；规则表自行云端更新，完美解释「某天起代码没动按钮却消失」的时间线）。
+**v41 假说被推翻**：v41 以为是「内容拦截器按名精确命中 `#share-btn`」，把 id 改成 `backup-share-btn`——**仍含子串 "share"**。若规则是 `[id*="share"]` / `[data-action*="share"]` 之类**子串匹配**，改名照样命中，与「改了名还是没了」完全自洽。
 
-**防御性修复**：把该按钮 `id` 从 `share-btn` 改为 `backup-share-btn`（ui.js 模板、io_actions `getElementById`、ui_smoke 两处断言同步），避开按名命中的装饰规则。功能与显隐逻辑零改动。
+**v42 修法（三管齐下）**：① **去尽 "share" 令牌**——id `backup-share-btn` → `backup-send-btn`、`data-action="share-json"` → `send-backup`（app.js 路由、io_actions `getElementById`、ui_smoke 选择器同步；内部函数名 `shareJSON`、可见文案与 `aria-label` 保留，不进选择器常见匹配面）；② **HUD 加探针**——`openFormSheet` 里 `mode==='more'` 渲染后打印 `more: send-btn hidden=… disp=… navShare=…`，真机开「更多」即得「app 自己认为它可见」的铁证；③ **用户 A/B**——关掉状态栏 VPN 那个 app 的过滤后重开对比，回来即实锤。
 
-**用户侧确证（A/B）**：升 v41 后先看分享是否回来；若仍不见 → Safari 地址栏「大小」(aA) 菜单 → 关闭内容拦截器 → 重开对比，出现即实锤是拦截器（若改名后仍被隐藏，说明规则匹配的是 `aria-label` 含「分享」等文本特征，那属不可绕，另议）。
-
-**经验**：「代码没变、能力在、UI 却没了」是把排查引向**页面之外**（内容拦截器、扩展、企业策略、系统级 a11y 覆盖）的强信号；按语义命名的 `id`（`share-btn`/`ad-banner`/`social-*`）天然是第三方装饰规则的靶子，对外分发的静态页给这类 id 起中性名是廉价的防御。
+**经验**：「代码没变、能力在、UI 却没了」把排查引向**页面之外**；但别急着钉「内容拦截器」这种具体假说——先用本地多引擎复现**证明代码侧无辜**（`share_probe.mjs` 是廉价决定性实验），再谈外因。防御靠「让元素无可匹配」：去尽语义令牌（`share`/`ad`/`social`）胜过换一个仍含旧词根的名字（v41 改了个寂寞就是教训）。
 
 ---
 

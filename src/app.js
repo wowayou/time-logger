@@ -465,7 +465,7 @@ import {
       if (action === 'import-json') ioActions.importJSON();
       if (action === 'cancel-import-shift') ioActions.cancelImportShift();
       if (action === 'confirm-import-shift') ioActions.confirmImportShift();
-      if (action === 'share-json') ioActions.shareJSON();
+      if (action === 'send-backup') ioActions.shareJSON();
       if (action === 'update-app') applyUpdate();
       if (action === 'dismiss-cross-tab-banner') {
         const b = document.getElementById('cross-tab-banner');
