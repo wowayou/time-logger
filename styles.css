@@ -185,6 +185,16 @@
       font-size: 17px;
       font-family: inherit;
     }
+    /* 新发现：与 .icon-btn svg 同一套 stroke 渲染约定（app.js 注入 iconSvg('more')）。 */
+    .hdr-action-btn svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
     .hdr-icon-link:active,
     .hdr-action-btn:active { background: var(--input); }
     .hdr-icon {
@@ -381,6 +391,11 @@
       #today-btn {
         grid-column: auto;
       }
+      /* R5：显式 grid 轨道即便对应 item 被 [hidden] 也照样保留空间——「回到今天」条件
+         隐藏后需要 collapse 掉第 4 列，否则右侧留一块死区。 */
+      .date-nav:has(#today-btn[hidden]) {
+        grid-template-columns: 44px minmax(0, 1fr) 44px;
+      }
     }
     .nav-btn {
       min-width: 0;
@@ -415,6 +430,13 @@
       text-overflow: ellipsis;
       padding: 0 10px;
       box-shadow: var(--shadow-1), var(--top-light);
+    }
+    /* R5：当前周期含今天时的常驻高亮字样——即便「回到今天」按钮已隐藏，这里仍
+       给一个「你在今天」的持续信号。 */
+    .period-today-badge {
+      color: var(--accent);
+      font-weight: 700;
+      margin-left: 2px;
     }
 
     /* Form */
@@ -832,7 +854,10 @@
     .ruler-bar {
       height: 9px;
       border-radius: 5px;
-      background: transparent;
+      /* 新发现：分段缝原为 transparent，实际颜色由父级 --card 透出——亮色下 --card
+         接近白（缝极淡）、暗色下 --card 是深石墨（缝显重），两主题分段视觉重量不一致。
+         改用已经按主题配平过的 --border（既有 hairline 令牌），缝的视觉重量主题间一致。 */
+      background: var(--border);
       display: flex;
       overflow: hidden;
       margin-bottom: 9px;
@@ -902,6 +927,14 @@
       /* 纵向滚动仍归浏览器、横向手势归左滑编辑处理器（app.js registerCardSwipe），
          两者互不抢；transform 落在自己的合成层，回弹平滑。 */
       touch-action: pan-y;
+      /* R7：列表重建（新增/删除/切段）时的入场淡入，140ms。只过渡 opacity——刻意不碰
+         transform，因为 transform 是左滑手势的驱动属性；一旦两者共用 transition 声明，
+         手势 touchstart 清空内联 transition 后会退回这条 CSS 规则，把 1:1 跟手拖拽
+         变成带延迟的动画。opacity 与 transform 完全独立，互不干扰。 */
+      transition: opacity 0.14s ease-out;
+    }
+    @starting-style {
+      .entry { opacity: 0; }
     }
     .entry.sheet-editing { border-color: var(--accent); }
     .entry.placeholder { border-color: var(--border); }
@@ -1114,15 +1147,23 @@
       height: calc(100dvh - env(safe-area-inset-top) - 12px);
     }
     /* v33: sheet 进场动画（纯 CSS 渐进增强；hidden→显示时从 @starting-style 过渡进来。
-       关闭仍走 hidden 瞬断。旧浏览器无此规则=直接弹出。 */
+       旧浏览器无此规则=直接弹出。 */
     @starting-style {
       .form-sheet:not([hidden]) .form-sheet-panel { transform: translateY(18px); opacity: 0; }
       .form-sheet:not([hidden]) .form-sheet-backdrop { opacity: 0; }
     }
+    /* R1（v46）：关闭走对称的收起动画——JS 挂 .sheet-closing 后过渡到与进场
+       @starting-style 相同的终态，transitionend 播完才真正 hidden（sheet_controller.js
+       animateSheetClose）；不再是旧版瞬断。 */
+    .form-sheet.sheet-closing .form-sheet-panel { transform: translateY(18px); opacity: 0; }
+    .form-sheet.sheet-closing .form-sheet-backdrop { opacity: 0; }
     @media (prefers-reduced-motion: reduce) {
       .form-sheet-panel, .form-sheet-backdrop { transition: none; }
     }
     .form-sheet-panel:focus, .form-sheet-panel:focus-visible { outline: none; }
+    @media (prefers-reduced-motion: reduce) {
+      .entry { transition: none; }
+    }
     .icon-btn:focus:not(:focus-visible) { outline: none; }
     /* v34 C 语法 sheet 头：抓手条 + 取消/完成文字按钮 + 居中标题 */
     .sh-grab {
@@ -1426,8 +1467,11 @@
 
     .bucket-seg { margin-bottom: 10px; }
     .record-mode-seg { margin-bottom: 12px; }
+    /* 新发现：gap 卡（真空、无内容）与 planned 卡（有真实内容，只是未来）此前同用
+       dashed 描边，语义不同视觉却相同。gap 保留 dashed（「还没有」的惯用语汇）；
+       planned 改实线 + accent 淡色调，读作「已安排」而非「未记录/占位」。 */
     .entry.planned {
-      border: 1px dashed var(--border);
+      border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
       background: color-mix(in srgb, var(--bg) 92%, var(--muted));
       box-shadow: none;
     }

@@ -24,7 +24,11 @@ export function iconSvg(name) {
   const icons = {
     edit: '<path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>',
     trash: '<path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path>',
-    check: '<path d="M20 6 9 17l-5-5"></path>'
+    check: '<path d="M20 6 9 17l-5-5"></path>',
+    // 新发现：「···」更多按钮此前是裸文本字形，与本图标体系并存。三个零长度、
+    // round linecap 的描边线段各画成一个圆点——沿用现有 stroke-based 渲染管线
+    // （.icon-btn svg 全局 fill:none/stroke-linecap:round），无需给这一个图标开 fill 例外。
+    more: '<path d="M5 12h.01"></path><path d="M12 12h.01"></path><path d="M19 12h.01"></path>'
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[name] || ''}</svg>`;
 }
@@ -233,7 +237,7 @@ export function sheetHead({ title, cancelText, cancelAction, cancelAria, doneTex
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '45';
+export const APP_VERSION = '46';
 
 export function renderMoreSheet(opts = {}) {
   let themePref = 'auto';
@@ -332,11 +336,28 @@ export function renderFormSheet(opts) {
         ${datalist}
         <div class="form-hint" data-role="mainline-hint">${bucketHint(bucket)}</div>
       </div>`;
-  const editTimeSection = `
+  // R3：常规编辑（非计划）的时间滚轮默认折叠为触发行——多数编辑只改文字/标签，
+  // 常驻展开的滚轮是噪音；点触发行才展开，与新建态「开始时间」触发行形态一致。
+  // 计划编辑（isEditPlanned）沿用「计划时间（可改）」始终展开，改动概率高、无需折叠。
+  const editStartLabel = e && normalizeTimestamp(e.ts) ? hhmm(e.ts) : '--:--';
+  const editTimeSection = isEditPlanned
+    ? `
       <div class="fl">
-        <div class="fl-label">${isEditPlanned ? '计划时间（可改）' : '开始时间'}</div>
+        <div class="fl-label">计划时间（可改）</div>
         ${tsInput}
         <div data-role="edit-wheel"></div>
+      </div>
+      <div class="form-inline-error" data-role="conflict-error" hidden></div>`
+    : `
+      <div class="fl">
+        <div class="fl-label">开始时间</div>
+        ${tsInput}
+        <div class="form-time-row" data-role="edit-time-row">
+          <button class="start-time-trigger" type="button" data-action="toggle-edit-start-time" aria-expanded="false" aria-label="修改开始时间"><span data-role="edit-start-label">${esc(editStartLabel)}</span></button>
+        </div>
+        <div class="fl start-time-section" data-role="edit-time-section" hidden>
+          <div data-role="edit-wheel"></div>
+        </div>
       </div>
       <div class="form-inline-error" data-role="conflict-error" hidden></div>`;
   const editBody = `

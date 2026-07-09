@@ -50,6 +50,49 @@ test('375px header hides title without overflowing', async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
+test('回到今天 only appears after leaving today, with a persistent 今天 badge while on it (R5)', async ({ page }) => {
+  await boot(page, 500, 'one-record', false, FIXED_NOW);
+  // FIXED_NOW = 2026-06-29T12:34:30 → boots on today; button hidden, badge shown.
+  await expect(page.locator('#today-btn')).toBeHidden();
+  await expect(page.locator('.period-today-badge')).toHaveText('今天');
+  await expectNoHorizontalOverflow(page);
+
+  // While on today, the button is hidden — the date-nav grid must collapse to 3
+  // explicit columns, not leave its 4th (76px+) track reserved as dead space
+  // (explicit grid tracks otherwise stay reserved even when their item is
+  // display:none — R5's .date-nav:has(#today-btn[hidden]) fix).
+  const colsWhileHidden = await page.evaluate(() =>
+    getComputedStyle(document.querySelector('.date-nav')).gridTemplateColumns.split(' ').length);
+  expect(colsWhileHidden).toBe(3);
+
+  // Leaving today (shift to yesterday) reveals the button, drops the badge, and
+  // the grid regains its 4th column now that there's a real item for it.
+  await page.locator('[data-action="shift-period"][data-delta="-1"]').click();
+  await expect(page.locator('#today-btn')).toBeVisible();
+  await expect(page.locator('.period-today-badge')).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+  const colsWhileVisible = await page.evaluate(() =>
+    getComputedStyle(document.querySelector('.date-nav')).gridTemplateColumns.split(' ').length);
+  expect(colsWhileVisible).toBe(4);
+
+  // 回到今天 returns to today and restores the collapsed/badge state.
+  await page.locator('#today-btn').click();
+  await expect(page.locator('#today-btn')).toBeHidden();
+  await expect(page.locator('.period-today-badge')).toHaveText('今天');
+});
+
+test('回到本周/本月/本年 stay hidden while the current period still contains today', async ({ page }) => {
+  await boot(page, 500, 'empty', false, FIXED_NOW);
+  for (const tab of ['周视图', '月视图', '年视图']) {
+    await page.getByRole('button', { name: tab }).click();
+    await expect(page.locator('#today-btn')).toBeHidden();
+    await page.locator('[data-action="shift-period"][data-delta="-1"]').click();
+    await expect(page.locator('#today-btn')).toBeVisible();
+    await page.locator('#today-btn').click();
+    await expect(page.locator('#today-btn')).toBeHidden();
+  }
+});
+
 test('new entry shows continuation context and recomputes start', async ({ page }) => {
   await boot(page, 768, 'tail-placeholder', false, FIXED_NOW);
   await page.getByRole('button', { name: '记一条新的时间记录' }).click();
@@ -205,6 +248,26 @@ test('new entry still shows inline same-time conflict', async ({ page }) => {
   await expect(page.locator('[data-role="conflict-error"]')).toContainText('同一时刻已有');
   await expect(page.locator('[data-role="conflict-error"]')).toContainText('编辑那条');
   await expect(page.locator('[data-role="conflict-error"]')).toContainText('用+1min');
+});
+
+test('clicking 编辑那条 on a conflict closes-and-reopens cleanly (R1 close-animation reentrancy)', async ({ page }) => {
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+  await page.getByRole('button', { name: '记一条新的时间记录' }).click();
+  await page.locator('[data-action="toggle-start-time"]').click();
+  await page.locator('[data-role="text"]').fill('2026-06-29 09:00');
+  await page.locator('[data-role="text"]').blur();
+  await page.locator('#form-what').fill('重复时间');
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  await expect(page.locator('[data-role="conflict-error"]')).toContainText('编辑那条');
+
+  // editConflictEntry closes the new-sheet and immediately reopens an edit-sheet
+  // for the conflicting entry in the same tick — R1's close animation must not
+  // leave the sheet hidden or wipe the freshly-opened edit content.
+  await page.locator('[data-role="conflict-error"] button', { hasText: '编辑那条' }).click();
+  await expect(page.locator('#form-sheet')).toBeVisible();
+  await expect(page.locator('.form-sheet-panel')).toHaveAttribute('data-mode', 'edit');
+  await expect(page.locator('.form-sheet-panel')).toHaveAttribute('data-id', 'today-1');
+  await expect(page.locator('#form-sheet')).not.toHaveClass(/sheet-closing/);
 });
 
 test('help close is a text button and import shift dialog stays custom', async ({ page }) => {
@@ -714,12 +777,39 @@ test('wheel columns paint above the highlight band (P22)', async ({ page }) => {
 test('editing a record can change its start time via the wheel', async ({ page }) => {
   await boot(page, 768, 'two-records', false, FIXED_NOW);
   await page.locator('.entry[data-id="today-1"] [data-action="start-edit"]').click();
+  // R3: 编辑态时间滚轮折叠为触发行，先点开才能看到 picker。
+  await expect(page.locator('[data-role="edit-time-section"]')).toBeHidden();
+  await page.locator('[data-action="toggle-edit-start-time"]').click();
+  await expect(page.locator('[data-role="edit-time-section"]')).toBeVisible();
   await page.locator('[data-role="edit-wheel"] [data-role="text"]').fill('2026-06-29 09:10');
   await page.locator('[data-role="edit-wheel"] [data-role="text"]').blur();
   await page.getByRole('button', { name: '保存修改' }).click();
   await expect(page.locator('#form-sheet')).toBeHidden();
   const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
   expect(entries.find(e => e.id === 'today-1').ts).toBe('2026-06-29T09:10');
+});
+
+test('editing a saved record without touching time keeps its timestamp unchanged (R3 collapsed by default)', async ({ page }) => {
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+  await page.locator('.entry[data-id="today-1"] [data-action="start-edit"]').click();
+  await expect(page.locator('[data-role="edit-time-section"]')).toBeHidden();
+  await page.locator('[data-role="edit-what"]').fill('改了内容没碰时间');
+  await page.getByRole('button', { name: '保存修改' }).click();
+  await expect(page.locator('#form-sheet')).toBeHidden();
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  const saved = entries.find(e => e.id === 'today-1');
+  expect(saved.ts).toBe('2026-06-29T09:00');
+  expect(saved.what).toBe('改了内容没碰时间');
+});
+
+test('editing a planned entry keeps its time wheel always expanded (R3 exemption)', async ({ page }) => {
+  await boot(page, 768, 'planned-only', false, FIXED_NOW);
+  await page.locator('.entry.planned[data-id="plan-1"] [data-action="start-edit"]').click();
+  await expect(page.locator('.form-sheet-panel')).toHaveAttribute('data-mode', 'edit');
+  // 计划编辑不折叠：没有触发行/edit-time-section 包装，picker 直接可见。
+  await expect(page.locator('[data-action="toggle-edit-start-time"]')).toHaveCount(0);
+  await expect(page.locator('[data-role="edit-time-section"]')).toHaveCount(0);
+  await expect(page.locator('[data-role="edit-wheel"] [data-role="text"]')).toBeVisible();
 });
 
 test.describe('swipe-left to edit (mobile gesture)', () => {

@@ -59,6 +59,7 @@ import {
 } from './time.js';
 import {
   APP_VERSION,
+  iconSvg,
   renderRuler,
   renderSummaryRows,
   renderTimeline,
@@ -163,12 +164,15 @@ import {
   }
 
   // --- Navigation ---
+  const VIEW_ORDER = ['day', 'week', 'month', 'year'];
   function setView(view) {
+    const direction = Math.sign(VIEW_ORDER.indexOf(view) - VIEW_ORDER.indexOf(state.view));
     state.view = view;
     sheetController.closeEditSheet();
     sheetController.closeForm();
     persistState();
     render();
+    animateContentEnter(direction);
   }
   function setSelectedDate(dateKey) {
     state.selectedDate = dateKey;
@@ -183,12 +187,16 @@ import {
     sheetController.closeEditSheet();
     sheetController.closeForm();
     render();
+    animateContentEnter(Math.sign(delta));
   }
   function goToday() {
+    const prevDate = state.selectedDate;
     setSelectedDate(todayStr());
     sheetController.closeEditSheet();
     sheetController.closeForm();
     render();
+    const today = todayStr();
+    animateContentEnter(today > prevDate ? 1 : (today < prevDate ? -1 : 0));
   }
   function drill(dateKey, view) {
     state.view = view;
@@ -196,6 +204,29 @@ import {
     sheetController.closeEditSheet();
     sheetController.closeForm();
     render();
+  }
+
+  // R7：切视图/切周期后内容方向性滑入（280ms）——只在导航函数里、render() 之后
+  // 调用，纯视觉糖：从偏移位滑到原位，不影响内容或任何时序；reduced-motion 跳过。
+  // direction: 1=正向（下一段/更晚的视图/更晚的日期），-1=反向，0/falsy=不动画。
+  function animateContentEnter(direction) {
+    if (!direction) return;
+    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const dx = direction > 0 ? 14 : -14;
+    [document.getElementById('ruler'), document.getElementById('timeline')].forEach(el => {
+      if (!el) return;
+      el.style.transition = 'none';
+      el.style.transform = `translateX(${dx}px)`;
+      el.style.opacity = '0';
+      void el.offsetWidth;
+      requestAnimationFrame(() => {
+        el.style.transition = 'transform 0.28s ease-out, opacity 0.22s ease';
+        el.style.transform = '';
+        el.style.opacity = '';
+        const clear = () => { el.style.transition = ''; el.removeEventListener('transitionend', clear); };
+        el.addEventListener('transitionend', clear);
+      });
+    });
   }
 
   // --- Render ---
@@ -219,8 +250,16 @@ import {
     document.querySelectorAll('#view-tabs button').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.view === state.view);
     });
+    // R5：当前周期是否包含今天——驱动「回到今天」按钮的条件渲染 + 日期行内的
+    // 「今天」常驻高亮字样，两处共用同一次判定。
+    const { start: periodStart, end: periodEnd } = periodRange();
+    const todayDate = parseDateKey(todayStr());
+    const inCurrentPeriod = Boolean(todayDate && todayDate >= periodStart && todayDate < periodEnd);
     const periodEl = document.getElementById('period-label');
-    periodEl.textContent = periodLabel({ short: state.view === 'week' });
+    const periodText = periodLabel({ short: state.view === 'week' });
+    periodEl.innerHTML = inCurrentPeriod
+      ? `${periodText} <span class="period-today-badge">今天</span>`
+      : periodText;
     periodEl.setAttribute('aria-label', periodFullLabel());
     const addBtn = document.getElementById('add-btn');
     const canPlanOnDate = state.selectedDate >= todayStr();
@@ -239,6 +278,8 @@ import {
     const todayLabels = { day: '回到今天', week: '回到本周', month: '回到本月', year: '回到今年' };
     const todayTip = `回到包含今天的当前${periodNames[state.view]}。`;
     const todayBtn = document.getElementById('today-btn');
+    // R5：只在离开当前周期（已不含今天）后才出现，避免常驻占位。
+    todayBtn.hidden = inCurrentPeriod;
     todayBtn.textContent = todayLabels[state.view];
     setButtonTip(todayBtn, todayTip, todayLabels[state.view]);
     document.querySelectorAll('[data-action="shift-period"]').forEach(btn => {
@@ -426,6 +467,10 @@ import {
 
   // --- Actions ---
   function registerActions() {
+    // 新发现：header「···」更多按钮此前是裸文本字形，换成 iconSvg 体系图标（一次性
+    // 注入，因为它是 index.html 静态壳里的按钮，不像其它图标按钮那样走 JS 模板渲染）。
+    const moreBtn = document.querySelector('[data-action="open-more"]');
+    if (moreBtn) moreBtn.innerHTML = iconSvg('more');
     document.addEventListener('click', e => {
       const el = e.target.closest('[data-action]');
       if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
@@ -441,6 +486,7 @@ import {
       if (action === 'open-more') openMore();
       if (action === 'open-tag-config') openTagConfig();
       if (action === 'toggle-start-time') sheetController.toggleStartTime(el);
+      if (action === 'toggle-edit-start-time') sheetController.toggleEditStartTime(el);
       if (action === 'pick-form-tag') sheetController.pickTag(el);
       if (action === 'pick-form-bucket') sheetController.pickBucket(el);
       if (action === 'pick-record-mode') sheetController.pickRecordMode(el);

@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v45` / manifest `version: "45"`。
+当前版本：`timelog-v46` / manifest `version: "46"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -71,11 +71,11 @@
 ## UI 红线
 
 - 响应式默认用 container query、CSS Grid/Flex 和文档流布局；禁止按 iPhone/iPad/设备名堆叠 viewport 补丁。
-- Header 排版固定为三行信息架构：第一行站点标识（图标即 GitHub 入口）和「···」更多入口；第二行天/周/月/年视图切换；第三行 `< 当前周期 >` 与回到今天按钮；不要把日期导航塞回第一行；说明入口在「···」更多菜单里，不放回 header。
+- Header 排版固定为三行信息架构：第一行站点标识（图标即 GitHub 入口）和「···」更多入口；第二行天/周/月/年视图切换；第三行 `< 当前周期 >` 与回到今天按钮；不要把日期导航塞回第一行；说明入口在「···」更多菜单里，不放回 header。v46（R5）：回到今天/本周/本月/今年按钮**条件渲染**——只在当前周期已不含今天时出现；`.date-nav` 用 `:has(#today-btn[hidden])` 在 ≥430px 断点收窄 grid 列数，避免显式轨道在按钮隐藏后留死区。当前周期含今天时，`#period-label` 内追加常驻 `.period-today-badge`（「今天」高亮字样）。「···」按钮改 `iconSvg('more')`（三点，零长度 round-linecap 描边），app.js `registerActions` 一次性注入（唯一不走 JS 模板渲染的图标按钮）。
 - 低频动作（摘要、备份四项、标签高级设置、主题、说明）收纳在「···」更多 sheet 的 cell 分组里；footer 已退役，不得重新引入常驻底栏；分享 cell 与复制/下载/导入一样**常显**（v43：不再按能力检测显隐——旧 reveal 时序在 footer→更多 迁移后丢失、iOS 卡隐藏态，P24），点击时若无 Web Share 能力则回退下载完整备份。
 - 窄屏第一行优先保留站点标识和「···」入口；空间不足时可以隐藏站点标题文字。
 - 窄屏日期导航必须允许两行：上一段/周期/下一段一行，回到今天/本周/本月/今年独立一行；周视图窄屏周期标题可用短格式，完整日期保留在可访问标签中。
-- 日视图时间轴是卡片列表（v36 回退直接操纵 rail）：按时间倒序排列（最新在最上）；每张卡片左侧内容、右侧编辑/删除图标按钮；点编辑图标进入编辑 sheet（可改内容、标签和开始时间）；点删除图标走智能删除（两侧同标签自动愈合，否则转未记录）；空隙卡「补一下」、已有段落卡「补一下/切一刀」触发有界补录/切分；`tl-head` 内「切换活动」按钮＝记一条并继续，等价于「+ 记一条」的快捷方式。v45：可编辑记录卡（真实/计划，非占位/空隙）支持**左滑即编辑**（移动端手势快捷方式，等价点铅笔）——`app.js registerCardSwipe`，`.entry` 用 `touch-action: pan-y` 让纵向滚动归浏览器、横向手势归左滑；桌面/无触屏仍用右侧图标。
+- 日视图时间轴是卡片列表（v36 回退直接操纵 rail）：按时间倒序排列（最新在最上）；每张卡片左侧内容、右侧编辑/删除图标按钮；点编辑图标进入编辑 sheet（可改内容、标签和开始时间）；点删除图标走智能删除（两侧同标签自动愈合，否则转未记录）；空隙卡「补一下」、已有段落卡「补一下/切一刀」触发有界补录/切分；`tl-head` 内「切换活动」按钮＝记一条并继续，等价于「+ 记一条」的快捷方式。v45：可编辑记录卡（真实/计划，非占位/空隙）支持**左滑即编辑**（移动端手势快捷方式，等价点铅笔）——`app.js registerCardSwipe`，`.entry` 用 `touch-action: pan-y` 让纵向滚动归浏览器、横向手势归左滑；桌面/无触屏仍用右侧图标。v46 新发现：gap 卡（空隙、无内容）与 planned 卡（有真实内容，只是未来）视觉区分——gap 保留 dashed 描边（「还没有」语汇），planned 改实线 + accent 淡色调（`color-mix(in srgb, var(--accent) 35%, transparent)`，读作「已安排」而非「未记录」）。
 - 表单 sheet 只按宽度适配：`>=720px` 居中 dialog，`<720px` bottom sheet；不要用 `pointer:fine` 决定视觉布局。
 - 统一 sheet 头部语法：抓手条 + 左「取消/关闭」右「完成/保存」文字按钮 + 居中标题；正文低频列表用 cell 分组（inset 底 + 内分隔线）；cell 分组容器用块级流布局、不用 grid——iOS WebKit 对 grid auto 轨道内 button 的 min-height 计量有缺陷，会累计裁掉最后一行（P21）。
 - 时间选择器只按宽度选择 wheel/desktop picker；打开表单后跨断点 resize 或旋转屏幕时，必须按当前宽度重挂载，不能停留在旧 picker。
@@ -86,6 +86,9 @@
 - 删除/取消禁用 x、`×`、`✕`，包括图标定义、按钮文本和渲染模板。
 - 输入字号不低于 16px，避免移动端聚焦放大。
 - 统一表单 sheet 打开后先把焦点收进 sheet 容器，首个 Tab 进入内部控件；“做了什么”是 textarea，Enter 必须换行，只有 Cmd/Ctrl+Enter 或「完成」按钮保存；定时刷新不能打断新增或编辑中的输入。
+- v46（R1）：sheet 关闭走 class 驱动过渡（`.sheet-closing`）+ `transitionend`/320ms 兜底后置 hidden，与进场 `@starting-style` 对称；`sheetCloseCleanup` 挡重入（关闭动画未播完又被重开/重关时立即收尾旧的，不留悬空定时器）；`prefers-reduced-motion` 下直接同步隐藏。
+- v46（R3）：编辑态时间选择默认折叠为触发行（点击展开滚轮），与新建态一致；计划编辑（时间本就是核心可改项）例外，始终展开。校验失败但触发行仍折叠时，先展开触发行再显示错误，不能把报错文案落进看不见的容器里。
+- v46（R7）：切视图/切周期后内容方向性滑入（280ms，`app.js animateContentEnter`）；列表卡片入场淡入（140ms，纯 `opacity`，`.entry` CSS `@starting-style`）——刻意只过渡 `opacity` 不碰 `transform`，因为 `transform` 是左滑手势（v45）的驱动属性，两者共用 transition 会让拖拽跟手变成带延迟的动画。均不做 FLIP／逐项 diff。
 
 ## 隐私红线
 
@@ -100,7 +103,7 @@
 - 纯原生 HTML/CSS/JS，使用浏览器原生 `type="module"`；不要引入打包步骤。
 - 日期值统一 `YYYY-MM-DDTHH:mm`。
 - 颜色走 CSS 变量；按钮白字 `#fff` 可保留。
-- 尺子未记录段用 `--track`，不用 `--border`。
+- 尺子未记录段用 `--track`，不用 `--border`。`.ruler-bar` 分段缝背景用 `--border`（不用 `transparent`——透出父级 `--card` 会导致两主题缝的视觉重量不一致，v46 新发现）。
 - 统计以分钟数为权威值：`job` / `maintain` / `leak` / `unrecorded` / `pending` / `total` 先累加分钟；百分比只用于展示，不反向参与统计，不强行凑满 100%。
 - 标签 taxonomy 固定 4 桶：主线 `job`、维持 `maintain`、漏损 `leak`、未记录 `unrecorded`。桶在渲染/统计时由 tag→bucket 映射派生；孤儿 tag 落未记录。
 - 本地自然日 00:00 是统计硬边界；空日不继承前一天最后标签；有明确右邻记录的跨日闭合段会切入后续日期；有首条记录的日期从 00:00 到首条之间计为未记录；周/月/年汇总按每日独立统计累加。
@@ -204,3 +207,4 @@ git diff --check
 | v43 | 2026-07-09 | 两处结构性重设计（停止打补丁、绕开问题）。**P23 键盘跳变根治**：连修六轮（P16→v42）认清根因是方案本身——「高度追踪键盘的 bottom sheet」每次键盘开合都要移动，而 iOS 收键盘的 vv resize 事件天生迟到 710ms，任何跟事件/预测都在赌不可靠时序。改为**面板不随键盘缩放**：`.form-sheet` 恒定 `inset:0`；召唤键盘的表单（新建/编辑/标签设置）用定高 `.tall` 面板 + 头部 `sticky top:0`（保存 ✓ 永在键盘够不到的顶部，顺带根治 P2/⑧），焦点控件 `scrollIntoView` 滚到键盘上方；`visualViewport` 只剩写 `--kb` 供正文 `scroll-padding-bottom`（只滚不移面板）。删约 200 行时序机器（predict/settle/glide/burst/`--vvt`/`--vvh`/`.vv-glide`/`settleThenTeardown`/P19 裙边/`.sheet-closing`）。**P24 分享消失根治**：用户证伪 VPN（一直开着、分享好用时也开着），真因是 footer→更多 迁移丢了 `updateShareAvailability` 的 reveal（footer 常驻 DOM 主 render 每次 reveal，更多动态渲染无 reveal，iOS 卡隐藏）；改**常显 + 点击无 Web Share 能力则回退下载**，删门闩与 `updateShareAvailability`。UI 红线（分享常显、键盘不移面板）与自测清单 5/11 同步重写；ui_smoke 分享显隐断言改常显。详见 `docs/postmortems.md` P23–P24 |
 | v44 | 2026-07-09 | P25 SW 更新可达性：旧 `registerServiceWorker` 只弹「更新应用」横幅、且从不主动 `reg.update()`——iOS Safari（尤其 standalone PWA）不及时复查 `sw.js`、横幅又常被忽略，导致 GitHub Pages 已发新版、用户端一直吃旧缓存（历次「还是没更新/还是没修好」的真凶：v41–v43 很可能从未在真机干净加载过）。改为：① 冷启动 + 每次 `visibilitychange` 转前台都 `reg.update()` 强制复查；② 新版就绪时——表单开着就弹横幅（不打断输入），否则**静默 skipWaiting + 单次 reload 自动更新**（`localStorage` 数据不受影响）。本地 Chromium 双版本模拟验证：模拟发新版后缓存自动切到新 CACHE 且页面自动 reload，零点击。发布仍走 GitHub Pages 主分支根目录直发；手动触发一次构建可用 `gh api -X POST repos/<owner>/<repo>/pages/builds`。详见 `docs/postmortems.md` P25 |
 | v45 | 2026-07-09 | 左滑即编辑（用户请求）：可编辑记录卡（真实/计划）支持左滑打开编辑 sheet，等价点右侧铅笔的移动端手势快捷方式；`app.js registerCardSwipe`（touchstart 认卡→touchmove 判轴/跟手/`preventDefault` 横向→touchend 超 56px 阈值即 `startEdit`），`.entry` 加 `touch-action: pan-y`（纵向滚动归浏览器、横向手势归左滑，互不抢）；占位/空隙卡不参与，图标按钮/桌面路径不变。Playwright 补 Chromium 合成触摸 swipe 断言（真机手感待确认）。键盘（v43）经无痕真机确认已修；分享按钮真机仍缺——代码 v43 起无条件常显、live 已核，无痕（绕缓存但不绕系统级 VPN 过滤）仍缺，强指向 VPN 装饰规则，待用户 `?vvdebug=1` HUD 读数 + 关 VPN A/B 定案 |
+| v46 | 2026-07-09 | 设计交接包第一批（R1/R3/R5/R7 + 新发现，纯 CSS/小 JS，零模型改动）。**R1**：sheet 关闭改 class 驱动过渡（`.sheet-closing`）+ `transitionend`/320ms 兜底后置 hidden，与进场 `@starting-style` 对称；`sheetCloseCleanup` 挡重入（`editConflictEntry` 关了立刻重开一类场景，关闭动画未播完就先立即收尾旧的）；`prefers-reduced-motion` 同步隐藏。**R3**：编辑态时间选择折叠为触发行（点击展开滚轮），与新建态一致；计划编辑例外始终展开；`commitEdit` 校验失败时先展开触发行再报错，避免报错文案落进折叠容器看不见。**R5**：回到今天/本周/本月/今年按钮只在当前周期已不含今天时出现；`.date-nav` 用 `:has(#today-btn[hidden])` 收窄 grid 列数避免显式轨道留死区；当前周期含今天时 `#period-label` 追加常驻 `.period-today-badge`。**R7**：切视图/切周期后内容方向性滑入（280ms，`animateContentEnter`）+ 列表卡片入场淡入（140ms，纯 `opacity`——刻意不碰 `transform`，避免与左滑手势的驱动属性共用 transition 让拖拽变卡顿）；不做 FLIP/逐项 diff。**新发现**：`.ruler-bar` 分段缝改 `--border`（不再透出 `--card` 导致两主题缝视觉重量不一致）；gap 卡（空隙）与 planned 卡（有内容的未来计划）视觉区分（gap 保留 dashed，planned 改实线+accent 淡色调）；「···」更多按钮从裸文本字形换 `iconSvg('more')`（app.js 一次性注入，唯一不走 JS 模板渲染的图标按钮）。 |

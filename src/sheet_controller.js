@@ -37,6 +37,8 @@ export function createSheetController(deps) {
   let configSnapshot = null;
   // 导航栈：config/help/import-shift 若从「更多」下钻进入，取消/保存回「更多」而非整层关闭。
   let returnToMore = false;
+  // R1：sheet 关闭走 class 驱动过渡；未收尾前的清理函数存这里，供重入保护调用。
+  let sheetCloseCleanup = null;
 
   function getSheetMode() {
     const sheet = document.getElementById('form-sheet');
@@ -271,6 +273,10 @@ export function createSheetController(deps) {
   }
 
   function openFormSheet(opts) {
+    // R1 重入保护：上一个 sheet 的关闭动画还没播完就要开新的（如 editConflictEntry
+    // 关了立刻重开），先把旧的立即收尾，避免它稍后的 transitionend/兜底定时器把刚
+    // 打开的新内容又清空、又 hidden 掉。
+    if (sheetCloseCleanup) sheetCloseCleanup();
     const requestedMode = opts && opts.mode;
     const mode = ['edit', 'help', 'config', 'import-shift', 'more'].includes(requestedMode) ? requestedMode : 'new';
     const id = opts && opts.id;
@@ -348,13 +354,18 @@ export function createSheetController(deps) {
         : 'more: send-btn ABSENT');
     }
     if (mode === 'edit') {
+      // R3：计划编辑（无 edit-time-section 包装，始终展开）照旧立即挂载；常规编辑
+      // 折叠为触发行，点击才挂载（toggleEditStartTime / expandEditTimeSection）。
+      const editSection = panel.querySelector('[data-role="edit-time-section"]');
       const editWheel = panel.querySelector('[data-role="edit-wheel"]');
-      if (editWheel) {
+      if (editWheel && !editSection) {
         const tsEl = panel.querySelector('[data-role="edit-ts"]');
         mountTimePicker(editWheel, ts, v => {
           tsEl.value = v;
         });
         sheetTimeMounted = true;
+      } else {
+        sheetTimeMounted = false;
       }
     } else if (mode === 'new') {
       if (formBackfill) mountBackfillPickers(panel, ts, formBackfillEnd);
@@ -381,28 +392,64 @@ export function createSheetController(deps) {
     run();
   }
 
+  function prefersReducedMotion() {
+    return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  // R1：关闭时的最终收尾——真正隐藏 + 清空内容。既用于动画播完之后，也用于
+  // reduced-motion/重入时的立即收尾，两条路径共享同一份清理逻辑。
+  function finishSheetClose(sheet, panel) {
+    sheet.hidden = true;
+    sheet.classList.remove('sheet-closing');
+    panel.innerHTML = '';
+    delete panel.dataset.id;
+    delete panel.dataset.mode;
+  }
+
+  // R1：sheet 关闭改「class 驱动过渡 + transitionend 后置 hidden」，不再是旧版的
+  // 瞬断——挂 .sheet-closing 让面板/遮罩过渡到 @starting-style 那套收起态，播完
+  // （或 320ms 兜底，防止某些环境不派发 transitionend）再真正 hidden + 清空。
+  // 若上一次关闭动画还没收尾就又被关一次（如 editConflictEntry 的「关了立刻重开」），
+  // 先立即收尾旧的，不留悬空定时器/监听器。
+  function animateSheetClose(sheet, panel) {
+    if (sheetCloseCleanup) sheetCloseCleanup();
+    sheet.classList.add('sheet-closing');
+    let done = false;
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      panel.removeEventListener('transitionend', onEnd);
+      sheetCloseCleanup = null;
+      finishSheetClose(sheet, panel);
+    };
+    const onEnd = e => { if (e.target === panel && e.propertyName === 'transform') cleanup(); };
+    panel.addEventListener('transitionend', onEnd);
+    const timer = setTimeout(cleanup, 320);
+    sheetCloseCleanup = cleanup;
+  }
+
   function closeFormSheet(opts = {}) {
     const restoreFocus = opts.restoreFocus !== false;
     const sheet = document.getElementById('form-sheet');
     const panel = sheet ? sheet.querySelector('.form-sheet-panel') : null;
-    const wasOpen = Boolean(sheet && panel && !sheet.hidden);
+    const wasOpen = Boolean(sheet && panel && !sheet.hidden && !sheet.classList.contains('sheet-closing'));
     const mode = wasOpen ? panel.dataset.mode || '' : '';
     if (sheetTrapController) {
       sheetTrapController.abort();
       sheetTrapController = null;
     }
-    if (sheet && panel) {
-      sheet.hidden = true;
-      panel.innerHTML = '';
-      delete panel.dataset.id;
-      delete panel.dataset.mode;
+    if (wasOpen) {
+      if (prefersReducedMotion()) finishSheetClose(sheet, panel);
+      else animateSheetClose(sheet, panel);
+      unlockBodyForSheet();
     }
     deps.setSheetEditId(null);
     sheetTimeMounted = false;
     formBackfill = false;
     formBackfillEnd = '';
     configSnapshot = null;
-    if (wasOpen) unlockBodyForSheet();
     if (restoreFocus && sheetLastFocus && document.contains(sheetLastFocus)) {
       sheetLastFocus.focus();
     }
@@ -428,6 +475,11 @@ export function createSheetController(deps) {
         const section = panel.querySelector('[data-role="start-time-section"]');
         if (section && section.hidden) return;
       }
+    }
+    if (mode === 'edit') {
+      // R3：折叠中的常规编辑没有挂载任何 picker，跨断点/旋转屏幕时无需重挂。
+      const editSection = panel.querySelector('[data-role="edit-time-section"]');
+      if (editSection && editSection.hidden) return;
     }
     const mountEl = mode === 'edit'
       ? panel.querySelector('[data-role="edit-wheel"]')
@@ -776,7 +828,6 @@ export function createSheetController(deps) {
     const whatEl = box.querySelector('[data-role="edit-what"]');
     const chipBox = box.querySelector('[data-role="edit-chips"]');
     const customEl = box.querySelector('[data-role="edit-custom-tag"]');
-    const timeScope = box.querySelector('[data-role="edit-wheel"]') || box;
     const d = deps.load();
     const entry = d.entries.find(e => e.id === id);
     const planned = Boolean(entry && entry.planned);
@@ -785,12 +836,15 @@ export function createSheetController(deps) {
       dateKey: (tsEl && tsEl.value || '').slice(0, 10) || deps.state.selectedDate
     });
     if (!checked.ok) {
+      // R3：折叠态下报错要先展开触发行，否则错误文案落在看不见的容器里。
+      expandEditTimeSection(box);
+      const timeScope = box.querySelector('[data-role="edit-wheel"]') || box;
       setTimeInputError(timeScope, checked.msg);
       const focusEl = timeScope.querySelector('[data-role="text"], [data-role="date"]');
       if (focusEl) focusEl.focus();
       return;
     }
-    setTimeInputError(timeScope, '');
+    setTimeInputError(box.querySelector('[data-role="edit-wheel"]') || box, '');
     const what = whatEl ? whatEl.value.trim() : '';
     if (!what) { if (whatEl) whatEl.focus(); return; }
     const sel = chipBox ? chipBox.querySelector('.chip.sel') : null;
@@ -831,6 +885,38 @@ export function createSheetController(deps) {
         const focusEl = section.querySelector('[data-role="text"], [data-role="date"], button, input, [tabindex]:not([tabindex="-1"])');
         if (focusEl) focusEl.focus({ preventScroll: true });
       });
+    }
+  }
+
+  // R3：常规编辑的时间触发行展开——挂载 picker（若还没挂过）+ 揭开容器 + 更新
+  // aria-expanded。commitEdit 校验失败时也调这个，确保折叠态下报错不会悄无声息。
+  function expandEditTimeSection(panel) {
+    const section = panel.querySelector('[data-role="edit-time-section"]');
+    const editWheel = panel.querySelector('[data-role="edit-wheel"]');
+    const tsEl = panel.querySelector('[data-role="edit-ts"]');
+    if (!section || !editWheel || !tsEl) return;
+    if (!section.hidden) return;
+    section.hidden = false;
+    const trigger = panel.querySelector('[data-action="toggle-edit-start-time"]');
+    if (trigger) trigger.setAttribute('aria-expanded', 'true');
+    mountTimePicker(editWheel, tsEl.value, v => { tsEl.value = v; });
+    sheetTimeMounted = true;
+  }
+
+  function toggleEditStartTime(el) {
+    const panel = el.closest('.form-sheet-panel');
+    if (!panel) return;
+    const section = panel.querySelector('[data-role="edit-time-section"]');
+    if (!section) return;
+    if (section.hidden) {
+      expandEditTimeSection(panel);
+      requestAnimationFrame(() => {
+        const focusEl = section.querySelector('[data-role="text"], [data-role="date"], button, input, [tabindex]:not([tabindex="-1"])');
+        if (focusEl) focusEl.focus({ preventScroll: true });
+      });
+    } else {
+      section.hidden = true;
+      el.setAttribute('aria-expanded', 'false');
     }
   }
 
@@ -894,6 +980,7 @@ export function createSheetController(deps) {
     updateMainlineHint,
     syncCustomDraft,
     toggleStartTime,
+    toggleEditStartTime,
     saveTagConfig,
     handleResponsiveResize,
     getEditingBox
