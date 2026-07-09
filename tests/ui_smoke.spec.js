@@ -22,8 +22,8 @@ for (const share of [false, true]) {
   test(`more sheet keeps layout when share is ${share ? 'available' : 'hidden'}`, async ({ page }) => {
     await boot(page, 320, 'one-record', share);
     await openBackupMenu(page);
-    if (share) await expect(page.locator('#share-btn')).toBeVisible();
-    else await expect(page.locator('#share-btn')).toBeHidden();
+    if (share) await expect(page.locator('#backup-share-btn')).toBeVisible();
+    else await expect(page.locator('#backup-share-btn')).toBeHidden();
     await expectNoHorizontalOverflow(page);
     // P21: every visible cell row must sit fully inside its own cell-group —
     // the group must never clip a trailing row (更多菜单「分享备份」被拦腰裁半).
@@ -216,9 +216,12 @@ test('help close is a text button and import shift dialog stays custom', async (
   // v34 C 语法：sheet 头部是「关闭」文字按钮，不再是 icon。
   await expect(page.getByRole('button', { name: '关闭说明' })).toHaveText('关闭');
 
+  // v41 导航栈：说明从「更多」下钻进入，Esc 返回「更多」而非整层关闭；
+  // 因此无需再次点 header，直接在「更多」里点导入即可。
   await page.keyboard.press('Escape');
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+
   const chooserPromise = page.waitForEvent('filechooser');
-  await openBackupMenu(page);
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
@@ -228,8 +231,9 @@ test('help close is a text button and import shift dialog stays custom', async (
   });
   await expect(page.locator('#form-sheet-title')).toContainText('导入时区平移');
   await expect(page.locator('#import-shift-hours')).toBeVisible();
+  // 导入弹框同样从「更多」下钻，取消返回「更多」。
   await page.getByRole('button', { name: '取消导入' }).click();
-  await expect(page.locator('#form-sheet')).toBeHidden();
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
 });
 
 test('JSON import shifts time, merges config, and export stays sorted', async ({ page }) => {
@@ -278,7 +282,8 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
   ]));
 
   const downloadPromise = page.waitForEvent('download');
-  await openBackupMenu(page);
+  // v41：确认导入后导航栈返回「更多」，无需再点 header，直接在此点下载。
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
   await page.getByRole('button', { name: '下载 JSON 备份' }).click();
   const download = await downloadPromise;
   const exportPath = await download.path();
@@ -390,6 +395,27 @@ test('config rename migrates existing tags and removes replacement UI', async ({
   expect(stored.config.chips).toEqual(expect.arrayContaining([
     expect.objectContaining({ name: '活动拉伸', bucket: 'maintain', longOk: false })
   ]));
+});
+
+test('secondary sheets opened from 更多 return to 更多 on close (v41 nav stack)', async ({ page }) => {
+  await boot(page, 375, 'empty', false, FIXED_NOW);
+  await openBackupMenu(page);
+
+  // 标签设置：取消回「更多」，不整层退回主界面。
+  await page.getByRole('button', { name: '配置标签' }).click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('标签高级设置');
+  await page.getByRole('button', { name: '取消配置' }).click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+
+  // 说明：关闭回「更多」。
+  await page.getByRole('button', { name: '打开说明' }).click();
+  await expect(page.locator('.help-body')).toBeVisible();
+  await page.getByRole('button', { name: '关闭说明' }).click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+
+  // 只有在「更多」这一层关闭才整层退出。
+  await page.getByRole('button', { name: '关闭更多菜单' }).click();
+  await expect(page.locator('#form-sheet')).toBeHidden();
 });
 
 test('custom tags pin immediately on first use in the same bucket', async ({ page }) => {

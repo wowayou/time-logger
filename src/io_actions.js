@@ -303,7 +303,8 @@ export function createIoActions(deps) {
   }
 
   function updateShareAvailability() {
-    const btn = document.getElementById('share-btn');
+    // id 避开 "share-btn"：iOS 内容拦截器的去分享类装饰规则会按名精确隐藏该 id（P24）。
+    const btn = document.getElementById('backup-share-btn');
     if (!btn) return;
     const supported = canUseSystemShare();
     btn.hidden = !supported;

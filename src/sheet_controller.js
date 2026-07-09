@@ -42,6 +42,8 @@ export function createSheetController(deps) {
   let formBackfill = false;
   let formBackfillEnd = '';
   let configSnapshot = null;
+  // 导航栈：config/help/import-shift 若从「更多」下钻进入，取消/保存回「更多」而非整层关闭。
+  let returnToMore = false;
 
   function getSheetMode() {
     const sheet = document.getElementById('form-sheet');
@@ -322,9 +324,15 @@ export function createSheetController(deps) {
     if (!(from instanceof HTMLElement) || !sheet.contains(from)) return;
     if (from.tagName !== 'TEXTAREA' && from.tagName !== 'INPUT') return;
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
-    // At focusout time the keyboard is still on screen; if it isn't (desktop,
-    // hardware keyboard, headless), there is nothing to predict.
-    if (!vv || (window.innerHeight - vv.height) <= 120) { window.__vvlog?.('focusout: kb not up, no predict'); return; }
+    if (!vv) return;
+    // P23: iOS 18 点键盘「完成」时 vv.height 的 getter 瞬间恢复、resize 事件却迟
+    // ~700ms 才派发——「键盘还在场」(kbUp) 探不到这次收起；但我们写进 CSS 的几何
+    // 还停在键盘态 (varsStale)。两种情况都必须立即滑向终态，否则面板挂在旧几何
+    // 上等迟到的事件（真机录屏实测悬停 728ms 后跳一次）。
+    const kbUp = (window.innerHeight - vv.height) > 120;
+    const writtenVvh = parseFloat(document.documentElement.style.getPropertyValue('--vvh'));
+    const varsStale = Number.isFinite(writtenVvh) && (vv.height - writtenVvh) > 120;
+    if (!kbUp && !varsStale) { window.__vvlog?.('focusout: kb not up, no predict'); return; }
     requestAnimationFrame(() => {
       if (document.body.classList.contains('sheet-closing') || teardownQueue) return;
       if (sheet.hidden) return;
@@ -485,6 +493,13 @@ export function createSheetController(deps) {
     if (mode === 'new') {
       deps.setSelectedDate((normalizeTimestamp(ts) || nowStr()).slice(0, 10));
       deps.persistState();
+    }
+    const prevMode = sheet.hidden ? '' : (panel.dataset.mode || '');
+    if (mode === 'config' || mode === 'help' || mode === 'import-shift') {
+      if (prevMode === 'more') returnToMore = true;
+      else if (prevMode !== mode) returnToMore = false;
+    } else {
+      returnToMore = false;
     }
     panel.dataset.mode = mode;
     if (mode === 'edit') panel.dataset.id = id;
@@ -665,6 +680,14 @@ export function createSheetController(deps) {
   }
 
   function closeForm() {
+    if (returnToMore) {
+      // 二级页返回「更多」：先 blur 让键盘收起预测在旧 DOM 上跑完，再原地重渲染。
+      returnToMore = false;
+      const active = document.activeElement;
+      if (active && typeof active.blur === 'function') active.blur();
+      openMoreSheet();
+      return;
+    }
     // Cancel/backdrop/Esc with the keyboard up had the same two-jump close as
     // the save paths (P14/P16); settle first, then tear down in one frame.
     settleThenTeardown(() => {

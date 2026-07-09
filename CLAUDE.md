@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v40` / manifest `version: "40"`。
+当前版本：`timelog-v41` / manifest `version: "41"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -141,7 +141,7 @@ git diff --check
 5. Ruler/摘要显示主线、维持、漏损、未记录 4 桶；睡觉 6h 不待确认，吃饭 6h 待确认。
 5a. 亮色+暗色各打开一次带滚轮的 sheet（新建/编辑/补录），选中行文字可见、不被高亮带涂掉（P22）。
 6. 同时刻新增出现内联冲突提示，可编辑原条或用 +1min。
-7. 「···」更多菜单里下载、导入、分享、摘要、复制均可用；导出文件名带秒，JSON 按 `ts` 升序。
+7. 「···」更多菜单里下载、导入、分享、摘要、复制均可用；导出文件名带秒，JSON 按 `ts` 升序。从「更多」下钻进入标签设置/说明/导入时区平移后，取消、保存、Esc、点遮罩都回到「更多」，不是回主界面；只有在「更多」这一层关闭才整层退出（首次启动自动弹的说明无上级，直接关闭）。
 8. PWA 更新链路：改 `index.html` 后升 CACHE 号；旧页面应出现“更新应用”，点击后加载新版，本机 `localStorage['timelog.v1']` 保留。
 9. 午夜后重开仍停在上次所看日期；历史日续记无右邻时结束显示 24:00，不漏到当前时间。
 10. 日视图卡片：点编辑图标开编辑 sheet（可改内容/标签/开始时间）、点删除图标智能删除；空隙卡「补一下」、有内容段落卡「补一下/切一刀」都能正确打开有界补录/切分；「切换活动」按钮记一条并继续；卡片改动后统计立即跟着变。
@@ -199,3 +199,4 @@ git diff --check
 | v38 | 2026-07-08 | 全项目收敛（审计轮，零新功能）：header 收敛——删重复 GitHub 图标与「?」按钮（说明收进「···」，站点图标即仓库入口），smoke 说明用例改经更多菜单；帮助页「怎么记」重写为 v36 卡片语义（清 v34 rail 残留文案）；README 演示图按当前 UI + 固定 demo 数据重生成（替换 v9 时代英文截图）；死代码清理（`clampEndToNow`、5 个未调用 icon 定义、`--green` 令牌、`.edit-context`/`.edit-actions`、`.entry.editing` 残留选择器）；`.mini-btn` 透明伪元素扩 44px 热区（视觉不变，T11）；压测 A 类加预热导航修单次冷启动误报并纠正 P90 注释；文档收敛（README 功能清单/文件地图、ROADMAP 去过时编号、audit-2026-07 结果标注、原型索引「已回退/已采纳」标注）；`.gitignore` 补 `memory/` |
 | v39 | 2026-07-08 | P22 热修：亮色主题下时间滚轮选中行文字被高亮带整行涂掉（v33 令牌重写把亮色 `--accent-bg` 改为不透明色，暴露 `.wheel-highlight` 一直压在文字上方的层序错误；暗色半透明掩盖三个版本）——高亮带垫到文字层下（列 `z-index:1`/带 `z-index:0`，iOS 原生滚轮同层序）；Playwright 补层序不变量断言；更多 sheet 底部加「时间尺 vN」版本号小字（真机核对零成本），`project_audit.py` 校验 `APP_VERSION` 与版本四联动同步。P20/P21 经真机核对确认在 v37/v38 上仍存在，列入下一轮重诊断。详见 `docs/postmortems.md` P22 |
 | v40 | 2026-07-08 | vv 诊断 HUD（`?vvdebug=1` 启用，无参数零成本）：页面顶部悬浮面板显示能力探针（`navigator.share`/`canShare`/standalone/版本号）+ 最近 16 条事件时间线（原始 vv resize/scroll、focusin/out、几何写入、P20 预测/挡写/settle、glide 开关、teardown 阶段），`sheet_controller` 在决策点埋 `window.__vvlog?.()` 守卫日志——用于 SE2 真机取证两件事：P20 键盘收起跳变的事件时序（录屏逐帧比对）与「分享备份消失」（iOS 18.6 Safari 报 `navigator.share` 缺失，代码侧 v36→v39 判定逐字节未变，属设备侧能力应答变化，待 HUD 实测）。P21 状态更新：v39 真机确认排版正常（v37 块级流修复有效）；本地 WebKitGTK 不复现 v36 grid 裁行，该缺陷属 iOS 构建特有 |
+| v41 | 2026-07-09 | P23（P20 真根因，HUD 录屏确诊）：iOS 18 点键盘「完成」时 `visualViewport.height` getter 瞬间恢复、resize 事件迟 ~728ms 才派发；v37 预测门闩 `innerHeight-vv.height>120` 在 focusout 读到差值≈0 误判「键盘不在」→ 预测从不启动 → 面板挂旧几何等迟到事件（连修四轮的真相）；门闩改双条件 `kbUp`（键盘在场）**或** `varsStale`（`vv.height-已写入的--vvh>120`，即「我写的几何还停在键盘态」）——探「我写的状态是否过时」而非「世界当前状态」。P24：更多菜单「分享备份」真机消失——HUD 实测 `share:function` 能力在、代码 v36→v39 逐字节未变，强嫌疑=内容拦截器按名隐藏 `#share-btn`；防御性改 id → `backup-share-btn`（ui.js/io_actions/ui_smoke 同步），用户 aA 菜单关拦截器可 A/B 实锤。sheet 导航栈：config/help/import-shift 若从「更多」下钻进入，取消/保存/Esc/遮罩返回「更多」而非整层关闭（`returnToMore` 标志）；修 help 测试 + 新增导航返回栈回归。详见 `docs/postmortems.md` P23–P24 |

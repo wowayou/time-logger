@@ -41,3 +41,6 @@ toolkit/
 
 # Agent session notes (budget/handoff info, private).
 memory/
+
+# Design handoff bundles are external inputs, not runtime files.
+*.zip
