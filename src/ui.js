@@ -25,9 +25,8 @@ export function iconSvg(name) {
     edit: '<path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>',
     trash: '<path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path>',
     check: '<path d="M20 6 9 17l-5-5"></path>',
-    // 新发现：「···」更多按钮此前是裸文本字形，与本图标体系并存。三个零长度、
-    // round linecap 的描边线段各画成一个圆点——沿用现有 stroke-based 渲染管线
-    // （.icon-btn svg 全局 fill:none/stroke-linecap:round），无需给这一个图标开 fill 例外。
+    // 「···」更多按钮：三个零长度、round linecap 的描边线段各画成一个圆点——沿用
+    // stroke-based 渲染管线（`.hdr-action-btn svg` 全局 fill:none/stroke-linecap:round）。
     more: '<path d="M5 12h.01"></path><path d="M12 12h.01"></path><path d="M19 12h.01"></path>'
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[name] || ''}</svg>`;
@@ -57,6 +56,45 @@ export function renderRuler(totals, hasItems, view) {
       ${parts.map(part => `<span><span class="dot" style="background:var(${part.color})"></span>${part.label} ${part.percent}</span>`).join('')}
       ${totals.pending ? `<span>待确认 ${fmtMins(totals.pending)}</span>` : ''}
       <span>${fmtMins(totals.total)}</span>
+    </div>`;
+}
+
+// R4（v47）：日视图尺子从「四桶清单」改「结论卡」——主线净时长是屏幕唯一大数字，
+// 漏损为次要数字，比例条 + 百分比降为辅助。只用于 day 视图；周/月/年仍走 renderRuler。
+export function renderDayHero(totals, hasItems, opts = {}) {
+  const el = document.getElementById('ruler');
+  const { isToday = false, asOf = '' } = opts;
+  if (!hasItems || !totals.total) {
+    const text = (hasItems && !totals.total) ? '今日有计划，不计入统计' : '这一天还没有记录';
+    el.innerHTML = `<p class="muted-note">${text}</p>`;
+    return;
+  }
+  const parts = bucketParts(totals);
+  const bar = parts.map(part => {
+    // 维持段 .55 透明度（设计稿：主线/漏损为焦点，维持退到背景）。
+    const dim = part.bucket === 'maintain' ? ';opacity:0.55' : '';
+    return `<div style="flex:${part.value};background:var(${part.color})${dim}"></div>`;
+  }).join('');
+  const aux = [
+    `维持 ${fmtMins(totals.maintain)}`,
+    `未记录 ${fmtMins(totals.unrecorded)}`,
+    totals.pending ? `待确认 ${fmtMins(totals.pending)}` : '',
+    isToday && asOf ? `截至 ${asOf}` : ''
+  ].filter(Boolean).join(' · ');
+  el.innerHTML = `
+    <div class="day-hero">
+      <div class="hero-nums">
+        <div class="hero-cell">
+          <div class="hero-label">${isToday ? '今日主线' : '主线'}</div>
+          <div class="hero-big">${fmtMins(totals.job)}</div>
+        </div>
+        <div class="hero-cell">
+          <div class="hero-label">漏损</div>
+          <div class="hero-leak">${fmtMins(totals.leak)}</div>
+        </div>
+      </div>
+      <div class="hero-bar">${bar}</div>
+      <div class="hero-aux">${aux}</div>
     </div>`;
 }
 
@@ -104,39 +142,39 @@ export function renderTimeline(items, opts = {}) {
   }));
   const allItems = [...items, ...planned];
   if (!allItems.length) {
-    el.innerHTML = '<div class="empty-tip">点击上方「+ 记一条」开始记录，或切换日期查看历史。</div>';
+    el.innerHTML = '<div class="empty-tip">点右下角「＋ 记一条」开始记录，或切换日期查看历史。</div>';
     return;
   }
+  // R6（v47）：撤记录行常驻 edit/delete 图标——点整卡即编辑（删除移进编辑 sheet 内的
+  // 「删除这条」）。卡片 div 带 data-action（click 委托：closest 命中最近的 data-action，
+  // 内部 meta 按钮如补/切/确认/标记已发生仍各管各的）+ role/tabindex/aria-label（键盘
+  // Enter/Space 激活，a11y 不回退）。gap 卡点整卡=补录；非 gap 卡点整卡=编辑。
   el.innerHTML = [...allItems].reverse().map(({ e, start, end, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs, planned: isPlanned }) => {
     if (isPlanned) {
       const displayTag = (e.tags || [])[0] || '未知';
       const tagClass = ` e-tag-${bucketForTag(displayTag)}`;
-      return `<div class="entry planned" data-id="${esc(e.id)}">
+      return `<div class="entry planned" data-id="${esc(e.id)}" data-action="start-edit" role="button" tabindex="0" aria-label="编辑计划：${esc(e.what || '未填写')}">
         <div class="e-body">
           <div class="e-time">${hhmm(e.ts)}</div>
           <div class="e-what">${esc(e.what || '未填写')}</div>
           <div class="e-meta">
             <span class="e-tag e-tag-planned${tagClass}">计划·#${esc(displayTag)}</span>
+            <button class="mini-btn" type="button" data-action="confirm-planned" data-id="${esc(e.id)}" data-tip="把这条计划标记为已发生。" aria-label="标记计划为已发生">标记已发生</button>
           </div>
-        </div>
-        <div class="e-btns">
-          <button class="icon-btn save-btn" type="button" data-action="confirm-planned" data-id="${esc(e.id)}" data-tip="标记为已发生" aria-label="标记计划为已发生">${iconSvg('check')}</button>
-          <button class="icon-btn" type="button" data-action="start-edit" data-id="${esc(e.id)}" data-tip="编辑计划" aria-label="编辑计划">${iconSvg('edit')}</button>
-          <button class="icon-btn dbtn" type="button" data-action="delete-entry" data-id="${esc(e.id)}" data-tip="删除计划" aria-label="删除计划">${iconSvg('trash')}</button>
         </div>
       </div>`;
     }
     if (!e) {
       const gapTs = localDateTimeKey(start);
       const gapEnd = localDateTimeKey(end);
-      return `<div class="entry gap" data-gap-ts="${esc(gapTs)}">
+      return `<div class="entry gap" data-gap-ts="${esc(gapTs)}" data-action="backfill-seg" data-ts="${esc(gapTs)}" data-end="${esc(gapEnd)}" role="button" tabindex="0" aria-label="补录 ${hhmm(start)} 起这段未记录时间">
         <div class="e-body">
           <div class="e-time">${hhmm(start)}</div>
           <div class="e-what">这一段还没记，要补吗？</div>
           <div class="e-meta">
             <span class="e-tag e-tag-unrecorded">#未记录</span>
             <span class="e-dur">${fmtMins(mins)}</span>
-            <button class="mini-btn" type="button" data-action="backfill-seg" data-ts="${esc(gapTs)}" data-end="${esc(gapEnd)}" data-tip="在这段未记录时间补一条；结束会自动接回原状态。" aria-label="补录这段未记录时间">补一下</button>
+            <span class="e-cta">补一下</span>
           </div>
         </div>
       </div>`;
@@ -157,7 +195,8 @@ export function renderTimeline(items, opts = {}) {
     const splitBtn = segEndTs
       ? `<button class="mini-btn" type="button" data-action="backfill-seg" data-ts="${esc(segStartTs)}" data-end="${esc(segEndTs)}" data-tip="在这段里补录或切分一段；结束自动接回原标签。" aria-label="在这段里补录或切分">${splitLabel}</button>`
       : '';
-    return `<div class="${entryClass}" data-id="${esc(e.id)}">
+    const cardLabel = isPlaceholder ? '编辑这段未记录时间' : `编辑：${esc(e.what)}`;
+    return `<div class="${entryClass}" data-id="${esc(e.id)}" data-action="start-edit" role="button" tabindex="0" aria-label="${cardLabel}">
       <div class="e-body">
         <div class="e-time">${startLabel}</div>
         <div class="e-what">${esc(isPlaceholder ? (activePlaceholder ? '进行中·还没记' : '未记录') : e.what)}</div>
@@ -167,10 +206,6 @@ export function renderTimeline(items, opts = {}) {
           ${confirmable ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" data-tip="确认后按这个标签统计；相邻时间变化会自动失效。" aria-label="${esc(confirmText)}">${esc(confirmText)}</button>` : ''}
           ${splitBtn}
         </div>
-      </div>
-      <div class="e-btns">
-        <button class="icon-btn" type="button" data-action="start-edit" data-id="${esc(e.id)}" data-tip="编辑记录" aria-label="编辑记录">${iconSvg('edit')}</button>
-        <button class="icon-btn dbtn" type="button" data-action="delete-entry" data-id="${esc(e.id)}" data-tip="删除记录" aria-label="删除记录">${iconSvg('trash')}</button>
       </div>
     </div>`;
   }).join('');
@@ -237,7 +272,7 @@ export function sheetHead({ title, cancelText, cancelAction, cancelAria, doneTex
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '46';
+export const APP_VERSION = '47';
 
 export function renderMoreSheet(opts = {}) {
   let themePref = 'auto';
@@ -452,7 +487,7 @@ export function renderHelpSheet() {
   return `
     ${sheetHead({ title: '说明', cancelText: '关闭', cancelAction: 'close-form', cancelAria: '关闭说明' })}
     <div class="form-sheet-body help-body">
-      <section><h2>怎么记</h2><p>点「+ 记一条」或「切换活动」记录刚才这一阵；卡片右侧铅笔改内容、标签和开始时间，垃圾桶智能删除（两侧同标签自动愈合，否则转未记录）；空隙卡「补一下」、段落卡「补一下/切一刀」做有界补录或切分。</p></section>
+      <section><h2>怎么记</h2><p>点右下角悬浮的「＋ 记一条」记录刚才这一阵（副文案标着从哪续起）；点整张卡片进编辑，可改内容、标签和开始时间，编辑里有「删除这条」（智能删除：两侧同标签自动愈合，否则转未记录）；空隙卡点一下补录、段落卡「补一下/切一刀」做有界补录或切分；卡片也可左滑快速编辑。</p></section>
       <section><h2>4 桶</h2><p>先选归类桶，再选标签：主线=求职推进和自定义主线；维持=睡觉、吃饭、通勤等必要消耗；漏损=逃避娱乐；未记录=未知、孤儿标签和待确认长段。</p></section>
       <section><h2>计划</h2><p>计划条不计入 4 桶统计；时间到了可点「发生了」转为已发生记录。</p></section>
       <section><h2>3 小时确认</h2><p>超过 3 小时的非睡觉片段先进入未记录；确认后才按标签统计。睡觉默认 longOk，不要求确认。</p></section>

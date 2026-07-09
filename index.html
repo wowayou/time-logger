@@ -74,20 +74,25 @@
     </div>
   </div>
 
-  <button class="add-btn" id="add-btn" type="button" data-action="open-form" data-tip="打开表单，记录刚才这一阵。" aria-label="记一条新的时间记录">+ 记一条</button>
-
   <div class="ruler" id="ruler">
     <div class="ruler-bar"></div>
   </div>
 
   <div>
     <div class="tl-head">
-      <div class="tl-label" id="list-label">今日时间轴</div>
-      <button class="mini-btn switch-btn" id="switch-btn" type="button" data-action="switch-activity" data-tip="记录刚才这一阵，并继续开下一段。" aria-label="切换活动">切换活动</button>
+      <div class="tl-label" id="list-label">当日时间轴</div>
     </div>
     <div id="timeline"></div>
   </div>
 </div>
+
+<!-- R2+FAB（v47）：入口合并为右下角悬浮「记一条」（原嵌入横条 + 切换活动）。保留
+     id=add-btn（启动门闩/测试引用）。副文案由 renderChrome 按续记起点动态填。 -->
+<button class="fab" id="add-btn" type="button" data-action="open-form" hidden aria-label="记一条新的时间记录">
+  <span class="fab-main">＋ 记一条</span>
+  <span class="fab-sub" data-role="fab-sub"></span>
+</button>
+<div class="list-fade" id="list-fade" aria-hidden="true" hidden></div>
 
 <div class="update-banner" id="update-banner" hidden>
   <span>发现新版。当前数据仍保存在本机。</span>

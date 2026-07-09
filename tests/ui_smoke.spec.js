@@ -100,7 +100,9 @@ test('new entry shows continuation context and recomputes start', async ({ page 
   await expect(panel).toBeFocused();
   await expect(page.locator('[data-role="start-time-label"]')).toHaveText('10:00');
   await expect(page.locator('[data-role="duration-label"]')).not.toBeEmpty();
-  const tooltipVisibility = await page.locator('.icon-btn').first()
+  // v47 R6：记录卡不再有常驻图标按钮；tooltip 不自动显示的不变量改测一个仍带
+  // data-tip 的按钮（header「···」）——无 hover 时自定义 tooltip 的 ::after 应隐藏。
+  const tooltipVisibility = await page.locator('[data-action="open-more"]').first()
     .evaluate(btn => getComputedStyle(btn, '::after').visibility);
   expect(tooltipVisibility).toBe('hidden');
 
@@ -217,8 +219,9 @@ test('closed cross-day segment is sliced into the selected day timeline', async 
   await expect(page.locator('#period-label')).toContainText('2026/06/30');
   await expect(page.locator('#timeline')).toContainText('跨日切片记录');
   await expect(page.locator('#timeline')).toContainText('进行中·还没记');
-  await expect(page.locator('#ruler')).toContainText('维持 20.5%');
-  await expect(page.locator('#ruler')).not.toContainText('未记录 100%');
+  // v47 R4：日视图尺子改 hero 结论卡——不再有百分比文字。切片生效＝维持有非零净时长
+  // （2h35m 的睡觉从昨日切进今天），而非整天未记录（那样维持会是 0）。
+  await expect(page.locator('#ruler')).toContainText(/维持 ~2h/);
 
   const visibleTimes = await page.locator('.entry .e-time').allTextContents();
   expect(visibleTimes).toEqual(['02:35', '00:00']);
@@ -407,7 +410,8 @@ test('plan mode uses plan copy and is hidden on historical days', async ({ page 
   await page.getByRole('button', { name: '选择标签：求职推进' }).click();
   await page.getByRole('button', { name: '保存时间记录' }).click();
 
-  await expect(page.getByRole('button', { name: '计划一条新的时间记录' })).toHaveText('+ 计划一条');
+  // v47 R2+FAB：入口是悬浮 FAB；计划模式下主文案切「＋ 计划一条」（fab-main）。
+  await expect(page.locator('#add-btn .fab-main')).toHaveText('＋ 计划一条');
   await expect(page.locator('#timeline')).toContainText('计划·#求职推进');
   const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
   expect(entries).toHaveLength(1);
@@ -572,8 +576,8 @@ test('reload starts with has-entries boot state and reaches app-ready', async ({
 test('editing an existing record persists content and tag (① commitEdit single load)', async ({ page }) => {
   await boot(page, 768, 'one-record', false, FIXED_NOW);
 
-  // Open the existing record's edit sheet.
-  await page.getByRole('button', { name: '编辑记录' }).click();
+  // Open the existing record's edit sheet — v47 R6：点整卡即编辑。
+  await page.locator('.entry[data-id="today-1"] .e-what').click();
   const what = page.locator('[data-role="edit-what"]');
   await expect(what).toBeVisible();
   await expect(what).toHaveValue('响应式测试记录');
@@ -599,7 +603,8 @@ test('editing a long-note record keeps the save button on screen (SE2 textarea c
   // long note growing an uncapped textarea used to push the save ✓ off-screen.
   await boot(page, 375, 'long-note', false, FIXED_NOW);
 
-  await page.locator('.entry[data-id="today-long"] [data-action="start-edit"]').click();
+  // v47 R6：点整卡即编辑（.e-what 是卡内非交互区，点它冒泡到卡片的 start-edit）。
+  await page.locator('.entry[data-id="today-long"] .e-what').click();
   const what = page.locator('[data-role="edit-what"]');
   await expect(what).toBeVisible();
 
@@ -652,7 +657,8 @@ test('② backfill on today forces log mode even when plan pref leaked', async (
 
   // Backfill the gap before the first record on *today*. Previously the leaked
   // plan pref opened the form in 计划 mode with a past ts, so ✓ silently failed.
-  await page.getByRole('button', { name: '补录这段未记录时间' }).first().click();
+  // v47 R6：点整张 gap 卡即补录。
+  await page.locator('.entry.gap[data-action="backfill-seg"]').first().click();
   // The record-mode toggle must be hidden, and the form is in log mode.
   await expect(page.locator('[data-role="record-mode-seg"]')).toHaveCount(0);
   await page.locator('#form-what').fill('补一下');
@@ -717,7 +723,9 @@ test('deleting a standalone middle record turns its span 未记录, never the pr
 
   // 睡一会 | 写代码 | 吃早饭. Deleting 写代码 (distinct neighbors) must not stretch
   // 睡觉 over 09:00→10:00 — that span becomes an honest 未记录 placeholder.
-  await page.locator('.entry[data-id="tl-b"] [data-action="delete-entry"]').click();
+  // v47 R6：删除移进编辑 sheet——点整卡进编辑，再点「删除这条记录」。
+  await page.locator('.entry[data-id="tl-b"] .e-what').click();
+  await page.getByRole('button', { name: '删除这条记录' }).click();
 
   const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.filter(e => !e.planned));
   expect(entries.find(e => e.id === 'tl-b')).toMatchObject({ what: '', tags: [] });
@@ -745,7 +753,7 @@ test('⑥ confirming a plan onto a taken now-minute nudges forward', async ({ pa
 
 test('tapping a gap card opens the bounded backfill sheet', async ({ page }) => {
   await boot(page, 768, 'two-records', false, FIXED_NOW);
-  await page.locator('.entry.gap [data-action="backfill-seg"]').click();
+  await page.locator('.entry.gap[data-action="backfill-seg"]').click();
   await expect(page.locator('#form-sheet-title')).toContainText('补录');
   await expect(page.locator('#form-ts')).toHaveValue('2026-06-29T00:00');
   await expect(page.locator('#form-end-ts')).toHaveValue('2026-06-29T09:00');
@@ -757,7 +765,7 @@ test('wheel columns paint above the highlight band (P22)', async ({ page }) => {
   // 断言层序不变量：列必须建立高于高亮带的堆叠层。
   await page.emulateMedia({ colorScheme: 'light' });
   await boot(page, 375, 'two-records', false, FIXED_NOW);
-  await page.locator('.entry.gap [data-action="backfill-seg"]').click();
+  await page.locator('.entry.gap[data-action="backfill-seg"]').click();
   await expect(page.locator('.wheel-picker').first()).toBeVisible();
   const stacking = await page.evaluate(() => {
     const col = document.querySelector('.wheel-col');
@@ -776,7 +784,7 @@ test('wheel columns paint above the highlight band (P22)', async ({ page }) => {
 
 test('editing a record can change its start time via the wheel', async ({ page }) => {
   await boot(page, 768, 'two-records', false, FIXED_NOW);
-  await page.locator('.entry[data-id="today-1"] [data-action="start-edit"]').click();
+  await page.locator('.entry[data-id="today-1"] .e-what').click();
   // R3: 编辑态时间滚轮折叠为触发行，先点开才能看到 picker。
   await expect(page.locator('[data-role="edit-time-section"]')).toBeHidden();
   await page.locator('[data-action="toggle-edit-start-time"]').click();
@@ -791,7 +799,7 @@ test('editing a record can change its start time via the wheel', async ({ page }
 
 test('editing a saved record without touching time keeps its timestamp unchanged (R3 collapsed by default)', async ({ page }) => {
   await boot(page, 768, 'two-records', false, FIXED_NOW);
-  await page.locator('.entry[data-id="today-1"] [data-action="start-edit"]').click();
+  await page.locator('.entry[data-id="today-1"] .e-what').click();
   await expect(page.locator('[data-role="edit-time-section"]')).toBeHidden();
   await page.locator('[data-role="edit-what"]').fill('改了内容没碰时间');
   await page.getByRole('button', { name: '保存修改' }).click();
@@ -804,7 +812,7 @@ test('editing a saved record without touching time keeps its timestamp unchanged
 
 test('editing a planned entry keeps its time wheel always expanded (R3 exemption)', async ({ page }) => {
   await boot(page, 768, 'planned-only', false, FIXED_NOW);
-  await page.locator('.entry.planned[data-id="plan-1"] [data-action="start-edit"]').click();
+  await page.locator('.entry.planned[data-id="plan-1"] .e-what').click();
   await expect(page.locator('.form-sheet-panel')).toHaveAttribute('data-mode', 'edit');
   // 计划编辑不折叠：没有触发行/edit-time-section 包装，picker 直接可见。
   await expect(page.locator('[data-action="toggle-edit-start-time"]')).toHaveCount(0);

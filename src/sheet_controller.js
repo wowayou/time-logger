@@ -806,12 +806,6 @@ export function createSheetController(deps) {
     teardownNow(() => { closeForm(); deps.render(); });
   }
 
-  function switchActivity() {
-    deps.state.view = 'day';
-    deps.setSelectedDate(todayStr());
-    openFormSheet({ mode: 'new' });
-  }
-
   function getEditingBox(id = deps.getSheetEditId()) {
     return Array.from(document.querySelectorAll('.form-sheet-panel'))
       .find(el => el.dataset.id === String(id));
@@ -974,7 +968,6 @@ export function createSheetController(deps) {
     editConflictEntry,
     pickEditTag,
     commitEdit,
-    switchActivity,
     saveEntry,
     autosizeTextareas,
     updateMainlineHint,

@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "46"
+EXPECTED_VERSION = "47"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -275,9 +275,12 @@ def audit_index(errors: list[str]) -> None:
         if "data-tip=" not in attrs:
             fail(errors, f"icon button is missing data-tip near byte {match.start()}")
 
-    for tip in ("编辑计划", "删除计划", "标记为已发生"):
-        if f'data-tip="{tip}"' not in runtime and f"'{tip}'" not in runtime:
-            fail(errors, f"icon action tooltip is missing or not short: {tip}")
+    # v47：日视图卡片撤了常驻 edit/delete 图标（点整卡即编辑，删除进编辑 sheet）；
+    # 计划卡的「标记已发生」确认动作与右下角 FAB 记一条入口仍须存在。
+    if 'aria-label="标记计划为已发生"' not in runtime:
+        fail(errors, "planned card must keep the confirm-as-happened action")
+    if 'id="add-btn"' not in html or 'data-action="open-form"' not in html:
+        fail(errors, "day-view record entry (FAB #add-btn / open-form) must exist")
 
     if ".inp" not in css or "font-size: 16px" not in css:
         fail(errors, "text inputs must keep a 16px font-size floor for mobile")

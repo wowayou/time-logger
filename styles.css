@@ -256,23 +256,53 @@
       .hdr-title { display: none; }
     }
     /* Add button */
-    .add-btn {
-      width: 100%;
-      padding: 15px;
+    /* R2+FAB（v47）：右下角悬浮胶囊。fixed 相对视口——宽屏时把右偏移锚到 600px
+       居中内容列的右边缘内 16px（`50vw-284px`＝(100vw-600)/2+16），窄屏回落 16px。 */
+    .fab {
+      position: fixed;
+      right: max(16px, calc(50vw - 284px));
+      bottom: calc(16px + env(safe-area-inset-bottom));
+      z-index: 70;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1px;
+      min-height: 52px;
+      padding: 9px 18px;
       background: var(--accent);
       color: #fff;
       border: none;
-      border-radius: var(--r-card);
-      font-size: 16px;
-      font-weight: 650;
+      border-radius: 999px;
+      font-family: inherit;
       cursor: pointer;
-      margin-bottom: 12px;
-      letter-spacing: 0.3px;
       box-shadow: 0 5px 16px color-mix(in srgb, var(--accent) 30%, transparent);
-      transition: transform var(--t-fast), opacity var(--t-fast);
+      transition: transform var(--t-fast), box-shadow var(--t-fast);
     }
-    .add-btn:active { opacity: 0.85; transform: scale(0.985); }
-    .add-btn[hidden] { display: none; }
+    .fab-main { font-size: 16px; font-weight: 650; line-height: 1.15; }
+    .fab-sub {
+      font-size: var(--fs-cap);
+      color: rgba(255,255,255,0.78);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+    .fab:active {
+      transform: scale(0.97);
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 24%, transparent);
+    }
+    .fab[hidden] { display: none; }
+    @media (prefers-reduced-motion: reduce) { .fab { transition: none; } }
+    /* 列表底部渐隐遮罩 + 避让：FAB 之下、内容之上。 */
+    .list-fade {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 56px;
+      z-index: 65;
+      pointer-events: none;
+      background: linear-gradient(to bottom, transparent, var(--bg));
+    }
+    .list-fade[hidden] { display: none; }
 
     /* Unified command tooltip */
     button[data-tip] { position: relative; }
@@ -892,6 +922,57 @@
       flex-shrink: 0;
     }
 
+    /* R4（v47）：日视图结论卡（渲染进 #ruler 容器）——主线净时长唯一大数字。 */
+    .day-hero {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+    }
+    .hero-nums {
+      display: flex;
+      align-items: flex-end;
+      gap: 24px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+    .hero-cell { min-width: 0; }
+    .hero-label {
+      font-size: var(--fs-cap);
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+    .hero-big {
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 1.05;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+    .hero-leak {
+      font-size: 19px;
+      font-weight: 650;
+      line-height: 1.1;
+      color: var(--leak);
+      font-variant-numeric: tabular-nums;
+    }
+    .hero-bar {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--border);
+      display: flex;
+      overflow: hidden;
+      gap: 2px;
+    }
+    .hero-bar div:first-child { border-radius: 3px 0 0 3px; }
+    .hero-bar div:last-child { border-radius: 0 3px 3px 0; }
+    .hero-aux {
+      font-size: var(--fs-cap);
+      color: var(--faint);
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+
     /* Timeline */
     .tl-label {
       font-size: var(--fs-cap);
@@ -903,16 +984,14 @@
     .tl-head {
       display: flex;
       align-items: center;
-      justify-content: space-between;
       gap: 8px;
       min-height: 34px;
     }
-    .switch-btn {
-      min-height: 30px;
-      flex: 0 0 auto;
-    }
     #timeline { min-height: 160px; }
     html[data-boot="has-entries"] #timeline { min-height: 360px; }
+    /* R2+FAB：日视图列表底部预留 ≥72px，让最后一张卡片能滚到 FAB 上方（FAB 固定
+       在视口右下）。非日视图 FAB 隐藏，多出的底部留白无害。 */
+    #timeline { padding-bottom: 84px; }
     .entry {
       background: var(--card);
       border-radius: var(--r-card);
@@ -940,6 +1019,11 @@
     .entry.placeholder { border-color: var(--border); }
     .entry.gap { border-style: dashed; border-color: var(--border); background: transparent; box-shadow: none; }
     .entry.gap .e-what { color: var(--muted); }
+    /* R6：整卡可点（role=button）——指针手型 + 按压/聚焦反馈；键盘 focus-visible 描边。 */
+    .entry[data-action] { cursor: pointer; }
+    .entry[data-action]:active { border-color: var(--accent); }
+    .entry[data-action]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .entry[data-action]:focus:not(:focus-visible) { outline: none; }
     .e-body { flex: 1; min-width: 0; }
     .e-time { font-size: var(--fs-ui); color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
     .e-what { font-size: var(--fs-body); color: var(--text); word-break: break-word; white-space: pre-wrap; margin-bottom: 5px; }
@@ -965,40 +1049,16 @@
       overflow-wrap: anywhere;
       font-variant-numeric: tabular-nums;
     }
-    .e-btns {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      flex: 0 0 var(--icon-btn);
-      width: var(--icon-btn);
+    /* R6（v47）：gap 卡的「补一下」由 button 降级为纯提示胶囊——整卡即补录动作，
+       不再需要卡内独立按钮（避免重复 data-action / 嵌套交互）。 */
+    .e-cta {
+      font-size: var(--fs-cap);
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-bg);
+      border-radius: 9px;
+      padding: 2px 11px;
     }
-    .icon-btn {
-      width: var(--icon-btn);
-      height: var(--icon-btn);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex: 0 0 var(--icon-btn);
-      padding: 0;
-      background: transparent;
-      border: none;
-      color: var(--muted);
-      font-family: inherit;
-      cursor: pointer;
-      border-radius: 10px;
-      transition: background var(--t-fast), color var(--t-fast);
-    }
-    .icon-btn svg {
-      width: 18px;
-      height: 18px;
-      stroke: currentColor;
-      fill: none;
-      stroke-width: 2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-    .icon-btn:active { background: var(--input); }
-    .icon-btn.dbtn { color: var(--danger); }
     .mini-btn {
       position: relative;
       min-width: 0;
@@ -1164,7 +1224,6 @@
     @media (prefers-reduced-motion: reduce) {
       .entry { transition: none; }
     }
-    .icon-btn:focus:not(:focus-visible) { outline: none; }
     /* v34 C 语法 sheet 头：抓手条 + 取消/完成文字按钮 + 居中标题 */
     .sh-grab {
       flex: 0 0 auto;

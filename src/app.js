@@ -47,6 +47,8 @@ import {
   addDays,
   addMonths,
   addYears,
+  fmtMins,
+  hhmm,
   localDateKey,
   minsBetweenDates,
   normalizeTimestamp,
@@ -59,7 +61,9 @@ import {
 } from './time.js';
 import {
   APP_VERSION,
+  esc,
   iconSvg,
+  renderDayHero,
   renderRuler,
   renderSummaryRows,
   renderTimeline,
@@ -234,7 +238,11 @@ import {
     renderChrome();
     if (state.view === 'day') {
       const day = computeDay();
-      renderRuler(day.totals, day.timeline.length || day.planned.length || day.totals.total, state.view);
+      const isToday = state.selectedDate === todayStr();
+      renderDayHero(day.totals, day.timeline.length || day.planned.length || day.totals.total, {
+        isToday,
+        asOf: nowStr().slice(11, 16)
+      });
       renderTimeline(day.timeline, { sheetEditId, plannedItems: day.planned });
       lastIntervalSignature = dataSignature();
       return;
@@ -261,19 +269,23 @@ import {
       ? `${periodText} <span class="period-today-badge">今天</span>`
       : periodText;
     periodEl.setAttribute('aria-label', periodFullLabel());
+    // R2+FAB：悬浮「记一条」——只在日视图出现；主文案随计划/记录模式，副文案标注
+    // 续记起点（续 X 起 · 已 Ymin）。底部渐隐遮罩与 FAB 同步显隐。
     const addBtn = document.getElementById('add-btn');
-    const canPlanOnDate = state.selectedDate >= todayStr();
-    const preferPlan = localStorage.getItem(RECORD_MODE_KEY) === 'plan';
-    const addLabel = canPlanOnDate && preferPlan ? '+ 计划一条' : '+ 记一条';
-    addBtn.hidden = state.view !== 'day';
-    addBtn.textContent = addLabel;
-    setButtonTip(
-      addBtn,
-      canPlanOnDate && preferPlan ? '打开表单，安排接下来要做的事。' : '打开表单，记录刚才这一阵。',
-      canPlanOnDate && preferPlan ? '计划一条新的时间记录' : '记一条新的时间记录'
-    );
-    const switchBtn = document.getElementById('switch-btn');
-    if (switchBtn) switchBtn.hidden = state.view !== 'day';
+    const listFade = document.getElementById('list-fade');
+    const isDay = state.view === 'day';
+    addBtn.hidden = !isDay;
+    if (listFade) listFade.hidden = !isDay;
+    if (isDay) {
+      const canPlanOnDate = state.selectedDate >= todayStr();
+      const preferPlan = localStorage.getItem(RECORD_MODE_KEY) === 'plan';
+      const mainLabel = canPlanOnDate && preferPlan ? '＋ 计划一条' : '＋ 记一条';
+      const sub = fabSubCopy();
+      addBtn.innerHTML = `<span class="fab-main">${mainLabel}</span>${sub ? `<span class="fab-sub">${esc(sub)}</span>` : ''}`;
+      // FAB 有可见文案，不需要 hover tooltip；且 `button[data-tip]` 会把 position 强制
+      // 成 relative（tooltip 定位规则），破坏 fixed 悬浮——所以只设 aria-label，不设 data-tip。
+      addBtn.setAttribute('aria-label', canPlanOnDate && preferPlan ? '计划一条新的时间记录' : '记一条新的时间记录');
+    }
     const periodNames = { day: '天', week: '周', month: '月', year: '年' };
     const todayLabels = { day: '回到今天', week: '回到本周', month: '回到本月', year: '回到今年' };
     const todayTip = `回到包含今天的当前${periodNames[state.view]}。`;
@@ -287,8 +299,22 @@ import {
       const text = `切到${isPrev ? '上一' : '下一'}${periodNames[state.view]}。`;
       setButtonTip(btn, text, `${isPrev ? '上一' : '下一'}${periodNames[state.view]}`);
     });
-    const labels = { day: '当日时间轴', week: '本周每日汇总', month: '本月每日汇总', year: '全年每月汇总' };
+    const labels = { day: '当日时间轴 · 点卡片即编辑', week: '本周每日汇总', month: '本月每日汇总', year: '全年每月汇总' };
     document.getElementById('list-label').textContent = labels[state.view];
+  }
+
+  // R2+FAB 副文案：续记起点。今天有记录 → 「续 hh:mm 起 · 已 Ymin」；今天空 →
+  // 「今天还没记」；历史日有记录 → 「续 hh:mm 起」；历史空 → 「这天还没记」。
+  function fabSubCopy() {
+    const dateKey = state.selectedDate;
+    const isToday = dateKey === todayStr();
+    const dayLogged = load().entries.filter(e => !e.planned && e.ts.slice(0, 10) === dateKey);
+    if (!dayLogged.length) return isToday ? '今天还没记' : '这天还没记';
+    const start = defaultFormTimestamp(load().entries, dateKey);
+    if (!isToday) return `续 ${hhmm(start)} 起`;
+    const settlement = settlementEndFor(start, dateKey);
+    const dur = settlement.endTs ? minsBetweenDates(new Date(start), new Date(settlement.endTs)) : 0;
+    return `续 ${hhmm(start)} 起 · 已 ${fmtMins(dur)}`;
   }
 
   function renderSummary() {
@@ -481,7 +507,6 @@ import {
       if (action === 'today') goToday();
       if (action === 'open-form') sheetController.openForm();
       if (action === 'backfill-seg') sheetController.openFormSheet({ mode: 'new', ts: el.dataset.ts, endTs: el.dataset.end, backfill: true });
-      if (action === 'switch-activity') sheetController.switchActivity();
       if (action === 'open-help') openHelp();
       if (action === 'open-more') openMore();
       if (action === 'open-tag-config') openTagConfig();
@@ -576,9 +601,11 @@ import {
     timeline.addEventListener('touchstart', e => {
       if (e.touches.length !== 1) { reset(false); return; }
       const t = e.target.closest('.entry[data-id]');
+      // v47：卡片自身带 data-action=start-edit（R6 点整卡即编辑）；只对真实/计划记录卡
+      // 启用左滑（占位/空隙卡不参与），且手势起点不在内部 mini-btn 上（让补/切/确认自理）。
       if (!t || t.classList.contains('placeholder') || t.classList.contains('gap')) return;
-      if (!t.querySelector('[data-action="start-edit"]')) return;
-      if (e.target.closest('.e-btns') || e.target.closest('.mini-btn')) return;  // 让图标按钮自己处理
+      if (t.dataset.action !== 'start-edit') return;
+      if (e.target.closest('.mini-btn')) return;
       card = t; id = t.dataset.id;
       startX = e.touches[0].clientX; startY = e.touches[0].clientY;
       dx = 0; axis = '';
@@ -609,6 +636,15 @@ import {
     };
     document.addEventListener('touchend', end, { passive: true });
     document.addEventListener('touchcancel', () => reset(true), { passive: true });
+
+    // R6：卡片是 role=button 的 div，键盘 Enter/Space 激活（等价点击）——保 a11y 不回退。
+    timeline.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      const cardEl = e.target.closest('.entry[data-action]');
+      if (!cardEl || cardEl !== e.target) return;
+      e.preventDefault();
+      cardEl.click();
+    });
   }
 
   // --- Register SW ---
