@@ -302,26 +302,14 @@ export function createIoActions(deps) {
     return typeof navigator !== 'undefined' && typeof navigator.share === 'function';
   }
 
-  function updateShareAvailability() {
-    // id/data-action 去尽 "share" 令牌（backup-send-btn / send-backup）：本地双引擎
-    // 复现证明代码渲染可见，真机仍消失＝页面外装饰性抑制；v41 保留子串 "share" 未规避，
-    // 子串匹配的 cosmetic filter 照样命中（P24）。
-    const btn = document.getElementById('backup-send-btn');
-    if (!btn) return;
-    const supported = canUseSystemShare();
-    btn.hidden = !supported;
-    btn.setAttribute('aria-disabled', supported ? 'false' : 'true');
-  }
-
   function openMoreSheet() {
-    deps.openFormSheet({
-      mode: 'more',
-      shareSupported: canUseSystemShare()
-    });
+    deps.openFormSheet({ mode: 'more' });
   }
 
   function shareJSON() {
-    if (!canUseSystemShare()) return;
+    // v43: 分享按钮常显（不再靠能力检测 reveal——那套在 footer→更多 迁移后时序丢失，
+    // iOS 上卡在隐藏态，P24）。无 Web Share 能力时回退下载完整备份，保证永远不是死按钮。
+    if (!canUseSystemShare()) { downloadJSON(); return; }
     const json = JSON.stringify(exportData(), null, 2);
     const fname = backupFileName();
     if (navigator.canShare) {
@@ -343,7 +331,6 @@ export function createIoActions(deps) {
     cancelImportShift,
     confirmImportShift,
     handleImport,
-    updateShareAvailability,
     openMoreSheet,
     shareJSON,
     exportData

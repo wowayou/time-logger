@@ -19,11 +19,12 @@ for (const width of VIEWPORTS) {
 }
 
 for (const share of [false, true]) {
-  test(`more sheet keeps layout when share is ${share ? 'available' : 'hidden'}`, async ({ page }) => {
+  test(`more sheet keeps layout and always shows the send button (share ${share ? 'present' : 'absent'})`, async ({ page }) => {
     await boot(page, 320, 'one-record', share);
     await openBackupMenu(page);
-    if (share) await expect(page.locator('#backup-send-btn')).toBeVisible();
-    else await expect(page.locator('#backup-send-btn')).toBeHidden();
+    // v43: 分享按钮常显——不再随 Web Share 能力显隐（旧 reveal 时序在 footer→更多
+    // 迁移后丢失，iOS 卡隐藏态，P24）；无能力时点击回退下载。两种能力状态下都在。
+    await expect(page.locator('#backup-send-btn')).toBeVisible();
     await expectNoHorizontalOverflow(page);
     // P21: every visible cell row must sit fully inside its own cell-group —
     // the group must never clip a trailing row (更多菜单「分享备份」被拦腰裁半).

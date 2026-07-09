@@ -1066,35 +1066,17 @@
 
     /* Form sheet */
     .form-sheet {
+      /* v43: 恒定满布局视口，不再随键盘缩放（结构性根除 P16–P23 整类跳变）。键盘只
+         盖住底部，焦点控件靠正文滚动避开——面板几何全程不动，没有可跳的东西。 */
       position: fixed;
-      left: 0;
-      right: 0;
-      /* Track the visual viewport so the iOS keyboard cannot push the sticky
-         head (and its save ✓) off-screen. Falls back to the full layout
-         viewport when visualViewport vars are unset. */
-      top: var(--vvt, 0px);
-      height: var(--vvh, 100%);
+      inset: 0;
       z-index: 80;
       display: grid;
       align-items: end;
     }
     .form-sheet[hidden] { display: none; }
-    /* P16: present only for the one-shot settled-geometry write after a
-       keyboard burst — turns the single remaining snap into a short glide.
-       (.sheet-closing still wins during teardown and kills all transitions.) */
-    .form-sheet.vv-glide { transition: top 0.18s ease-out, height 0.18s ease-out; }
-    .form-sheet.vv-glide .form-sheet-panel {
-      transition: transform 0.25s ease-out, opacity 0.2s ease, max-height 0.18s ease-out;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .form-sheet.vv-glide,
-      .form-sheet.vv-glide .form-sheet-panel { transition: none; }
-    }
     .form-sheet-backdrop {
-      /* P19: fixed (not absolute-within-.form-sheet) so the scrim always covers
-         the full layout viewport, even the instant the keyboard collapses and
-         --vvh/--vvt haven't caught up yet — otherwise that lagging strip below
-         .form-sheet showed raw page instead of the dimmed overlay. */
+      /* fixed + inset:0：遮罩恒盖满布局视口。 */
       position: fixed;
       inset: 0;
       background: rgba(0,0,0,0.42);
@@ -1110,7 +1092,7 @@
          save ✓ off the right edge — the SE2 "can't edit" bug. Same discipline as
          the view-tabs minmax(0,1fr) guard. */
       min-width: 0;
-      max-height: min(var(--vvh, 92dvh), 720px, calc(100dvh - env(safe-area-inset-top) - 8px));
+      max-height: calc(100dvh - env(safe-area-inset-top) - 12px);
       width: 100%;
       max-width: 600px;
       margin: 0 auto;
@@ -1122,24 +1104,14 @@
       box-shadow: var(--shadow-3);
       transition: transform 0.25s ease-out, opacity 0.2s ease;
     }
-    /* P19: a "skirt" below the panel painted in the same card background —
-       when the iOS keyboard collapses faster than --vvh grows back, this
-       stands in for the not-yet-arrived full-height panel instead of exposing
-       raw page underneath, so the form reads as already full-screen while the
-       geometry settles. Sits off-screen (below the real viewport bottom) once
-       the panel is already full height, so it's a no-op in the resting state. */
-    .form-sheet-panel::after {
-      content: '';
-      position: absolute;
-      top: 100%;
-      left: 0;
-      right: 0;
-      height: 50vh;
-      background: var(--card);
-      pointer-events: none;
+    /* v43: 会召唤软键盘的表单（新建/编辑/标签设置）用定高高 sheet——头部置顶保存 ✓
+       常在、内容从顶部流下、焦点控件滚到键盘上方；面板几何不随键盘变。短 sheet
+       （更多/说明/导入平移）不加 .tall，保持内容自适应，不弹键盘也不会跳。 */
+    .form-sheet-panel.tall {
+      height: calc(100dvh - env(safe-area-inset-top) - 12px);
     }
     /* v33: sheet 进场动画（纯 CSS 渐进增强；hidden→显示时从 @starting-style 过渡进来。
-       关闭仍走 hidden 瞬断；P14 teardown 与 vv-glide 不受影响。旧浏览器无此规则=直接弹出。 */
+       关闭仍走 hidden 瞬断。旧浏览器无此规则=直接弹出。 */
     @starting-style {
       .form-sheet:not([hidden]) .form-sheet-panel { transform: translateY(18px); opacity: 0; }
       .form-sheet:not([hidden]) .form-sheet-backdrop { opacity: 0; }
@@ -1159,6 +1131,11 @@
       margin: 9px auto 0;
     }
     .form-sheet-head {
+      /* v43: 置顶不滚——键盘只盖底部，保存 ✓ 永远在顶部可达（结构性根治 P2/⑧）。 */
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      flex: 0 0 auto;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -1279,10 +1256,14 @@
       grid-template-columns: minmax(0, 1fr);
       gap: 12px;
       padding-top: 14px;
-      padding-bottom: calc(16px + env(safe-area-inset-bottom));
+      /* v43: 底部预留键盘遮挡高度 --kb，让最后一个字段能滚到键盘上方；键盘落下时
+         --kb→0，多出的内边距收回。--kb 由 sheet_controller 从 visualViewport 写，
+         只影响这个滚动内边距、不移动面板（迟到也只是晚一拍滚，不跳）。 */
+      padding-bottom: calc(16px + env(safe-area-inset-bottom) + var(--kb, 0px));
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       scroll-padding-top: 84px;
+      scroll-padding-bottom: var(--kb, 0px);
       flex: 1;
       min-height: 0;
     }
@@ -1366,21 +1347,13 @@
       .form-sheet-body {
         padding-bottom: 16px;
       }
-      /* P19 的裙边只服务底部贴边的 bottom sheet；居中 dialog 下它会在面板
-         下方露出一条卡片色矩形（v37 真机复验时在 768px 截图里发现）。 */
-      .form-sheet-panel::after { content: none; }
+      /* 居中 dialog 无软键盘：定高 .tall 收回，按内容自适应。 */
+      .form-sheet-panel.tall { height: auto; }
     }
     body.sheet-open {
       overflow: hidden;
     }
     body.sheet-open .update-banner { bottom: calc(12px + env(safe-area-inset-bottom)); }
-    /* P14: during the deferred teardown (soft keyboard collapsing before we close
-       + render) suppress transitions/animations so any residual reflow lands in a
-       single silent frame instead of animating a visible second jump. */
-    body.sheet-closing * {
-      transition: none !important;
-      animation: none !important;
-    }
 
     .empty-tip {
       text-align: center;

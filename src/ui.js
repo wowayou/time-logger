@@ -233,10 +233,9 @@ export function sheetHead({ title, cancelText, cancelAction, cancelAria, doneTex
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '42';
+export const APP_VERSION = '43';
 
 export function renderMoreSheet(opts = {}) {
-  const shareSupported = Boolean(opts.shareSupported);
   let themePref = 'auto';
   try { themePref = localStorage.getItem(THEME_KEY) || 'auto'; } catch {}
   const themeBtn = (value, label) =>
@@ -252,7 +251,7 @@ export function renderMoreSheet(opts = {}) {
         <button class="cell-btn" id="copy-btn" type="button" data-action="copy-json" aria-label="复制完整 JSON 备份">复制 JSON 备份${cellChevron}</button>
         <button class="cell-btn" type="button" data-action="download-json" aria-label="下载 JSON 备份">下载备份${cellChevron}</button>
         <button class="cell-btn" type="button" data-action="import-json" aria-label="导入 JSON 备份">导入备份${cellChevron}</button>
-        <button class="cell-btn" id="backup-send-btn" type="button" data-action="send-backup" aria-label="分享 JSON 备份"${shareSupported ? '' : ' hidden'}>分享备份${cellChevron}</button>
+        <button class="cell-btn" id="backup-send-btn" type="button" data-action="send-backup" aria-label="分享 JSON 备份">分享备份${cellChevron}</button>
       </div>
       <div class="cell-group">
         <button class="cell-btn" type="button" data-action="open-tag-config" aria-label="配置标签">标签高级设置${cellChevron}</button>

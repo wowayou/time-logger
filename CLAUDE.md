@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v42` / manifest `version: "42"`。
+当前版本：`timelog-v43` / manifest `version: "43"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -72,7 +72,7 @@
 
 - 响应式默认用 container query、CSS Grid/Flex 和文档流布局；禁止按 iPhone/iPad/设备名堆叠 viewport 补丁。
 - Header 排版固定为三行信息架构：第一行站点标识（图标即 GitHub 入口）和「···」更多入口；第二行天/周/月/年视图切换；第三行 `< 当前周期 >` 与回到今天按钮；不要把日期导航塞回第一行；说明入口在「···」更多菜单里，不放回 header。
-- 低频动作（摘要、备份四项、标签高级设置、主题、说明）收纳在「···」更多 sheet 的 cell 分组里；footer 已退役，不得重新引入常驻底栏；分享 cell 默认 hidden，由能力检测后再显示。
+- 低频动作（摘要、备份四项、标签高级设置、主题、说明）收纳在「···」更多 sheet 的 cell 分组里；footer 已退役，不得重新引入常驻底栏；分享 cell 与复制/下载/导入一样**常显**（v43：不再按能力检测显隐——旧 reveal 时序在 footer→更多 迁移后丢失、iOS 卡隐藏态，P24），点击时若无 Web Share 能力则回退下载完整备份。
 - 窄屏第一行优先保留站点标识和「···」入口；空间不足时可以隐藏站点标题文字。
 - 窄屏日期导航必须允许两行：上一段/周期/下一段一行，回到今天/本周/本月/今年独立一行；周视图窄屏周期标题可用短格式，完整日期保留在可访问标签中。
 - 日视图时间轴是卡片列表（v36 回退直接操纵 rail）：按时间倒序排列（最新在最上）；每张卡片左侧内容、右侧编辑/删除图标按钮；点编辑图标进入编辑 sheet（可改内容、标签和开始时间）；点删除图标走智能删除（两侧同标签自动愈合，否则转未记录）；空隙卡「补一下」、已有段落卡「补一下/切一刀」触发有界补录/切分；`tl-head` 内「切换活动」按钮＝记一条并继续，等价于「+ 记一条」的快捷方式。
@@ -145,7 +145,7 @@ git diff --check
 8. PWA 更新链路：改 `index.html` 后升 CACHE 号；旧页面应出现“更新应用”，点击后加载新版，本机 `localStorage['timelog.v1']` 保留。
 9. 午夜后重开仍停在上次所看日期；历史日续记无右邻时结束显示 24:00，不漏到当前时间。
 10. 日视图卡片：点编辑图标开编辑 sheet（可改内容/标签/开始时间）、点删除图标智能删除；空隙卡「补一下」、有内容段落卡「补一下/切一刀」都能正确打开有界补录/切分；「切换活动」按钮记一条并继续；卡片改动后统计立即跟着变。
-11. 新建/编辑 sheet 点「做了什么」呼出键盘：sheet 头部（取消/完成）全程不被顶出视口，随键盘展开连续滑动，无二次跳位或短暂裸露遮挡；点键盘「完成」收起键盘时，面板与键盘离场同步滑到全屏——无空白条带、无「悬停一拍再落位」的二段式位移；在两个文本框之间切换焦点（键盘不走）不触发任何面板位移。
+11. 新建/编辑 sheet 点「做了什么」呼出键盘：sheet 头部（取消/完成）置顶常在、键盘开合时面板几何一动不动（v43：`.form-sheet` 恒定满视口、`.tall` 面板定高、头部 `sticky`——不再随键盘缩放，故无任何跳变/悬停/裸露）；焦点控件自动滚到键盘上方；点键盘「完成」收起键盘只是键盘离场，面板不动；两个文本框之间切换焦点也只滚动、不移面板。禁止再引入随 `visualViewport` 移动/缩放整个 sheet 的方案（P16–P23 连修六轮的根源）。
 
 响应式手动矩阵：
 
@@ -153,7 +153,7 @@ git diff --check
 2. 360/390/412/430px：不刷新页面连续切换宽度，header/date-nav/时间轴卡片立即自适应。
 3. 768px：sheet 居中，内容不被遮挡。
 4. 横竖屏切换：打开新建/编辑 sheet 后切换宽度，时间 picker 使用当前宽度对应形态。
-5. 分享能力有/无：更多菜单里分享 cell 显示/隐藏，分组不留空缝。
+5. 分享 cell 常显：更多菜单里分享备份始终在（有无 Web Share 都在），分组不留空缝；无能力时点击回退下载。
 
 ## CHANGELOG
 
@@ -201,3 +201,4 @@ git diff --check
 | v40 | 2026-07-08 | vv 诊断 HUD（`?vvdebug=1` 启用，无参数零成本）：页面顶部悬浮面板显示能力探针（`navigator.share`/`canShare`/standalone/版本号）+ 最近 16 条事件时间线（原始 vv resize/scroll、focusin/out、几何写入、P20 预测/挡写/settle、glide 开关、teardown 阶段），`sheet_controller` 在决策点埋 `window.__vvlog?.()` 守卫日志——用于 SE2 真机取证两件事：P20 键盘收起跳变的事件时序（录屏逐帧比对）与「分享备份消失」（iOS 18.6 Safari 报 `navigator.share` 缺失，代码侧 v36→v39 判定逐字节未变，属设备侧能力应答变化，待 HUD 实测）。P21 状态更新：v39 真机确认排版正常（v37 块级流修复有效）；本地 WebKitGTK 不复现 v36 grid 裁行，该缺陷属 iOS 构建特有 |
 | v41 | 2026-07-09 | P23（P20 真根因，HUD 录屏确诊）：iOS 18 点键盘「完成」时 `visualViewport.height` getter 瞬间恢复、resize 事件迟 ~728ms 才派发；v37 预测门闩 `innerHeight-vv.height>120` 在 focusout 读到差值≈0 误判「键盘不在」→ 预测从不启动 → 面板挂旧几何等迟到事件（连修四轮的真相）；门闩改双条件 `kbUp`（键盘在场）**或** `varsStale`（`vv.height-已写入的--vvh>120`，即「我写的几何还停在键盘态」）——探「我写的状态是否过时」而非「世界当前状态」。P24：更多菜单「分享备份」真机消失——HUD 实测 `share:function` 能力在、代码 v36→v39 逐字节未变，强嫌疑=内容拦截器按名隐藏 `#share-btn`；防御性改 id → `backup-share-btn`（ui.js/io_actions/ui_smoke 同步），用户 aA 菜单关拦截器可 A/B 实锤。sheet 导航栈：config/help/import-shift 若从「更多」下钻进入，取消/保存/Esc/遮罩返回「更多」而非整层关闭（`returnToMore` 标志）；修 help 测试 + 新增导航返回栈回归。详见 `docs/postmortems.md` P23–P24 |
 | v42 | 2026-07-09 | 真机热修二诊。P23：v41 修法失手——SE2 真机 HUD 复录仍 `no predict`、面板仍跳，因 v41 的 `varsStale` 又拿 getter `vv.height` 做判断，而 focusout 那刻 getter 落在收起中途的死区(~430)，两侧 120px 阈值都够不着；改纯自写几何 `writtenIsKbState = innerHeight-已写入的--vvh > 120`（稳定量对比自写量，全程不读 getter），`318 vs 544 → 226>120` 预测在 focusout 立即触发。P24：v41「内容拦截器按名隐藏 `#share-btn`」假说被推翻（用户否认开拦截器）——本地 `share_probe.mjs` WebKit+Chromium 双引擎注入真 `navigator.share` 均 `display:flex` 可见，证明代码渲染无辜、真机消失＝页面外装饰性抑制（状态栏 VPN 徽标为头号来源）；v41 改名保留子串 "share" 故未规避，v42 去尽令牌（id `backup-send-btn`、data-action `send-backup`）+ `openFormSheet` more 渲染后加 HUD 分享探针取证，待用户关 VPN A/B。详见 `docs/postmortems.md` P23–P24 |
+| v43 | 2026-07-09 | 两处结构性重设计（停止打补丁、绕开问题）。**P23 键盘跳变根治**：连修六轮（P16→v42）认清根因是方案本身——「高度追踪键盘的 bottom sheet」每次键盘开合都要移动，而 iOS 收键盘的 vv resize 事件天生迟到 710ms，任何跟事件/预测都在赌不可靠时序。改为**面板不随键盘缩放**：`.form-sheet` 恒定 `inset:0`；召唤键盘的表单（新建/编辑/标签设置）用定高 `.tall` 面板 + 头部 `sticky top:0`（保存 ✓ 永在键盘够不到的顶部，顺带根治 P2/⑧），焦点控件 `scrollIntoView` 滚到键盘上方；`visualViewport` 只剩写 `--kb` 供正文 `scroll-padding-bottom`（只滚不移面板）。删约 200 行时序机器（predict/settle/glide/burst/`--vvt`/`--vvh`/`.vv-glide`/`settleThenTeardown`/P19 裙边/`.sheet-closing`）。**P24 分享消失根治**：用户证伪 VPN（一直开着、分享好用时也开着），真因是 footer→更多 迁移丢了 `updateShareAvailability` 的 reveal（footer 常驻 DOM 主 render 每次 reveal，更多动态渲染无 reveal，iOS 卡隐藏）；改**常显 + 点击无 Web Share 能力则回退下载**，删门闩与 `updateShareAvailability`。UI 红线（分享常显、键盘不移面板）与自测清单 5/11 同步重写；ui_smoke 分享显隐断言改常显。详见 `docs/postmortems.md` P23–P24 |

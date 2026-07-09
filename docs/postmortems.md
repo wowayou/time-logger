@@ -359,9 +359,9 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ---
 
-## P23 · 键盘收起跳变的真根因：getter 新鲜、事件迟到（v41 确诊，v42 二诊修复，P20 续篇）
+## P23 · 键盘收起跳变的真根因：getter 新鲜、事件迟到（v41 确诊，v42 二诊，v43 结构性根治，P20 续篇）
 
-**确诊日期**：2026-07-09 · **状态**：v41 修法失手（仍读 getter、中死区），v42 改自写几何二诊 · **严重度**：低（体验，短暂但连修五轮）
+**确诊日期**：2026-07-09 · **状态**：v43 结构性根治（面板不再随键盘缩放），待 SE2 真机确认 · **严重度**：低（体验，短暂但连修六轮才认清是结构问题）
 
 **现象**：P16→P18→P19→P20 四轮之后，SE2（iOS 18.6.2 Safari）真机点键盘「完成」收起键盘时，表单面板仍「悬停一拍再跳到全屏」。P20 的失焦预测（`predictKeyboardCollapse`）看似正确却从未触发。
 
@@ -385,13 +385,15 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 **经验**：事件驱动几何跟随的最后一课——**getter 与事件可以不同步**。当「读值」与「收事件」给出矛盾答案时，与其去判断难以捉摸的「世界当前状态」（本例：键盘到底在不在），不如判断确定可知的「我上一次写进 DOM 的状态是否已经过时」，据此决定是否重写。
 
-**v42 二诊（v41 修法为何仍失手）**：v41 上线后 SE2 真机 HUD 复录，`focusout` 仍打印「no predict」、面板仍跳。因为 v41 的第二条件 `varsStale = vv.height − 已写入 --vvh > 120` **又把 getter `vv.height` 掺了进来**。SE2 上 `focusout` 那一刻 getter 返回的既不是键盘态 318 也不是终态 544，而是**收起动画中途的 ~430**，正好落进死区：`kbUp = 544−430 = 114 < 120`、`varsStale = 430−318 = 112 < 120`，两侧都够不着，预测又没触发，`resize` 迟到 710ms 后才 snap。教训被自己犯了一遍：postmortem 写「探自写状态优于探世界状态」，实现时却把「自写状态」的判断建立在不可靠的 getter 上。**v42 真修**：判据改为纯自写几何——`writtenIsKbState = innerHeight − 已写入 --vvh > 120`，用稳定量 `innerHeight`（布局视口，`position:fixed` 锁 body 时恒定）对比自写量 `--vvh`，**全程不读 getter**。`writtenVvh=318, innerHeight=544 → 226 > 120 → 预测在 focusout 立即触发`。`kbUp` 仅作 getter 确读到键盘高度时的兜底。同一症状五轮的终章：探「我写的状态」就要用稳定量做对比，别让不可靠的读值从后门溜回判断里。
+**v42 二诊（v41 修法为何仍失手）**：v41 上线后 SE2 真机 HUD 复录，`focusout` 仍打印「no predict」、面板仍跳。因为 v41 的第二条件 `varsStale = vv.height − 已写入 --vvh > 120` **又把 getter `vv.height` 掺了进来**。SE2 上 `focusout` 那一刻 getter 返回的既不是键盘态 318 也不是终态 544，而是**收起动画中途的 ~430**，正好落进死区：`kbUp = 544−430 = 114 < 120`、`varsStale = 430−318 = 112 < 120`，两侧都够不着，预测又没触发，`resize` 迟到 710ms 后才 snap。教训被自己犯了一遍：postmortem 写「探自写状态优于探世界状态」，实现时却把「自写状态」的判断建立在不可靠的 getter 上。**v42 真修**：判据改为纯自写几何——`writtenIsKbState = innerHeight − 已写入 --vvh > 120`，用稳定量 `innerHeight`（布局视口，`position:fixed` 锁 body 时恒定）对比自写量 `--vvh`，**全程不读 getter**。`writtenVvh=318, innerHeight=544 → 226 > 120 → 预测在 focusout 立即触发`。`kbUp` 仅作 getter 确读到键盘高度时的兜底。
+
+**v43 结构性根治（v42 仍失手后，停止打补丁、拆掉整套方案）**：v42 真机仍跳。至此连修六轮（P16→P18→P19→P20→v41→v42）全部失败，认清**根因不是任何阈值/时序，而是方案本身**：表单是「高度追踪键盘的 bottom sheet」——`.form-sheet { height: var(--vvh) }` 随键盘缩放、`align-items:end` 面板底部锚定，所以每次键盘开合面板都必须移动；而 iOS 收键盘的 `visualViewport` resize 事件**天生迟到/稀疏**（实测迟 710ms），任何「跟事件」或「预测事件」都在赌一个不可靠时序，必然有跳的窗口。**根治=让面板不随键盘缩放**：`.form-sheet` 改 `position:fixed; inset:0` 恒定满视口；会召唤键盘的表单（新建/编辑/标签设置）用定高 `.tall` 面板，头部 `position:sticky; top:0`（保存 ✓ 永远在键盘够不到的顶部，顺带结构性根治 P2/⑧），正文可滚、焦点控件 `focusin` 里 `scrollIntoView` 滚到键盘上方；`visualViewport` 只剩一处极简用途——把键盘遮挡高度写成 `--kb` 供正文 `scroll-padding-bottom`，**只影响滚动、不移动面板**（迟到也只是晚一拍滚，不跳）。删掉约 200 行精密时序机器（`predict`/`settle`/`glide`/`burst`/`--vvt`/`--vvh`/`.vv-glide`/`settleThenTeardown`/P19 裙边）。**经验（真正的最后一课）**：同一症状修到第三轮还没好，就别再调参数了——退一步问「是不是整个方案的前提就错了」。这里的错误前提是「面板必须浮在键盘上方所以必须追踪键盘」；换成「面板满屏、键盘只盖住底部、焦点靠滚动避开」，那个不可靠的时序就被彻底移出关键路径，无可跳之处。
 
 ---
 
-## P24 · 「分享备份」入口在真机消失（v41 假说被推翻，v42 取证）
+## P24 · 「分享备份」入口在真机消失：footer→更多 迁移丢了 reveal（v41/v42 假说均错，v43 常显根治）
 
-**确诊日期**：2026-07-09 · **状态**：本地双引擎复现证明代码渲染可见 → 页面外抑制；v42 去尽 "share" 令牌 + HUD 探针，待用户关 VPN A/B · **严重度**：中（备份分享入口不可达）
+**确诊日期**：2026-07-09 · **状态**：v43 常显 + 点击回退下载根治，待 SE2 真机确认 · **严重度**：中（备份分享入口不可达）
 
 **现象**：SE2（iOS 18.6.2 Safari 标签页，状态栏全程有 VPN 徽标）真机上，更多菜单里的「分享备份」cell 彻底不出现（分组无空档、非裁切）。桌面、headless、本地 WebKit 均不复现。用户明确否认开过 Safari 内容拦截器，并指出分享按钮此前一直在、是在 P21 裁行修复之后才消失。
 
@@ -401,7 +403,11 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 **v42 修法（三管齐下）**：① **去尽 "share" 令牌**——id `backup-share-btn` → `backup-send-btn`、`data-action="share-json"` → `send-backup`（app.js 路由、io_actions `getElementById`、ui_smoke 选择器同步；内部函数名 `shareJSON`、可见文案与 `aria-label` 保留，不进选择器常见匹配面）；② **HUD 加探针**——`openFormSheet` 里 `mode==='more'` 渲染后打印 `more: send-btn hidden=… disp=… navShare=…`，真机开「更多」即得「app 自己认为它可见」的铁证；③ **用户 A/B**——关掉状态栏 VPN 那个 app 的过滤后重开对比，回来即实锤。
 
-**经验**：「代码没变、能力在、UI 却没了」把排查引向**页面之外**；但别急着钉「内容拦截器」这种具体假说——先用本地多引擎复现**证明代码侧无辜**（`share_probe.mjs` 是廉价决定性实验），再谈外因。防御靠「让元素无可匹配」：去尽语义令牌（`share`/`ad`/`social`）胜过换一个仍含旧词根的名字（v41 改了个寂寞就是教训）。
+**v41/v42 假说均被推翻，真因是 footer→更多 迁移**：用户决定性纠正——**VPN 一直开着（分享好用的那段时间也开着），不是拦截器**；按钮是「移进『更多』菜单后」才没的。核实（`git show dd0daa3~6`）：v33 footer 时代分享按钮用**一模一样**的 `${shareSupported?'':' hidden'}` 门闩却能显示——因为 footer **常驻 DOM**，主 `render()` 每次都调 `updateShareAvailability()` 把它 reveal；v34 移进「更多」sheet 后，按钮**动态渲染、且开 sheet 不触发主 render**，那次 reveal 再没跑过。渲染期门闩本应传 `shareSupported=true`（`typeof navigator.share==='function'`，iOS 上为真）——但 iOS WebKit 上它卡在隐藏态（本地 WebKitGTK 不复现，与 P21 同类 iOS 构建特有），加上没有主 render 兜底 reveal，就彻底不出现。「代码/能力/CSS 都对但按钮没了」的组合，配上「footer 有、更多 无」这个唯一结构差，指向的是**reveal 时序在迁移中丢失**，不是页面外抑制（v41 的拦截器假说、v42 的 VPN 假说都错，教训：别凭「本地不复现」就往环境甩锅，先找「能用 vs 不能用」两态之间**代码路径的真实差异**）。
+
+**v43 根治（绕开 reveal 时序）**：分享按钮与 `复制/下载/导入` 三个兄弟一样**无条件常显**（它们从不消失，因为从不靠能力 reveal）；点击时若无 Web Share 能力就**回退 `downloadJSON()`**——保证任何浏览器上都不是死按钮/隐藏按钮。删 `updateShareAvailability` 与渲染期 `hidden` 门闩。id/data-action 维持 v42 的去 "share" 令牌（`backup-send-btn`/`send-backup`）作为额外防御，不回退。
+
+**经验**：能力检测驱动的「默认隐藏、再 reveal」很脆——reveal 要么每次渲染都跑、要么就别用它做常驻可见性的唯一依赖；对「只要能力在就该常在」的入口，直接常显 + 点击时降级，比「藏起来等 reveal」稳得多。排查「A 能用 B 不能用」时，先钉两态之间**代码走了哪条不同的路**，再谈环境。
 
 ---
 

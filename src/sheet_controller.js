@@ -28,13 +28,6 @@ export function createSheetController(deps) {
   let sheetLastFocus = null;
   let sheetTrapController = null;
   let sheetResizeTimer = null;
-  let vvSettleTimer = null;
-  let vvSettleCap = null;
-  let vvGlideOffTimer = null;
-  let vvRafId = null;
-  let vvPredictionHold = false;
-  let vvPredictionDeadline = 0;
-  let teardownQueue = null;
   let formTag = '';
   let formBucket = 'job';
   let editBucket = 'job';
@@ -160,227 +153,48 @@ export function createSheetController(deps) {
     if (endMount) mountTimePicker(endMount, e, v => { endTsEl.value = v; paintBackfillDuration(panel); });
   }
 
-  // Light geometry-only write: cheap enough to call on every burst event
-  // (see scheduleVisualViewportSync below). Split out from syncVisualViewport
-  // so the burst path never pays for autosize on every frame.
-  function writeViewportVars() {
+  // v43: 面板不再随键盘缩放（结构性根除 P16–P23 整类跳变，见 docs/postmortems.md）。
+  // .form-sheet / .form-sheet-panel 几何全程恒定，键盘只是盖住底部；这里只把「被
+  // 键盘遮挡的高度」写成 --kb 供正文 scroll-padding 用，焦点控件靠原生滚动避开键盘。
+  // 因此不存在任何随键盘开合而移动的东西——iOS 那个迟到/稀疏的 vv 事件只影响 --kb
+  // 的滚动内边距（最坏让焦点控件晚一拍滚上来），永不产生面板跳变。
+  function writeKeyboardInset() {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
     if (!vv) return;
-    const root = document.documentElement;
-    // The iOS soft keyboard shrinks visualViewport and can offset it from the
-    // layout viewport; publish both so the fixed sheet overlay tracks it and
-    // the sticky head (with save ✓) stays on-screen. See docs/postmortems.md ⑧.
-    root.style.setProperty('--vvt', `${Math.max(0, vv.offsetTop)}px`);
-    root.style.setProperty('--vvh', `${vv.height}px`);
-    window.__vvlog?.(`write --vvt=${Math.max(0, Math.round(vv.offsetTop))} --vvh=${Math.round(vv.height)}`);
+    const kb = Math.max(0, Math.round(window.innerHeight - vv.height));
+    document.documentElement.style.setProperty('--kb', `${kb}px`);
+    window.__vvlog?.(`--kb=${kb}`);
   }
 
-  function syncVisualViewport() {
-    writeViewportVars();
-    // The keyboard opening/closing changes the viewport height the textarea cap
-    // is derived from; re-run autosize so a long note re-clamps to the new fold.
-    const openSheet = document.querySelector('#form-sheet:not([hidden]) .form-sheet-panel');
-    if (openSheet) autosizeTextareas(openSheet);
-  }
-
-  function clearVisualViewport() {
-    const root = document.documentElement;
-    root.style.removeProperty('--vvt');
-    root.style.removeProperty('--vvh');
-  }
-
-  // P16/P18: iOS animates the soft keyboard with a burst of discrete
-  // visualViewport resize/scroll events. P16 waited for the burst to go quiet
-  // (60ms; 400ms cap) before writing geometry at all, which stopped the
-  // "二排抖动" (2-3 visible jumps) but left the sheet parked on stale geometry
-  // for the whole keyboard animation — long enough for iOS to shove the fixed
-  // sheet's head off-screen while revealing the focused control (P18: "表单
-  // 遮挡"). Fix: keep writing geometry on every burst event (rAF-batched to at
-  // most once per frame), but do it while .vv-glide's CSS transition is
-  // already engaged, so the discrete writes become one continuous slide
-  // instead of either "stale then snap" (old bug) or "jump 2-3 times" (P16's
-  // original bug). The settle timers below now only own the FINAL pass:
-  // autosize (needs the fold to have stopped moving) and keeping the focused
-  // control in view.
-  function clearViewportSettleTimers() {
-    clearTimeout(vvSettleTimer);
-    clearTimeout(vvSettleCap);
-    clearTimeout(vvGlideOffTimer);
-    if (vvRafId !== null) cancelAnimationFrame(vvRafId);
-    vvSettleTimer = null;
-    vvSettleCap = null;
-    vvGlideOffTimer = null;
-    vvRafId = null;
-    vvPredictionHold = false;
-  }
-
-  // P20: after a blur the keyboard-collapse end state is fully known, so
-  // predictKeyboardCollapse() glides the sheet there immediately. While the
-  // keyboard is still mid-collapse, vv events report intermediate (shrunken)
-  // heights — writing those would drag the sheet back down. This gate blocks
-  // geometry writes for that window; a hard deadline keeps it from wedging.
-  function predictionBlocksWrite() {
-    if (!vvPredictionHold) return false;
-    if (Date.now() > vvPredictionDeadline) {
-      vvPredictionHold = false;
-      return false;
-    }
-    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
-    return Boolean(vv && (window.innerHeight - vv.height) > 120);
-  }
-
-  function ensureGlide() {
-    const sheet = document.getElementById('form-sheet');
-    if (!sheet || sheet.hidden) return;
-    if (!sheet.classList.contains('vv-glide')) window.__vvlog?.('glide ON');
-    sheet.classList.add('vv-glide');
-    clearTimeout(vvGlideOffTimer);
-    vvGlideOffTimer = null;
-  }
-
-  function scheduleGlideOff() {
-    const sheet = document.getElementById('form-sheet');
-    if (!sheet) return;
-    clearTimeout(vvGlideOffTimer);
-    vvGlideOffTimer = setTimeout(() => { window.__vvlog?.('glide OFF'); sheet.classList.remove('vv-glide'); }, 260);
-  }
-
-  function scheduleVisualViewportSync() {
-    if (document.body.classList.contains('sheet-closing')) return;
-    ensureGlide();
-    if (vvRafId === null) {
-      vvRafId = requestAnimationFrame(() => {
-        vvRafId = null;
-        if (document.body.classList.contains('sheet-closing')) return;
-        // P20: mid-collapse events must not drag the predicted geometry back.
-        if (predictionBlocksWrite()) { window.__vvlog?.('write BLOCKED (predict hold)'); return; }
-        writeViewportVars();
-      });
-    }
-    clearTimeout(vvSettleTimer);
-    vvSettleTimer = setTimeout(applySettledViewport, 60);
-    if (!vvSettleCap) vvSettleCap = setTimeout(applySettledViewport, 400);
-  }
-
-  function applySettledViewport() {
-    clearTimeout(vvSettleTimer);
-    clearTimeout(vvSettleCap);
-    vvSettleTimer = null;
-    vvSettleCap = null;
-    if (document.body.classList.contains('sheet-closing')) return;
-    // P20: the keyboard is still mid-collapse — stamping this stale geometry
-    // would yank the sheet back down. Check again shortly; the prediction
-    // deadline bounds this loop.
-    if (predictionBlocksWrite()) {
-      window.__vvlog?.('settle deferred (hold)');
-      vvSettleTimer = setTimeout(applySettledViewport, 60);
-      return;
-    }
-    vvPredictionHold = false;
-    const sheet = document.getElementById('form-sheet');
-    const open = Boolean(sheet && !sheet.hidden);
-    window.__vvlog?.('SETTLE apply');
-    syncVisualViewport();
-    // Once the keyboard has settled, keep the focused control inside the
-    // (possibly much shorter) fold instead of under the keyboard.
-    const active = document.activeElement;
-    const panel = open ? sheet.querySelector('.form-sheet-panel') : null;
-    if (panel && active instanceof HTMLElement && panel.contains(active)
-        && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) {
-      active.scrollIntoView({ block: 'nearest' });
-    }
-    if (open) scheduleGlideOff();
-  }
-
-  // P20: the collapse's end state is fully known at blur time — body is locked
-  // position:fixed, so layout viewport == keyboardless visual viewport. Glide
-  // there NOW, in sync with the keyboard's own exit animation, instead of
-  // waiting for sparse/late vv events: the growth happens behind the departing
-  // keyboard and lands as one continuous slide instead of a hang-then-jump
-  // (P19 only painted over the exposed strip; the content itself still jumped).
-  function predictKeyboardCollapse(sheet) {
-    window.__vvlog?.(`PREDICT collapse → vvh=${window.innerHeight}`);
-    vvPredictionHold = true;
-    vvPredictionDeadline = Date.now() + 700;
-    ensureGlide();
-    const root = document.documentElement;
-    root.style.setProperty('--vvt', '0px');
-    root.style.setProperty('--vvh', `${window.innerHeight}px`);
-    // Re-clamp textareas to the final fold in the same slide, so they don't
-    // grow a second time when the settle pass lands.
-    const panel = sheet.querySelector('.form-sheet-panel');
-    if (panel) autosizeTextareas(panel, window.innerHeight);
-    // Own the finish even if iOS fires no further vv events.
-    clearTimeout(vvSettleTimer);
-    vvSettleTimer = setTimeout(applySettledViewport, 120);
-    if (!vvSettleCap) vvSettleCap = setTimeout(applySettledViewport, 400);
-  }
-
-  function onSheetFocusOut(e) {
-    if (document.body.classList.contains('sheet-closing') || teardownQueue) return;
-    const sheet = document.getElementById('form-sheet');
-    if (!sheet || sheet.hidden) return;
-    const from = e.target;
-    if (!(from instanceof HTMLElement) || !sheet.contains(from)) return;
-    if (from.tagName !== 'TEXTAREA' && from.tagName !== 'INPUT') return;
-    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
-    if (!vv) return;
-    // P23 二诊（v42）：只信「我写进 CSS 的几何」，绝不拿 vv.height getter 做判断——
-    // SE2 上点键盘「完成」时，getter 在 focusout 那一刻落在收起动画中途的死区(~430)，
-    // 既非键盘态 318 也非终态 544，两侧 120px 阈值都够不着；v41 的 varsStale（比 getter）
-    // 因此漏判，面板挂旧几何等迟到 ~710ms 的 resize 才跳（录屏 HUD 实测）。而我们上次写的
-    // --vvh=318 明确是键盘态：text 控件刚失焦 + 自写几何仍是键盘高度 = 键盘正在走，立即
-    // 预测到终态。判据用稳定量 innerHeight 对比自写量，不掺 getter。
-    const writtenVvh = parseFloat(document.documentElement.style.getPropertyValue('--vvh'));
-    const writtenIsKbState = Number.isFinite(writtenVvh) && (window.innerHeight - writtenVvh) > 120;
-    const kbUp = (window.innerHeight - vv.height) > 120;  // 兜底：getter 确实读到键盘高度时
-    if (!kbUp && !writtenIsKbState) { window.__vvlog?.('focusout: geometry not kb-state, no predict'); return; }
-    requestAnimationFrame(() => {
-      if (document.body.classList.contains('sheet-closing') || teardownQueue) return;
-      if (sheet.hidden) return;
-      const active = document.activeElement;
-      // Focus hopped to another text control inside the sheet: keyboard stays.
-      if (active instanceof HTMLElement && sheet.contains(active)
-          && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) { window.__vvlog?.('predict skip (focus stayed)'); return; }
-      predictKeyboardCollapse(sheet);
-    });
+  function clearKeyboardInset() {
+    document.documentElement.style.removeProperty('--kb');
   }
 
   function onSheetFocusIn(e) {
-    if (!vvPredictionHold) return;
     const sheet = document.getElementById('form-sheet');
     if (!sheet || sheet.hidden) return;
     const to = e.target;
-    // Keyboard is coming back: drop the prediction, resume normal tracking.
-    if (to instanceof HTMLElement && sheet.contains(to)
-        && (to.tagName === 'TEXTAREA' || to.tagName === 'INPUT')) {
-      window.__vvlog?.('focusin text → hold cleared');
-      vvPredictionHold = false;
-    }
+    if (!(to instanceof HTMLElement) || !sheet.contains(to)) return;
+    if (to.tagName !== 'TEXTAREA' && to.tagName !== 'INPUT') return;
+    // 把焦点控件滚到键盘上方。这是滚动、不是几何变更——即便 iOS 的 vv/键盘事件迟到，
+    // 最坏也只是晚一拍把控件滚上来，绝不会像旧方案那样让整个面板跳。
+    requestAnimationFrame(() => to.scrollIntoView({ block: 'center' }));
   }
 
   function attachVisualViewport() {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
-    if (!vv) return;
-    syncVisualViewport();
-    vv.addEventListener('resize', scheduleVisualViewportSync);
-    vv.addEventListener('scroll', scheduleVisualViewportSync);
-    document.addEventListener('focusout', onSheetFocusOut);
+    if (vv) {
+      writeKeyboardInset();
+      vv.addEventListener('resize', writeKeyboardInset);
+    }
     document.addEventListener('focusin', onSheetFocusIn);
   }
 
   function detachVisualViewport() {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
-    if (vv) {
-      vv.removeEventListener('resize', scheduleVisualViewportSync);
-      vv.removeEventListener('scroll', scheduleVisualViewportSync);
-    }
-    document.removeEventListener('focusout', onSheetFocusOut);
+    if (vv) vv.removeEventListener('resize', writeKeyboardInset);
     document.removeEventListener('focusin', onSheetFocusIn);
-    clearViewportSettleTimers();
-    const sheet = document.getElementById('form-sheet');
-    if (sheet) sheet.classList.remove('vv-glide');
-    clearVisualViewport();
+    clearKeyboardInset();
   }
 
   function lockBodyForSheet() {
@@ -425,17 +239,13 @@ export function createSheetController(deps) {
     }, { signal: sheetTrapController.signal });
   }
 
-  function autosizeTextareas(scope = document, viewHOverride = 0) {
-    // Grow to fit content, but CAP the height so a long note can never push the
-    // rest of the form (or the save ✓) past the visible area — on iPhone SE2 with
-    // the soft keyboard up the visual viewport is ~250px, so an uncapped textarea
-    // full of text swallows the whole panel and the record becomes uneditable.
-    // Past the cap the textarea scrolls internally (overflow-y auto below).
-    // viewHOverride: P20 的失焦预测路径在键盘还没收完时就按"收起后的终态高度"
-    // 重排 textarea，避免 settle 时 textarea 再长一截造成面板内二次位移。
-    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
-    const viewH = viewHOverride || (vv && vv.height) || (typeof window !== 'undefined' ? window.innerHeight : 0) || 0;
-    const cap = viewH ? Math.max(88, Math.round(viewH * 0.32)) : 200;
+  function autosizeTextareas(scope = document) {
+    // Grow to fit content, but CAP the height so one long note can't swallow the
+    // whole panel. cap 用稳定的 innerHeight（v43：面板定高、正文可滚，不再读随键盘
+    // 缩放的 vv.height——否则键盘一开 cap 就缩、textarea 重排造成内容位移）。超过 cap
+    // 后 textarea 内部滚动（overflow-y auto below）。
+    const viewH = (typeof window !== 'undefined' ? window.innerHeight : 0) || 0;
+    const cap = viewH ? Math.max(120, Math.round(viewH * 0.4)) : 260;
     scope.querySelectorAll('textarea.ta').forEach(textarea => {
       textarea.style.height = 'auto';
       const target = Math.min(Math.max(textarea.scrollHeight, 52), cap);
@@ -504,6 +314,10 @@ export function createSheetController(deps) {
       returnToMore = false;
     }
     panel.dataset.mode = mode;
+    // v43: 只有会召唤软键盘的表单（新建/编辑/标签设置）用定高高 sheet——内容从顶部流下、
+    // 焦点控件滚到键盘上方，面板几何不随键盘变。不弹键盘的短 sheet（更多/说明/导入平移）
+    // 保持内容自适应 bottom sheet，避免短菜单底部空一截。
+    panel.classList.toggle('tall', mode === 'new' || mode === 'edit' || mode === 'config');
     if (mode === 'edit') panel.dataset.id = id;
     else delete panel.dataset.id;
     panel.innerHTML = renderFormSheet({
@@ -513,7 +327,6 @@ export function createSheetController(deps) {
       entries: deps.load().entries,
       importShiftHours: opts && opts.importShiftHours,
       importShiftHint: opts && opts.importShiftHint,
-      shareSupported: typeof navigator !== 'undefined' && typeof navigator.share === 'function',
       targetDate: deps.state.selectedDate,
       isToday: deps.state.selectedDate === todayStr(),
       isHistoryDay: isHistoryDate(),
@@ -522,10 +335,8 @@ export function createSheetController(deps) {
       defaultBucket: formBucket,
       recordMode: formRecordMode
     });
-    // ① Set the visualViewport geometry (--vvt/--vvh) BEFORE revealing the sheet
-    // so the fixed overlay paints at the right size on the first frame instead of
-    // snapping "small → bigger" a frame later (v30 bug1). lockBodyForSheet runs the
-    // initial syncVisualViewport.
+    // v43: 面板几何恒定，开合键盘不再改 sheet 尺寸；lockBodyForSheet 锁滚动 + 起初
+    // 写一次 --kb 供正文 scroll-padding。
     lockBodyForSheet();
     sheet.hidden = false;
     if (mode === 'more' && window.__vvlog) {
@@ -562,63 +373,12 @@ export function createSheetController(deps) {
     });
   }
 
-  function softKeyboardUp() {
-    // Heuristic for "the iOS soft keyboard is currently on screen": an input/
-    // textarea holds focus AND the visual viewport is much shorter than the
-    // layout viewport. Desktop, headless (Playwright) and no-keyboard closes all
-    // fall through to false and keep the original synchronous teardown.
-    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
-    if (!vv) return false;
+  // v43: 面板不再随键盘缩放后，关闭无需再等键盘 settle（旧 P14/P16 的二次重排源于
+  // 关闭时面板还在追踪键盘几何——现在几何恒定，关就是关）。blur 收键盘 → 同步关闭渲染。
+  function teardownNow(run) {
     const active = document.activeElement;
-    const isInput = Boolean(active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT'));
-    const shrunk = (window.innerHeight - vv.height) > 120;
-    return isInput && shrunk;
-  }
-
-  // P14: defer the sheet teardown until the soft keyboard has finished collapsing,
-  // then close + render in a single frame — otherwise iOS dismisses the keyboard
-  // AFTER our synchronous close and reflows the viewport a beat later, painting a
-  // visible second jump on save. Only engaged when a keyboard is actually up;
-  // desktop/headless run `run()` immediately so UI smoke never sees a deferral.
-  function settleThenTeardown(run) {
-    // A teardown is already waiting for the keyboard: join it instead of
-    // running synchronously (Escape fires cancelEdit AND closeForm — the
-    // second call arrives after blur, when softKeyboardUp() is false again).
-    if (teardownQueue) { teardownQueue.push(run); return; }
-    if (!softKeyboardUp()) { window.__vvlog?.('TEARDOWN sync (kb down)'); run(); return; }
-    const vv = window.visualViewport;
-    const active = document.activeElement;
-    window.__vvlog?.('TEARDOWN start (kb up)');
-    teardownQueue = [run];
-    document.body.classList.add('sheet-closing');
-    // The teardown owns geometry from here; drop any pending settled-sync so
-    // the still-visible sheet can't grow to the restored viewport mid-close.
-    clearViewportSettleTimers();
     if (active && typeof active.blur === 'function') active.blur();
-    let done = false;
-    let settleTimer = null;
-    let cap = null;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      window.__vvlog?.('TEARDOWN finish');
-      vv.removeEventListener('resize', onResize);
-      clearTimeout(settleTimer);
-      clearTimeout(cap);
-      requestAnimationFrame(() => {
-        const queued = teardownQueue || [];
-        teardownQueue = null;
-        queued.forEach(fn => fn());
-        requestAnimationFrame(() => document.body.classList.remove('sheet-closing'));
-      });
-    };
-    const onResize = () => {
-      clearTimeout(settleTimer);
-      settleTimer = setTimeout(finish, 60);
-    };
-    vv.addEventListener('resize', onResize);
-    // Cap: if the keyboard never reports a resize, don't hang the teardown.
-    cap = setTimeout(finish, 250);
+    run();
   }
 
   function closeFormSheet(opts = {}) {
@@ -700,7 +460,7 @@ export function createSheetController(deps) {
     }
     // Cancel/backdrop/Esc with the keyboard up had the same two-jump close as
     // the save paths (P14/P16); settle first, then tear down in one frame.
-    settleThenTeardown(() => {
+    teardownNow(() => {
       const mode = closeFormSheet();
       if (mode === 'edit') deps.render();
     });
@@ -727,7 +487,7 @@ export function createSheetController(deps) {
   }
 
   function cancelEdit() {
-    settleThenTeardown(() => {
+    teardownNow(() => {
       const changed = Boolean(deps.getSheetEditId() || getSheetMode() === 'edit');
       closeEditSheet();
       if (changed) deps.render();
@@ -941,7 +701,7 @@ export function createSheetController(deps) {
       d.entries.push({ id: deps.uid(), ts: checked.ts, what, tags: [tag], planned: true });
       deps.save(d);
       deps.setSelectedDate(checked.ts.slice(0, 10));
-      settleThenTeardown(() => { closeForm(); deps.render(); });
+      teardownNow(() => { closeForm(); deps.render(); });
       return;
     }
     if (placeholder) {
@@ -958,7 +718,7 @@ export function createSheetController(deps) {
     normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
     deps.save(d);
     deps.setSelectedDate(checked.ts.slice(0, 10));
-    settleThenTeardown(() => { closeForm(); deps.render(); });
+    teardownNow(() => { closeForm(); deps.render(); });
   }
 
   // 「补/切」: bounded insert into a segment. Carve [start, end) as the new label,
@@ -991,7 +751,7 @@ export function createSheetController(deps) {
     normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
     deps.save(d);
     deps.setSelectedDate(startChecked.ts.slice(0, 10));
-    settleThenTeardown(() => { closeForm(); deps.render(); });
+    teardownNow(() => { closeForm(); deps.render(); });
   }
 
   function switchActivity() {
@@ -1052,7 +812,7 @@ export function createSheetController(deps) {
       deps.save(d);
     }
     deps.setSelectedDate(checked.ts.slice(0, 10));
-    settleThenTeardown(() => { closeEditSheet(); deps.render(); });
+    teardownNow(() => { closeEditSheet(); deps.render(); });
   }
 
   function toggleStartTime(el) {

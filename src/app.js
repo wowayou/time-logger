@@ -246,7 +246,6 @@ import {
       const text = `切到${isPrev ? '上一' : '下一'}${periodNames[state.view]}。`;
       setButtonTip(btn, text, `${isPrev ? '上一' : '下一'}${periodNames[state.view]}`);
     });
-    ioActions.updateShareAvailability();
     const labels = { day: '当日时间轴', week: '本周每日汇总', month: '本月每日汇总', year: '全年每月汇总' };
     document.getElementById('list-label').textContent = labels[state.view];
   }
