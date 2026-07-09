@@ -411,6 +411,24 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ---
 
+## P25 · 新版发布后用户端一直吃旧缓存（v44，可能是 v41–v43「还是没修好」的元凶）
+
+**确诊日期**：2026-07-09 · **状态**：v44 改主动检查 + 静默自动更新，本地验证通过，待真机确认 · **严重度**：高（掩盖了所有前序修复的真机验证——用户以为在测新版，其实一直是旧缓存）
+
+**现象**：用户报「GitHub Pages 没更新」。核实：Pages **确已发布** v43（live `sw.js` = `timelog-v43`、live `sheet_controller.js` 含 v43 的 `writeKeyboardInset`、Pages API `status: built`），仓库与线上一致。问题在**用户设备的 Service Worker 缓存**——旧 SW 用 cache-first 策略把旧文件一直喂给页面。
+
+**根因**：`registerServiceWorker` 只做了两件不够的事——注册时 `register('sw.js')` 只触发浏览器**隐式**的更新检查，从不显式 `reg.update()`；发现新版也只是把「更新应用」横幅 `hidden=false`。iOS Safari（尤其加到主屏的 standalone PWA）**不会主动/及时复查 `sw.js`**，横幅又是屏幕底部一条、极易被忽略/不知道要点。于是「Pages 已发新版」和「用户看到新版」之间断了：新版永远到不了真机。**这极可能是 v41→v42→v43 一路「还是没修好」的元凶**——每次真机测的可能都是旧缓存，我的 P23 二诊（v42）、乃至 v43 结构重设计，都未必在真机上干净加载过；据此推断「还在跳」并再改，是在错误前提上迭代。
+
+**修法（`src/app.js` registerServiceWorker）**：① **主动复查**——冷启动立即 `reg.update()`，并在 `visibilitychange → visible`（每次切回前台）再 `reg.update()`，把 iOS 那套「懒得查」彻底绕开；② **静默自动更新**——新 SW 到 `installed`/`waiting` 且有 controller 时：表单开着（可能正在输入）才弹横幅让用户自己点，否则直接 `skipWaiting` + 单次 `reload` 自动切新版（`localStorage` 数据不受 SW 更新影响，无损）。`controllerchange` 仅在 `updateReloading` 时 reload，无循环风险。
+
+**验证**：本地 Chromium 双版本模拟——注册旧 SW 控制页面后，把磁盘上的 `sw.js` CACHE 改名模拟发新版，`reg.update()` 后 2.5s 内缓存自动从旧名切到新名、页面自动 reload，全程零点击。iOS standalone 的复查时机仍需真机确认，但「一旦查到新版就自动装上」这段已确定可靠。
+
+**用户侧一次性解卡（旧 SW 里没有本 fix，需手动清一次）**：iOS Safari 标签页——设置 → Safari → 高级 → 网站数据 → 搜 `wowayou` → 左滑删除，重开即拿最新；或直接「清除历史记录与网站数据」。主屏 PWA——删掉图标重新「添加到主屏幕」。清一次拿到 v44 后，此后所有新版都会自动更新，不用再清。手动触发一次 Pages 构建（排查用，不影响缓存问题）：`gh api -X POST repos/<owner>/<repo>/pages/builds`。
+
+**经验**：**「修了但用户说没用」先怀疑「用户到底加载到没有」**——离线优先的 PWA 里，「已部署」≠「已送达」，SW 缓存会把新版拦在门外。验证一个真机修复前，先确认真机加载的版本号（本项目更多 sheet 底部有「时间尺 vN」、`?vvdebug=1` HUD 也显示版本，正是为此）。更新链路本身必须主动 + 自动，别指望用户去点一条容易被忽略的横幅。
+
+---
+
 ## 协作约束补记（v28）
 
 - 多步改动走主线程；避免并发 fan-out 子代理 / workflow（上游会 429，串行 workflow 亦然）。已同步进 `CLAUDE.md` / `AGENTS.md`「开发与维护红线」。

@@ -514,13 +514,32 @@ import {
       if (updateReloading) window.location.reload();
     });
     navigator.serviceWorker.register('sw.js').then(reg => {
-      if (reg.waiting && navigator.serviceWorker.controller) showUpdatePrompt(reg);
+      // 新版就绪时的处置：表单开着（可能正在输入）就用横幅让用户自己点，不打断；
+      // 否则直接静默更新（skipWaiting + 单次 reload）。旧版只弹横幅，而 iOS Safari
+      // 里横幅常被忽略、SW 又不主动复查 sw.js，导致 GitHub Pages 已发新版、用户端
+      // 却一直吃旧缓存（历次「还是没更新」的真凶）。localStorage 数据不受 SW 更新影响。
+      const consider = () => {
+        if (updateReloading) return;
+        if (!reg.waiting || !navigator.serviceWorker.controller) return;
+        const sheet = document.getElementById('form-sheet');
+        if (sheet && !sheet.hidden) { showUpdatePrompt(reg); return; }
+        pendingUpdateRegistration = reg;
+        applyUpdate();
+      };
+      consider();
       reg.addEventListener('updatefound', () => {
         const worker = reg.installing;
         if (!worker) return;
         worker.addEventListener('statechange', () => {
-          if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdatePrompt(reg);
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) consider();
         });
+      });
+      // 主动、及时地复查新版本——iOS Safari（尤其 standalone PWA）不会主动/及时
+      // 复查 sw.js。每次冷启动 + 每次切回前台都强制 update()，让新版尽快到达。
+      const checkForUpdate = () => { reg.update().catch(() => {}); };
+      checkForUpdate();
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') checkForUpdate();
       });
     }).catch(() => {});
   }
