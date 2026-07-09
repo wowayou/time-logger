@@ -721,3 +721,28 @@ test('editing a record can change its start time via the wheel', async ({ page }
   const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
   expect(entries.find(e => e.id === 'today-1').ts).toBe('2026-06-29T09:10');
 });
+
+test.describe('swipe-left to edit (mobile gesture)', () => {
+  test.use({ hasTouch: true });
+  test('swiping a record card left opens its edit sheet', async ({ page }) => {
+    await boot(page, 375, 'two-records', false, FIXED_NOW);
+    const card = page.locator('.entry[data-id="today-2"]');
+    await expect(card).toBeVisible();
+    const box = await card.boundingBox();
+    const y = box.y + box.height / 2;
+    await page.evaluate(({ startX, y }) => {
+      const body = document.querySelector('.entry[data-id="today-2"] .e-body');
+      const mk = x => new Touch({ identifier: 1, target: body, clientX: x, clientY: y, pageX: x, pageY: y });
+      const fire = (type, x) => {
+        const tl = type === 'touchend' ? [] : [mk(x)];
+        body.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: tl, targetTouches: tl, changedTouches: [mk(x)] }));
+      };
+      fire('touchstart', startX);
+      for (let i = 1; i <= 8; i++) fire('touchmove', startX - i * 12);
+      fire('touchend', startX - 96);
+    }, { startX: box.x + box.width * 0.6, y });
+    await expect(page.locator('#form-sheet')).toBeVisible();
+    await expect(page.locator('.form-sheet-panel')).toHaveAttribute('data-mode', 'edit');
+    await expect(page.locator('.form-sheet-panel')).toHaveAttribute('data-id', 'today-2');
+  });
+});

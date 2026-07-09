@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v44` / manifest `version: "44"`。
+当前版本：`timelog-v45` / manifest `version: "45"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -75,7 +75,7 @@
 - 低频动作（摘要、备份四项、标签高级设置、主题、说明）收纳在「···」更多 sheet 的 cell 分组里；footer 已退役，不得重新引入常驻底栏；分享 cell 与复制/下载/导入一样**常显**（v43：不再按能力检测显隐——旧 reveal 时序在 footer→更多 迁移后丢失、iOS 卡隐藏态，P24），点击时若无 Web Share 能力则回退下载完整备份。
 - 窄屏第一行优先保留站点标识和「···」入口；空间不足时可以隐藏站点标题文字。
 - 窄屏日期导航必须允许两行：上一段/周期/下一段一行，回到今天/本周/本月/今年独立一行；周视图窄屏周期标题可用短格式，完整日期保留在可访问标签中。
-- 日视图时间轴是卡片列表（v36 回退直接操纵 rail）：按时间倒序排列（最新在最上）；每张卡片左侧内容、右侧编辑/删除图标按钮；点编辑图标进入编辑 sheet（可改内容、标签和开始时间）；点删除图标走智能删除（两侧同标签自动愈合，否则转未记录）；空隙卡「补一下」、已有段落卡「补一下/切一刀」触发有界补录/切分；`tl-head` 内「切换活动」按钮＝记一条并继续，等价于「+ 记一条」的快捷方式。
+- 日视图时间轴是卡片列表（v36 回退直接操纵 rail）：按时间倒序排列（最新在最上）；每张卡片左侧内容、右侧编辑/删除图标按钮；点编辑图标进入编辑 sheet（可改内容、标签和开始时间）；点删除图标走智能删除（两侧同标签自动愈合，否则转未记录）；空隙卡「补一下」、已有段落卡「补一下/切一刀」触发有界补录/切分；`tl-head` 内「切换活动」按钮＝记一条并继续，等价于「+ 记一条」的快捷方式。v45：可编辑记录卡（真实/计划，非占位/空隙）支持**左滑即编辑**（移动端手势快捷方式，等价点铅笔）——`app.js registerCardSwipe`，`.entry` 用 `touch-action: pan-y` 让纵向滚动归浏览器、横向手势归左滑；桌面/无触屏仍用右侧图标。
 - 表单 sheet 只按宽度适配：`>=720px` 居中 dialog，`<720px` bottom sheet；不要用 `pointer:fine` 决定视觉布局。
 - 统一 sheet 头部语法：抓手条 + 左「取消/关闭」右「完成/保存」文字按钮 + 居中标题；正文低频列表用 cell 分组（inset 底 + 内分隔线）；cell 分组容器用块级流布局、不用 grid——iOS WebKit 对 grid auto 轨道内 button 的 min-height 计量有缺陷，会累计裁掉最后一行（P21）。
 - 时间选择器只按宽度选择 wheel/desktop picker；打开表单后跨断点 resize 或旋转屏幕时，必须按当前宽度重挂载，不能停留在旧 picker。
@@ -203,3 +203,4 @@ git diff --check
 | v42 | 2026-07-09 | 真机热修二诊。P23：v41 修法失手——SE2 真机 HUD 复录仍 `no predict`、面板仍跳，因 v41 的 `varsStale` 又拿 getter `vv.height` 做判断，而 focusout 那刻 getter 落在收起中途的死区(~430)，两侧 120px 阈值都够不着；改纯自写几何 `writtenIsKbState = innerHeight-已写入的--vvh > 120`（稳定量对比自写量，全程不读 getter），`318 vs 544 → 226>120` 预测在 focusout 立即触发。P24：v41「内容拦截器按名隐藏 `#share-btn`」假说被推翻（用户否认开拦截器）——本地 `share_probe.mjs` WebKit+Chromium 双引擎注入真 `navigator.share` 均 `display:flex` 可见，证明代码渲染无辜、真机消失＝页面外装饰性抑制（状态栏 VPN 徽标为头号来源）；v41 改名保留子串 "share" 故未规避，v42 去尽令牌（id `backup-send-btn`、data-action `send-backup`）+ `openFormSheet` more 渲染后加 HUD 分享探针取证，待用户关 VPN A/B。详见 `docs/postmortems.md` P23–P24 |
 | v43 | 2026-07-09 | 两处结构性重设计（停止打补丁、绕开问题）。**P23 键盘跳变根治**：连修六轮（P16→v42）认清根因是方案本身——「高度追踪键盘的 bottom sheet」每次键盘开合都要移动，而 iOS 收键盘的 vv resize 事件天生迟到 710ms，任何跟事件/预测都在赌不可靠时序。改为**面板不随键盘缩放**：`.form-sheet` 恒定 `inset:0`；召唤键盘的表单（新建/编辑/标签设置）用定高 `.tall` 面板 + 头部 `sticky top:0`（保存 ✓ 永在键盘够不到的顶部，顺带根治 P2/⑧），焦点控件 `scrollIntoView` 滚到键盘上方；`visualViewport` 只剩写 `--kb` 供正文 `scroll-padding-bottom`（只滚不移面板）。删约 200 行时序机器（predict/settle/glide/burst/`--vvt`/`--vvh`/`.vv-glide`/`settleThenTeardown`/P19 裙边/`.sheet-closing`）。**P24 分享消失根治**：用户证伪 VPN（一直开着、分享好用时也开着），真因是 footer→更多 迁移丢了 `updateShareAvailability` 的 reveal（footer 常驻 DOM 主 render 每次 reveal，更多动态渲染无 reveal，iOS 卡隐藏）；改**常显 + 点击无 Web Share 能力则回退下载**，删门闩与 `updateShareAvailability`。UI 红线（分享常显、键盘不移面板）与自测清单 5/11 同步重写；ui_smoke 分享显隐断言改常显。详见 `docs/postmortems.md` P23–P24 |
 | v44 | 2026-07-09 | P25 SW 更新可达性：旧 `registerServiceWorker` 只弹「更新应用」横幅、且从不主动 `reg.update()`——iOS Safari（尤其 standalone PWA）不及时复查 `sw.js`、横幅又常被忽略，导致 GitHub Pages 已发新版、用户端一直吃旧缓存（历次「还是没更新/还是没修好」的真凶：v41–v43 很可能从未在真机干净加载过）。改为：① 冷启动 + 每次 `visibilitychange` 转前台都 `reg.update()` 强制复查；② 新版就绪时——表单开着就弹横幅（不打断输入），否则**静默 skipWaiting + 单次 reload 自动更新**（`localStorage` 数据不受影响）。本地 Chromium 双版本模拟验证：模拟发新版后缓存自动切到新 CACHE 且页面自动 reload，零点击。发布仍走 GitHub Pages 主分支根目录直发；手动触发一次构建可用 `gh api -X POST repos/<owner>/<repo>/pages/builds`。详见 `docs/postmortems.md` P25 |
+| v45 | 2026-07-09 | 左滑即编辑（用户请求）：可编辑记录卡（真实/计划）支持左滑打开编辑 sheet，等价点右侧铅笔的移动端手势快捷方式；`app.js registerCardSwipe`（touchstart 认卡→touchmove 判轴/跟手/`preventDefault` 横向→touchend 超 56px 阈值即 `startEdit`），`.entry` 加 `touch-action: pan-y`（纵向滚动归浏览器、横向手势归左滑，互不抢）；占位/空隙卡不参与，图标按钮/桌面路径不变。Playwright 补 Chromium 合成触摸 swipe 断言（真机手感待确认）。键盘（v43）经无痕真机确认已修；分享按钮真机仍缺——代码 v43 起无条件常显、live 已核，无痕（绕缓存但不绕系统级 VPN 过滤）仍缺，强指向 VPN 装饰规则，待用户 `?vvdebug=1` HUD 读数 + 关 VPN A/B 定案 |

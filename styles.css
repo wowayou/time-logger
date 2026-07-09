@@ -899,6 +899,9 @@
       border: 1px solid transparent;
       min-width: 0;
       box-shadow: var(--shadow-1), var(--top-light);
+      /* 纵向滚动仍归浏览器、横向手势归左滑编辑处理器（app.js registerCardSwipe），
+         两者互不抢；transform 落在自己的合成层，回弹平滑。 */
+      touch-action: pan-y;
     }
     .entry.sheet-editing { border-color: var(--accent); }
     .entry.placeholder { border-color: var(--border); }

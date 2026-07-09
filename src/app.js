@@ -507,6 +507,64 @@ import {
     if (b && !b.hidden) render();
   }
 
+  // 左滑记录卡＝编辑（移动端手势快捷方式，桌面/无触屏仍用右侧铅笔图标）。
+  // 只对可编辑的真实/计划卡生效；占位/空隙卡不参与。CSS 给 .entry 加 touch-action:
+  // pan-y，让纵向滚动仍归浏览器、横向手势归这里，互不抢。
+  function registerCardSwipe() {
+    const TRIGGER = 56;   // 左滑超过这么多 px 松手即进入编辑
+    const MAX = 84;       // 视觉最多跟手这么多 px
+    let card = null, id = '', startX = 0, startY = 0, dx = 0, axis = '';
+
+    function reset(animate) {
+      if (card) {
+        const c = card;
+        c.style.transition = animate ? 'transform 0.2s ease' : '';
+        c.style.transform = '';
+        if (animate) setTimeout(() => { c.style.transition = ''; }, 220);
+      }
+      card = null; id = ''; dx = 0; axis = '';
+    }
+
+    const timeline = document.getElementById('timeline');
+    if (!timeline) return;
+    timeline.addEventListener('touchstart', e => {
+      if (e.touches.length !== 1) { reset(false); return; }
+      const t = e.target.closest('.entry[data-id]');
+      if (!t || t.classList.contains('placeholder') || t.classList.contains('gap')) return;
+      if (!t.querySelector('[data-action="start-edit"]')) return;
+      if (e.target.closest('.e-btns') || e.target.closest('.mini-btn')) return;  // 让图标按钮自己处理
+      card = t; id = t.dataset.id;
+      startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+      dx = 0; axis = '';
+      card.style.transition = '';
+    }, { passive: true });
+
+    document.addEventListener('touchmove', e => {
+      if (!card || e.touches.length !== 1) return;
+      const ddx = e.touches[0].clientX - startX;
+      const ddy = e.touches[0].clientY - startY;
+      if (!axis) {
+        if (Math.abs(ddx) < 8 && Math.abs(ddy) < 8) return;
+        axis = Math.abs(ddx) > Math.abs(ddy) + 4 ? 'x' : 'y';
+        if (axis === 'y') { reset(false); return; }  // 纵向＝滚动，放手给浏览器
+      }
+      if (axis !== 'x') return;
+      dx = Math.max(-MAX, Math.min(0, ddx));  // 只响应左滑
+      card.style.transform = `translateX(${dx}px)`;
+      if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+
+    const end = () => {
+      if (!card) return;
+      const editId = id;
+      const go = axis === 'x' && dx <= -TRIGGER;
+      reset(true);
+      if (go) sheetController.startEdit(editId);
+    };
+    document.addEventListener('touchend', end, { passive: true });
+    document.addEventListener('touchcancel', () => reset(true), { passive: true });
+  }
+
   // --- Register SW ---
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
@@ -631,6 +689,7 @@ import {
     exposeTestApi();
   } else {
     registerActions();
+    registerCardSwipe();
     registerServiceWorker();
     initVvDebugHud();
     init();
