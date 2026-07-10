@@ -180,9 +180,15 @@ export function createIoActions(deps) {
     copyText(buildCurrentViewSummaryMarkdown(), document.getElementById('summary-btn'), '✓ 已复制', '复制当前视图摘要');
   }
 
-  function downloadJSON() {
+  function backupArtifact() {
     const json = JSON.stringify(exportData(), null, 2);
     const fname = backupFileName();
+    let file = null;
+    try { file = new File([json], fname, { type: 'application/json' }); } catch {}
+    return { json, fname, file };
+  }
+
+  function directDownloadBackup({ json, fname }) {
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -190,6 +196,37 @@ export function createIoActions(deps) {
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
+  function prefersSystemFileSave() {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent || '';
+    return /iPad|iPhone|iPod/.test(ua)
+      || (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints) > 1);
+  }
+
+  function canShareFile(file) {
+    if (!file || !canUseSystemShare() || typeof navigator.canShare !== 'function') return false;
+    try { return Boolean(navigator.canShare({ files: [file] })); } catch { return false; }
+  }
+
+  async function downloadJSON() {
+    const artifact = backupArtifact();
+    const btn = document.getElementById('backup-download-btn');
+    // iOS Safari/主屏 PWA 对 Blob + a.download 可能只发起请求却不真正落盘，页面也
+    // 没有完成事件可核实。文件分享面板能让用户明确选择「存储到文件」及目标目录。
+    if (prefersSystemFileSave() && canShareFile(artifact.file)) {
+      try {
+        await navigator.share({ files: [artifact.file], title: `时间尺完整备份 ${artifact.fname}` });
+        setCopyFeedback(btn, true, '已完成存储', '存储备份');
+        return;
+      } catch (error) {
+        // 用户取消代表明确不保存，不能偷偷回退成一个去向不明的浏览器下载。
+        if (isShareCancellation(error)) return;
+      }
+    }
+    directDownloadBackup(artifact);
+    setCopyFeedback(btn, true, '请在下载项确认', '存储备份');
   }
 
   function parseImportShiftHours(raw) {
@@ -368,33 +405,29 @@ export function createIoActions(deps) {
   async function shareJSON() {
     // v43: 分享按钮常显（不再靠能力检测 reveal——那套在 footer→更多 迁移后时序丢失，
     // iOS 上卡在隐藏态，P24）。无 Web Share 能力时回退下载完整备份，保证永远不是死按钮。
-    if (!canUseSystemShare()) { downloadJSON(); return; }
-    const json = JSON.stringify(exportData(), null, 2);
-    const fname = backupFileName();
+    const artifact = backupArtifact();
+    if (!canUseSystemShare()) {
+      directDownloadBackup(artifact);
+      return;
+    }
     const btn = document.getElementById('backup-send-btn');
-    let file = null;
-    try { file = new File([json], fname, { type: 'application/json' }); } catch {}
-    if (file && typeof navigator.canShare === 'function') {
-      let canShareFile = false;
-      try { canShareFile = Boolean(navigator.canShare({ files: [file] })); } catch {}
-      if (canShareFile) {
-        try {
-          await navigator.share({ files: [file], title: `时间尺完整备份 ${fname}` });
-          setCopyFeedback(btn, true, '已分享备份', '分享备份');
-          return;
-        } catch (error) {
-          if (isShareCancellation(error)) return;
-        }
+    if (canShareFile(artifact.file)) {
+      try {
+        await navigator.share({ files: [artifact.file], title: `时间尺完整备份 ${artifact.fname}` });
+        setCopyFeedback(btn, true, '已分享备份', '分享备份');
+        return;
+      } catch (error) {
+        if (isShareCancellation(error)) return;
       }
     }
     try {
-      await navigator.share({ title: `时间尺完整备份 ${fname}`, text: json });
+      await navigator.share({ title: `时间尺完整备份 ${artifact.fname}`, text: artifact.json });
       setCopyFeedback(btn, true, '已分享备份', '分享备份');
       return;
     } catch (error) {
       if (isShareCancellation(error)) return;
     }
-    downloadJSON();
+    directDownloadBackup(artifact);
     setCopyFeedback(btn, true, '已下载备份', '分享备份');
   }
 

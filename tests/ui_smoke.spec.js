@@ -367,7 +367,7 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
   const downloadPromise = page.waitForEvent('download');
   // v41：确认导入后导航栈返回「更多」，无需再点 header，直接在此点下载。
   await expect(page.locator('#form-sheet-title')).toHaveText('更多');
-  await page.getByRole('button', { name: '下载 JSON 备份' }).click();
+  await page.getByRole('button', { name: '存储 JSON 备份' }).click();
   const download = await downloadPromise;
   const exportPath = await download.path();
   const exported = JSON.parse(await readFile(exportPath, 'utf8'));
@@ -1104,6 +1104,54 @@ test('share prefers files, survives canShare exceptions, and preserves cell stru
   });
   await page.locator('#backup-send-btn').click();
   await expect.poll(() => page.evaluate(() => window.__shareCalls)).toEqual([{ files: true, text: false }]);
+});
+
+test('iOS storage uses the system file sheet, while cancellation never creates a hidden download', async ({ page }) => {
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  await page.evaluate(() => {
+    window.__shareCalls = [];
+    window.__fallbackClicks = 0;
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X)' });
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: 'iPhone' });
+    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 5 });
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: payload => Boolean(payload.files) });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: payload => { window.__shareCalls.push({ files: Boolean(payload.files), name: payload.files?.[0]?.name || '' }); return Promise.resolve(); }
+    });
+    HTMLAnchorElement.prototype.click = function () { window.__fallbackClicks += 1; };
+  });
+  await openBackupMenu(page);
+  await expect(page.locator('#backup-download-btn')).toHaveText(/存储备份/);
+  await expect(page.locator('#backup-send-btn')).toBeVisible();
+  await page.locator('#backup-download-btn').click();
+  await expect.poll(() => page.evaluate(() => window.__shareCalls)).toEqual([
+    { files: true, name: expect.stringMatching(/^timelog-\d{8}-\d{6}\.json$/) }
+  ]);
+  expect(await page.evaluate(() => window.__fallbackClicks)).toBe(0);
+
+  await page.evaluate(() => {
+    window.__shareCalls = [];
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: payload => {
+        window.__shareCalls.push({ files: Boolean(payload.files) });
+        return Promise.reject(new DOMException('cancelled', 'AbortError'));
+      }
+    });
+  });
+  await page.locator('#backup-download-btn').click();
+  await expect.poll(() => page.evaluate(() => window.__shareCalls)).toEqual([{ files: true }]);
+  expect(await page.evaluate(() => window.__fallbackClicks)).toBe(0);
+});
+
+test('desktop storage remains a direct JSON download', async ({ page }) => {
+  await boot(page, 768, 'one-record', false, FIXED_NOW);
+  await openBackupMenu(page);
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#backup-download-btn').click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^timelog-\d{8}-\d{6}\.json$/);
 });
 
 test('share falls back to download without Web Share and cancellation never downloads', async ({ page }) => {

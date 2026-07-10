@@ -281,7 +281,7 @@ export function sheetHead({ title, cancelText, cancelAction, cancelAria, doneTex
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '49';
+export const APP_VERSION = '50';
 
 export function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -331,7 +331,7 @@ export function renderMoreSheet(opts = {}) {
       <div class="form-hint">摘要只含当前视图，可贴给 AI；下面四项均为完整 JSON 备份，全部在本机完成。</div>
       <div class="cell-group">
         <button class="cell-btn" id="copy-btn" type="button" data-action="copy-json" aria-label="复制完整 JSON 备份"><span data-role="cell-label">复制 JSON 备份</span>${cellChevron}</button>
-        <button class="cell-btn" type="button" data-action="download-json" aria-label="下载 JSON 备份"><span data-role="cell-label">下载备份</span>${cellChevron}</button>
+        <button class="cell-btn" id="backup-download-btn" type="button" data-action="download-json" aria-label="存储 JSON 备份"><span data-role="cell-label">存储备份</span>${cellChevron}</button>
         <button class="cell-btn" type="button" data-action="import-json" aria-label="导入 JSON 备份"><span data-role="cell-label">导入备份</span>${cellChevron}</button>
         <button class="cell-btn" id="backup-send-btn" type="button" data-action="send-backup" aria-label="分享 JSON 备份"><span data-role="cell-label">分享备份</span>${cellChevron}</button>
       </div>
@@ -567,7 +567,7 @@ export function renderHelpSheet() {
       <section><h2>4 桶</h2><p>先选归类桶，再选标签：主线=求职推进和自定义主线；维持=睡觉、吃饭、通勤等必要消耗；漏损=逃避娱乐；未记录=未知、孤儿标签和待确认长段。</p></section>
       <section><h2>计划</h2><p>计划条不计入 4 桶统计；时间到了可点「发生了」转为已发生记录。</p></section>
       <section><h2>3 小时确认</h2><p>超过 3 小时的非睡觉片段先进入未记录；确认后才按标签统计。睡觉默认 longOk，不要求确认。</p></section>
-      <section><h2>备份与合并</h2><p>右上角「···」更多菜单含复制、下载、分享、导入完整 JSON；分享会依次尝试文件、文本和下载。导入会先完整预检，发现同 ID 不同内容或同时刻冲突时整批停止，不会静默覆盖。</p></section>
+      <section><h2>备份与合并</h2><p>右上角「···」更多菜单含复制、存储、分享、导入完整 JSON；iPhone/iPad 点「存储备份」会打开系统菜单，可明确选择「存储到文件」和目录，其他浏览器使用下载。分享会依次尝试文件、文本和下载。导入会先完整预检，发现同 ID 不同内容或同时刻冲突时整批停止，不会静默覆盖。</p></section>
       <section><h2>离线更新</h2><p>首次联网后可离线使用。发现新版时会显示「更新应用」，只有你点击后才刷新；记录和标签仍保留在本机。</p></section>
       <section><h2>双设备时区</h2><p>时间按设备壁钟保存，不做自动转换。导入时可整体平移 ±N 小时来对齐。</p></section>
       <section><h2>屏幕与隐私</h2><p>本应用不会主动保持屏幕常亮；数据只存在本机浏览器。</p></section>

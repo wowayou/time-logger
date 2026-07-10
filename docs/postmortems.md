@@ -463,6 +463,22 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ---
 
+## P28 · Safari 点击下载却没有可查的备份文件（v50）
+
+**确诊日期**：2026-07-10 · **状态**：v50 改系统文件面板，待 iOS Safari/主屏 PWA 真机确认 · **严重度**：高（用户以为完成备份，实际无法在 Files 找到文件）
+
+**现象**：6 月 30 日通过旧路径保存的 `timelog-*.json` 仍在 Files/Downloads，但当天从 Safari 新点「下载备份」后，同一目录和搜索均找不到新文件。页面没有报错，也没有能力判断 Safari 是否真正落盘。「分享备份」入口在 Safari 标签页仍可能因旧缓存/真机渲染状态不可见，而主屏 PWA 与桌面可见。
+
+**根因**：原实现用 `Blob → URL.createObjectURL → 隐藏 a.download → a.click()` 发起程序化下载。浏览器没有提供下载完成事件；iOS Safari 可能接受点击却未把 Blob 文件可靠写入 Files，应用仍无法区分“已保存”“进了别的下载目录”或“根本没落盘”。这条路径把关键的备份成功交给了不可观测行为。
+
+**修法**：更多菜单「下载备份」改名「存储备份」。iPhone/iPad（含 iPadOS 桌面 UA）且支持文件 Web Share 时，直接 `navigator.share({ files })` 打开系统面板，让用户明确选择「存储到文件」和目录；用户取消 (`AbortError`) 即停止，不暗中回退成去向不明的下载。能力探测失败或非 Apple 移动平台才保留 Blob 下载。复制、存储、分享复用同一份完整 JSON artifact；独立「分享备份」仍按文件→文本→下载降级并始终渲染。
+
+**护栏**：Playwright Chromium/WebKit 覆盖三条路径：模拟 iPhone 时「存储备份」必须调用文件分享且文件名为 `timelog-YYYYMMDD-HHMMSS.json`；取消后隐藏下载点击数保持 0；桌面仍触发真实 download 事件。同时既有双能力状态用例继续断言「分享备份」cell 无条件可见。
+
+**经验**：备份动作的首要目标不是“发起过”，而是用户能指出文件在哪里。平台提供可选目录的系统面板时，应优先选择可确认去向的交互；对没有完成回执的下载，只能称“已请求下载”，不能当作备份成功。
+
+---
+
 ## 协作约束补记（v28）
 
 - 多步改动走主线程；避免并发 fan-out 子代理 / workflow（上游会 429，串行 workflow 亦然）。已同步进 `CLAUDE.md` / `AGENTS.md`「开发与维护红线」。
