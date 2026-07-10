@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "48"
+EXPECTED_VERSION = "49"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",

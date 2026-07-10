@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v48` / manifest `version: "48"`。
+当前版本：`timelog-v49` / manifest `version: "49"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -74,6 +74,7 @@
 - Header 排版固定为三行信息架构：第一行站点标识（图标即 GitHub 入口）和「···」更多入口；第二行天/周/月/年视图切换；第三行 `< 当前周期 >` 与回到今天按钮；不要把日期导航塞回第一行；说明入口在「···」更多菜单里，不放回 header。v46（R5）：回到今天/本周/本月/今年按钮**条件渲染**——只在当前周期已不含今天时出现；`.date-nav` 用 `:has(#today-btn[hidden])` 在 ≥430px 断点收窄 grid 列数，避免显式轨道在按钮隐藏后留死区。当前周期含今天时，`#period-label` 内追加常驻 `.period-today-badge`（「今天」高亮字样）。「···」按钮改 `iconSvg('more')`（三点，零长度 round-linecap 描边），app.js `registerActions` 一次性注入（唯一不走 JS 模板渲染的图标按钮）。
 - 低频动作（摘要、备份四项、标签高级设置、主题、说明）收纳在「···」更多 sheet 的 cell 分组里；footer 已退役，不得重新引入常驻底栏；分享 cell 与复制/下载/导入一样**常显**（v43：不再按能力检测显隐——旧 reveal 时序在 footer→更多 迁移后丢失、iOS 卡隐藏态，P24），点击时若无 Web Share 能力则回退下载完整备份。
 - 窄屏第一行优先保留站点标识和「···」入口；空间不足时可以隐藏站点标题文字。
+- Header 站点标识旁显示纯本地「使用第 N 天」；首次初始化写入 `timelog.firstUsedDate`，已有记录的老用户以最早本机记录日期迁移，之后不因联网、版本更新或导入更早历史而倒拨。
 - 窄屏日期导航必须允许两行：上一段/周期/下一段一行，回到今天/本周/本月/今年独立一行；周视图窄屏周期标题可用短格式，完整日期保留在可访问标签中。
 - 日视图时间轴是卡片列表（v36 回退直接操纵 rail）：按时间倒序排列（最新在最上）。点卡片编辑（卡片是 `role="button" tabindex="0"` 的 `div[data-action]`，键盘 Enter/Space 激活）；空隙卡点整卡=补录；已有段落卡 meta 里「补一下/切一刀」触发有界补录/切分；计划卡 meta 有「标记已发生」。**v48 区间编辑**：普通已发生记录编辑完整开始—结束，不能跨自然日、越过相邻记录或产生零时长；共享边界变化必须实时预览前/本/后三段。今日尾段可选「至今」或固定结束，固定结束后自动留下未记录尾段；计划记录仍只编辑计划时刻。**v48 切分**：打开时冻结原段边界，两端只允许在段内选择，预览内部/贴边/整段结果，禁止吞掉其它记录。**v48 删除**：应用内确认 sheet 显示确切结果；仅前后内容和标签完全一致时接回，其余已发生记录转同区间未记录，计划直接移除；成功后 8 秒撤销，检测到其它标签页修改即取消撤销。**v48 左滑轨道**：仅触摸/触控笔启用，水平轴锁定、跟手拖动并吸附到 2×72px「编辑/删除」，一次只开一张，纵向滚动或点空白关闭；桌面和键盘继续点卡编辑、编辑页删除。右下角 FAB、hero 结论卡与 gap/planned 视觉区分保持 v47/v46 规则。
 - 表单 sheet 只按宽度适配：`>=720px` 居中 dialog，`<720px` bottom sheet；不要用 `pointer:fine` 决定视觉布局。
@@ -214,3 +215,4 @@ git diff --check
 | v46 | 2026-07-09 | 设计交接包第一批（R1/R3/R5/R7 + 新发现，纯 CSS/小 JS，零模型改动）。**R1**：sheet 关闭改 class 驱动过渡（`.sheet-closing`）+ `transitionend`/320ms 兜底后置 hidden，与进场 `@starting-style` 对称；`sheetCloseCleanup` 挡重入（`editConflictEntry` 关了立刻重开一类场景，关闭动画未播完就先立即收尾旧的）；`prefers-reduced-motion` 同步隐藏。**R3**：编辑态时间选择折叠为触发行（点击展开滚轮），与新建态一致；计划编辑例外始终展开；`commitEdit` 校验失败时先展开触发行再报错，避免报错文案落进折叠容器看不见。**R5**：回到今天/本周/本月/今年按钮只在当前周期已不含今天时出现；`.date-nav` 用 `:has(#today-btn[hidden])` 收窄 grid 列数避免显式轨道留死区；当前周期含今天时 `#period-label` 追加常驻 `.period-today-badge`。**R7**：切视图/切周期后内容方向性滑入（280ms，`animateContentEnter`）+ 列表卡片入场淡入（140ms，纯 `opacity`——刻意不碰 `transform`，避免与左滑手势的驱动属性共用 transition 让拖拽变卡顿）；不做 FLIP/逐项 diff。**新发现**：`.ruler-bar` 分段缝改 `--border`（不再透出 `--card` 导致两主题缝视觉重量不一致）；gap 卡（空隙）与 planned 卡（有内容的未来计划）视觉区分（gap 保留 dashed，planned 改实线+accent 淡色调）；「···」更多按钮从裸文本字形换 `iconSvg('more')`（app.js 一次性注入，唯一不走 JS 模板渲染的图标按钮）。 |
 | v47 | 2026-07-09 | 设计交接包第二批：日视图 DOM 形态重做（方案 1a「静尺」+ 悬浮 FAB，用户已授权破 UI 红线；只改日视图，周/月/年不动）。**R4** 尺子出结论——`renderDayHero` 把日视图 `#ruler` 改 hero 结论卡：主线净时长唯一大数字（32px/700）、漏损 19px 次要、6px 比例条（维持段 .55 透明）、辅助行「维持/未记录/截至」；周/月/年仍走 `renderRuler`。**R2+FAB** 入口收敛——删嵌入式「+记一条」横条与「切换活动」按钮（连同 `switchActivity`），合并为右下角悬浮 FAB（保留 `id=add-btn`，`fixed` 右偏移锚 600px 列右边缘内 16px，副文案「续 hh:mm 起 · 已 Ymin」由续记模型派生，只设 aria-label 不设 data-tip——`button[data-tip]` 会强制 position:relative 破坏悬浮）；列表底 `padding-bottom:84px` 避让 + `.list-fade` 渐隐遮罩，与 FAB 同步显隐。**R6** 撤记录行常驻图标——删卡片 edit/delete 图标，点整卡即编辑（卡片 `role=button tabindex=0 div[data-action]`，键盘 Enter/Space 激活，delegated click 靠 `closest` 让卡内 meta 按钮优先）；删除移进编辑 sheet 的「删除这条」；gap 卡点整卡补录（卡内「补一下」降级 `.e-cta` 纯提示）、段落卡 meta 保留「补/切/确认」、计划卡 meta「标记已发生」；`registerCardSwipe` 判据改 `dataset.action==='start-edit'`。UI 红线（日视图卡片/入口/hero）+ 自测清单 2/5/10 重写；帮助页「怎么记」重写；ui_smoke 断言全面适配（点整卡/点 gap 卡/FAB 文案/hero 无百分比），双主题截图自验，53/53 全绿。 |
 | v48 | 2026-07-10 | 时间轴可信交互与离线可靠性修复：统一事务 planner 驱动完整区间编辑、冻结边界切分、精确删除预览与最新数据二次确认；今日尾段支持「至今/固定」，删除提供 8 秒冲突安全撤销；触摸/笔左滑改 2×72px 编辑/删除轨道。导入改 Map 整批预检并阻止 ID/同刻冲突，修默认标签复活、主线/chip 同名、首次固定文案与用户文本 DOM 注入。分享按文件→文本→下载可靠降级并区分取消；SW 安装/激活/fetch 收紧，waiting 更新只在用户点击后应用，更新提示层级高于 FAB。补最小对比度/a11y 语义，Playwright 启用 Chromium+WebKit 并覆盖区间、删除、撤销、导入、分享、跨标签和更新提示。 |
+| v49 | 2026-07-10 | 修复 iOS standalone 下 sticky 更新提示与 fixed FAB 分层导致「更新应用」视觉可见但命中区被挡：提示改为 fixed，并保持在 FAB 上方、sheet 下方；移动端 smoke 增加不重叠与 `elementFromPoint` 可点击护栏。Header 新增纯本地「使用第 N 天」：首次写入本机起始日期，老用户按最早本机记录迁移，按自然日离线计算。 |

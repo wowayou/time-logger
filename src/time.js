@@ -35,6 +35,16 @@ export function parseDateKey(key) {
   return d;
 }
 
+export function inclusiveCalendarDayCount(startKey, endKey) {
+  const start = parseDateKey(startKey);
+  const end = parseDateKey(endKey);
+  if (!start || !end) return 1;
+  // 用 UTC 日序只比较日历日期，避开夏令时造成的 23/25 小时自然日。
+  const startDay = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const endDay = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+  return Math.max(1, Math.round((endDay - startDay) / 86400000) + 1);
+}
+
 export function addDays(d, n) {
   const x = new Date(d);
   x.setDate(x.getDate() + n);

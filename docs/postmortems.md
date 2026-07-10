@@ -447,6 +447,22 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ---
 
+## P27 · 更新按钮视觉未重叠但命中区仍被 FAB 截走（v49）
+
+**确诊日期**：2026-07-10 · **状态**：v49 结构修复，待 iOS standalone 真机确认 · **严重度**：高（新版已就绪但用户无法手动完成更新）
+
+**现象**：iOS 主屏 PWA 中，「发现新版」提示与右下角「记一条」FAB 视觉上已经上下错开，但「更新应用」按钮无法点击；录屏/截图显示按钮区域的触控被 FAB 所在合成层截走。v48 仅把提示的 `z-index` 提到 FAB 上方，未解决命中测试。
+
+**根因**：更新提示使用 `position: sticky`，FAB 使用 `position: fixed`。iOS standalone WebKit 会把两者放入不同滚动/合成层；此时 CSS 绘制顺序与触控命中顺序可能不一致，导致“看得见且不重叠”并不等于“点得到”。单纯继续抬高 `z-index` 仍依赖跨层排序，不能消除问题来源。
+
+**修法**：更新提示改为 `position: fixed`，与 FAB 进入同一类视口定位层；日视图下提示底边固定抬到 FAB 上方，层级保持 FAB（70）< 更新提示（75）< 表单 sheet（80）。不隐藏记录入口，也不依赖设备型号或 viewport 补丁。
+
+**护栏**：Playwright waiting-worker 用例改到 375px 移动端宽度，同时检查三件事：提示与 FAB 的矩形不相交、提示计算样式确为 `fixed`、按钮中心点的 `document.elementFromPoint()` 确实命中 `update-app`。本地引擎只能防 DOM/CSS 回归，最终仍需 iOS 主屏 PWA 点击验证。
+
+**经验**：移动 WebKit 的可点击性问题不能只看截图和 `z-index`；固定悬浮控件之间应尽量使用同一种定位模型，并把 `elementFromPoint` 纳入命中区护栏。
+
+---
+
 ## 协作约束补记（v28）
 
 - 多步改动走主线程；避免并发 fan-out 子代理 / workflow（上游会 429，串行 workflow 亦然）。已同步进 `CLAUDE.md` / `AGENTS.md`「开发与维护红线」。

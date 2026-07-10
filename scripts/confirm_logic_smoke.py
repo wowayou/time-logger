@@ -31,6 +31,7 @@ import {
   planIntervalEdit,
   planSegmentSplit
 } from './src/entry_model.js';
+import { inclusiveCalendarDayCount } from './src/time.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -74,6 +75,8 @@ assert(formatPercent(99.95, 100) === '>99.9%', 'near-100 percentage formatting c
 assert(formatPercent(0, 100) === '0%', 'zero percentage formatting changed');
 assert(formatPercent(33.34, 100) === '33.3%', '33.34% formatting changed');
 assert(formatPercent(33.33, 100) === '33.3%', '33.33% formatting changed');
+assert(inclusiveCalendarDayCount('2026-03-08', '2026-03-09') === 2, 'usage days must count local calendar dates across DST');
+assert(inclusiveCalendarDayCount('2026-06-29', '2026-06-29') === 1, 'first local usage date must be day 1');
 
 const thresholdEntries = [
   entry('a', '2020-01-01T09:00', '求职推进'),

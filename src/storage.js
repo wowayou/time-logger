@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-import { normalizeTimestamp } from './time.js';
+import { normalizeTimestamp, parseDateKey } from './time.js';
 
 export const KEY = 'timelog.v1';
 export const CONFIG_KEY = 'timelog.config';
@@ -11,6 +11,7 @@ export const VIEW_KEY = 'timelog.view';
 export const SELECTED_DATE_KEY = 'timelog.selectedDate';
 export const OPEN_DATE_KEY = 'timelog.openDate';
 export const RECORD_MODE_KEY = 'timelog.recordMode';
+export const FIRST_USED_DATE_KEY = 'timelog.firstUsedDate';
 export const BUCKETS = {
   job: '主线',
   maintain: '维持',
@@ -192,6 +193,24 @@ export function load() {
   } catch {
     return { version: 1, entries: [] };
   }
+}
+
+export function ensureFirstUsedDate(todayKey, entries = []) {
+  if (!parseDateKey(todayKey)) return todayKey;
+  try {
+    const stored = localStorage.getItem(FIRST_USED_DATE_KEY);
+    if (parseDateKey(stored)) return stored;
+  } catch {}
+
+  // 老用户首次升级时用本机现有记录的最早日期初始化；以后只读固定键，导入更早
+  // 的历史数据也不会倒拨“使用第 N 天”。未来计划不应把起点推到今天之后。
+  const firstDate = (entries || []).reduce((earliest, entry) => {
+    const dateKey = typeof entry?.ts === 'string' ? entry.ts.slice(0, 10) : '';
+    if (!parseDateKey(dateKey) || dateKey > todayKey) return earliest;
+    return dateKey < earliest ? dateKey : earliest;
+  }, todayKey);
+  try { localStorage.setItem(FIRST_USED_DATE_KEY, firstDate); } catch {}
+  return firstDate;
 }
 
 export function save(d) {

@@ -216,6 +216,20 @@
       letter-spacing: 0.01em;
       white-space: nowrap;
     }
+    .hdr-brand-copy {
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .usage-day {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: var(--fs-cap);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    body:not(.app-ready) .usage-day { visibility: hidden; }
     .hdr-actions {
       display: inline-flex;
       align-items: center;
@@ -1152,13 +1166,15 @@
 
     /* Update prompt */
     .update-banner {
-      position: sticky;
+      position: fixed;
+      left: 50%;
       bottom: calc(12px + env(safe-area-inset-bottom));
-      /* Must stay above the day FAB/list fade so the explicit update action is
-         always reachable, while remaining below the open form sheet (z=80). */
+      transform: translateX(-50%);
+      /* iOS standalone 会把 sticky 与 fixed FAB 放进不同合成层，视觉上错开但 FAB
+         仍可能截走按钮命中区。提示改为真正的 fixed 层，明确位于 FAB 之上、sheet 之下。 */
       z-index: 75;
       width: min(600px, calc(100% - 24px));
-      margin: 0 auto 12px;
+      margin: 0;
       display: flex;
       align-items: center;
       gap: 10px;

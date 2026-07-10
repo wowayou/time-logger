@@ -17,6 +17,7 @@ import {
   SELECTED_DATE_KEY,
   THEME_KEY,
   VIEW_KEY,
+  ensureFirstUsedDate,
   load,
   loadConfig,
   mergeImportedConfig,
@@ -51,6 +52,7 @@ import {
   addYears,
   fmtMins,
   hhmm,
+  inclusiveCalendarDayCount,
   localDateKey,
   minsBetweenDates,
   normalizeTimestamp,
@@ -78,6 +80,7 @@ import {
   let pendingDelete = null;
   let undoDeleteState = null;
   let lastIntervalSignature = '';
+  let firstUsedDate = '';
   let state = { view: 'day', selectedDate: '' };
   const HELP_SEEN_KEY = 'timelog.helpSeen.v16';
   const UNRECORDED_GAP_FLOOR_MIN = 15;
@@ -266,6 +269,12 @@ import {
       btn.classList.toggle('active', selected);
       btn.setAttribute('aria-pressed', String(selected));
     });
+    const usageDay = inclusiveCalendarDayCount(firstUsedDate, todayStr());
+    const usageEl = document.getElementById('usage-day');
+    if (usageEl) {
+      usageEl.textContent = `使用第 ${usageDay} 天`;
+      usageEl.setAttribute('aria-label', `已在本机使用第 ${usageDay} 天`);
+    }
     // R5：当前周期是否包含今天——驱动「回到今天」按钮的条件渲染 + 日期行内的
     // 「今天」常驻高亮字样，两处共用同一次判定。
     const { start: periodStart, end: periodEnd } = periodRange();
@@ -484,7 +493,7 @@ import {
     const { start, end } = periodRange();
     const now = new Date();
     const liveMinute = now >= start && now < end ? nowStr() : '';
-    return JSON.stringify({ view: state.view, selectedDate: state.selectedDate, liveMinute, entries: d.entries });
+    return JSON.stringify({ view: state.view, selectedDate: state.selectedDate, today: todayStr(), liveMinute, entries: d.entries });
   }
   function openHelp(opts = {}) {
     if (opts.markSeen !== false) localStorage.setItem(HELP_SEEN_KEY, '1');
@@ -896,6 +905,7 @@ import {
 
   function init() {
     const today = todayStr();
+    firstUsedDate = ensureFirstUsedDate(today, load().entries);
     const savedView = localStorage.getItem(VIEW_KEY);
     const savedDate = parseDateKey(localStorage.getItem(SELECTED_DATE_KEY));
     state.view = ['day', 'week', 'month', 'year'].includes(savedView) ? savedView : 'day';

@@ -47,7 +47,23 @@ for (const share of [false, true]) {
 test('375px header hides title without overflowing', async ({ page }) => {
   await boot(page, 375, 'one-record');
   await expect(page.locator('.hdr-title')).toBeHidden();
+  await expect(page.locator('#usage-day')).toBeVisible();
   await expectNoHorizontalOverflow(page);
+});
+
+test('usage day is derived once from local history and stays fully local', async ({ page }) => {
+  await boot(page, 375, 'yesterday-residual', false, FIXED_NOW);
+  await expect(page.locator('#usage-day')).toHaveText('使用第 2 天');
+  expect(await page.evaluate(() => localStorage.getItem('timelog.firstUsedDate'))).toBe('2026-06-28');
+
+  await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('timelog.v1'));
+    data.entries.push({ id: 'imported-old', ts: '2026-05-01T08:00', what: '更早历史', tags: ['求职推进'] });
+    localStorage.setItem('timelog.v1', JSON.stringify(data));
+  });
+  await page.getByRole('button', { name: '周视图' }).click();
+  await expect(page.locator('#usage-day')).toHaveText('使用第 2 天');
+  expect(await page.evaluate(() => localStorage.getItem('timelog.firstUsedDate'))).toBe('2026-06-28');
 });
 
 test('回到今天 only appears after leaving today, with a persistent 今天 badge while on it (R5)', async ({ page }) => {
@@ -1138,7 +1154,7 @@ test('dismissing a cross-tab notice renders the latest stored data', async ({ pa
   await other.close();
 });
 
-test('waiting service worker prompts until the user applies it and rechecks on foreground', async ({ page }) => {
+test('waiting service worker prompt has a reachable update button above the mobile FAB', async ({ page }) => {
   await page.addInitScript(() => {
     window.__swUpdates = 0;
     window.__swMessages = [];
@@ -1165,7 +1181,7 @@ test('waiting service worker prompts until the user applies it and rechecks on f
       value: serviceWorker
     });
   });
-  await boot(page, 768, 'one-record', false, FIXED_NOW);
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
 
   await expect(page.locator('#update-banner')).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__swUpdates)).toBe(1);
@@ -1175,6 +1191,13 @@ test('waiting service worker prompts until the user applies it and rechecks on f
     return prompt.left < fab.right && prompt.right > fab.left && prompt.top < fab.bottom && prompt.bottom > fab.top;
   });
   expect(promptOverlapsFab).toBe(false);
+  await expect(page.locator('#update-banner')).toHaveCSS('position', 'fixed');
+  const updateButtonReceivesHit = await page.locator('[data-action="update-app"]').evaluate(button => {
+    const box = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return Boolean(hit && hit.closest('[data-action="update-app"]') === button);
+  });
+  expect(updateButtonReceivesHit).toBe(true);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await expect.poll(() => page.evaluate(() => window.__swUpdates)).toBe(2);
   await page.locator('[data-action="update-app"]').click();
