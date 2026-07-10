@@ -290,33 +290,70 @@ export function createIoActions(deps) {
     deps.closeForm();
   }
 
+  function importConflictSide(label, entry) {
+    const side = document.createElement('div');
+    side.className = 'import-conflict-side';
+    const role = document.createElement('div');
+    role.className = 'import-conflict-role';
+    role.textContent = label;
+    const what = document.createElement('div');
+    what.className = 'import-conflict-what';
+    what.textContent = entry && entry.what ? entry.what : '未填写内容';
+    const tag = entry && Array.isArray(entry.tags) && entry.tags[0] ? entry.tags[0] : '未记录';
+    const meta = document.createElement('div');
+    meta.className = 'import-conflict-meta';
+    meta.textContent = `${entry && entry.ts ? fmtTs(entry.ts) : '时间未知'} · #${tag}${entry && entry.planned ? ' · 计划' : ''}`;
+    side.append(role, what, meta);
+    return side;
+  }
+
   function paintImportPlan(plan) {
     const summary = document.querySelector('#form-sheet [data-role="import-summary"]');
     const error = document.querySelector('#form-sheet [data-role="import-error"]');
+    const confirm = document.getElementById('import-confirm-btn');
+    const conflicts = plan && plan.conflicts || [];
+    const blocked = conflicts.length > 0;
     if (summary) {
-      summary.textContent = plan
-        ? `将导入 ${plan.imported || 0} 条，跳过 ${plan.skipped || 0} 条，冲突 ${(plan.conflicts || []).length} 条。`
-        : '';
+      summary.classList.toggle('is-error', blocked);
+      summary.textContent = !plan
+        ? ''
+        : blocked
+          ? `发现 ${conflicts.length} 条冲突 · 本次不会写入`
+          : `可导入 ${plan.imported || 0} 条 · 已存在跳过 ${plan.skipped || 0} 条`;
+    }
+    if (confirm) {
+      confirm.disabled = blocked;
+      confirm.setAttribute('aria-disabled', String(blocked));
     }
     if (!error) return;
     error.replaceChildren();
-    const conflicts = plan && plan.conflicts || [];
     if (!conflicts.length) {
       error.hidden = true;
       return;
     }
     const intro = document.createElement('div');
-    intro.textContent = '存在冲突，本次导入尚未写入：';
-    const list = document.createElement('ul');
-    conflicts.slice(0, 8).forEach(conflict => {
-      const item = document.createElement('li');
-      item.textContent = conflict.message;
-      list.appendChild(item);
+    intro.className = 'import-conflict-intro';
+    intro.textContent = '请调整平移小时数，或先在本机处理对应时刻；所有冲突解决后才能导入。';
+    const list = document.createElement('div');
+    list.className = 'import-conflict-list';
+    conflicts.slice(0, 8).forEach((conflict, index) => {
+      const card = document.createElement('section');
+      card.className = 'import-conflict-card';
+      const title = document.createElement('div');
+      title.className = 'import-conflict-title';
+      title.textContent = `${index + 1}. ${conflict.type === 'id' ? '同一记录的内容不同' : '同一时刻有两条记录'}`;
+      card.append(
+        title,
+        importConflictSide('备份中', conflict.incoming),
+        importConflictSide('本机中', conflict.local)
+      );
+      list.appendChild(card);
     });
     if (conflicts.length > 8) {
-      const item = document.createElement('li');
-      item.textContent = `另有 ${conflicts.length - 8} 条冲突`;
-      list.appendChild(item);
+      const more = document.createElement('div');
+      more.className = 'import-conflict-more';
+      more.textContent = `另有 ${conflicts.length - 8} 条冲突未展开`;
+      list.appendChild(more);
     }
     error.append(intro, list);
     error.hidden = false;
@@ -324,6 +361,12 @@ export function createIoActions(deps) {
 
   function importPlan(imported, shiftMinutes) {
     return deps.mergeImportedEntries(deps.load(), imported.entries, { shiftMinutes });
+  }
+
+  function previewImportShift(raw) {
+    if (!pendingImport) return;
+    importShiftMinutes = parseImportShiftHours(raw);
+    paintImportPlan(importPlan(pendingImport, importShiftMinutes));
   }
 
   function applyImportedData(imported, shiftMinutes) {
@@ -440,6 +483,7 @@ export function createIoActions(deps) {
     cancelImportShift,
     confirmImportShift,
     handleImport,
+    previewImportShift,
     openMoreSheet,
     shareJSON,
     exportData

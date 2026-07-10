@@ -83,6 +83,7 @@ import {
   let firstUsedDate = '';
   let state = { view: 'day', selectedDate: '' };
   const HELP_SEEN_KEY = 'timelog.helpSeen.v16';
+  const BOOT_SNAPSHOT_KEY = 'timelog.bootSnapshot.v1';
   const UNRECORDED_GAP_FLOOR_MIN = 15;
 
   function defaultFormTs() {
@@ -254,12 +255,36 @@ import {
       });
       renderTimeline(day.timeline, { sheetEditId, plannedItems: day.planned });
       lastIntervalSignature = dataSignature();
+      saveBootSnapshot();
       return;
     }
     const { start, end } = periodRange();
     renderRuler(summarizeRange(start, end), 1, state.view);
     renderSummary();
     lastIntervalSignature = dataSignature();
+    saveBootSnapshot();
+  }
+
+  function saveBootSnapshot() {
+    try {
+      const app = document.querySelector('.app');
+      const addBtn = document.getElementById('add-btn');
+      const listFade = document.getElementById('list-fade');
+      if (!app || !addBtn) return;
+      sessionStorage.setItem(BOOT_SNAPSHOT_KEY, JSON.stringify({
+        appHtml: app.innerHTML,
+        addHtml: addBtn.innerHTML,
+        addHidden: addBtn.hidden,
+        addAria: addBtn.getAttribute('aria-label') || '',
+        fadeHidden: listFade ? listFade.hidden : true,
+        dataRaw: localStorage.getItem('timelog.v1'),
+        configRaw: localStorage.getItem('timelog.config'),
+        view: localStorage.getItem(VIEW_KEY),
+        selectedDate: localStorage.getItem(SELECTED_DATE_KEY),
+        recordMode: localStorage.getItem(RECORD_MODE_KEY),
+        today: todayStr()
+      }));
+    } catch {}
   }
   function renderChrome() {
     const crossTabBanner = document.getElementById('cross-tab-banner');
@@ -661,6 +686,7 @@ import {
         sheetController.syncCustomDraft(e.target);
       }
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        if (e.target.id === 'import-shift-hours') ioActions.previewImportShift(e.target.value);
         sheetController.handleFormInput(e.target);
       }
     });

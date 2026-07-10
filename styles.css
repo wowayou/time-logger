@@ -136,7 +136,7 @@
        paints with the HTML parse; the data regions fade in together after the
        first render() (render runs before app-ready, so they reveal already
        correct — including add-btn hidden on non-day views). */
-    body:not(.app-ready) :is(#add-btn, .ruler, .tl-head, #timeline) { opacity: 0; }
+    body:not(.app-ready):not(.boot-restored) :is(#add-btn, .ruler, .tl-head, #timeline) { opacity: 0; }
     :is(#add-btn, .ruler, .tl-head, #timeline) { transition: opacity 0.18s ease; }
     @media (prefers-reduced-motion: reduce) {
       :is(#add-btn, .ruler, .tl-head, #timeline) { transition: none; }
@@ -229,7 +229,7 @@
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
     }
-    body:not(.app-ready) .usage-day { visibility: hidden; }
+    body:not(.app-ready):not(.boot-restored) .usage-day { visibility: hidden; }
     .hdr-actions {
       display: inline-flex;
       align-items: center;
@@ -1367,6 +1367,7 @@
     }
     .sh-cancel { color: var(--muted); }
     .sh-done { color: var(--accent); font-weight: 700; }
+    .sh-done:disabled { color: var(--faint); opacity: 0.55; cursor: default; }
     .sh-cancel:active,
     .sh-done:active { opacity: 0.7; }
     .sh-title {
@@ -1499,7 +1500,38 @@
     .delete-result { padding: 2px 0; }
     .delete-result p { color: var(--text); font-size: 14px; line-height: 1.55; }
     .delete-result.is-unrecorded p { color: var(--danger); }
-    .import-summary { color: var(--text); font-size: 14px; line-height: 1.5; }
+    .import-summary { color: var(--text); font-size: 14px; line-height: 1.5; font-weight: 600; }
+    .import-summary.is-error { color: var(--danger); }
+    .import-conflicts {
+      display: grid;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid color-mix(in srgb, var(--danger) 65%, transparent);
+      border-radius: var(--r-ctl);
+      background: color-mix(in srgb, var(--danger) 8%, transparent);
+    }
+    .import-conflicts[hidden] { display: none; }
+    .import-conflict-intro { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .import-conflict-list { display: grid; gap: 10px; }
+    .import-conflict-card {
+      overflow: hidden;
+      border-radius: 12px;
+      background: var(--input);
+      box-shadow: var(--shadow-1), var(--top-light);
+    }
+    .import-conflict-title {
+      padding: 8px 11px;
+      color: var(--danger);
+      font-size: 13px;
+      font-weight: 650;
+      border-bottom: 1px solid var(--border);
+    }
+    .import-conflict-side { padding: 9px 11px; min-width: 0; }
+    .import-conflict-side + .import-conflict-side { border-top: 1px solid var(--border); }
+    .import-conflict-role { color: var(--muted); font-size: 12px; margin-bottom: 2px; }
+    .import-conflict-what { color: var(--text); font-size: 14px; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .import-conflict-meta { color: var(--faint); font-size: 12px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+    .import-conflict-more { color: var(--muted); font-size: 13px; text-align: center; }
     .more-body { gap: 10px; }
     .app-version {
       text-align: center;

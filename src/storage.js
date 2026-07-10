@@ -350,7 +350,14 @@ export function preflightImportedEntries(current, importedEntries, opts = {}) {
     const sameId = byId.get(entry.id);
     if (sameId) {
       if (comparableImportEntry(sameId) === comparableImportEntry(entry)) skipped += 1;
-      else conflicts.push({ type: 'id', id: entry.id, ts: entry.ts, message: `ID ${entry.id} 的内容不同` });
+      else conflicts.push({
+        type: 'id',
+        id: entry.id,
+        ts: entry.ts,
+        incoming: shiftedEntry(entry, 0),
+        local: shiftedEntry(sameId, 0),
+        message: `ID ${entry.id} 的内容不同`
+      });
       continue;
     }
     const sameTime = byTime.get(entry.ts);
@@ -359,6 +366,8 @@ export function preflightImportedEntries(current, importedEntries, opts = {}) {
         type: 'time',
         id: entry.id,
         ts: entry.ts,
+        incoming: shiftedEntry(entry, 0),
+        local: shiftedEntry(sameTime, 0),
         message: `${entry.ts.replace('T', ' ')} 的导入记录 ${entry.id} 与本机记录 ${sameTime.id} 冲突`
       });
       continue;

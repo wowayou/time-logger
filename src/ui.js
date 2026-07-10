@@ -281,7 +281,7 @@ export function sheetHead({ title, cancelText, cancelAction, cancelAria, doneTex
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '50';
+export const APP_VERSION = '51';
 
 export function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -578,7 +578,7 @@ export function renderImportShiftDialog(opts = {}) {
   const value = opts.importShiftHours !== undefined ? opts.importShiftHours : '0';
   const hint = opts.importShiftHint || '导入前可把所有时间整体平移。例：iPhone 记在 UTC+8、电脑 UTC-5，填 -13；留空或 0 不平移。';
   return `
-    ${sheetHead({ title: '导入时区平移', cancelText: '取消', cancelAction: 'cancel-import-shift', cancelAria: '取消导入', doneText: '导入', doneAction: 'confirm-import-shift', doneAria: '确认导入' })}
+    ${sheetHead({ title: '导入检查', cancelText: '取消', cancelAction: 'cancel-import-shift', cancelAria: '取消导入', doneText: '导入', doneAction: 'confirm-import-shift', doneAria: '确认导入', doneId: ' id="import-confirm-btn" disabled aria-disabled="true"' })}
     <div class="form-sheet-body import-shift-body">
       <div class="form-hint">${esc(hint)}</div>
       <div class="fl">
@@ -586,7 +586,7 @@ export function renderImportShiftDialog(opts = {}) {
         <input type="number" class="inp" id="import-shift-hours" value="${esc(value)}" step="0.25" inputmode="decimal">
       </div>
       <div class="import-summary" data-role="import-summary" aria-live="polite"></div>
-      <div class="form-inline-error" data-role="import-error" hidden></div>
+      <div class="import-conflicts" data-role="import-error" role="alert" hidden></div>
     </div>`;
 }
 

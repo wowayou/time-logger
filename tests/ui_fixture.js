@@ -141,13 +141,12 @@ export async function boot(page, width, state, share = false, now = '', selected
         chips: [{ name: '休息', bucket: 'maintain', longOk: true }]
       }));
     }
-    if (selectedDateOffset !== null) {
-      const selected = new Date(today);
-      selected.setDate(selected.getDate() + selectedDateOffset);
-      const selectedKey = dateKey(selected);
-      localStorage.setItem('timelog.selectedDate', selectedKey);
-      localStorage.setItem('timelog.openDate', selectedKey);
-    }
+    const selected = new Date(today);
+    if (selectedDateOffset !== null) selected.setDate(selected.getDate() + selectedDateOffset);
+    const selectedKey = dateKey(selected);
+    localStorage.setItem('timelog.view', 'day');
+    localStorage.setItem('timelog.selectedDate', selectedKey);
+    localStorage.setItem('timelog.openDate', selectedKey);
 
     Object.defineProperty(navigator, 'share', {
       configurable: true,

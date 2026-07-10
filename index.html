@@ -97,6 +97,36 @@
 </button>
 <div class="list-fade" id="list-fade" aria-hidden="true" hidden></div>
 
+<script>
+  (() => {
+    // Safari 刷新时会先绘制静态 HTML 壳，再等待 ES module 恢复真实内容，造成一帧
+    // 「主内容消失 / 回到今天误出现」。同标签页只保存已安全渲染的 DOM 快照，在模块
+    // 到达前接住上一帧；sessionStorage 不跨标签、不上传，也不替代权威数据。
+    try {
+      const snapshot = JSON.parse(sessionStorage.getItem('timelog.bootSnapshot.v1'));
+      if (!snapshot || typeof snapshot.appHtml !== 'string') return;
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      if (snapshot.dataRaw !== localStorage.getItem('timelog.v1')
+        || snapshot.configRaw !== localStorage.getItem('timelog.config')
+        || snapshot.view !== localStorage.getItem('timelog.view')
+        || snapshot.selectedDate !== localStorage.getItem('timelog.selectedDate')
+        || snapshot.recordMode !== localStorage.getItem('timelog.recordMode')
+        || snapshot.today !== today) return;
+      const app = document.querySelector('.app');
+      const addBtn = document.getElementById('add-btn');
+      const listFade = document.getElementById('list-fade');
+      if (!app || !addBtn) return;
+      app.innerHTML = snapshot.appHtml;
+      if (typeof snapshot.addHtml === 'string') addBtn.innerHTML = snapshot.addHtml;
+      addBtn.hidden = Boolean(snapshot.addHidden);
+      if (snapshot.addAria) addBtn.setAttribute('aria-label', snapshot.addAria);
+      if (listFade) listFade.hidden = Boolean(snapshot.fadeHidden);
+      document.body.classList.add('boot-restored');
+    } catch {}
+  })();
+</script>
+
 <div class="update-banner" id="update-banner" hidden>
   <span>发现新版。当前数据仍保存在本机。</span>
   <button class="update-btn" type="button" data-action="update-app" data-tip="刷新并加载新版应用。" aria-label="更新应用">更新应用</button>

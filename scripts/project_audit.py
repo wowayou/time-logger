@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "50"
+EXPECTED_VERSION = "51"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -259,7 +259,9 @@ def audit_index(errors: list[str]) -> None:
             continue
         if "timelog.v1" in body and "data-boot" in body:
             continue
-        fail(errors, "index.html may only contain the app module script and the early theme script")
+        if "timelog.bootSnapshot.v1" in body and "boot-restored" in body:
+            continue
+        fail(errors, "index.html may only contain the app module script and approved early boot scripts")
 
     if not re.search(r"button\[data-tip\]:hover::after,\s*\n\s*button\[data-tip\]:hover::before\s*\{[^}]*transition-delay:\s*" + re.escape(EXPECTED_TOOLTIP_DELAY), css, re.DOTALL):
         fail(errors, f"desktop hover tooltip must use a {EXPECTED_TOOLTIP_DELAY} show delay")

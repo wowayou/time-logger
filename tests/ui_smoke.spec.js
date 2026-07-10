@@ -312,7 +312,7 @@ test('help close is a text button and import shift dialog stays custom', async (
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({ version: 1, entries: [] }))
   });
-  await expect(page.locator('#form-sheet-title')).toContainText('导入时区平移');
+  await expect(page.locator('#form-sheet-title')).toContainText('导入检查');
   await expect(page.locator('#import-shift-hours')).toBeVisible();
   // 导入弹框同样从「更多」下钻，取消返回「更多」。
   await page.getByRole('button', { name: '取消导入' }).click();
@@ -347,7 +347,7 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(imported))
   });
-  await expect(page.locator('#form-sheet-title')).toContainText('导入时区平移');
+  await expect(page.locator('#form-sheet-title')).toContainText('导入检查');
   await expect(page.locator('#import-shift-hours')).toHaveValue('0');
   await page.locator('#import-shift-hours').fill('1');
   await page.getByRole('button', { name: '确认导入' }).click();
@@ -404,7 +404,7 @@ test('JSON import uses timezone metadata to suggest default shift', async ({ pag
     buffer: Buffer.from(JSON.stringify(imported))
   });
 
-  await expect(page.locator('#form-sheet-title')).toContainText('导入时区平移');
+  await expect(page.locator('#form-sheet-title')).toContainText('导入检查');
   await expect(page.locator('#import-shift-hours')).toHaveValue('-1');
   await expect(page.locator('.import-shift-body')).toContainText('Asia/Tokyo');
   await page.getByRole('button', { name: '确认导入' }).click();
@@ -593,6 +593,30 @@ test('reload starts with has-entries boot state and reaches app-ready', async ({
   await page.waitForFunction(() => document.body.classList.contains('app-ready'));
   await expect(page.locator('html')).toHaveAttribute('data-boot', 'has-entries');
   await expect(page.locator('#timeline')).toContainText('响应式测试记录');
+});
+
+test('Safari-style reload restores the last rendered frame before app.js arrives', async ({ page }) => {
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  await expect(page.locator('#timeline')).toContainText('响应式测试记录');
+
+  let releaseApp;
+  let markAppRequested;
+  const appRequested = new Promise(resolve => { markAppRequested = resolve; });
+  await page.route('**/src/app.js', async route => {
+    markAppRequested();
+    await new Promise(resolve => { releaseApp = resolve; });
+    await route.continue();
+  });
+
+  const reload = page.reload({ waitUntil: 'load' });
+  await appRequested;
+  await expect(page.locator('body')).toHaveClass(/boot-restored/);
+  await expect(page.locator('#timeline')).toContainText('响应式测试记录');
+  await expect(page.locator('#today-btn')).toBeHidden();
+  await expect(page.locator('#usage-day')).toHaveText('使用第 1 天');
+  releaseApp();
+  await reload;
+  await expect(page.locator('body')).toHaveClass(/app-ready/);
 });
 
 test('editing an existing record persists content and tag (① commitEdit single load)', async ({ page }) => {
@@ -1021,8 +1045,8 @@ test('interval save recomputes against latest cross-tab data and requires reconf
   await other.close();
 });
 
-test('conflicting malicious import is listed as text and writes nothing', async ({ page }) => {
-  await boot(page, 768, 'one-record', false, FIXED_NOW);
+test('conflicting import shows safe side-by-side cards, blocks writing, and replans live', async ({ page }) => {
+  await boot(page, 375, 'two-records', false, FIXED_NOW);
   await page.evaluate(() => { window.__importPwned = 0; });
   const maliciousId = '<img src=x onerror="window.__importPwned=1">';
   const chooserPromise = page.waitForEvent('filechooser');
@@ -1034,20 +1058,35 @@ test('conflicting malicious import is listed as text and writes nothing', async 
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({
       version: 1,
-      entries: [{ id: maliciousId, ts: '2026-06-29T00:05', what: '<script>bad()</script>', tags: ['求职推进'] }]
+      entries: [
+        { id: maliciousId, ts: '2026-06-29T09:00', what: '<script>bad()</script>', tags: ['求职推进'] },
+        { id: 'incoming-2', ts: '2026-06-29T10:00', what: '备份里的另一条', tags: ['吃饭'] }
+      ]
     }))
   });
-  await expect(page.locator('[data-role="import-summary"]')).toContainText('冲突 1 条');
-  await expect(page.locator('[data-role="import-error"]')).toContainText(maliciousId);
+  await expect(page.locator('[data-role="import-summary"]')).toHaveText('发现 2 条冲突 · 本次不会写入');
+  await expect(page.locator('.import-conflict-card')).toHaveCount(2);
+  await expect(page.locator('[data-role="import-error"]')).toContainText('备份中');
+  await expect(page.locator('[data-role="import-error"]')).toContainText('本机中');
+  await expect(page.locator('[data-role="import-error"]')).toContainText('<script>bad()</script>');
+  await expect(page.locator('[data-role="import-error"]')).toContainText('写代码');
+  await expect(page.locator('[data-role="import-error"]')).not.toContainText(maliciousId);
   await expect(page.locator('[data-role="import-error"] img')).toHaveCount(0);
-  await page.getByRole('button', { name: '确认导入' }).click();
-  await expect(page.locator('#form-sheet')).toBeVisible();
+  await expect(page.locator('#import-confirm-btn')).toBeDisabled();
+
+  await page.locator('#import-shift-hours').fill('2');
+  await expect(page.locator('[data-role="import-summary"]')).toHaveText('可导入 2 条 · 已存在跳过 0 条');
+  await expect(page.locator('#import-confirm-btn')).toBeEnabled();
+  await expect(page.locator('[data-role="import-error"]')).toBeHidden();
+  await page.locator('#import-shift-hours').fill('0');
+  await expect(page.locator('#import-confirm-btn')).toBeDisabled();
+
   const result = await page.evaluate(() => ({
     pwned: window.__importPwned,
     entries: JSON.parse(localStorage.getItem('timelog.v1')).entries
   }));
   expect(result.pwned).toBe(0);
-  expect(result.entries).toHaveLength(1);
+  expect(result.entries).toHaveLength(2);
 });
 
 test('renamed defaults stay renamed and mainline/chip duplicates are rejected safely', async ({ page }) => {
