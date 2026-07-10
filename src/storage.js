@@ -4,14 +4,14 @@
 // Commercial licensing available on request; contact via the repository above.
 import { normalizeTimestamp, parseDateKey } from './time.js';
 
-export const KEY = 'timelog.v1';
+const KEY = 'timelog.v1';
 export const CONFIG_KEY = 'timelog.config';
 export const THEME_KEY = 'timelog.theme';
 export const VIEW_KEY = 'timelog.view';
 export const SELECTED_DATE_KEY = 'timelog.selectedDate';
 export const OPEN_DATE_KEY = 'timelog.openDate';
 export const RECORD_MODE_KEY = 'timelog.recordMode';
-export const FIRST_USED_DATE_KEY = 'timelog.firstUsedDate';
+const FIRST_USED_DATE_KEY = 'timelog.firstUsedDate';
 export const BUCKETS = {
   job: '主线',
   maintain: '维持',
@@ -19,7 +19,7 @@ export const BUCKETS = {
   unrecorded: '未记录'
 };
 export const BUCKET_ORDER = ['job', 'maintain', 'leak', 'unrecorded'];
-export const LEGACY_ALIASES = {
+const LEGACY_ALIASES = {
   '研究·学工具·逃避': { bucket: 'leak', longOk: false },
   '小說': { bucket: 'leak', longOk: false },
   '睡覺': { bucket: 'maintain', longOk: true },
@@ -30,7 +30,7 @@ export const LEGACY_ALIASES = {
   '求职推进': { bucket: 'job', longOk: false },
   '未知': { bucket: 'unrecorded', longOk: false }
 };
-export const DEFAULT_CONFIG = {
+const DEFAULT_CONFIG = {
   version: 1,
   mainline: ['求职推进'],
   chips: [
@@ -105,7 +105,7 @@ export function saveConfig(config) {
   return normalized;
 }
 
-export function addMainlineTag(tag) {
+function addMainlineTag(tag) {
   const name = cleanName(tag);
   if (!name || name === '未知') return loadConfig();
   const config = loadConfig();
@@ -116,7 +116,7 @@ export function addMainlineTag(tag) {
   return config;
 }
 
-export function addChipTag(tag, bucket) {
+function addChipTag(tag, bucket) {
   const name = cleanName(tag);
   if (!name || name === '未知' || bucket === 'job' || bucket === 'unrecorded') return loadConfig();
   const config = loadConfig();
@@ -133,7 +133,7 @@ export function addChipTag(tag, bucket) {
   return config;
 }
 
-export function rememberTagForBucket(tag, bucket) {
+function rememberTagForBucket(tag, bucket) {
   if (bucket === 'job') return addMainlineTag(tag);
   if (bucket === 'maintain' || bucket === 'leak') return addChipTag(tag, bucket);
   return loadConfig();
@@ -333,7 +333,7 @@ function comparableImportEntry(entry) {
   });
 }
 
-export function preflightImportedEntries(current, importedEntries, opts = {}) {
+function preflightImportedEntries(current, importedEntries, opts = {}) {
   const shiftMinutes = Number(opts.shiftMinutes || 0);
   const currentEntries = Array.isArray(current && current.entries) ? current.entries : [];
   const byId = new Map();

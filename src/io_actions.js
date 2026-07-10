@@ -343,7 +343,7 @@ export function createIoActions(deps) {
     intro.textContent = '逐条选择处理方式；也可以调整平移小时数重新检查。全部处理后才会一次性写入。';
     const list = document.createElement('div');
     list.className = 'import-conflict-list';
-    conflicts.slice(0, 8).forEach((conflict, index) => {
+    conflicts.forEach((conflict, index) => {
       const card = document.createElement('section');
       card.className = 'import-conflict-card';
       const title = document.createElement('div');
@@ -384,12 +384,6 @@ export function createIoActions(deps) {
       }
       list.appendChild(card);
     });
-    if (conflicts.length > 8) {
-      const more = document.createElement('div');
-      more.className = 'import-conflict-more';
-      more.textContent = `另有 ${conflicts.length - 8} 条冲突未展开`;
-      list.appendChild(more);
-    }
     error.append(intro, list);
     error.hidden = false;
   }
@@ -496,10 +490,6 @@ export function createIoActions(deps) {
     return typeof navigator !== 'undefined' && typeof navigator.share === 'function';
   }
 
-  function openMoreSheet() {
-    deps.openFormSheet({ mode: 'more' });
-  }
-
   function isShareCancellation(error) {
     return Boolean(error && error.name === 'AbortError');
   }
@@ -534,7 +524,6 @@ export function createIoActions(deps) {
   }
 
   return {
-    buildCurrentViewSummaryMarkdown,
     copyCurrentViewSummary,
     copyJSON,
     downloadJSON,
@@ -544,8 +533,6 @@ export function createIoActions(deps) {
     handleImport,
     previewImportShift,
     resolveImportConflict,
-    openMoreSheet,
-    shareJSON,
-    exportData
+    shareJSON
   };
 }

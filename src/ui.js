@@ -24,7 +24,6 @@ export function iconSvg(name) {
   const icons = {
     edit: '<path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>',
     trash: '<path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path>',
-    check: '<path d="M20 6 9 17l-5-5"></path>',
     // 「···」更多按钮：三个零长度、round linecap 的描边线段各画成一个圆点——沿用
     // stroke-based 渲染管线（`.hdr-action-btn svg` 全局 fill:none/stroke-linecap:round）。
     more: '<path d="M5 12h.01"></path><path d="M12 12h.01"></path><path d="M19 12h.01"></path>'
@@ -98,7 +97,7 @@ export function renderDayHero(totals, hasItems, opts = {}) {
     </div>`;
 }
 
-export function bucketParts(totals) {
+function bucketParts(totals) {
   const colors = {
     job: '--accent',
     maintain: '--maintain',
@@ -114,13 +113,13 @@ export function bucketParts(totals) {
   }));
 }
 
-export function timelineDurationLabel(mins, isOngoing, unrecorded, pendingConfirm) {
+function timelineDurationLabel(mins, isOngoing, unrecorded, pendingConfirm) {
   if (pendingConfirm) return isOngoing ? `待确认 · 进行中 · ${fmtMins(mins)}` : `待确认 · ${fmtMins(mins)}`;
   if (unrecorded) return isOngoing ? '未记录·进行中' : '未记录';
   return isOngoing ? `${fmtMins(mins)}（进行中）` : fmtMins(mins);
 }
 
-export function confirmSegmentLabel(startTs, endTs) {
+function confirmSegmentLabel(startTs, endTs) {
   return normalizeTimestamp(startTs) && normalizeTimestamp(endTs) ? `确认 ${hhmm(startTs)}-${hhmm(endTs)}` : '确认这段';
 }
 
@@ -248,7 +247,7 @@ export function bucketHint(bucket) {
   return '自定义标签将归入「主线」；已有同名标签保持原归类。';
 }
 
-export function renderBucketSeg(prefix, selectedBucket) {
+function renderBucketSeg(prefix, selectedBucket) {
   const action = prefix === 'edit' ? 'pick-edit-bucket' : 'pick-form-bucket';
   const buckets = ['job', 'maintain', 'leak'];
   return `<div class="seg bucket-seg" data-role="${prefix}-bucket-seg" role="group" aria-label="归类桶">
@@ -256,7 +255,7 @@ export function renderBucketSeg(prefix, selectedBucket) {
   </div>`;
 }
 
-export function renderRecordModeSeg(selectedMode = 'log') {
+function renderRecordModeSeg(selectedMode = 'log') {
   return `<div class="seg record-mode-seg" data-role="record-mode-seg" role="group" aria-label="记录模式">
     <button type="button" data-action="pick-record-mode" data-mode="log" class="${selectedMode === 'log' ? 'active' : ''}" aria-pressed="${selectedMode === 'log'}" aria-label="记录已发生">已发生</button>
     <button type="button" data-action="pick-record-mode" data-mode="plan" class="${selectedMode === 'plan' ? 'active' : ''}" aria-pressed="${selectedMode === 'plan'}" aria-label="记录计划中">计划中</button>
@@ -265,7 +264,7 @@ export function renderRecordModeSeg(selectedMode = 'log') {
 
 // C 语法 sheet 头：抓手条 + 左取消/右完成文字按钮 + 居中标题。
 // 可见文字按钮不加 data-tip（红线：文字按钮不强制 tooltip）。
-export function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '', doneAction = '', doneAria = '', doneId = '' }) {
+function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '', doneAction = '', doneAria = '', doneId = '' }) {
   const done = doneText
     ? `<button class="sh-done" type="button" data-action="${doneAction}"${doneId} aria-label="${esc(doneAria || doneText)}">${esc(doneText)}</button>`
     : '<span class="sh-spacer" aria-hidden="true"></span>';
@@ -281,9 +280,9 @@ export function sheetHead({ title, cancelText, cancelAction, cancelAria, doneTex
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '52';
+export const APP_VERSION = '53';
 
-export function renderDeleteConfirmSheet(opts = {}) {
+function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
   const entry = opts.deleteEntry || {};
   const isPlan = Boolean(entry.planned);
@@ -317,7 +316,7 @@ export function renderDeleteConfirmSheet(opts = {}) {
     </div>`;
 }
 
-export function renderMoreSheet(opts = {}) {
+function renderMoreSheet(opts = {}) {
   let themePref = 'auto';
   try { themePref = localStorage.getItem(THEME_KEY) || 'auto'; } catch {}
   const themeBtn = (value, label) =>
@@ -559,7 +558,7 @@ export function renderTagPicker(prefix, selectedTag, config = loadConfig(), buck
   return parts.join('');
 }
 
-export function renderHelpSheet() {
+function renderHelpSheet() {
   return `
     ${sheetHead({ title: '说明', cancelText: '关闭', cancelAction: 'close-form', cancelAria: '关闭说明' })}
     <div class="form-sheet-body help-body">
@@ -574,7 +573,7 @@ export function renderHelpSheet() {
     </div>`;
 }
 
-export function renderImportShiftDialog(opts = {}) {
+function renderImportShiftDialog(opts = {}) {
   const value = opts.importShiftHours !== undefined ? opts.importShiftHours : '0';
   const hint = opts.importShiftHint || '导入前可把所有时间整体平移。例：iPhone 记在 UTC+8、电脑 UTC-5，填 -13；留空或 0 不平移。';
   return `
@@ -590,7 +589,7 @@ export function renderImportShiftDialog(opts = {}) {
     </div>`;
 }
 
-export function renderConfigSheet(config = loadConfig(), opts = {}) {
+function renderConfigSheet(config = loadConfig(), opts = {}) {
   const entries = opts.entries || [];
   // 每个 chip 一个两行式 cell：第一行名称输入 + 桶 select，第二行 longOk 勾选
   // 与记录条数说明。cell-group 供 inset 底和 hairline 分隔（与更多菜单同语法）。

@@ -6,7 +6,7 @@
 
 - `index.html`：DOM 壳、PWA/meta 引用、`styles.css` 和 `src/app.js` 模块入口
 - `styles.css`：全部样式
-- `src/app.js`：启动、状态组合、导航、渲染调度、事件委托、测试 API 和 Service Worker 注册
+- `src/app.js`：启动、状态组合、导航、渲染调度、事件委托和 Service Worker 注册
 - `src/entry_model.js`：记录日期模型、续记默认起点、占位条、结算点、同刻冲突和 `+1min` helper
 - `src/io_actions.js`：当前视图摘要、复制、下载、导入、分享等本地 IO 动作
 - `src/sheet_controller.js`：新建/编辑/config/import sheet、focus trap、picker 重挂载和表单保存
@@ -44,7 +44,7 @@
 - `src/entry_model.js`：只放记录日期模型、续记默认起点、占位条、结算点、同刻冲突、`+1min`、补录有界插入（`carveInsert`）、无冗余边界归一化（`coalesceRedundant`）和写后统一出口（`normalizeEntries`，恒保今天尾占位）等纯/低副作用 helper；不访问 DOM / localStorage。
 - `src/io_actions.js`：只处理当前视图摘要、复制、下载、导入、分享；通过显式依赖接收 `load/save/render/state`，不拥有全局状态。
 - `src/sheet_controller.js`：只处理新建/编辑/config/import sheet、focus trap、picker 重挂载和表单保存；通过显式依赖读写状态和持久化。
-- `src/app.js`：只负责启动、状态组合、导航、渲染调度、事件委托、测试 API 和 Service Worker 注册。
+- `src/app.js`：只负责启动、状态组合、导航、渲染调度、事件委托和 Service Worker 注册。
 
 提交与推送前红线：
 
@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v52` / manifest `version: "52"`。
+当前版本：`timelog-v53` / manifest `version: "53"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -90,8 +90,8 @@
 - v46（R1）：sheet 关闭走 class 驱动过渡（`.sheet-closing`）+ `transitionend`/320ms 兜底后置 hidden，与进场 `@starting-style` 对称；`sheetCloseCleanup` 挡重入（关闭动画未播完又被重开/重关时立即收尾旧的，不留悬空定时器）；`prefers-reduced-motion` 下直接同步隐藏。
 - v46（R3）：编辑态时间选择默认折叠为触发行（点击展开滚轮），与新建态一致；计划编辑（时间本就是核心可改项）例外，始终展开。校验失败但触发行仍折叠时，先展开触发行再显示错误，不能把报错文案落进看不见的容器里。
 - v46（R7）：切视图/切周期后内容方向性滑入（280ms，`app.js animateContentEnter`）；列表卡片入场淡入（140ms，纯 `opacity`，`.entry` CSS `@starting-style`）——刻意只过渡 `opacity` 不碰 `transform`，因为 `transform` 是左滑手势（v45）的驱动属性，两者共用 transition 会让拖拽跟手变成带延迟的动画。均不做 FLIP／逐项 diff。
-- v52 刷新接帧：每次主渲染后把 `.app` 与 FAB 的已转义 DOM 写入同标签页 `sessionStorage['timelog.bootSnapshot.v1']`；`index.html` 在 ES module 到达前同步恢复该快照并加 `.boot-restored`。只有数据/config/视图/日期/记录模式/自然日仍一致才恢复；命中后 `init()` **不得再首轮 render**，只建立状态与数据签名，避免恢复节点被销毁重建后触发卡片淡入/FAB 二次合成闪动。快照不跨标签、不进备份、不替代 `localStorage` 权威数据。
-- 移动端「更多」短 sheet 的抓手必须可下拉关闭：只从 `.sh-grab` 响应触摸/笔，短拖回弹，拖动 ≥72px 或快速下甩关闭；正文滚动、桌面布局和新建/编辑等高表单不接管该手势。
+- v53 刷新接帧：每次主渲染后把 `.app` 与 FAB 的已转义 DOM 写入同标签页 `sessionStorage['timelog.bootSnapshot.v1']`；`index.html` 在 ES module 到达前同步恢复该快照并加 `.boot-restored`。只有数据/config/视图/日期/记录模式/自然日仍一致才恢复；命中后 `init()` **不得再首轮 render**。左滑「编辑/删除」轨道默认 `visibility:hidden`，只在真实拖动或吸附打开时显现，禁止依赖上层卡片合成层遮盖，避免 Safari 刷新时底层轨道透出。快照不跨标签、不进备份、不替代 `localStorage` 权威数据。
+- 移动端「更多」短 sheet 的抓手必须可下拉关闭：只从 `.sh-grab` 的至少 44px 高真实命中区响应触摸/笔，短拖回弹，拖动 ≥72px 或快速下甩关闭；正文滚动、桌面布局和新建/编辑等高表单不接管该手势。
 
 ## 隐私红线
 
@@ -223,3 +223,4 @@ git diff --check
 | v50 | 2026-07-10 | iOS 备份落盘可靠性：更多菜单「下载备份」改名「存储备份」；iPhone/iPad Safari 与主屏 PWA 优先通过系统文件分享面板选择「存储到文件」及目录，取消不再暗中产生去向不明的下载，能力不足时才回退浏览器下载；桌面保留直接下载。复用统一备份 artifact，分享仍按文件→文本→下载降级，并补 Chromium/WebKit 平台路径护栏。 |
 | v51 | 2026-07-10 | Safari 刷新与导入冲突体验修复：同标签页保存安全 DOM 启动快照，刷新时在 ES module 到达前同步接住上一帧，消除主内容空白、静态「回到今天」误露和 FAB 闪变；导入冲突从原始 ID 长文本改为逐条「备份中 / 本机中」对照卡，有冲突时禁用导入，平移小时数变化实时重算，全部消解才可提交。补模块延迟刷新与恶意双冲突 Chromium/WebKit 护栏。 |
 | v52 | 2026-07-10 | v51 二诊与交互闭环：启动快照命中后跳过 `init()` 首轮重渲染，避免恢复节点立刻被销毁重建而触发 `.entry` 淡入和 fixed FAB 二次合成闪动。导入冲突每条可选保留本机、使用备份或保守合并文字；全部选择后最新数据签名复核并原子写入，不静默 +1min。移动端「更多」抓手支持下拉关闭，短拖回弹，桌面/正文滚动/高表单不受影响。 |
+| v53 | 2026-07-11 | 功能冻结前 KISS 收敛：更多抓手把 5px 装饰线扩为 44px 真实命中区；左滑操作轨道默认不可见，只在拖动/打开时显示，消除 Safari 刷新合成层透底。导入冲突不再只展开 8 条，新增 10 条冲突逐项处理、未处理阻写、签名过期阻写和最终原子提交回归。删除测试专用运行时分支、无调用包装/返回方法、内部多余 exports、未用图标/变量/旧选择器和过时可执行原型；README/应用说明明确完整备份是数据完整导出，导入是安全合并而非精确恢复。 |

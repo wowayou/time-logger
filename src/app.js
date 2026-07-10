@@ -31,19 +31,9 @@ import {
 import { createIoActions } from './io_actions.js';
 import { createSheetController } from './sheet_controller.js';
 import {
-  GAP,
-  addBucket,
   buildRangeSegmentsFromEntries,
-  classifySegment,
   confirmSegmentInData,
-  emptyTotals,
-  formatPercent,
-  isKnownTag,
-  isSegmentConfirmed,
   listPlannedEntries,
-  percentValue,
-  primaryTag,
-  sortedEntriesFrom,
   summarizeEntries
 } from './stats.js';
 import {
@@ -55,7 +45,6 @@ import {
   inclusiveCalendarDayCount,
   localDateKey,
   minsBetweenDates,
-  normalizeTimestamp,
   nowStr,
   parseDateKey,
   periodLabel as getPeriodLabel,
@@ -132,14 +121,8 @@ import {
   }
 
   // --- Compute entries and summaries ---
-  function sortedEntries() {
-    return sortedEntriesFrom(load().entries);
-  }
   function settlementEndFor(startTs, dateKey) {
     return getSettlementEndFor(load().entries, startTs, dateKey);
-  }
-  function buildRangeSegments(start, end, opts = {}) {
-    return buildRangeSegmentsFromEntries(load().entries, start, end, opts);
   }
   function summarizeRange(start, end, opts = {}) {
     return summarizeEntries(load().entries, start, end, opts);
@@ -528,10 +511,6 @@ import {
     sheetController.openFormSheet({ mode: 'config' });
   }
 
-  function openMore() {
-    ioActions.openMoreSheet();
-  }
-
   const sheetController = createSheetController({
     state,
     load,
@@ -585,29 +564,6 @@ import {
     worker.postMessage({ type: 'SKIP_WAITING' });
   }
 
-  // --- Test API ---
-  function exposeTestApi() {
-    document.body.classList.add('app-ready');
-    window.__timelogTest = {
-      GAP,
-      addBucket,
-      buildRangeSegmentsFromEntries,
-      classifySegment,
-      confirmSegmentInData,
-      emptyTotals,
-      formatPercent,
-      isKnownTag,
-      isSegmentConfirmed,
-      minsBetweenDates,
-      normalizeTimestamp,
-      percentValue,
-      primaryTag,
-      listPlannedEntries,
-      sortedEntriesFrom,
-      summarizeEntries
-    };
-  }
-
   // --- Actions ---
   function registerActions() {
     // 新发现：header「···」更多按钮此前是裸文本字形，换成 iconSvg 体系图标（一次性
@@ -632,7 +588,7 @@ import {
         sourceId: el.dataset.sourceId || ''
       });
       if (action === 'open-help') openHelp();
-      if (action === 'open-more') openMore();
+      if (action === 'open-more') sheetController.openMoreSheet();
       if (action === 'open-tag-config') openTagConfig();
       if (action === 'toggle-start-time') sheetController.toggleStartTime(el);
       if (action === 'toggle-edit-start-time') sheetController.toggleEditStartTime(el);
@@ -747,9 +703,14 @@ import {
       card.style.transform = offset ? `translateX(${offset}px)` : '';
       row.dataset.swipeOffset = String(offset);
       row.classList.toggle('swipe-open', offset === -TRACK);
+      if (offset < 0) row.classList.add('swipe-revealing');
+      else if (!animate) row.classList.remove('swipe-revealing');
       setActionsEnabled(row, offset === -TRACK);
       if (animate) setTimeout(() => {
-        if (document.contains(card)) card.style.transition = '';
+        if (document.contains(card)) {
+          card.style.transition = '';
+          if (!offset) row.classList.remove('swipe-revealing');
+        }
       }, 200);
     }
 
@@ -998,12 +959,8 @@ import {
     window.__vvlog('HUD ready');
   }
 
-  if (window.__TIMELOG_TEST__) {
-    exposeTestApi();
-  } else {
-    registerActions();
-    registerCardSwipe();
-    registerServiceWorker();
-    initVvDebugHud();
-    init();
-  }
+  registerActions();
+  registerCardSwipe();
+  registerServiceWorker();
+  initVvDebugHud();
+  init();

@@ -28,7 +28,7 @@ export function listPlannedEntries(entries, dateKey) {
     .filter(e => e.planned && e.ts.slice(0, 10) === dateKey);
 }
 
-export function emptyTotals() {
+function emptyTotals() {
   return { job: 0, maintain: 0, leak: 0, unrecorded: 0, pending: 0, total: 0 };
 }
 
@@ -40,7 +40,7 @@ export function isKnownTag(tag) {
   return tagKnownForConfirmation(tag);
 }
 
-export function isSegmentConfirmed(entry, endTs) {
+function isSegmentConfirmed(entry, endTs) {
   const mark = entry && entry.longConfirm;
   return Boolean(mark && mark.startTs === entry.ts && mark.endTs === endTs);
 }
@@ -60,7 +60,7 @@ export function classifySegment(entry, rawMins, endTs, isOngoing) {
   };
 }
 
-export function addBucket(totals, tag, mins, flags = {}) {
+function addBucket(totals, tag, mins, flags = {}) {
   if (mins <= 0) return;
   const unrecorded = typeof flags === 'boolean' ? flags : Boolean(flags.unrecorded);
   const pending = typeof flags === 'object' && Boolean(flags.pending);
@@ -198,7 +198,7 @@ export function confirmSegmentInData(d, id, endTs, opts = {}) {
   return { ok: true, entry: stored };
 }
 
-export function percentValue(n, total) {
+function percentValue(n, total) {
   if (total <= 0 || n <= 0) return 0;
   return Math.min(100, Math.max(0, n / total * 100));
 }

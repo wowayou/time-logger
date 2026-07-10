@@ -759,7 +759,11 @@ export function createSheetController(deps) {
     sheet.addEventListener('pointerdown', event => {
       const panel = event.target.closest('.form-sheet-panel');
       if (!panel || panel.dataset.mode !== 'more' || window.innerWidth >= 720) return;
-      if (event.pointerType === 'mouse' || !event.target.closest('.sh-grab')) return;
+      const grabber = panel.querySelector('.sh-grab');
+      const hit = grabber && grabber.getBoundingClientRect();
+      if (event.pointerType === 'mouse' || !hit
+        || event.clientX < hit.left || event.clientX > hit.right
+        || event.clientY < hit.top || event.clientY > hit.bottom) return;
       sheetDismissDrag = {
         panel,
         pointerId: event.pointerId,
@@ -1434,7 +1438,6 @@ export function createSheetController(deps) {
     pickEditEndMode,
     handleFormInput,
     saveTagConfig,
-    handleResponsiveResize,
-    getEditingBox
+    handleResponsiveResize
   };
 }

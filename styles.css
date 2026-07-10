@@ -18,11 +18,8 @@
       --fs-cap: 12px;
       --fs-ui: 13px;
       --fs-body: 15px;
-      --fs-title: 17px;
       --t-fast: 140ms ease-out;
-      --t-med: 280ms cubic-bezier(0.32, 0.72, 0, 1);
       --control-h: 44px;
-      --icon-btn: 44px;
     }
     /* === 暗·石墨（默认） === */
     :root {
@@ -189,7 +186,7 @@
       font-size: 17px;
       font-family: inherit;
     }
-    /* 新发现：与 .icon-btn svg 同一套 stroke 渲染约定（app.js 注入 iconSvg('more')）。 */
+    /* header「···」沿用 stroke 图标渲染约定（app.js 注入 iconSvg('more')）。 */
     .hdr-action-btn svg {
       width: 20px;
       height: 20px;
@@ -604,47 +601,6 @@
     }
     .start-time-section[hidden] { display: none; }
 
-    /* Form actions */
-    .form-btns {
-      display: flex;
-      align-items: stretch;
-      gap: 8px;
-      min-height: var(--control-h);
-      margin-top: 4px;
-    }
-    .btn-pri {
-      flex: 1;
-      min-height: var(--control-h);
-      padding: 0 12px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: var(--r-ctl);
-      font-size: 16px;
-      font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
-    }
-    .btn-pri:active { opacity: 0.8; }
-    .btn-sec {
-      min-height: var(--control-h);
-      min-width: 88px;
-      padding: 0 16px;
-      background: transparent;
-      color: var(--muted);
-      border: 1px solid var(--border);
-      border-radius: var(--r-ctl);
-      font-size: 16px;
-      font-family: inherit;
-      cursor: pointer;
-    }
-    .btn-pri, .btn-sec {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      line-height: 1.2;
-    }
-
     /* Wheel picker */
     .wheel-picker {
       display: flex;
@@ -1036,7 +992,9 @@
       width: 144px;
       display: grid;
       grid-template-columns: repeat(2, 72px);
+      visibility: hidden;
     }
+    .swipe-row.swipe-revealing .swipe-actions { visibility: visible; }
     .swipe-action {
       width: 72px;
       min-width: 72px;
@@ -1148,22 +1106,6 @@
       inset: -7px 0;
     }
     .mini-btn:active { opacity: 0.75; }
-    .time-toggle {
-      width: 100%;
-      min-height: 40px;
-      padding: 0 12px;
-      border: 1px solid var(--border);
-      border-radius: var(--r-ctl);
-      background: transparent;
-      color: var(--text);
-      font-size: 15px;
-      font-family: inherit;
-      cursor: pointer;
-      text-align: left;
-    }
-    .time-collapse { margin-top: 8px; }
-    .time-collapse[hidden] { display: none; }
-
     /* Update prompt */
     .update-banner {
       position: fixed;
@@ -1335,13 +1277,22 @@
     /* v34 C 语法 sheet 头：抓手条 + 取消/完成文字按钮 + 居中标题 */
     .sh-grab {
       flex: 0 0 auto;
-      width: 40px;
-      height: 5px;
-      border-radius: 3px;
-      background: var(--track);
-      margin: 9px auto 0;
+      position: relative;
+      z-index: 2;
+      width: 64px;
+      height: 44px;
+      margin: 0 auto -30px;
       touch-action: none;
       cursor: grab;
+    }
+    .sh-grab::before {
+      content: '';
+      display: block;
+      width: 40px;
+      height: 5px;
+      margin: 9px auto 0;
+      border-radius: 3px;
+      background: var(--track);
     }
     .form-sheet.sheet-dragging .sh-grab { cursor: grabbing; }
     .form-sheet-head {
@@ -1436,14 +1387,6 @@
       background: var(--border);
     }
     .cell-chevron { color: var(--faint); font-size: 16px; flex: 0 0 auto; }
-    .cell-value {
-      margin-left: auto;
-      color: var(--muted);
-      font-size: var(--fs-ui);
-      font-variant-numeric: tabular-nums;
-      text-align: right;
-      min-width: 0;
-    }
     .cell-row .theme-seg { margin-left: auto; }
     .cell-danger {
       min-height: 48px;
@@ -1491,8 +1434,6 @@
     .preview-role { color: var(--muted); }
     .preview-time { color: var(--text); font-variant-numeric: tabular-nums; }
     .preview-label { min-width: 0; color: var(--text); overflow-wrap: anywhere; }
-    .preview-current .preview-role,
-    .preview-new .preview-role { color: var(--accent); font-weight: 650; }
     .delete-confirm-body { gap: 14px; }
     .delete-target {
       display: grid;
@@ -1573,7 +1514,6 @@
       font-size: 13px;
       font-weight: 650;
     }
-    .import-conflict-more { color: var(--muted); font-size: 13px; text-align: center; }
     .more-body { gap: 10px; }
     .app-version {
       text-align: center;

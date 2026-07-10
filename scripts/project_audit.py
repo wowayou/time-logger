@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "52"
+EXPECTED_VERSION = "53"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -267,10 +267,8 @@ def audit_index(errors: list[str]) -> None:
         fail(errors, f"desktop hover tooltip must use a {EXPECTED_TOOLTIP_DELAY} show delay")
     if not re.search(r"button\[data-tip\]:focus-visible::after,\s*\n\s*button\[data-tip\]:focus-visible::before\s*\{[^}]*transition-delay:\s*0s", css, re.DOTALL):
         fail(errors, "keyboard focus-visible tooltip must show without delay")
-    if "window.__timelogTest" not in app or "window.__TIMELOG_TEST__" not in app:
-        fail(errors, "src/app.js must expose test API only behind window.__TIMELOG_TEST__")
-    if not re.search(r"if\s*\(\s*window\.__TIMELOG_TEST__\s*\)\s*\{\s*exposeTestApi\(\);", app):
-        fail(errors, "src/app.js test API must be guarded by window.__TIMELOG_TEST__")
+    if "window.__timelogTest" in app or "window.__TIMELOG_TEST__" in app:
+        fail(errors, "src/app.js must not carry a test-only runtime branch")
     if "iconSvg('x')" in runtime or re.search(r"^\s*x\s*:", ui, re.MULTILINE):
         fail(errors, "runtime files must not define or use the x icon")
     if re.search(r'data-action="start-edit"[^>]*>\s*改\s*</button>', runtime):

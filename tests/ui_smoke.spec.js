@@ -47,8 +47,12 @@ for (const share of [false, true]) {
 test('mobile more sheet follows the grabber: short pulls rebound and long pulls dismiss', async ({ page }) => {
   await boot(page, 375, 'one-record', false, FIXED_NOW);
   await openBackupMenu(page);
+  const grabberBox = await page.locator('.sh-grab').boundingBox();
+  expect(grabberBox.height).toBeGreaterThanOrEqual(44);
   const dragGrabber = async distance => {
-    await page.locator('.sh-grab').evaluate((grabber, dy) => {
+    await page.evaluate(({ box, dy }) => {
+      const grabber = document.elementFromPoint(box.x + box.width / 2, box.y + box.height - 6);
+      if (!grabber) throw new Error('expanded grabber hit target is missing');
       const fire = (type, y) => grabber.dispatchEvent(new PointerEvent(type, {
         bubbles: true,
         cancelable: true,
@@ -57,10 +61,11 @@ test('mobile more sheet follows the grabber: short pulls rebound and long pulls 
         clientX: 180,
         clientY: y
       }));
-      fire('pointerdown', 120);
-      fire('pointermove', 120 + dy);
-      fire('pointerup', 120 + dy);
-    }, distance);
+      const startY = box.y + box.height - 6;
+      fire('pointerdown', startY);
+      fire('pointermove', startY + dy);
+      fire('pointerup', startY + dy);
+    }, { box: grabberBox, dy: distance });
   };
 
   await dragGrabber(30);
@@ -624,6 +629,7 @@ test('reload starts with has-entries boot state and reaches app-ready', async ({
 test('Safari-style reload restores the last rendered frame before app.js arrives', async ({ page }) => {
   await boot(page, 375, 'one-record', false, FIXED_NOW);
   await expect(page.locator('#timeline')).toContainText('响应式测试记录');
+  await expect(page.locator('.swipe-actions')).toBeHidden();
   await page.evaluate(() => {
     document.querySelector('.entry').dataset.bootSentinel = 'kept';
     const snapshot = JSON.parse(sessionStorage.getItem('timelog.bootSnapshot.v1'));
@@ -646,6 +652,7 @@ test('Safari-style reload restores the last rendered frame before app.js arrives
   await expect(page.locator('#timeline')).toContainText('响应式测试记录');
   await expect(page.locator('#today-btn')).toBeHidden();
   await expect(page.locator('#usage-day')).toHaveText('使用第 1 天');
+  await expect(page.locator('.swipe-actions')).toBeHidden();
   releaseApp();
   await reload;
   await expect(page.locator('body')).toHaveClass(/app-ready/);
@@ -907,7 +914,9 @@ test.describe('swipe-left action track (mobile gesture)', () => {
   test('swiping a record card reveals 2x72 actions and edit remains explicit', async ({ page }) => {
     await boot(page, 375, 'two-records', false, FIXED_NOW);
     const card = page.locator('.entry[data-id="today-2"]');
+    const row = page.locator('.swipe-row[data-swipe-id="today-2"]');
     await expect(card).toBeVisible();
+    await expect(row.locator('.swipe-actions')).toBeHidden();
     const box = await card.boundingBox();
     const y = box.y + box.height / 2;
     await page.evaluate(({ startX, y }) => {
@@ -927,8 +936,8 @@ test.describe('swipe-left action track (mobile gesture)', () => {
       for (let i = 1; i <= 8; i++) fire('touchmove', startX - i * 12);
       fire('touchend', startX - 96);
     }, { startX: box.x + box.width * 0.6, y });
-    const row = page.locator('.swipe-row[data-swipe-id="today-2"]');
     await expect(row).toHaveClass(/swipe-open/);
+    await expect(row.locator('.swipe-actions')).toBeVisible();
     await expect(row.locator('.swipe-actions')).toHaveAttribute('aria-hidden', 'false');
     const widths = await row.locator('.swipe-action').evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().width));
     expect(widths).toEqual([72, 72]);
@@ -1162,6 +1171,67 @@ test('import conflicts can be resolved per item with local, backup, or conservat
     what: '专注\n\n补充的备份文字',
     tags: ['求职推进']
   });
+});
+
+test('ten import conflicts all render, stay atomic, and reject stale resolution signatures', async ({ page }) => {
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  const localEntries = Array.from({ length: 10 }, (_, index) => ({
+    id: `local-${index}`,
+    ts: `2026-06-29T${String(index + 8).padStart(2, '0')}:00`,
+    what: `本机 ${index + 1}`,
+    tags: ['求职推进']
+  }));
+  const incomingEntries = localEntries.map((entry, index) => ({
+    id: `incoming-${index}`,
+    ts: entry.ts,
+    what: `备份 ${index + 1}`,
+    tags: ['吃饭']
+  }));
+  await page.evaluate(entries => {
+    localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
+  }, localEntries);
+
+  const chooserPromise = page.waitForEvent('filechooser');
+  await openBackupMenu(page);
+  await page.getByRole('button', { name: '导入 JSON 备份' }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    name: 'timelog-ten-conflicts.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ version: 1, entries: incomingEntries }))
+  });
+
+  const cards = page.locator('.import-conflict-card');
+  await expect(cards).toHaveCount(10);
+  for (let index = 0; index < 9; index++) {
+    await cards.nth(index).getByRole('button', { name: '使用备份' }).click();
+  }
+  await expect(page.locator('[data-role="import-summary"]')).toHaveText('10 条冲突 · 已处理 9/10');
+  await expect(page.locator('#import-confirm-btn')).toBeDisabled();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.map(entry => entry.id))).toEqual(localEntries.map(entry => entry.id));
+
+  await cards.nth(9).getByRole('button', { name: '使用备份' }).click();
+  await expect(page.locator('#import-confirm-btn')).toBeEnabled();
+  await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('timelog.v1'));
+    data.entries[0].what = '另一标签页改过';
+    localStorage.setItem('timelog.v1', JSON.stringify(data));
+  });
+  await page.locator('#import-confirm-btn').click();
+  await expect(page.locator('[data-role="import-summary"]')).toHaveText('10 条冲突 · 已处理 0/10');
+  await expect(page.locator('[data-role="import-error"]')).toContainText('本机数据或平移结果已变化');
+  await expect(page.locator('#import-confirm-btn')).toBeDisabled();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.some(entry => entry.id.startsWith('incoming-')))).toBe(false);
+
+  for (let index = 0; index < 10; index++) {
+    await cards.nth(index).getByRole('button', { name: '使用备份' }).click();
+  }
+  await expect(page.locator('#import-confirm-btn')).toBeEnabled();
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#import-confirm-btn').click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  const finalIds = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.map(entry => entry.id));
+  expect(finalIds).toEqual(incomingEntries.map(entry => entry.id));
 });
 
 test('renamed defaults stay renamed and mainline/chip duplicates are rejected safely', async ({ page }) => {

@@ -18,11 +18,11 @@ export function isPlaceholderEntry(entry) {
   return Boolean(entry && typeof entry.what === 'string' && entry.what.trim() === '');
 }
 
-export function entriesOnDate(entries, dateKey) {
+function entriesOnDate(entries, dateKey) {
   return loggedEntriesFrom(entries).filter(entry => entry.ts.slice(0, 10) === dateKey);
 }
 
-export function lastEntryOnDate(entries, dateKey) {
+function lastEntryOnDate(entries, dateKey) {
   const entriesForDay = entriesOnDate(entries, dateKey);
   return entriesForDay.length ? entriesForDay[entriesForDay.length - 1] : null;
 }
@@ -65,7 +65,7 @@ export function addOneMinute(ts) {
   return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
 }
 
-export function ensureOpenPlaceholderAt(entries, ts, completedId = '', createId) {
+function ensureOpenPlaceholderAt(entries, ts, completedId = '', createId) {
   const existing = entries.find(entry => entry.ts === ts && entry.id !== completedId);
   if (existing) {
     if (isPlaceholderEntry(existing)) {
@@ -250,7 +250,7 @@ function entryTagsEqual(a, b) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-export function entryContentEqual(a, b) {
+function entryContentEqual(a, b) {
   return Boolean(a && b)
     && String(a.what || '') === String(b.what || '')
     && entryTagsEqual(a, b);

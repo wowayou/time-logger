@@ -67,18 +67,18 @@ export function startOfDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-export function startOfWeek(d) {
+function startOfWeek(d) {
   const x = startOfDay(d);
   const day = x.getDay() || 7;
   x.setDate(x.getDate() - day + 1);
   return x;
 }
 
-export function startOfMonth(d) {
+function startOfMonth(d) {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
-export function startOfYear(d) {
+function startOfYear(d) {
   return new Date(d.getFullYear(), 0, 1);
 }
 
@@ -123,7 +123,7 @@ export function validateTs(raw) {
   return { ok: true, ts };
 }
 
-export function validatePlannedTs(raw, dateKey) {
+function validatePlannedTs(raw, dateKey) {
   const ts = normalizeTimestamp(raw);
   if (!ts) return { ok: false, msg: '请输入完整日期和时间，例如 2026-06-28 09:05。' };
   const when = new Date(ts);
@@ -149,7 +149,7 @@ export function fmtTs(ts) {
   return value ? value.replace('T', ' ') : String(ts || '');
 }
 
-export function dateLabel(d) {
+function dateLabel(d) {
   return `${d.getFullYear()}/${p2(d.getMonth() + 1)}/${p2(d.getDate())} 周${'日一二三四五六'[d.getDay()]}`;
 }
 
@@ -157,7 +157,7 @@ export function shortDateLabel(d) {
   return `${d.getMonth() + 1}/${d.getDate()} 周${'日一二三四五六'[d.getDay()]}`;
 }
 
-export function shortRangeLabel(start, end) {
+function shortRangeLabel(start, end) {
   const last = addDays(end, -1);
   return `${p2(start.getMonth() + 1)}/${p2(start.getDate())}-${p2(last.getMonth() + 1)}/${p2(last.getDate())}`;
 }
