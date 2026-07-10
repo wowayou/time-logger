@@ -5,12 +5,14 @@
 import { mountTimePicker, setTimeInputError, useCompactTimePicker } from './pickers.js';
 import {
   addOneMinute,
-  carveInsert,
-  conflictMessage,
+  cloneEntries,
   findTimeConflict,
+  intervalEditContext,
   isPlaceholderEntry,
   normalizeEntries,
-  openPlaceholderForDate
+  openPlaceholderForDate,
+  planIntervalEdit,
+  planSegmentSplit
 } from './entry_model.js';
 import {
   BUCKETS,
@@ -34,6 +36,14 @@ export function createSheetController(deps) {
   let formRecordMode = 'log';
   let formBackfill = false;
   let formBackfillEnd = '';
+  let formBackfillKind = 'fill';
+  let formSourceId = '';
+  let formFrozenStart = '';
+  let formFrozenEnd = '';
+  let formBaseEntries = [];
+  let formPlanIds = [];
+  let lastPreviewSignature = '';
+  let editEndMode = 'fixed';
   let configSnapshot = null;
   // 导航栈：config/help/import-shift 若从「更多」下钻进入，取消/保存回「更多」而非整层关闭。
   let returnToMore = false;
@@ -151,8 +161,172 @@ export function createSheetController(deps) {
     startTsEl.value = s;
     endTsEl.value = e;
     paintBackfillDuration(panel);
-    if (startMount) mountTimePicker(startMount, s, v => { startTsEl.value = v; paintBackfillDuration(panel); });
-    if (endMount) mountTimePicker(endMount, e, v => { endTsEl.value = v; paintBackfillDuration(panel); });
+    if (startMount) mountTimePicker(startMount, s, v => {
+      startTsEl.value = v;
+      paintBackfillDuration(panel);
+      refreshSplitPreview(panel);
+    });
+    if (endMount) mountTimePicker(endMount, e, v => {
+      endTsEl.value = v;
+      paintBackfillDuration(panel);
+      refreshSplitPreview(panel);
+    });
+    refreshSplitPreview(panel);
+  }
+
+  function resetPlanIds() {
+    formPlanIds = [deps.uid(), deps.uid(), deps.uid(), deps.uid()];
+  }
+
+  function planIdFactory() {
+    let index = 0;
+    return () => formPlanIds[index++] || formPlanIds[formPlanIds.length - 1];
+  }
+
+  function selectedTag(panel, prefix, fallback = '未知') {
+    const custom = panel && panel.querySelector(prefix === 'edit' ? '[data-role="edit-custom-tag"]' : '#form-ctag');
+    const root = panel && panel.querySelector(prefix === 'edit' ? '[data-role="edit-chips"]' : '#form-chips');
+    const selected = root && root.querySelector('.chip.sel');
+    return (custom && custom.value.trim()) || (selected && selected.dataset.tag) || (root ? '未知' : fallback) || '未知';
+  }
+
+  function paintTransactionPreview(panel, plan) {
+    const preview = panel ? panel.querySelector('[data-role="interval-preview"]') : null;
+    const limits = panel ? panel.querySelector('[data-role="edit-limits"], [data-role="backfill-limits"]') : null;
+    if (limits) {
+      const c = plan && (plan.context || plan.constraints);
+      if (c) {
+        const timeLabel = value => value && c.dayEndTs && value === c.dayEndTs ? '24:00' : hhmm(value);
+        limits.textContent = `开始 ${timeLabel(c.startMin)}-${timeLabel(c.startMax)}（${c.startReason}）；结束 ${timeLabel(c.endMin)}-${timeLabel(c.endMax)}（${c.endReason}）`;
+      } else if (formFrozenStart && formFrozenEnd) {
+        limits.textContent = `最小 ${hhmm(formFrozenStart)}（原段起点）；最大 ${hhmm(formFrozenEnd)}（原段终点）`;
+      }
+    }
+    if (!preview) return;
+    preview.replaceChildren();
+    const headline = document.createElement('div');
+    headline.className = 'preview-head';
+    if (!plan || !plan.ok) {
+      headline.textContent = plan && plan.message || '请选择有效的起止时间。';
+      headline.classList.add('is-error');
+      preview.appendChild(headline);
+      return;
+    }
+    if (plan.kind === 'segment-split') {
+      headline.textContent = plan.mode === 'whole'
+        ? '整段改为'
+        : (plan.mode === 'edge' ? '贴边后为两段' : '切分后为三段');
+    } else {
+      headline.textContent = '保存后的边界';
+    }
+    preview.appendChild(headline);
+    const roleNames = {
+      previous: '前一段', current: '本段', next: '后一段',
+      before: '前段', new: '新段', after: '后段'
+    };
+    (plan.preview || []).forEach(part => {
+      const row = document.createElement('div');
+      row.className = `preview-row preview-${part.role}`;
+      const role = document.createElement('span');
+      role.className = 'preview-role';
+      role.textContent = roleNames[part.role] || part.role;
+      const time = document.createElement('span');
+      time.className = 'preview-time';
+      const endLabel = part.endTs.slice(0, 10) !== part.startTs.slice(0, 10) && part.endTs.slice(11) === '00:00'
+        ? '24:00'
+        : hhmm(part.endTs);
+      time.textContent = `${hhmm(part.startTs)}-${endLabel}`;
+      const label = document.createElement('span');
+      label.className = 'preview-label';
+      label.textContent = part.label || '未记录';
+      row.append(role, time, label);
+      preview.appendChild(row);
+    });
+  }
+
+  function buildEditPlan(panel, entries = formBaseEntries) {
+    const id = panel && panel.dataset.id;
+    const tsEl = panel && panel.querySelector('[data-role="edit-ts"]');
+    const endEl = panel && panel.querySelector('[data-role="edit-end-ts"]');
+    const modeEl = panel && panel.querySelector('[data-role="edit-end-mode"]');
+    const whatEl = panel && panel.querySelector('[data-role="edit-what"]');
+    if (!id || !tsEl || !endEl || !modeEl) return null;
+    const original = entries.find(item => item.id === id);
+    const tag = selectedTag(panel, 'edit', original && (original.tags || [])[0]);
+    return planIntervalEdit(entries, {
+      id,
+      startTs: tsEl.value,
+      endTs: endEl.value,
+      endMode: modeEl.value,
+      what: whatEl ? whatEl.value.trim() : '',
+      tags: [tag]
+    }, {
+      todayKey: todayStr(),
+      nowTs: nowStr(),
+      createId: planIdFactory()
+    });
+  }
+
+  function refreshEditPreview(panel, entries = formBaseEntries, remember = true) {
+    const plan = buildEditPlan(panel, entries);
+    if (!plan) return null;
+    paintTransactionPreview(panel, plan);
+    if (remember && plan.ok) lastPreviewSignature = plan.resultSignature;
+    return plan;
+  }
+
+  function buildSplitPlan(panel, entries = formBaseEntries) {
+    const startEl = panel && panel.querySelector('#form-ts');
+    const endEl = panel && panel.querySelector('#form-end-ts');
+    const whatEl = panel && panel.querySelector('#form-what');
+    if (!startEl || !endEl) return null;
+    return planSegmentSplit(entries, {
+      sourceId: formSourceId,
+      frozenStart: formFrozenStart,
+      frozenEnd: formFrozenEnd,
+      startTs: startEl.value,
+      endTs: endEl.value,
+      what: whatEl ? whatEl.value.trim() : '',
+      tags: [selectedTag(panel, 'form')]
+    }, { createId: planIdFactory() });
+  }
+
+  function refreshSplitPreview(panel, entries = formBaseEntries, remember = true) {
+    const plan = buildSplitPlan(panel, entries);
+    if (!plan) return null;
+    paintTransactionPreview(panel, plan);
+    if (remember && plan.ok) lastPreviewSignature = plan.resultSignature;
+    return plan;
+  }
+
+  function updateEditRangeLabel(panel) {
+    const label = panel && panel.querySelector('[data-role="edit-start-label"]');
+    const startEl = panel && panel.querySelector('[data-role="edit-ts"]');
+    const endEl = panel && panel.querySelector('[data-role="edit-end-ts"]');
+    const modeEl = panel && panel.querySelector('[data-role="edit-end-mode"]');
+    if (!label || !startEl || !endEl || !modeEl) return;
+    label.textContent = `${hhmm(startEl.value)}-${modeEl.value === 'now' ? '至今' : hhmm(endEl.value)}`;
+  }
+
+  function mountEditIntervalPickers(panel) {
+    const startEl = panel.querySelector('[data-role="edit-ts"]');
+    const endEl = panel.querySelector('[data-role="edit-end-ts"]');
+    const startMount = panel.querySelector('[data-role="edit-start-wheel"]');
+    const endMount = panel.querySelector('[data-role="edit-end-wheel"]');
+    if (!startEl || !endEl || !startMount) return;
+    mountTimePicker(startMount, startEl.value, value => {
+      startEl.value = value;
+      updateEditRangeLabel(panel);
+      refreshEditPreview(panel);
+    });
+    if (endMount) mountTimePicker(endMount, endEl.value, value => {
+      endEl.value = value;
+      updateEditRangeLabel(panel);
+      refreshEditPreview(panel);
+    });
+    updateEditRangeLabel(panel);
+    refreshEditPreview(panel);
+    sheetTimeMounted = true;
   }
 
   // v43: 面板不再随键盘缩放（结构性根除 P16–P23 整类跳变，见 docs/postmortems.md）。
@@ -265,10 +439,14 @@ export function createSheetController(deps) {
     const hint = panel.querySelector('[data-role="mainline-hint"]');
     if (hint) hint.textContent = bucketHint(formBucket);
     panel.querySelectorAll('[data-role="form-bucket-seg"] button').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.bucket === formBucket);
+      const selected = btn.dataset.bucket === formBucket;
+      btn.classList.toggle('active', selected);
+      btn.setAttribute('aria-pressed', String(selected));
     });
     panel.querySelectorAll('[data-role="record-mode-seg"] button').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.mode === formRecordMode);
+      const selected = btn.dataset.mode === formRecordMode;
+      btn.classList.toggle('active', selected);
+      btn.setAttribute('aria-pressed', String(selected));
     });
   }
 
@@ -278,9 +456,10 @@ export function createSheetController(deps) {
     // 打开的新内容又清空、又 hidden 掉。
     if (sheetCloseCleanup) sheetCloseCleanup();
     const requestedMode = opts && opts.mode;
-    const mode = ['edit', 'help', 'config', 'import-shift', 'more'].includes(requestedMode) ? requestedMode : 'new';
+    const mode = ['edit', 'help', 'config', 'import-shift', 'more', 'delete-confirm'].includes(requestedMode) ? requestedMode : 'new';
     const id = opts && opts.id;
-    const entry = mode === 'edit' ? deps.load().entries.find(e => e.id === id) : null;
+    const loaded = deps.load();
+    const entry = mode === 'edit' ? loaded.entries.find(e => e.id === id) : null;
     if (mode === 'edit' && !entry) return;
     sheetLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (mode === 'new') {
@@ -292,6 +471,13 @@ export function createSheetController(deps) {
       formRecordMode = loadRecordModePref();
       formBackfill = Boolean(opts && opts.backfill);
       formBackfillEnd = (opts && opts.endTs) || '';
+      formBackfillKind = (opts && opts.backfillKind) === 'split' ? 'split' : 'fill';
+      formSourceId = (opts && opts.sourceId) || '';
+      formFrozenStart = normalizeTimestamp((opts && opts.ts) || '');
+      formFrozenEnd = normalizeTimestamp((opts && opts.endTs) || '');
+      formBaseEntries = cloneEntries(loaded.entries);
+      resetPlanIds();
+      lastPreviewSignature = '';
       // Backfilling a known past gap is always an "already happened" record;
       // a leaked plan-mode pref would force a future ts and silently fail to save.
       if (isHistoryDate() || formBackfill) formRecordMode = 'log';
@@ -299,6 +485,11 @@ export function createSheetController(deps) {
       deps.setSheetEditId(id);
       sheetTimeMounted = false;
       editBucket = safeBucket(bucketForTag((entry.tags || [])[0] || '', deps.loadConfig()));
+      formBaseEntries = cloneEntries(loaded.entries);
+      resetPlanIds();
+      lastPreviewSignature = '';
+      const context = intervalEditContext(formBaseEntries, id, { todayKey: todayStr(), nowTs: nowStr() });
+      editEndMode = context.ok && context.canUseNow && (!context.next || entry.ongoing) ? 'now' : 'fixed';
       deps.render();
     } else if (mode === 'config') {
       configSnapshot = JSON.parse(JSON.stringify(deps.loadConfig()));
@@ -330,16 +521,24 @@ export function createSheetController(deps) {
       mode,
       entry,
       config: deps.loadConfig(),
-      entries: deps.load().entries,
+      entries: loaded.entries,
       importShiftHours: opts && opts.importShiftHours,
       importShiftHint: opts && opts.importShiftHint,
       targetDate: deps.state.selectedDate,
       isToday: deps.state.selectedDate === todayStr(),
       isHistoryDay: isHistoryDate(),
       backfill: Boolean(opts && opts.backfill),
+      backfillKind: formBackfillKind,
       bucket: mode === 'edit' ? editBucket : formBucket,
       defaultBucket: formBucket,
-      recordMode: formRecordMode
+      recordMode: formRecordMode,
+      intervalContext: mode === 'edit'
+        ? intervalEditContext(formBaseEntries, id, { todayKey: todayStr(), nowTs: nowStr() })
+        : null,
+      editEndMode,
+      deletePlan: opts && opts.deletePlan,
+      deleteEntry: opts && opts.deleteEntry,
+      deleteStale: Boolean(opts && opts.deleteStale)
     });
     // v43: 面板几何恒定，开合键盘不再改 sheet 尺寸；lockBodyForSheet 锁滚动 + 起初
     // 写一次 --kb 供正文 scroll-padding。
@@ -449,6 +648,14 @@ export function createSheetController(deps) {
     sheetTimeMounted = false;
     formBackfill = false;
     formBackfillEnd = '';
+    formBackfillKind = 'fill';
+    formSourceId = '';
+    formFrozenStart = '';
+    formFrozenEnd = '';
+    formBaseEntries = [];
+    formPlanIds = [];
+    lastPreviewSignature = '';
+    editEndMode = 'fixed';
     configSnapshot = null;
     if (restoreFocus && sheetLastFocus && document.contains(sheetLastFocus)) {
       sheetLastFocus.focus();
@@ -480,6 +687,12 @@ export function createSheetController(deps) {
       // R3：折叠中的常规编辑没有挂载任何 picker，跨断点/旋转屏幕时无需重挂。
       const editSection = panel.querySelector('[data-role="edit-time-section"]');
       if (editSection && editSection.hidden) return;
+      const intervalStart = panel.querySelector('[data-role="edit-start-wheel"]');
+      if (intervalStart) {
+        if (intervalStart.dataset.pickerCompact === compact) return;
+        mountEditIntervalPickers(panel);
+        return;
+      }
     }
     const mountEl = mode === 'edit'
       ? panel.querySelector('[data-role="edit-wheel"]')
@@ -550,12 +763,18 @@ export function createSheetController(deps) {
     const wasSelected = el.classList.contains('sel');
     const panel = el.closest('.form-sheet-panel');
     const chipRoot = panel ? panel.querySelector('#form-chips, [data-role="edit-chips"]') : null;
-    if (chipRoot) chipRoot.querySelectorAll('.chip').forEach(c => c.classList.remove('sel'));
+    if (chipRoot) chipRoot.querySelectorAll('.chip').forEach(c => {
+      c.classList.remove('sel');
+      c.setAttribute('aria-pressed', 'false');
+    });
     if (wasSelected) {
       formTag = '';
+      if (panel && panel.dataset.mode === 'edit') refreshEditPreview(panel);
+      if (panel && panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
       return;
     }
     el.classList.add('sel');
+    el.setAttribute('aria-pressed', 'true');
     formTag = el.dataset.tag || '';
     if (el.dataset.bucket) {
       if (panel && panel.dataset.mode === 'edit') editBucket = el.dataset.bucket;
@@ -564,12 +783,16 @@ export function createSheetController(deps) {
       const editSeg = panel ? panel.querySelector('[data-role="edit-bucket-seg"]') : null;
       if (editSeg) {
         editSeg.querySelectorAll('button').forEach(btn => {
-          btn.classList.toggle('active', btn.dataset.bucket === editBucket);
+          const selected = btn.dataset.bucket === editBucket;
+          btn.classList.toggle('active', selected);
+          btn.setAttribute('aria-pressed', String(selected));
         });
       }
     }
     const custom = panel ? panel.querySelector('#form-ctag, [data-role="edit-custom-tag"]') : null;
     if (custom) custom.value = '';
+    if (panel && panel.dataset.mode === 'edit') refreshEditPreview(panel);
+    if (panel && panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
   }
 
   function pickBucket(el) {
@@ -589,12 +812,18 @@ export function createSheetController(deps) {
         );
       }
       const seg = el.closest('[data-role="form-bucket-seg"], [data-role="edit-bucket-seg"]');
-      if (seg) seg.querySelectorAll('button').forEach(btn => btn.classList.toggle('active', btn.dataset.bucket === bucket));
+      if (seg) seg.querySelectorAll('button').forEach(btn => {
+        const selected = btn.dataset.bucket === bucket;
+        btn.classList.toggle('active', selected);
+        btn.setAttribute('aria-pressed', String(selected));
+      });
       const hint = panel.querySelector('[data-role="mainline-hint"]');
       if (hint) hint.textContent = bucketHint(bucket);
       const custom = panel.querySelector('#form-ctag, [data-role="edit-custom-tag"]');
       if (custom) custom.value = '';
     }
+    if (panel && panel.dataset.mode === 'edit') refreshEditPreview(panel);
+    if (panel && panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
   }
 
   function pickRecordMode(el) {
@@ -610,7 +839,9 @@ export function createSheetController(deps) {
     if (planRow) planRow.hidden = formRecordMode !== 'plan';
     if (startSection) startSection.hidden = true;
     panel.querySelectorAll('[data-role="record-mode-seg"] button').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.mode === formRecordMode);
+      const selected = btn.dataset.mode === formRecordMode;
+      btn.classList.toggle('active', selected);
+      btn.setAttribute('aria-pressed', String(selected));
     });
     const title = panel.querySelector('#form-sheet-title');
     const what = panel.querySelector('.form-sheet-what');
@@ -637,10 +868,10 @@ export function createSheetController(deps) {
     err.innerHTML = '';
   }
 
-  function showInlineError(scope, html, role = 'conflict-error') {
+  function showInlineError(scope, message, role = 'conflict-error') {
     const err = scope ? scope.querySelector(`[data-role="${role}"]`) : null;
     if (!err) return;
-    err.innerHTML = html;
+    err.textContent = String(message || '');
     err.hidden = false;
     // ④ A blocked ✓ must give feedback the user can actually see; the panel body
     // scrolls and the iOS keyboard can hide the lower half, so pull it into view.
@@ -649,13 +880,36 @@ export function createSheetController(deps) {
     }
   }
 
+  function showConflictError(scope, conflict, ts, plusAction) {
+    const err = scope ? scope.querySelector('[data-role="conflict-error"]') : null;
+    if (!err) return;
+    err.replaceChildren();
+    const what = String(conflict && conflict.what || '未填写').replace(/\s+/g, ' ').slice(0, 36);
+    err.append(document.createTextNode(`同一时刻已有“${what}”。`));
+    const edit = document.createElement('button');
+    edit.className = 'mini-btn';
+    edit.type = 'button';
+    edit.dataset.action = 'edit-conflict-entry';
+    edit.dataset.id = String(conflict && conflict.id || '');
+    edit.textContent = '编辑那条';
+    const plus = document.createElement('button');
+    plus.className = 'mini-btn';
+    plus.type = 'button';
+    plus.dataset.action = plusAction;
+    plus.dataset.ts = ts;
+    plus.textContent = '用+1min';
+    err.append(edit, plus);
+    err.hidden = false;
+    if (typeof err.scrollIntoView === 'function') err.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
   function useConflictPlusMinute(el) {
     const panel = el.closest('.form-sheet-panel');
     const mode = panel && panel.dataset.mode;
     const nextTs = addOneMinute(el.dataset.ts || '');
     const input = mode === 'edit' ? panel.querySelector('[data-role="edit-ts"]') : panel.querySelector('#form-ts');
     const mount = mode === 'edit'
-      ? panel.querySelector('[data-role="edit-wheel"]')
+      ? panel.querySelector('[data-role="edit-wheel"], [data-role="edit-start-wheel"]')
       : getFormWheelMount(panel);
     if (input) input.value = nextTs;
     if (mode === 'new' && formRecordMode !== 'plan') paintPrevSegment(panel, nextTs);
@@ -668,6 +922,10 @@ export function createSheetController(deps) {
       setTimeInputError(mount, '');
     }
     clearInlineError(panel);
+    if (mode === 'edit') {
+      updateEditRangeLabel(panel);
+      refreshEditPreview(panel);
+    }
   }
 
   function editConflictEntry(id) {
@@ -708,6 +966,8 @@ export function createSheetController(deps) {
     if (!chipRoot) return;
     formTag = '';
     chipRoot.innerHTML = renderTagPicker(isEdit ? 'edit' : 'form', input.value.trim(), deps.loadConfig(), isEdit ? editBucket : formBucket);
+    if (isEdit) refreshEditPreview(panel);
+    else if (formBackfill) refreshSplitPreview(panel);
   }
 
   function rememberTag(tag, bucket, entries) {
@@ -744,14 +1004,17 @@ export function createSheetController(deps) {
       if (!planned && isPlaceholderEntry(conflict)) {
         placeholder = conflict;
       } else {
-        showInlineError(panel, conflictMessage(conflict, checked.ts, 'use-conflict-plus-new'));
+        showConflictError(panel, conflict, checked.ts, 'use-conflict-plus-new');
         return;
       }
     }
     if (ctag) rememberTag(ctag, formBucket, d.entries);
     if (planned) {
       d.entries.push({ id: deps.uid(), ts: checked.ts, what, tags: [tag], planned: true });
-      deps.save(d);
+      if (!deps.save(d)) {
+        showInlineError(panel, '本机存储空间不足，表单内容仍保留；请先导出备份并清理空间。');
+        return;
+      }
       deps.setSelectedDate(checked.ts.slice(0, 10));
       teardownNow(() => { closeForm(); deps.render(); });
       return;
@@ -768,7 +1031,10 @@ export function createSheetController(deps) {
     // Single normalization out: coalesce redundant boundaries + re-ensure today's
     // tail placeholder so the next record's default start can never collide.
     normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
-    deps.save(d);
+    if (!deps.save(d)) {
+      showInlineError(panel, '本机存储空间不足，表单内容仍保留；请先导出备份并清理空间。');
+      return;
+    }
     deps.setSelectedDate(checked.ts.slice(0, 10));
     teardownNow(() => { closeForm(); deps.render(); });
   }
@@ -789,19 +1055,40 @@ export function createSheetController(deps) {
     if (!what) { document.getElementById('form-what').focus(); return; }
     const ctag = document.getElementById('form-ctag').value.trim();
     const tag = ctag || formTag || '未知';
+    const expected = buildSplitPlan(panel, formBaseEntries);
+    if (!expected || !expected.ok) {
+      showInlineError(panel, expected && expected.message || '这段时间无法补录，请检查起止时间。');
+      paintTransactionPreview(panel, expected);
+      return;
+    }
     const d = deps.load();
-    // Cross-point guard: the window must lie within a single segment, else the
-    // "restore original label at end" is ambiguous and would swallow a record.
-    const crosser = d.entries.find(e => !e.planned && normalizeTimestamp(e.ts) && e.ts > startChecked.ts && e.ts < endChecked.ts);
-    if (crosser) {
-      showInlineError(panel, '这段里已有其它记录，请缩小范围或分两次补。');
+    const latest = planSegmentSplit(d.entries, {
+      sourceId: formSourceId,
+      frozenStart: formFrozenStart,
+      frozenEnd: formFrozenEnd,
+      startTs: startChecked.ts,
+      endTs: endChecked.ts,
+      what,
+      tags: [tag]
+    }, { createId: planIdFactory() });
+    if (!latest.ok) {
+      showInlineError(panel, latest.message || '原段已经变化，请重新确认。');
+      paintTransactionPreview(panel, latest);
+      return;
+    }
+    if (lastPreviewSignature && latest.resultSignature !== lastPreviewSignature) {
+      formBaseEntries = cloneEntries(d.entries);
+      lastPreviewSignature = latest.resultSignature;
+      paintTransactionPreview(panel, latest);
+      showInlineError(panel, '数据已变化，预览已按最新记录重新计算；请再次确认。');
+      return;
+    }
+    d.entries = latest.resultEntries;
+    if (!deps.save(d)) {
+      showInlineError(panel, '本机存储空间不足，表单内容仍保留；请先导出备份并清理空间。');
       return;
     }
     if (ctag) rememberTag(ctag, formBucket, d.entries);
-    const created = carveInsert(d.entries, { start: startChecked.ts, end: endChecked.ts, what, tag, createId: deps.uid });
-    if (!created) { showInlineError(panel, '这段时间无法补录，请检查起止时间。'); return; }
-    normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
-    deps.save(d);
     deps.setSelectedDate(startChecked.ts.slice(0, 10));
     teardownNow(() => { closeForm(); deps.render(); });
   }
@@ -846,18 +1133,60 @@ export function createSheetController(deps) {
     const tag = ctag || (sel ? sel.dataset.tag : '未知');
     const conflict = findTimeConflict(d.entries, checked.ts, id);
     if (conflict) {
-      showInlineError(box, conflictMessage(conflict, checked.ts, 'use-conflict-plus-edit'));
+      showConflictError(box, conflict, checked.ts, 'use-conflict-plus-edit');
       return;
     }
-    if (ctag) rememberTag(ctag, editBucket, d.entries.filter(item => item.id !== id));
-    if (entry) {
+    const endEl = box.querySelector('[data-role="edit-end-ts"]');
+    const endModeEl = box.querySelector('[data-role="edit-end-mode"]');
+    if (entry && !planned && endEl && endModeEl) {
+      const expected = buildEditPlan(box, formBaseEntries);
+      if (!expected || !expected.ok) {
+        showInlineError(box, expected && expected.message || '这组起止时间无法保存。');
+        paintTransactionPreview(box, expected);
+        return;
+      }
+      const latest = planIntervalEdit(d.entries, {
+        id,
+        startTs: checked.ts,
+        endTs: endEl.value,
+        endMode: endModeEl.value,
+        what,
+        tags: [tag]
+      }, {
+        todayKey: todayStr(),
+        nowTs: nowStr(),
+        createId: planIdFactory()
+      });
+      if (!latest.ok) {
+        showInlineError(box, latest.message || '记录边界已经变化，请重新确认。');
+        paintTransactionPreview(box, latest);
+        return;
+      }
+      if (lastPreviewSignature && latest.resultSignature !== lastPreviewSignature) {
+        formBaseEntries = cloneEntries(d.entries);
+        lastPreviewSignature = latest.resultSignature;
+        paintTransactionPreview(box, latest);
+        showInlineError(box, '数据已变化，预览已按最新记录重新计算；请再次确认。');
+        return;
+      }
+      d.entries = latest.resultEntries;
+      if (!deps.save(d)) {
+        showInlineError(box, '本机存储空间不足，表单内容仍保留；请先导出备份并清理空间。');
+        return;
+      }
+      if (ctag) rememberTag(ctag, editBucket, d.entries.filter(item => item.id !== id));
+    } else if (entry) {
       entry.ts = checked.ts;
       entry.what = what;
       entry.tags = [tag];
       if (planned) entry.planned = true;
       else delete entry.planned;
       normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
-      deps.save(d);
+      if (!deps.save(d)) {
+        showInlineError(box, '本机存储空间不足，表单内容仍保留；请先导出备份并清理空间。');
+        return;
+      }
+      if (ctag) rememberTag(ctag, editBucket, d.entries.filter(item => item.id !== id));
     }
     deps.setSelectedDate(checked.ts.slice(0, 10));
     teardownNow(() => { closeEditSheet(); deps.render(); });
@@ -886,6 +1215,14 @@ export function createSheetController(deps) {
   // aria-expanded。commitEdit 校验失败时也调这个，确保折叠态下报错不会悄无声息。
   function expandEditTimeSection(panel) {
     const section = panel.querySelector('[data-role="edit-time-section"]');
+    const intervalStart = panel.querySelector('[data-role="edit-start-wheel"]');
+    if (section && intervalStart) {
+      if (section.hidden) section.hidden = false;
+      const trigger = panel.querySelector('[data-action="toggle-edit-start-time"]');
+      if (trigger) trigger.setAttribute('aria-expanded', 'true');
+      if (!sheetTimeMounted) mountEditIntervalPickers(panel);
+      return;
+    }
     const editWheel = panel.querySelector('[data-role="edit-wheel"]');
     const tsEl = panel.querySelector('[data-role="edit-ts"]');
     if (!section || !editWheel || !tsEl) return;
@@ -914,6 +1251,39 @@ export function createSheetController(deps) {
     }
   }
 
+  function pickEditEndMode(el) {
+    const panel = el.closest('.form-sheet-panel');
+    if (!panel || panel.dataset.mode !== 'edit') return;
+    editEndMode = el.dataset.mode === 'now' ? 'now' : 'fixed';
+    const modeEl = panel.querySelector('[data-role="edit-end-mode"]');
+    const picker = panel.querySelector('[data-role="edit-end-picker"]');
+    if (modeEl) modeEl.value = editEndMode;
+    if (picker) picker.hidden = editEndMode === 'now';
+    panel.querySelectorAll('[data-role="edit-end-mode-seg"] button').forEach(btn => {
+      const selected = btn.dataset.mode === editEndMode;
+      btn.classList.toggle('active', selected);
+      btn.setAttribute('aria-pressed', String(selected));
+    });
+    if (editEndMode === 'fixed') {
+      const endEl = panel.querySelector('[data-role="edit-end-ts"]');
+      const mount = panel.querySelector('[data-role="edit-end-wheel"]');
+      if (endEl && mount) mountTimePicker(mount, endEl.value, value => {
+        endEl.value = value;
+        updateEditRangeLabel(panel);
+        refreshEditPreview(panel);
+      });
+    }
+    updateEditRangeLabel(panel);
+    refreshEditPreview(panel);
+  }
+
+  function handleFormInput(target) {
+    const panel = target && target.closest && target.closest('.form-sheet-panel');
+    if (!panel) return;
+    if (panel.dataset.mode === 'edit') refreshEditPreview(panel);
+    if (panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
+  }
+
   function saveTagConfig() {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
     const rows = Array.from(panel.querySelectorAll('.cfg-row'));
@@ -933,6 +1303,11 @@ export function createSheetController(deps) {
       return;
     }
     const snapshot = configSnapshot || deps.loadConfig();
+    const mainlineCollision = rowStates.find(chip => snapshot.mainline.includes(chip.name));
+    if (mainlineCollision) {
+      showInlineError(panel, `“${mainlineCollision.name}”已经是主线标签，不能同时作为 chip。`, 'config-error');
+      return;
+    }
     const d = deps.load();
     for (const chip of rowStates) {
       if (chip.originalName && chip.originalName !== chip.name && countEntriesWithTag(d.entries, chip.originalName)) {
@@ -944,7 +1319,10 @@ export function createSheetController(deps) {
       mainline: snapshot.mainline,
       chips: rowStates.map(chip => ({ name: chip.name, bucket: chip.bucket, longOk: chip.longOk }))
     };
-    deps.save(d);
+    if (!deps.save(d)) {
+      showInlineError(panel, '本机存储空间不足，配置页内容仍保留；请先导出备份并清理空间。', 'config-error');
+      return;
+    }
     deps.saveConfig(nextConfig);
     closeForm();
     deps.render();
@@ -974,6 +1352,8 @@ export function createSheetController(deps) {
     syncCustomDraft,
     toggleStartTime,
     toggleEditStartTime,
+    pickEditEndMode,
+    handleFormInput,
     saveTagConfig,
     handleResponsiveResize,
     getEditingBox

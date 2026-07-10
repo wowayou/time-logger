@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "47"
+EXPECTED_VERSION = "48"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -114,6 +114,16 @@ def audit_service_worker(errors: list[str]) -> None:
     for src in ["./" + src for src in [*REQUIRED_RUNTIME_ASSETS, *REQUIRED_ICON_SIZES]]:
         if src not in sw:
             fail(errors, f"sw.js FILES must cache runtime asset {src}")
+
+    required_reliability_guards = {
+        "c.addAll(FILES)": "install must reject when precaching fails",
+        "self.clients.claim()": "activate must wait for clients.claim()",
+        "e.request.method !== 'GET'": "fetch handler must ignore non-GET requests",
+        "url.origin !== self.location.origin": "fetch handler must ignore cross-origin requests",
+    }
+    for fragment, message in required_reliability_guards.items():
+        if fragment not in sw:
+            fail(errors, f"service worker reliability guard missing: {message}")
 
 
 def audit_app_version_string(errors: list[str]) -> None:
@@ -275,12 +285,19 @@ def audit_index(errors: list[str]) -> None:
         if "data-tip=" not in attrs:
             fail(errors, f"icon button is missing data-tip near byte {match.start()}")
 
-    # v47：日视图卡片撤了常驻 edit/delete 图标（点整卡即编辑，删除进编辑 sheet）；
-    # 计划卡的「标记已发生」确认动作与右下角 FAB 记一条入口仍须存在。
+    # v48：日视图点卡编辑、触摸左滑揭示双操作轨道；计划确认与 FAB 入口仍须存在。
     if 'aria-label="标记计划为已发生"' not in runtime:
         fail(errors, "planned card must keep the confirm-as-happened action")
     if 'id="add-btn"' not in html or 'data-action="open-form"' not in html:
         fail(errors, "day-view record entry (FAB #add-btn / open-form) must exist")
+    for required in ('data-action="start-edit"', 'data-action="request-delete"', 'class="swipe-actions"'):
+        if required not in runtime:
+            fail(errors, f"v48 swipe/edit action contract is missing: {required}")
+    for required in ("planIntervalEdit", "planSegmentSplit", "planDeleteEntry"):
+        if required not in runtime:
+            fail(errors, f"v48 transactional interval model is missing: {required}")
+    if 'id="backup-send-btn"' not in runtime or 'data-action="send-backup"' not in runtime:
+        fail(errors, "share backup cell must stay unconditionally renderable")
 
     if ".inp" not in css or "font-size: 16px" not in css:
         fail(errors, "text inputs must keep a 16px font-size floor for mobile")

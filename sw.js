@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-const CACHE = 'timelog-v47';
+const CACHE = 'timelog-v48';
 const FILES = [
   './',
   './index.html',
@@ -28,7 +28,7 @@ const FILES = [
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(FILES).catch(() => {}))
+    caches.open(CACHE).then(c => c.addAll(FILES))
   );
 });
 
@@ -36,9 +36,8 @@ self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('message', e => {
@@ -46,7 +45,9 @@ self.addEventListener('message', e => {
 });
 
 self.addEventListener('fetch', e => {
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request).catch(() => r))
+    caches.match(e.request).then(r => r || fetch(e.request))
   );
 });

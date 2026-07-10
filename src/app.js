@@ -4,10 +4,11 @@
 // Commercial licensing available on request; contact via the repository above.
 import {
   addOneMinute,
+  entriesRevision,
   defaultFormTimestamp,
   findTimeConflict,
-  isPlaceholderEntry,
   normalizeEntries,
+  planDeleteEntry,
   settlementEndFor as getSettlementEndFor
 } from './entry_model.js';
 import {
@@ -18,6 +19,7 @@ import {
   VIEW_KEY,
   load,
   loadConfig,
+  mergeImportedConfig,
   mergeImportedEntries,
   rememberCustomTagForBucket,
   save,
@@ -73,6 +75,8 @@ import {
   let sheetEditId = null;
   let pendingUpdateRegistration = null;
   let updateReloading = false;
+  let pendingDelete = null;
+  let undoDeleteState = null;
   let lastIntervalSignature = '';
   let state = { view: 'day', selectedDate: '' };
   const HELP_SEEN_KEY = 'timelog.helpSeen.v16';
@@ -113,7 +117,9 @@ import {
     const effective = pref === 'auto' ? getSysPref() : pref;
     document.getElementById('meta-theme-color').setAttribute('content', effective === 'light' ? '#f7f5f1' : '#0e0f13');
     document.querySelectorAll('#theme-seg button').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.theme === pref);
+      const selected = btn.dataset.theme === pref;
+      btn.classList.toggle('active', selected);
+      btn.setAttribute('aria-pressed', String(selected));
     });
   }
   function setThemePref(pref) {
@@ -256,7 +262,9 @@ import {
     const crossTabBanner = document.getElementById('cross-tab-banner');
     if (crossTabBanner) crossTabBanner.hidden = true;
     document.querySelectorAll('#view-tabs button').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.view === state.view);
+      const selected = btn.dataset.view === state.view;
+      btn.classList.toggle('active', selected);
+      btn.setAttribute('aria-pressed', String(selected));
     });
     // R5：当前周期是否包含今天——驱动「回到今天」按钮的条件渲染 + 日期行内的
     // 「今天」常驻高亮字样，两处共用同一次判定。
@@ -341,43 +349,114 @@ import {
     render();
   }
 
-  // --- Delete ---
-  function delEntry(id) {
-    if (!confirm('删除这条记录？')) return;
+  // --- Delete / undo ---
+  function deleteError(message) {
+    const error = document.querySelector('#form-sheet [data-role="delete-error"]');
+    if (!error) return;
+    error.textContent = message;
+    error.hidden = false;
+  }
+
+  function requestDelete(id, opts = {}) {
     const d = load();
-    const entry = d.entries.find(e => e.id === id);
-    if (!entry) {
-      if (sheetEditId === id) sheetController.closeEditSheet();
-      render();
+    const entry = d.entries.find(item => item.id === id);
+    const plan = planDeleteEntry(d.entries, id, { todayKey: todayStr(), nowTs: nowStr() });
+    if (!entry || !plan.ok) return;
+    pendingDelete = {
+      id,
+      plan,
+      returnToEdit: opts.returnToEdit !== false && sheetController.getSheetMode() === 'edit'
+    };
+    sheetController.openFormSheet({ mode: 'delete-confirm', deletePlan: plan, deleteEntry: entry });
+  }
+
+  function cancelDelete() {
+    const pending = pendingDelete;
+    pendingDelete = null;
+    sheetController.closeFormSheet({ restoreFocus: false });
+    if (pending && pending.returnToEdit) sheetController.startEdit(pending.id);
+    else render();
+  }
+
+  function hideUndoToast() {
+    if (undoDeleteState && undoDeleteState.timer) clearTimeout(undoDeleteState.timer);
+    undoDeleteState = null;
+    const toast = document.getElementById('undo-toast');
+    if (toast) toast.hidden = true;
+  }
+
+  function showUndoToast(beforeData, afterRevision) {
+    hideUndoToast();
+    const toast = document.getElementById('undo-toast');
+    if (!toast) return;
+    const message = toast.querySelector('[data-role="undo-message"]');
+    const button = toast.querySelector('[data-action="undo-delete"]');
+    if (message) message.textContent = '已删除';
+    if (button) button.hidden = false;
+    toast.hidden = false;
+    const timer = setTimeout(hideUndoToast, 8000);
+    undoDeleteState = { beforeData, afterRevision, timer };
+  }
+
+  function cancelUndoForConflict() {
+    if (!undoDeleteState) return;
+    const toast = document.getElementById('undo-toast');
+    const message = toast && toast.querySelector('[data-role="undo-message"]');
+    const button = toast && toast.querySelector('[data-action="undo-delete"]');
+    if (undoDeleteState.timer) clearTimeout(undoDeleteState.timer);
+    undoDeleteState = null;
+    if (message) message.textContent = '数据已在别处更新，撤销已取消';
+    if (button) button.hidden = true;
+    if (toast) {
+      toast.hidden = false;
+      setTimeout(() => { toast.hidden = true; }, 3000);
+    }
+  }
+
+  function confirmDelete(id) {
+    if (!pendingDelete || pendingDelete.id !== id) return;
+    const d = load();
+    const entry = d.entries.find(item => item.id === id);
+    const latest = planDeleteEntry(d.entries, id, { todayKey: todayStr(), nowTs: nowStr() });
+    if (!entry || !latest.ok) {
+      deleteError(latest.message || '这条记录已经不存在。');
       return;
     }
-    const dayKey = entry.ts.slice(0, 10);
-    const sameDay = d.entries
-      .filter(x => !x.planned && x.id !== id && normalizeTimestamp(x.ts) && x.ts.slice(0, 10) === dayKey)
-      .sort((a, b) => (a.ts < b.ts ? -1 : 1));
-    let prev = null;
-    let next = null;
-    for (const x of sameDay) {
-      if (x.ts < entry.ts) prev = x;
-      else if (x.ts > entry.ts && !next) next = x;
+    if (latest.resultSignature !== pendingDelete.plan.resultSignature) {
+      pendingDelete.plan = latest;
+      sheetController.openFormSheet({
+        mode: 'delete-confirm',
+        deletePlan: latest,
+        deleteEntry: entry,
+        deleteStale: true
+      });
+      return;
     }
-    const prevReal = Boolean(prev) && !isPlaceholderEntry(prev);
-    const neighborsMatch = prevReal && next && !isPlaceholderEntry(next) && primaryTag(prev) === primaryTag(next);
-    // Smart delete: if removing would silently stretch a real previous label over
-    // the freed span (standalone activity), convert this entry to 未记录 instead.
-    // Otherwise remove it and let normalizeEntries coalesce — which heals a
-    // carve-undo (identical neighbors) and folds placeholders back together.
-    if (!isPlaceholderEntry(entry) && prevReal && !neighborsMatch) {
-      entry.what = '';
-      entry.tags = [];
-      delete entry.longConfirm;
-      delete entry.planned;
-    } else {
-      d.entries = d.entries.filter(e => e.id !== id);
+    const beforeData = JSON.parse(JSON.stringify(d));
+    d.entries = latest.resultEntries;
+    if (!save(d)) {
+      deleteError('本机存储空间不足，删除没有执行；请先导出备份并清理空间。');
+      return;
     }
-    normalizeEntries(d, { todayKey: todayStr(), createId: uid });
-    save(d);
-    if (sheetEditId === id) sheetController.closeEditSheet();
+    pendingDelete = null;
+    sheetController.closeFormSheet({ restoreFocus: false });
+    render();
+    showUndoToast(beforeData, entriesRevision(d.entries));
+  }
+
+  function undoDelete() {
+    const pending = undoDeleteState;
+    if (!pending) return;
+    const current = load();
+    if (entriesRevision(current.entries) !== pending.afterRevision) {
+      cancelUndoForConflict();
+      return;
+    }
+    if (!save(pending.beforeData)) {
+      cancelUndoForConflict();
+      return;
+    }
+    hideUndoToast();
     render();
   }
 
@@ -402,7 +481,10 @@ import {
   // --- Data signature ---
   function dataSignature() {
     const d = load();
-    return JSON.stringify({ view: state.view, selectedDate: state.selectedDate, entries: d.entries });
+    const { start, end } = periodRange();
+    const now = new Date();
+    const liveMinute = now >= start && now < end ? nowStr() : '';
+    return JSON.stringify({ view: state.view, selectedDate: state.selectedDate, liveMinute, entries: d.entries });
   }
   function openHelp(opts = {}) {
     if (opts.markSeen !== false) localStorage.setItem(HELP_SEEN_KEY, '1');
@@ -442,6 +524,7 @@ import {
     saveConfig,
     validateImportData,
     mergeImportedEntries,
+    mergeImportedConfig,
     periodRange,
     periodFullLabel,
     computeDay,
@@ -506,17 +589,29 @@ import {
       if (action === 'shift-period') shiftPeriod(Number(el.dataset.delta || 0));
       if (action === 'today') goToday();
       if (action === 'open-form') sheetController.openForm();
-      if (action === 'backfill-seg') sheetController.openFormSheet({ mode: 'new', ts: el.dataset.ts, endTs: el.dataset.end, backfill: true });
+      if (action === 'backfill-seg') sheetController.openFormSheet({
+        mode: 'new',
+        ts: el.dataset.ts,
+        endTs: el.dataset.end,
+        backfill: true,
+        backfillKind: el.dataset.kind,
+        sourceId: el.dataset.sourceId || ''
+      });
       if (action === 'open-help') openHelp();
       if (action === 'open-more') openMore();
       if (action === 'open-tag-config') openTagConfig();
       if (action === 'toggle-start-time') sheetController.toggleStartTime(el);
       if (action === 'toggle-edit-start-time') sheetController.toggleEditStartTime(el);
+      if (action === 'pick-edit-end-mode') sheetController.pickEditEndMode(el);
       if (action === 'pick-form-tag') sheetController.pickTag(el);
       if (action === 'pick-form-bucket') sheetController.pickBucket(el);
       if (action === 'pick-record-mode') sheetController.pickRecordMode(el);
       if (action === 'save-entry') sheetController.saveEntry();
-      if (action === 'close-form') { sheetController.closeForm(); renderIfCrossTabPending(); }
+      if (action === 'close-form') {
+        if (sheetController.getSheetMode() === 'delete-confirm') cancelDelete();
+        else sheetController.closeForm();
+        renderIfCrossTabPending();
+      }
       if (action === 'use-conflict-plus-new' || action === 'use-conflict-plus-edit') sheetController.useConflictPlusMinute(el);
       if (action === 'edit-conflict-entry') sheetController.editConflictEntry(el.dataset.id);
       if (action === 'start-edit') sheetController.startEdit(el.dataset.id);
@@ -527,7 +622,10 @@ import {
       if (action === 'save-tag-config') sheetController.saveTagConfig();
       if (action === 'confirm-planned') confirmPlanned(el.dataset.id);
       if (action === 'confirm-segment') confirmSegment(el.dataset.id, el.dataset.end);
-      if (action === 'delete-entry') delEntry(el.dataset.id);
+      if (action === 'request-delete') requestDelete(el.dataset.id);
+      if (action === 'confirm-delete') confirmDelete(el.dataset.id);
+      if (action === 'cancel-delete') cancelDelete();
+      if (action === 'undo-delete') undoDelete();
       if (action === 'drill') drill(el.dataset.date, el.dataset.view);
       if (action === 'copy-summary') ioActions.copyCurrentViewSummary();
       if (action === 'copy-json') ioActions.copyJSON();
@@ -540,6 +638,8 @@ import {
       if (action === 'dismiss-cross-tab-banner') {
         const b = document.getElementById('cross-tab-banner');
         if (b) b.hidden = true;
+        cancelUndoForConflict();
+        render();
       }
     });
     document.getElementById('import-file').addEventListener('change', ioActions.handleImport);
@@ -551,10 +651,17 @@ import {
         sheetController.updateMainlineHint(e.target);
         sheetController.syncCustomDraft(e.target);
       }
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        sheetController.handleFormInput(e.target);
+      }
     });
 
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { sheetController.cancelEdit(); sheetController.closeForm(); renderIfCrossTabPending(); }
+      if (e.key === 'Escape') {
+        if (sheetController.getSheetMode() === 'delete-confirm') cancelDelete();
+        else { sheetController.cancelEdit(); sheetController.closeForm(); }
+        renderIfCrossTabPending();
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         if (sheetEditId) { sheetController.commitEdit(sheetEditId); return; }
         if (sheetController.isFormOpen()) sheetController.saveEntry();
@@ -564,6 +671,7 @@ import {
     window.addEventListener('orientationchange', sheetController.handleResponsiveResize, { passive: true });
     window.addEventListener('storage', e => {
       if (e.key !== 'timelog.v1') return;
+      cancelUndoForConflict();
       if (sheetEditId || sheetController.isFormOpen() || sheetController.getSheetMode()) {
         const b = document.getElementById('cross-tab-banner');
         if (b) b.hidden = false;
@@ -578,64 +686,151 @@ import {
     if (b && !b.hidden) render();
   }
 
-  // 左滑记录卡＝编辑（移动端手势快捷方式，桌面/无触屏仍用右侧铅笔图标）。
-  // 只对可编辑的真实/计划卡生效；占位/空隙卡不参与。CSS 给 .entry 加 touch-action:
-  // pan-y，让纵向滚动仍归浏览器、横向手势归这里，互不抢。
+  // 触摸/触控笔左滑揭示 2x72px 编辑/删除轨道。一次只开一张；纵向滚动、点空白、
+  // 打开另一张都会关闭。桌面鼠标不启用，键盘仍走点卡片编辑与编辑页删除。
   function registerCardSwipe() {
-    const TRIGGER = 56;   // 左滑超过这么多 px 松手即进入编辑
-    const MAX = 84;       // 视觉最多跟手这么多 px
-    let card = null, id = '', startX = 0, startY = 0, dx = 0, axis = '';
-
-    function reset(animate) {
-      if (card) {
-        const c = card;
-        c.style.transition = animate ? 'transform 0.2s ease' : '';
-        c.style.transform = '';
-        if (animate) setTimeout(() => { c.style.transition = ''; }, 220);
-      }
-      card = null; id = ''; dx = 0; axis = '';
-    }
-
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
+    const TRACK = 144;
+    const SNAP = 72;
+    let active = null;
+    let openRow = null;
+    let suppressClickUntil = 0;
+
+    function setActionsEnabled(row, enabled) {
+      const actions = row && row.querySelector('.swipe-actions');
+      if (!actions) return;
+      actions.setAttribute('aria-hidden', String(!enabled));
+      actions.querySelectorAll('button').forEach(button => { button.tabIndex = enabled ? 0 : -1; });
+    }
+
+    function setOffset(row, offset, animate = false) {
+      const card = row && row.querySelector('.entry');
+      if (!card) return;
+      card.style.transition = animate ? 'transform 180ms cubic-bezier(.2,.8,.2,1)' : 'none';
+      card.style.transform = offset ? `translateX(${offset}px)` : '';
+      row.dataset.swipeOffset = String(offset);
+      row.classList.toggle('swipe-open', offset === -TRACK);
+      setActionsEnabled(row, offset === -TRACK);
+      if (animate) setTimeout(() => {
+        if (document.contains(card)) card.style.transition = '';
+      }, 200);
+    }
+
+    function closeOpen(animate = true) {
+      if (openRow && document.contains(openRow)) setOffset(openRow, 0, animate);
+      openRow = null;
+    }
+
+    function finishGesture(cancelled = false) {
+      if (!active) return;
+      const { row, offset, axis, velocity } = active;
+      const shouldOpen = !cancelled && axis === 'x' && (offset <= -SNAP || velocity < -0.45);
+      if (shouldOpen) {
+        if (openRow && openRow !== row) setOffset(openRow, 0, true);
+        setOffset(row, -TRACK, true);
+        openRow = row;
+      } else {
+        setOffset(row, 0, true);
+        if (openRow === row) openRow = null;
+      }
+      if (axis === 'x') suppressClickUntil = performance.now() + 350;
+      active = null;
+    }
+
+    function begin(row, x, y, source, pointerId = null) {
+      if (!row || !row.querySelector('.entry[data-action="start-edit"]')) return;
+      if (openRow && openRow !== row) closeOpen(true);
+      active = {
+        row,
+        source,
+        pointerId,
+        startX: x,
+        startY: y,
+        base: Number(row.dataset.swipeOffset || 0),
+        offset: Number(row.dataset.swipeOffset || 0),
+        axis: '',
+        lastX: x,
+        lastAt: performance.now(),
+        velocity: 0
+      };
+    }
+
+    function move(x, y, event) {
+      if (!active) return;
+      const dx = x - active.startX;
+      const dy = y - active.startY;
+      if (!active.axis) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        active.axis = Math.abs(dx) > Math.abs(dy) + 4 ? 'x' : 'y';
+        if (active.axis === 'y') {
+          closeOpen(true);
+          active = null;
+          return;
+        }
+      }
+      if (active.axis !== 'x') return;
+      const now = performance.now();
+      const elapsed = Math.max(1, now - active.lastAt);
+      active.velocity = (x - active.lastX) / elapsed;
+      active.lastX = x;
+      active.lastAt = now;
+      active.offset = Math.max(-TRACK, Math.min(0, active.base + dx));
+      setOffset(active.row, active.offset, false);
+      if (event && event.cancelable) event.preventDefault();
+    }
+
+    timeline.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+      if (e.target.closest('.mini-btn, .swipe-action')) return;
+      const row = e.target.closest('.swipe-row');
+      begin(row, e.clientX, e.clientY, 'pointer', e.pointerId);
+      if (active && row.setPointerCapture) row.setPointerCapture(e.pointerId);
+    });
+    timeline.addEventListener('pointermove', e => {
+      if (!active || active.source !== 'pointer' || active.pointerId !== e.pointerId) return;
+      move(e.clientX, e.clientY, e);
+    });
+    timeline.addEventListener('pointerup', e => {
+      if (active && active.source === 'pointer' && active.pointerId === e.pointerId) finishGesture(false);
+    });
+    timeline.addEventListener('pointercancel', e => {
+      if (active && active.source === 'pointer' && active.pointerId === e.pointerId) finishGesture(true);
+    });
+
+    // Synthetic TouchEvent coverage and older WebKit fallback.
     timeline.addEventListener('touchstart', e => {
-      if (e.touches.length !== 1) { reset(false); return; }
-      const t = e.target.closest('.entry[data-id]');
-      // v47：卡片自身带 data-action=start-edit（R6 点整卡即编辑）；只对真实/计划记录卡
-      // 启用左滑（占位/空隙卡不参与），且手势起点不在内部 mini-btn 上（让补/切/确认自理）。
-      if (!t || t.classList.contains('placeholder') || t.classList.contains('gap')) return;
-      if (t.dataset.action !== 'start-edit') return;
-      if (e.target.closest('.mini-btn')) return;
-      card = t; id = t.dataset.id;
-      startX = e.touches[0].clientX; startY = e.touches[0].clientY;
-      dx = 0; axis = '';
-      card.style.transition = '';
+      if (active || e.touches.length !== 1 || e.target.closest('.mini-btn, .swipe-action')) return;
+      const touch = e.touches[0];
+      begin(e.target.closest('.swipe-row'), touch.clientX, touch.clientY, 'touch');
+    }, { passive: true });
+    timeline.addEventListener('touchmove', e => {
+      if (!active || active.source !== 'touch' || e.touches.length !== 1) return;
+      move(e.touches[0].clientX, e.touches[0].clientY, e);
+    }, { passive: false });
+    timeline.addEventListener('touchend', () => {
+      if (active && active.source === 'touch') finishGesture(false);
+    }, { passive: true });
+    timeline.addEventListener('touchcancel', () => {
+      if (active && active.source === 'touch') finishGesture(true);
     }, { passive: true });
 
-    document.addEventListener('touchmove', e => {
-      if (!card || e.touches.length !== 1) return;
-      const ddx = e.touches[0].clientX - startX;
-      const ddy = e.touches[0].clientY - startY;
-      if (!axis) {
-        if (Math.abs(ddx) < 8 && Math.abs(ddy) < 8) return;
-        axis = Math.abs(ddx) > Math.abs(ddy) + 4 ? 'x' : 'y';
-        if (axis === 'y') { reset(false); return; }  // 纵向＝滚动，放手给浏览器
+    timeline.addEventListener('click', e => {
+      const row = e.target.closest('.swipe-row');
+      if (e.target.closest('.swipe-action')) {
+        if (row === openRow) closeOpen(false);
+        return;
       }
-      if (axis !== 'x') return;
-      dx = Math.max(-MAX, Math.min(0, ddx));  // 只响应左滑
-      card.style.transform = `translateX(${dx}px)`;
-      if (e.cancelable) e.preventDefault();
-    }, { passive: false });
-
-    const end = () => {
-      if (!card) return;
-      const editId = id;
-      const go = axis === 'x' && dx <= -TRIGGER;
-      reset(true);
-      if (go) sheetController.startEdit(editId);
-    };
-    document.addEventListener('touchend', end, { passive: true });
-    document.addEventListener('touchcancel', () => reset(true), { passive: true });
+      if (performance.now() < suppressClickUntil || (row && row === openRow)) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (row === openRow) closeOpen(true);
+      }
+    });
+    document.addEventListener('pointerdown', e => {
+      if (openRow && !e.target.closest('.swipe-row')) closeOpen(true);
+    }, { passive: true });
+    window.addEventListener('scroll', () => closeOpen(true), { passive: true });
 
     // R6：卡片是 role=button 的 div，键盘 Enter/Space 激活（等价点击）——保 a11y 不回退。
     timeline.addEventListener('keydown', e => {
@@ -654,17 +849,12 @@ import {
       if (updateReloading) window.location.reload();
     });
     navigator.serviceWorker.register('sw.js').then(reg => {
-      // 新版就绪时的处置：表单开着（可能正在输入）就用横幅让用户自己点，不打断；
-      // 否则直接静默更新（skipWaiting + 单次 reload）。旧版只弹横幅，而 iOS Safari
-      // 里横幅常被忽略、SW 又不主动复查 sw.js，导致 GitHub Pages 已发新版、用户端
-      // 却一直吃旧缓存（历次「还是没更新」的真凶）。localStorage 数据不受 SW 更新影响。
+      // 新 worker 进入 waiting 后始终提示，由用户点击后才 skipWaiting + reload。
+      // 不在空闲态静默重载：用户需要看见版本边界，也避免刷新造成视觉闪烁。
       const consider = () => {
         if (updateReloading) return;
         if (!reg.waiting || !navigator.serviceWorker.controller) return;
-        const sheet = document.getElementById('form-sheet');
-        if (sheet && !sheet.hidden) { showUpdatePrompt(reg); return; }
-        pendingUpdateRegistration = reg;
-        applyUpdate();
+        showUpdatePrompt(reg);
       };
       consider();
       reg.addEventListener('updatefound', () => {

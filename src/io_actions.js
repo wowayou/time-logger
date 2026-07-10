@@ -109,10 +109,11 @@ export function createIoActions(deps) {
 
   function setCopyFeedback(btn, ok, label, fallbackLabel) {
     if (!btn) return;
-    btn.textContent = ok ? label : '复制失败';
+    const labelEl = btn.querySelector('[data-role="cell-label"]') || btn;
+    labelEl.textContent = ok ? label : '复制失败';
     btn.classList.toggle('copied', ok);
     setTimeout(() => {
-      btn.textContent = fallbackLabel;
+      labelEl.textContent = fallbackLabel;
       btn.classList.remove('copied');
     }, 2500);
   }
@@ -188,7 +189,7 @@ export function createIoActions(deps) {
     a.href = url; a.download = fname;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   function parseImportShiftHours(raw) {
@@ -252,28 +253,81 @@ export function createIoActions(deps) {
     deps.closeForm();
   }
 
-  function applyImportedData(imported, shiftMinutes) {
-    const current = deps.mergeImportedEntries(deps.load(), imported.entries, { shiftMinutes });
-    if (imported.config) {
-      const currentConfig = deps.loadConfig();
-      deps.saveConfig({
-        mainline: [...currentConfig.mainline, ...(imported.config.mainline || [])],
-        chips: [...currentConfig.chips, ...(imported.config.chips || [])]
-      });
+  function paintImportPlan(plan) {
+    const summary = document.querySelector('#form-sheet [data-role="import-summary"]');
+    const error = document.querySelector('#form-sheet [data-role="import-error"]');
+    if (summary) {
+      summary.textContent = plan
+        ? `将导入 ${plan.imported || 0} 条，跳过 ${plan.skipped || 0} 条，冲突 ${(plan.conflicts || []).length} 条。`
+        : '';
     }
-    deps.save(current);
+    if (!error) return;
+    error.replaceChildren();
+    const conflicts = plan && plan.conflicts || [];
+    if (!conflicts.length) {
+      error.hidden = true;
+      return;
+    }
+    const intro = document.createElement('div');
+    intro.textContent = '存在冲突，本次导入尚未写入：';
+    const list = document.createElement('ul');
+    conflicts.slice(0, 8).forEach(conflict => {
+      const item = document.createElement('li');
+      item.textContent = conflict.message;
+      list.appendChild(item);
+    });
+    if (conflicts.length > 8) {
+      const item = document.createElement('li');
+      item.textContent = `另有 ${conflicts.length - 8} 条冲突`;
+      list.appendChild(item);
+    }
+    error.append(intro, list);
+    error.hidden = false;
+  }
+
+  function importPlan(imported, shiftMinutes) {
+    return deps.mergeImportedEntries(deps.load(), imported.entries, { shiftMinutes });
+  }
+
+  function applyImportedData(imported, shiftMinutes) {
+    const current = deps.load();
+    const plan = deps.mergeImportedEntries(current, imported.entries, { shiftMinutes });
+    paintImportPlan(plan);
+    if (!plan.ok) return false;
+    const currentConfig = deps.loadConfig();
+    const nextConfig = deps.mergeImportedConfig(currentConfig, imported.config);
+    if (!deps.save(plan.data)) {
+      const error = document.querySelector('#form-sheet [data-role="import-error"]');
+      if (error) {
+        error.textContent = '本机存储空间不足，导入没有执行；表单和原数据均已保留。';
+        error.hidden = false;
+      }
+      return false;
+    }
+    try {
+      deps.saveConfig(nextConfig);
+    } catch {
+      deps.save(current);
+      const error = document.querySelector('#form-sheet [data-role="import-error"]');
+      if (error) {
+        error.textContent = '标签配置保存失败，记录导入已回滚。';
+        error.hidden = false;
+      }
+      return false;
+    }
     deps.render();
-    alert(`导入完成，共 ${current.entries.length} 条记录。`);
+    alert(`导入完成：新增 ${plan.imported} 条，跳过 ${plan.skipped} 条，冲突 0 条。`);
+    return true;
   }
 
   function confirmImportShift() {
     const input = document.getElementById('import-shift-hours');
     importShiftMinutes = parseImportShiftHours(input ? input.value : '0');
     const imported = pendingImport;
+    if (!imported) return;
+    if (!applyImportedData(imported, importShiftMinutes)) return;
     pendingImport = null;
     deps.closeForm();
-    if (!imported) return;
-    applyImportedData(imported, importShiftMinutes);
   }
 
   function handleImport(event) {
@@ -293,6 +347,7 @@ export function createIoActions(deps) {
         importShiftHours: formatShiftHours(importShiftMinutes),
         importShiftHint: importShiftHint(imported, importShiftMinutes)
       });
+      requestAnimationFrame(() => paintImportPlan(importPlan(imported, importShiftMinutes)));
     };
     reader.readAsText(file);
     event.target.value = '';
@@ -306,20 +361,41 @@ export function createIoActions(deps) {
     deps.openFormSheet({ mode: 'more' });
   }
 
-  function shareJSON() {
+  function isShareCancellation(error) {
+    return Boolean(error && error.name === 'AbortError');
+  }
+
+  async function shareJSON() {
     // v43: 分享按钮常显（不再靠能力检测 reveal——那套在 footer→更多 迁移后时序丢失，
     // iOS 上卡在隐藏态，P24）。无 Web Share 能力时回退下载完整备份，保证永远不是死按钮。
     if (!canUseSystemShare()) { downloadJSON(); return; }
     const json = JSON.stringify(exportData(), null, 2);
     const fname = backupFileName();
-    if (navigator.canShare) {
-      const file = new File([json], fname, { type: 'application/json' });
-      if (navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: `时间尺完整备份 ${fname}` }).catch(() => {});
-        return;
+    const btn = document.getElementById('backup-send-btn');
+    let file = null;
+    try { file = new File([json], fname, { type: 'application/json' }); } catch {}
+    if (file && typeof navigator.canShare === 'function') {
+      let canShareFile = false;
+      try { canShareFile = Boolean(navigator.canShare({ files: [file] })); } catch {}
+      if (canShareFile) {
+        try {
+          await navigator.share({ files: [file], title: `时间尺完整备份 ${fname}` });
+          setCopyFeedback(btn, true, '已分享备份', '分享备份');
+          return;
+        } catch (error) {
+          if (isShareCancellation(error)) return;
+        }
       }
     }
-    navigator.share({ title: `时间尺完整备份 ${fname}`, text: json }).catch(() => {});
+    try {
+      await navigator.share({ title: `时间尺完整备份 ${fname}`, text: json });
+      setCopyFeedback(btn, true, '已分享备份', '分享备份');
+      return;
+    } catch (error) {
+      if (isShareCancellation(error)) return;
+    }
+    downloadJSON();
+    setCopyFeedback(btn, true, '已下载备份', '分享备份');
   }
 
   return {

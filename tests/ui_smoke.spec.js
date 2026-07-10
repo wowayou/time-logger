@@ -435,12 +435,18 @@ test('planned-only day has honest ruler copy and confirm opens placeholder', asy
   await expect(page.locator('#timeline')).toContainText('进行中·还没记');
 });
 
-test('summary includes a plan section for day view', async ({ page, context }) => {
+test('summary includes a plan section for day view', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__copiedSummary = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: text => { window.__copiedSummary = text; return Promise.resolve(); } }
+    });
+  });
   await boot(page, 768, 'planned-only', false, FIXED_NOW);
-  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await openBackupMenu(page);
   await page.getByRole('button', { name: '复制当前视图摘要' }).click();
-  const text = await page.evaluate(() => navigator.clipboard.readText());
+  const text = await page.evaluate(() => window.__copiedSummary);
   expect(text).toContain('## 计划');
   expect(text).toContain('- 09:30 | 计划 | 准备面试 | #求职推进');
 });
@@ -719,13 +725,15 @@ test('splitting a labeled segment carves three parts and leaves neighbors intact
 
 test('deleting a standalone middle record turns its span 未记录, never the previous label', async ({ page }) => {
   await boot(page, 768, 'three-labels', false, FIXED_NOW);
-  page.on('dialog', dialog => dialog.accept());
 
   // 睡一会 | 写代码 | 吃早饭. Deleting 写代码 (distinct neighbors) must not stretch
   // 睡觉 over 09:00→10:00 — that span becomes an honest 未记录 placeholder.
   // v47 R6：删除移进编辑 sheet——点整卡进编辑，再点「删除这条记录」。
   await page.locator('.entry[data-id="tl-b"] .e-what').click();
   await page.getByRole('button', { name: '删除这条记录' }).click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('删除记录');
+  await expect(page.locator('.delete-result')).toContainText('未记录');
+  await page.getByRole('button', { name: '确认删除记录' }).click();
 
   const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.filter(e => !e.planned));
   expect(entries.find(e => e.id === 'tl-b')).toMatchObject({ what: '', tags: [] });
@@ -789,8 +797,8 @@ test('editing a record can change its start time via the wheel', async ({ page }
   await expect(page.locator('[data-role="edit-time-section"]')).toBeHidden();
   await page.locator('[data-action="toggle-edit-start-time"]').click();
   await expect(page.locator('[data-role="edit-time-section"]')).toBeVisible();
-  await page.locator('[data-role="edit-wheel"] [data-role="text"]').fill('2026-06-29 09:10');
-  await page.locator('[data-role="edit-wheel"] [data-role="text"]').blur();
+  await page.locator('[data-role="edit-start-wheel"] [data-role="text"]').fill('2026-06-29 09:10');
+  await page.locator('[data-role="edit-start-wheel"] [data-role="text"]').blur();
   await page.getByRole('button', { name: '保存修改' }).click();
   await expect(page.locator('#form-sheet')).toBeHidden();
   const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
@@ -820,9 +828,9 @@ test('editing a planned entry keeps its time wheel always expanded (R3 exemption
   await expect(page.locator('[data-role="edit-wheel"] [data-role="text"]')).toBeVisible();
 });
 
-test.describe('swipe-left to edit (mobile gesture)', () => {
+test.describe('swipe-left action track (mobile gesture)', () => {
   test.use({ hasTouch: true });
-  test('swiping a record card left opens its edit sheet', async ({ page }) => {
+  test('swiping a record card reveals 2x72 actions and edit remains explicit', async ({ page }) => {
     await boot(page, 375, 'two-records', false, FIXED_NOW);
     const card = page.locator('.entry[data-id="today-2"]');
     await expect(card).toBeVisible();
@@ -830,17 +838,353 @@ test.describe('swipe-left to edit (mobile gesture)', () => {
     const y = box.y + box.height / 2;
     await page.evaluate(({ startX, y }) => {
       const body = document.querySelector('.entry[data-id="today-2"] .e-body');
-      const mk = x => new Touch({ identifier: 1, target: body, clientX: x, clientY: y, pageX: x, pageY: y });
+      const mk = x => ({ identifier: 1, target: body, clientX: x, clientY: y, pageX: x, pageY: y });
       const fire = (type, x) => {
         const tl = type === 'touchend' ? [] : [mk(x)];
-        body.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: tl, targetTouches: tl, changedTouches: [mk(x)] }));
+        const event = new Event(type, { bubbles: true, cancelable: true });
+        Object.defineProperties(event, {
+          touches: { value: tl },
+          targetTouches: { value: tl },
+          changedTouches: { value: [mk(x)] }
+        });
+        body.dispatchEvent(event);
       };
       fire('touchstart', startX);
       for (let i = 1; i <= 8; i++) fire('touchmove', startX - i * 12);
       fire('touchend', startX - 96);
     }, { startX: box.x + box.width * 0.6, y });
+    const row = page.locator('.swipe-row[data-swipe-id="today-2"]');
+    await expect(row).toHaveClass(/swipe-open/);
+    await expect(row.locator('.swipe-actions')).toHaveAttribute('aria-hidden', 'false');
+    const widths = await row.locator('.swipe-action').evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().width));
+    expect(widths).toEqual([72, 72]);
+    await row.getByRole('button', { name: '编辑记录' }).click();
     await expect(page.locator('#form-sheet')).toBeVisible();
     await expect(page.locator('.form-sheet-panel')).toHaveAttribute('data-mode', 'edit');
     await expect(page.locator('.form-sheet-panel')).toHaveAttribute('data-id', 'today-2');
   });
+});
+
+test('full interval edit previews previous/current/next and moves the shared end boundary', async ({ page }) => {
+  await boot(page, 768, 'interval-three', false, '2026-06-29T20:00:30');
+  await page.locator('.entry[data-id="various"] .e-what').click();
+  await page.locator('[data-action="toggle-edit-start-time"]').click();
+  await expect(page.locator('[data-role="edit-limits"]')).toContainText('前一段');
+  await expect(page.locator('[data-role="edit-limits"]')).toContainText('下一段');
+
+  const startInput = page.locator('[data-role="edit-start-wheel"] [data-role="text"]');
+  const endInput = page.locator('[data-role="edit-end-wheel"] [data-role="text"]');
+  await startInput.fill('2026-06-29 15:50');
+  await startInput.blur();
+  await endInput.fill('2026-06-29 18:11');
+  await endInput.blur();
+
+  const rows = page.locator('[data-role="interval-preview"] .preview-row');
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0)).toContainText('14:30-15:50');
+  await expect(rows.nth(1)).toContainText('15:50-18:11');
+  await expect(rows.nth(2)).toContainText('18:11-19:11');
+  await page.getByRole('button', { name: '保存修改' }).click();
+
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(entries.find(entry => entry.id === 'various').ts).toBe('2026-06-29T15:50');
+  expect(entries.find(entry => entry.id === 'focus').ts).toBe('2026-06-29T18:11');
+  expect(entries.find(entry => entry.id === 'after').ts).toBe('2026-06-29T19:11');
+});
+
+test('today tail switches between a true ongoing end and a fixed unrecorded tail', async ({ page }) => {
+  await boot(page, 768, 'ongoing-tail', false, FIXED_NOW);
+  await page.locator('.entry[data-id="ongoing"] .e-what').click();
+  await page.locator('[data-action="toggle-edit-start-time"]').click();
+  await expect(page.locator('[data-role="edit-end-mode"]')).toHaveValue('now');
+  await page.getByRole('button', { name: '固定结束' }).click();
+  const endInput = page.locator('[data-role="edit-end-wheel"] [data-role="text"]');
+  await endInput.fill('2026-06-29 11:30');
+  await endInput.blur();
+  await expect(page.locator('[data-role="interval-preview"]')).toContainText('未记录');
+  await page.getByRole('button', { name: '保存修改' }).click();
+
+  let entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(entries.find(entry => entry.id === 'ongoing').ongoing).toBeFalsy();
+  expect(entries).toEqual(expect.arrayContaining([expect.objectContaining({ ts: '2026-06-29T11:30', what: '', tags: [] })]));
+
+  await page.locator('.entry[data-id="ongoing"] .e-what').click();
+  await page.locator('[data-action="toggle-edit-start-time"]').click();
+  await page.getByRole('button', { name: '至今' }).click();
+  await page.getByRole('button', { name: '保存修改' }).click();
+  entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(entries.find(entry => entry.id === 'ongoing').ongoing).toBe(true);
+  expect(entries.some(entry => entry.what === '')).toBe(false);
+});
+
+test('split sheet freezes bounds and labels whole, edge, and internal previews', async ({ page }) => {
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+  await page.locator('.entry[data-id="today-1"] [data-action="backfill-seg"]').click();
+  await expect(page.locator('#form-sheet-title')).toContainText('切一刀');
+  await expect(page.locator('[data-role="backfill-limits"]')).toContainText('09:00');
+  await expect(page.locator('[data-role="backfill-limits"]')).toContainText('10:00');
+  await expect(page.locator('.preview-head')).toHaveText('整段改为');
+
+  const start = page.locator('[data-role="backfill-start-mount"] [data-role="text"]');
+  const end = page.locator('[data-role="backfill-end-mount"] [data-role="text"]');
+  await start.fill('2026-06-29 09:20');
+  await start.blur();
+  await expect(page.locator('.preview-head')).toHaveText('贴边后为两段');
+  await end.fill('2026-06-29 09:40');
+  await end.blur();
+  await expect(page.locator('.preview-head')).toHaveText('切分后为三段');
+  await expect(page.locator('[data-role="interval-preview"] .preview-row')).toHaveCount(3);
+});
+
+test('delete confirmation is exact and the saved deletion can be undone for 8 seconds', async ({ page }) => {
+  await boot(page, 768, 'three-labels', false, FIXED_NOW);
+  await page.locator('.entry[data-id="tl-b"] .e-what').click();
+  await page.getByRole('button', { name: '删除这条记录' }).click();
+  await expect(page.locator('.delete-target')).toContainText('09:00-10:00');
+  await expect(page.locator('.delete-result')).toContainText('未记录');
+  await page.getByRole('button', { name: '确认删除记录' }).click();
+  await expect(page.locator('#undo-toast')).toBeVisible();
+  await page.getByRole('button', { name: '撤销' }).click();
+  const restored = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(entry => entry.id === 'tl-b'));
+  expect(restored).toMatchObject({ what: '写代码', tags: ['求职推进'] });
+  await expect(page.locator('#undo-toast')).toBeHidden();
+});
+
+test('delete reconnects only exactly matching neighbors', async ({ page }) => {
+  await boot(page, 768, 'same-neighbors', false, FIXED_NOW);
+  await page.locator('.entry[data-id="same-middle"] .e-what').click();
+  await page.getByRole('button', { name: '删除这条记录' }).click();
+  await expect(page.locator('.delete-result')).toContainText('接回一段');
+  await page.getByRole('button', { name: '确认删除记录' }).click();
+  const ids = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.map(entry => entry.id));
+  expect(ids).not.toContain('same-middle');
+  expect(ids).not.toContain('same-right');
+  expect(ids).toContain('same-left');
+});
+
+test('cross-tab data change cancels delete undo instead of overwriting newer data', async ({ page, context }) => {
+  await boot(page, 768, 'three-labels', false, FIXED_NOW);
+  const other = await context.newPage();
+  await other.goto('/');
+  await other.waitForFunction(() => document.body.classList.contains('app-ready'));
+
+  await page.locator('.entry[data-id="tl-b"] .e-what').click();
+  await page.getByRole('button', { name: '删除这条记录' }).click();
+  await page.getByRole('button', { name: '确认删除记录' }).click();
+  await expect(page.locator('#undo-toast')).toBeVisible();
+  await other.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('timelog.v1'));
+    data.entries.push({ id: 'other-tab', ts: '2026-06-29T11:30', what: '另一标签页', tags: ['求职推进'] });
+    localStorage.setItem('timelog.v1', JSON.stringify(data));
+  });
+  await expect(page.locator('#undo-toast')).toContainText('撤销已取消');
+  await expect(page.locator('#undo-toast [data-action="undo-delete"]')).toBeHidden();
+  await other.close();
+});
+
+test('interval save recomputes against latest cross-tab data and requires reconfirmation', async ({ page, context }) => {
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+  const other = await context.newPage();
+  await other.goto('/');
+  await other.waitForFunction(() => document.body.classList.contains('app-ready'));
+  await page.locator('.entry[data-id="today-1"] .e-what').click();
+  await page.locator('[data-action="toggle-edit-start-time"]').click();
+  await page.locator('[data-role="edit-what"]').fill('跨标签确认');
+
+  await other.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('timelog.v1'));
+    data.entries.find(entry => entry.id === 'today-2').what = '另一标签页改了后一段';
+    localStorage.setItem('timelog.v1', JSON.stringify(data));
+  });
+  await expect(page.locator('#cross-tab-banner')).toBeVisible();
+  await page.getByRole('button', { name: '保存修改' }).click();
+  await expect(page.locator('[data-role="conflict-error"]')).toContainText('请再次确认');
+  await expect(page.locator('#form-sheet')).toBeVisible();
+  await page.getByRole('button', { name: '保存修改' }).click();
+  await expect(page.locator('#form-sheet')).toBeHidden();
+  await other.close();
+});
+
+test('conflicting malicious import is listed as text and writes nothing', async ({ page }) => {
+  await boot(page, 768, 'one-record', false, FIXED_NOW);
+  await page.evaluate(() => { window.__importPwned = 0; });
+  const maliciousId = '<img src=x onerror="window.__importPwned=1">';
+  const chooserPromise = page.waitForEvent('filechooser');
+  await openBackupMenu(page);
+  await page.getByRole('button', { name: '导入 JSON 备份' }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    name: 'timelog-conflict.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      version: 1,
+      entries: [{ id: maliciousId, ts: '2026-06-29T00:05', what: '<script>bad()</script>', tags: ['求职推进'] }]
+    }))
+  });
+  await expect(page.locator('[data-role="import-summary"]')).toContainText('冲突 1 条');
+  await expect(page.locator('[data-role="import-error"]')).toContainText(maliciousId);
+  await expect(page.locator('[data-role="import-error"] img')).toHaveCount(0);
+  await page.getByRole('button', { name: '确认导入' }).click();
+  await expect(page.locator('#form-sheet')).toBeVisible();
+  const result = await page.evaluate(() => ({
+    pwned: window.__importPwned,
+    entries: JSON.parse(localStorage.getItem('timelog.v1')).entries
+  }));
+  expect(result.pwned).toBe(0);
+  expect(result.entries).toHaveLength(1);
+});
+
+test('renamed defaults stay renamed and mainline/chip duplicates are rejected safely', async ({ page }) => {
+  await boot(page, 768, 'renamed-default', false, FIXED_NOW);
+  await openBackupMenu(page);
+  await page.getByRole('button', { name: '配置标签' }).click();
+  await expect(page.locator('.cfg-name')).toHaveValue('休息');
+  await expect(page.locator('.config-body')).not.toContainText('睡觉');
+  await page.locator('.cfg-name').fill('求职推进');
+  await page.getByRole('button', { name: '保存标签配置' }).click();
+  await expect(page.locator('[data-role="config-error"]')).toContainText('已经是主线标签');
+  const config = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.config')));
+  expect(config.chips).toEqual([expect.objectContaining({ name: '休息' })]);
+});
+
+test('quota failure keeps edited form content and existing data intact', async ({ page }) => {
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+  await page.locator('.entry[data-id="today-1"] .e-what').click();
+  await page.locator('[data-role="edit-what"]').fill('配额失败仍保留');
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'timelog.v1') throw new DOMException('quota', 'QuotaExceededError');
+      return original.call(this, key, value);
+    };
+  });
+  await page.getByRole('button', { name: '保存修改' }).click();
+  await expect(page.locator('#form-sheet')).toBeVisible();
+  await expect(page.locator('[data-role="edit-what"]')).toHaveValue('配额失败仍保留');
+  await expect(page.locator('[data-role="conflict-error"]')).toContainText('存储空间不足');
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(entry => entry.id === 'today-1').what);
+  expect(stored).toBe('写代码');
+});
+
+test('share prefers files, survives canShare exceptions, and preserves cell structure', async ({ page }) => {
+  await boot(page, 768, 'one-record', false, FIXED_NOW);
+  await page.evaluate(() => {
+    window.__shareCalls = [];
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => { throw new Error('probe failed'); } });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: payload => { window.__shareCalls.push({ files: Boolean(payload.files), text: Boolean(payload.text) }); return Promise.resolve(); }
+    });
+  });
+  await openBackupMenu(page);
+  await page.locator('#backup-send-btn').click();
+  await expect(page.locator('#backup-send-btn [data-role="cell-label"]')).toHaveText('已分享备份');
+  await expect(page.locator('#backup-send-btn .cell-chevron')).toHaveCount(1);
+  expect(await page.evaluate(() => window.__shareCalls)).toEqual([{ files: false, text: true }]);
+
+  await page.evaluate(() => {
+    window.__shareCalls = [];
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: payload => Boolean(payload.files) });
+  });
+  await page.locator('#backup-send-btn').click();
+  await expect.poll(() => page.evaluate(() => window.__shareCalls)).toEqual([{ files: true, text: false }]);
+});
+
+test('share falls back to download without Web Share and cancellation never downloads', async ({ page }) => {
+  await boot(page, 768, 'one-record', false, FIXED_NOW);
+  await openBackupMenu(page);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#backup-send-btn').click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^timelog-\d{8}-\d{6}\.json$/);
+
+  await page.evaluate(() => {
+    window.__shareCalls = 0;
+    window.__fallbackClicks = 0;
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: payload => Boolean(payload.files) });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: () => {
+        window.__shareCalls += 1;
+        return Promise.reject(new DOMException('cancelled', 'AbortError'));
+      }
+    });
+    HTMLAnchorElement.prototype.click = function () { window.__fallbackClicks += 1; };
+  });
+  await page.locator('#backup-send-btn').click();
+  await expect.poll(() => page.evaluate(() => window.__shareCalls)).toBe(1);
+  expect(await page.evaluate(() => window.__fallbackClicks)).toBe(0);
+  await expect(page.locator('#backup-send-btn [data-role="cell-label"]')).toHaveText('分享备份');
+});
+
+test('dismissing a cross-tab notice renders the latest stored data', async ({ page, context }) => {
+  await boot(page, 768, 'two-records', false, FIXED_NOW);
+  const other = await context.newPage();
+  await other.goto('/');
+  await other.waitForFunction(() => document.body.classList.contains('app-ready'));
+
+  await page.locator('.entry[data-id="today-1"] .e-what').click();
+  await other.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('timelog.v1'));
+    data.entries.find(entry => entry.id === 'today-2').what = '另一标签页的新内容';
+    localStorage.setItem('timelog.v1', JSON.stringify(data));
+  });
+  await expect(page.locator('#cross-tab-banner')).toBeVisible();
+  await page.locator('[data-action="dismiss-cross-tab-banner"]').click();
+  await expect(page.locator('#cross-tab-banner')).toBeHidden();
+  await expect(page.locator('.entry[data-id="today-2"] .e-what')).toHaveText('另一标签页的新内容');
+  await expect(page.locator('#form-sheet')).toBeVisible();
+  await other.close();
+});
+
+test('waiting service worker prompts until the user applies it and rechecks on foreground', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__swUpdates = 0;
+    window.__swMessages = [];
+    window.__visibility = 'visible';
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => window.__visibility
+    });
+    const waiting = {
+      postMessage(message) { window.__swMessages.push(message); }
+    };
+    const registration = new EventTarget();
+    registration.waiting = waiting;
+    registration.installing = null;
+    registration.update = () => {
+      window.__swUpdates += 1;
+      return Promise.resolve();
+    };
+    const serviceWorker = new EventTarget();
+    serviceWorker.controller = {};
+    serviceWorker.register = () => Promise.resolve(registration);
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: serviceWorker
+    });
+  });
+  await boot(page, 768, 'one-record', false, FIXED_NOW);
+
+  await expect(page.locator('#update-banner')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__swUpdates)).toBe(1);
+  const promptOverlapsFab = await page.evaluate(() => {
+    const prompt = document.getElementById('update-banner').getBoundingClientRect();
+    const fab = document.getElementById('add-btn').getBoundingClientRect();
+    return prompt.left < fab.right && prompt.right > fab.left && prompt.top < fab.bottom && prompt.bottom > fab.top;
+  });
+  expect(promptOverlapsFab).toBe(false);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect.poll(() => page.evaluate(() => window.__swUpdates)).toBe(2);
+  await page.locator('[data-action="update-app"]').click();
+  expect(await page.evaluate(() => window.__swMessages)).toEqual([{ type: 'SKIP_WAITING' }]);
+});
+
+test('ongoing minutes update on the minute without reopening the page', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-06-29T12:34:30') });
+  await boot(page, 768, 'ongoing-tail');
+  const before = await page.locator('.entry[data-id="ongoing"] .e-dur').textContent();
+  await page.clock.fastForward(60_000);
+  await expect.poll(() => page.locator('.entry[data-id="ongoing"] .e-dur').textContent()).not.toBe(before);
 });

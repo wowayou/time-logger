@@ -149,11 +149,18 @@ export function renderTimeline(items, opts = {}) {
   // 「删除这条」）。卡片 div 带 data-action（click 委托：closest 命中最近的 data-action，
   // 内部 meta 按钮如补/切/确认/标记已发生仍各管各的）+ role/tabindex/aria-label（键盘
   // Enter/Space 激活，a11y 不回退）。gap 卡点整卡=补录；非 gap 卡点整卡=编辑。
+  const swipeWrap = (card, entry, kind) => `<div class="swipe-row" data-swipe-id="${esc(entry.id)}">
+    <div class="swipe-actions" aria-hidden="true">
+      <button class="swipe-action swipe-edit" type="button" data-action="start-edit" data-id="${esc(entry.id)}" tabindex="-1" aria-label="编辑${kind}">${iconSvg('edit')}<span>编辑</span></button>
+      <button class="swipe-action swipe-delete" type="button" data-action="request-delete" data-id="${esc(entry.id)}" tabindex="-1" aria-label="删除${kind}">${iconSvg('trash')}<span>删除</span></button>
+    </div>
+    ${card}
+  </div>`;
   el.innerHTML = [...allItems].reverse().map(({ e, start, end, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs, planned: isPlanned }) => {
     if (isPlanned) {
       const displayTag = (e.tags || [])[0] || '未知';
       const tagClass = ` e-tag-${bucketForTag(displayTag)}`;
-      return `<div class="entry planned" data-id="${esc(e.id)}" data-action="start-edit" role="button" tabindex="0" aria-label="编辑计划：${esc(e.what || '未填写')}">
+      const card = `<div class="entry planned" data-id="${esc(e.id)}" data-action="start-edit" role="button" tabindex="0" aria-label="编辑计划：${esc(e.what || '未填写')}">
         <div class="e-body">
           <div class="e-time">${hhmm(e.ts)}</div>
           <div class="e-what">${esc(e.what || '未填写')}</div>
@@ -163,11 +170,12 @@ export function renderTimeline(items, opts = {}) {
           </div>
         </div>
       </div>`;
+      return swipeWrap(card, e, '计划');
     }
     if (!e) {
       const gapTs = localDateTimeKey(start);
       const gapEnd = localDateTimeKey(end);
-      return `<div class="entry gap" data-gap-ts="${esc(gapTs)}" data-action="backfill-seg" data-ts="${esc(gapTs)}" data-end="${esc(gapEnd)}" role="button" tabindex="0" aria-label="补录 ${hhmm(start)} 起这段未记录时间">
+      return `<div class="entry gap" data-gap-ts="${esc(gapTs)}" data-action="backfill-seg" data-kind="fill" data-ts="${esc(gapTs)}" data-end="${esc(gapEnd)}" role="button" tabindex="0" aria-label="补录 ${hhmm(start)} 起这段未记录时间">
         <div class="e-body">
           <div class="e-time">${hhmm(start)}</div>
           <div class="e-what">这一段还没记，要补吗？</div>
@@ -193,10 +201,10 @@ export function renderTimeline(items, opts = {}) {
     const segEndTs = end ? localDateTimeKey(end) : '';
     const splitLabel = (isPlaceholder || unrecorded) ? '补一下' : '切一刀';
     const splitBtn = segEndTs
-      ? `<button class="mini-btn" type="button" data-action="backfill-seg" data-ts="${esc(segStartTs)}" data-end="${esc(segEndTs)}" data-tip="在这段里补录或切分一段；结束自动接回原标签。" aria-label="在这段里补录或切分">${splitLabel}</button>`
+      ? `<button class="mini-btn" type="button" data-action="backfill-seg" data-kind="${isPlaceholder ? 'fill' : 'split'}" data-source-id="${esc(e.id)}" data-ts="${esc(segStartTs)}" data-end="${esc(segEndTs)}" data-tip="在冻结的原段边界内补录或切分。" aria-label="在这段里补录或切分">${splitLabel}</button>`
       : '';
     const cardLabel = isPlaceholder ? '编辑这段未记录时间' : `编辑：${esc(e.what)}`;
-    return `<div class="${entryClass}" data-id="${esc(e.id)}" data-action="start-edit" role="button" tabindex="0" aria-label="${cardLabel}">
+    const card = `<div class="${entryClass}" data-id="${esc(e.id)}" data-action="start-edit" role="button" tabindex="0" aria-label="${cardLabel}">
       <div class="e-body">
         <div class="e-time">${startLabel}</div>
         <div class="e-what">${esc(isPlaceholder ? (activePlaceholder ? '进行中·还没记' : '未记录') : e.what)}</div>
@@ -208,6 +216,7 @@ export function renderTimeline(items, opts = {}) {
         </div>
       </div>
     </div>`;
+    return isPlaceholder ? card : swipeWrap(card, e, '记录');
   }).join('');
 }
 
@@ -234,23 +243,23 @@ export function renderSummaryRows(rows) {
 }
 
 export function bucketHint(bucket) {
-  if (bucket === 'maintain') return '自定义标签将归入「维持」；与固定 chip 同名时按 chip 归类。';
-  if (bucket === 'leak') return '自定义标签将归入「漏损」；与固定 chip 同名时按 chip 归类。';
-  return '自定义标签将归入「主线」；与固定 chip 同名时按 chip 归类。';
+  if (bucket === 'maintain') return '自定义标签将归入「维持」；已有同名标签保持原归类。';
+  if (bucket === 'leak') return '自定义标签将归入「漏损」；已有同名标签保持原归类。';
+  return '自定义标签将归入「主线」；已有同名标签保持原归类。';
 }
 
 export function renderBucketSeg(prefix, selectedBucket) {
   const action = prefix === 'edit' ? 'pick-edit-bucket' : 'pick-form-bucket';
   const buckets = ['job', 'maintain', 'leak'];
   return `<div class="seg bucket-seg" data-role="${prefix}-bucket-seg" role="group" aria-label="归类桶">
-    ${buckets.map(bucket => `<button type="button" data-action="${action}" data-bucket="${bucket}" class="${bucket === selectedBucket ? 'active' : ''}" aria-label="${esc(BUCKETS[bucket])}">${esc(BUCKETS[bucket])}</button>`).join('')}
+    ${buckets.map(bucket => `<button type="button" data-action="${action}" data-bucket="${bucket}" class="${bucket === selectedBucket ? 'active' : ''}" aria-pressed="${bucket === selectedBucket}" aria-label="${esc(BUCKETS[bucket])}">${esc(BUCKETS[bucket])}</button>`).join('')}
   </div>`;
 }
 
 export function renderRecordModeSeg(selectedMode = 'log') {
   return `<div class="seg record-mode-seg" data-role="record-mode-seg" role="group" aria-label="记录模式">
-    <button type="button" data-action="pick-record-mode" data-mode="log" class="${selectedMode === 'log' ? 'active' : ''}" aria-label="记录已发生">已发生</button>
-    <button type="button" data-action="pick-record-mode" data-mode="plan" class="${selectedMode === 'plan' ? 'active' : ''}" aria-label="记录计划中">计划中</button>
+    <button type="button" data-action="pick-record-mode" data-mode="log" class="${selectedMode === 'log' ? 'active' : ''}" aria-pressed="${selectedMode === 'log'}" aria-label="记录已发生">已发生</button>
+    <button type="button" data-action="pick-record-mode" data-mode="plan" class="${selectedMode === 'plan' ? 'active' : ''}" aria-pressed="${selectedMode === 'plan'}" aria-label="记录计划中">计划中</button>
   </div>`;
 }
 
@@ -272,25 +281,59 @@ export function sheetHead({ title, cancelText, cancelAction, cancelAria, doneTex
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '47';
+export const APP_VERSION = '48';
+
+export function renderDeleteConfirmSheet(opts = {}) {
+  const plan = opts.deletePlan || {};
+  const entry = opts.deleteEntry || {};
+  const isPlan = Boolean(entry.planned);
+  const range = plan.startTs && plan.endTs
+    ? `${hhmm(plan.startTs)}-${plan.endLabel || hhmm(plan.endTs)}`
+    : hhmm(entry.ts || '');
+  const resultClass = plan.outcome === 'join' ? 'is-join' : 'is-unrecorded';
+  return `
+    ${sheetHead({
+      title: isPlan ? '删除计划' : '删除记录',
+      cancelText: '取消',
+      cancelAction: 'cancel-delete',
+      cancelAria: '取消删除',
+      doneText: '删除',
+      doneAction: 'confirm-delete',
+      doneAria: isPlan ? '确认删除计划' : '确认删除记录',
+      doneId: ` data-id="${esc(entry.id || '')}"`
+    })}
+    <div class="form-sheet-body delete-confirm-body">
+      ${opts.deleteStale ? '<div class="form-inline-error" role="alert">数据已变化，下面是重新计算后的结果；请再次确认。</div>' : ''}
+      <div class="delete-target">
+        <div class="delete-range">${esc(range)}</div>
+        <div class="delete-what">${esc(entry.what || '未填写')}</div>
+        <div class="delete-tag">#${esc((entry.tags || [])[0] || '未记录')}</div>
+      </div>
+      <div class="delete-result ${resultClass}" role="status">
+        <div class="fl-label">删除后的确切结果</div>
+        <p>${esc(plan.message || '这条记录将被删除。')}</p>
+      </div>
+      <div class="form-inline-error" data-role="delete-error" hidden></div>
+    </div>`;
+}
 
 export function renderMoreSheet(opts = {}) {
   let themePref = 'auto';
   try { themePref = localStorage.getItem(THEME_KEY) || 'auto'; } catch {}
   const themeBtn = (value, label) =>
-    `<button type="button" data-action="theme" data-theme="${value}" class="${themePref === value ? 'active' : ''}" aria-label="主题：${label}">${label}</button>`;
+    `<button type="button" data-action="theme" data-theme="${value}" class="${themePref === value ? 'active' : ''}" aria-pressed="${themePref === value}" aria-label="主题：${label}">${label}</button>`;
   return `
     ${sheetHead({ title: '更多', cancelText: '关闭', cancelAction: 'close-form', cancelAria: '关闭更多菜单' })}
     <div class="form-sheet-body more-body">
       <div class="cell-group">
-        <button class="cell-btn" id="summary-btn" type="button" data-action="copy-summary" aria-label="复制当前视图摘要">复制当前视图摘要${cellChevron}</button>
+        <button class="cell-btn" id="summary-btn" type="button" data-action="copy-summary" aria-label="复制当前视图摘要"><span data-role="cell-label">复制当前视图摘要</span>${cellChevron}</button>
       </div>
       <div class="form-hint">摘要只含当前视图，可贴给 AI；下面四项均为完整 JSON 备份，全部在本机完成。</div>
       <div class="cell-group">
-        <button class="cell-btn" id="copy-btn" type="button" data-action="copy-json" aria-label="复制完整 JSON 备份">复制 JSON 备份${cellChevron}</button>
-        <button class="cell-btn" type="button" data-action="download-json" aria-label="下载 JSON 备份">下载备份${cellChevron}</button>
-        <button class="cell-btn" type="button" data-action="import-json" aria-label="导入 JSON 备份">导入备份${cellChevron}</button>
-        <button class="cell-btn" id="backup-send-btn" type="button" data-action="send-backup" aria-label="分享 JSON 备份">分享备份${cellChevron}</button>
+        <button class="cell-btn" id="copy-btn" type="button" data-action="copy-json" aria-label="复制完整 JSON 备份"><span data-role="cell-label">复制 JSON 备份</span>${cellChevron}</button>
+        <button class="cell-btn" type="button" data-action="download-json" aria-label="下载 JSON 备份"><span data-role="cell-label">下载备份</span>${cellChevron}</button>
+        <button class="cell-btn" type="button" data-action="import-json" aria-label="导入 JSON 备份"><span data-role="cell-label">导入备份</span>${cellChevron}</button>
+        <button class="cell-btn" id="backup-send-btn" type="button" data-action="send-backup" aria-label="分享 JSON 备份"><span data-role="cell-label">分享备份</span>${cellChevron}</button>
       </div>
       <div class="cell-group">
         <button class="cell-btn" type="button" data-action="open-tag-config" aria-label="配置标签">标签高级设置${cellChevron}</button>
@@ -310,6 +353,7 @@ export function renderFormSheet(opts) {
   if (opts && opts.mode === 'config') return renderConfigSheet(opts.config || loadConfig(), opts);
   if (opts && opts.mode === 'import-shift') return renderImportShiftDialog(opts);
   if (opts && opts.mode === 'more') return renderMoreSheet(opts);
+  if (opts && opts.mode === 'delete-confirm') return renderDeleteConfirmSheet(opts);
   const mode = opts && opts.mode === 'edit' ? 'edit' : 'new';
   const e = opts && opts.entry;
   const isEdit = mode === 'edit';
@@ -326,12 +370,16 @@ export function renderFormSheet(opts) {
   const recordMode = opts && opts.recordMode ? opts.recordMode : 'log';
   const isPlan = !isEdit && !isHistoryDay && recordMode === 'plan';
   const isBackfill = !isEdit && Boolean(opts && opts.backfill);
+  const isSplit = isBackfill && opts && opts.backfillKind === 'split';
   const isEditPlanned = isEdit && e && e.planned;
+  const isEditPlaceholder = isEdit && e && typeof e.what === 'string' && e.what.trim() === '';
+  const intervalContext = opts && opts.intervalContext || null;
+  const editEndMode = opts && opts.editEndMode === 'now' ? 'now' : 'fixed';
   const isKnownPickerTag = config.mainline.includes(tag) || config.chips.some(chip => chip.name === tag);
   const bucketSeg = renderBucketSeg(isEdit ? 'edit' : 'form', bucket);
   const chips = renderTagPicker(isEdit ? 'edit' : 'form', tag, config, bucket);
   const recordModeSeg = isEdit || isHistoryDay || isBackfill ? '' : renderRecordModeSeg(recordMode);
-  const title = isEdit ? '编辑' : (isBackfill ? '补录' : (isPlan ? '计划' : (isToday ? '记一条' : '补记')));
+  const title = isEdit ? '编辑' : (isBackfill ? (isSplit ? '切一刀' : '补录') : (isPlan ? '计划' : (isToday ? '记一条' : '补记')));
   const summary = isEdit
     ? `${hhmm(e.ts)}${tag ? ` · #${esc(tag)}` : ''}`
     : (isBackfill ? daySummary : (isPlan ? daySummary : (isToday ? '刚才这一阵' : daySummary)));
@@ -375,6 +423,7 @@ export function renderFormSheet(opts) {
   // 常驻展开的滚轮是噪音；点触发行才展开，与新建态「开始时间」触发行形态一致。
   // 计划编辑（isEditPlanned）沿用「计划时间（可改）」始终展开，改动概率高、无需折叠。
   const editStartLabel = e && normalizeTimestamp(e.ts) ? hhmm(e.ts) : '--:--';
+  const editEndLabel = intervalContext && normalizeTimestamp(intervalContext.endTs) ? hhmm(intervalContext.endTs) : '--:--';
   const editTimeSection = isEditPlanned
     ? `
       <div class="fl">
@@ -383,7 +432,7 @@ export function renderFormSheet(opts) {
         <div data-role="edit-wheel"></div>
       </div>
       <div class="form-inline-error" data-role="conflict-error" hidden></div>`
-    : `
+    : (isEditPlaceholder || !intervalContext ? `
       <div class="fl">
         <div class="fl-label">开始时间</div>
         ${tsInput}
@@ -394,7 +443,33 @@ export function renderFormSheet(opts) {
           <div data-role="edit-wheel"></div>
         </div>
       </div>
-      <div class="form-inline-error" data-role="conflict-error" hidden></div>`;
+      <div class="form-inline-error" data-role="conflict-error" hidden></div>` : `
+      <div class="fl">
+        <div class="fl-label">开始 - 结束</div>
+        ${tsInput}
+        <input type="hidden" data-role="edit-end-ts" value="${esc(intervalContext.endTs)}">
+        <input type="hidden" data-role="edit-end-mode" value="${esc(editEndMode)}">
+        <div class="form-time-row" data-role="edit-time-row">
+          <button class="start-time-trigger" type="button" data-action="toggle-edit-start-time" aria-expanded="false" aria-label="修改开始和结束时间"><span data-role="edit-start-label">${esc(editStartLabel)}-${esc(editEndMode === 'now' ? '至今' : editEndLabel)}</span></button>
+        </div>
+        <div class="fl start-time-section interval-editor" data-role="edit-time-section" hidden>
+          <div class="boundary-picker">
+            <div class="fl-label">开始</div>
+            <div data-role="edit-start-wheel"></div>
+          </div>
+          ${intervalContext.canUseNow ? `<div class="seg end-mode-seg" data-role="edit-end-mode-seg" role="group" aria-label="结束方式">
+            <button type="button" data-action="pick-edit-end-mode" data-mode="now" class="${editEndMode === 'now' ? 'active' : ''}" aria-pressed="${editEndMode === 'now'}">至今</button>
+            <button type="button" data-action="pick-edit-end-mode" data-mode="fixed" class="${editEndMode === 'fixed' ? 'active' : ''}" aria-pressed="${editEndMode === 'fixed'}">固定结束</button>
+          </div>` : ''}
+          <div class="boundary-picker" data-role="edit-end-picker"${editEndMode === 'now' ? ' hidden' : ''}>
+            <div class="fl-label">结束</div>
+            <div data-role="edit-end-wheel"></div>
+          </div>
+          <div class="boundary-limits" data-role="edit-limits"></div>
+          <div class="interval-preview" data-role="interval-preview" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="form-inline-error" data-role="conflict-error" hidden></div>`);
   const editBody = `
       ${editTimeSection}
       <div class="fl">
@@ -402,7 +477,7 @@ export function renderFormSheet(opts) {
         ${whatInput}
       </div>
       ${tagBlock}
-      ${isEdit ? `<button class="cell-danger" type="button" data-action="delete-entry" data-id="${esc(e.id)}" aria-label="删除这条${isEditPlanned ? '计划' : '记录'}">删除这条${isEditPlanned ? '计划' : '记录'}</button>` : ''}`;
+      ${isEdit && !isEditPlaceholder ? `<button class="cell-danger" type="button" data-action="request-delete" data-id="${esc(e.id)}" aria-label="删除这条${isEditPlanned ? '计划' : '记录'}">删除这条${isEditPlanned ? '计划' : '记录'}</button>` : ''}`;
   const backfillTimeSection = `
       <input type="hidden" id="form-ts">
       <input type="hidden" id="form-end-ts">
@@ -415,7 +490,8 @@ export function renderFormSheet(opts) {
         <div data-role="backfill-end-mount"></div>
         <div class="form-hint" data-role="backfill-duration"></div>
       </div>
-      <div class="form-hint">在这段里补录/切分一段；结束之后自动接回原来的状态，其它段不受影响。</div>
+      <div class="boundary-limits" data-role="backfill-limits"></div>
+      <div class="interval-preview" data-role="interval-preview" aria-live="polite"></div>
       <div class="form-inline-error" data-role="conflict-error" hidden></div>`;
   const logTimeSection = `
       ${recordModeSeg}
@@ -461,7 +537,7 @@ export function renderTagPicker(prefix, selectedTag, config = loadConfig(), buck
   const action = prefix === 'edit' ? 'pick-edit-tag' : 'pick-form-tag';
   const groups = chipGroups(config);
   const mainline = config.mainline.map(name => ({ name, bucket: 'job' }));
-  const chipBtn = item => `<button class="chip chip-${item.bucket}${item.name === selectedTag ? ' sel' : ''}" type="button" data-action="${action}" data-tag="${esc(item.name)}" data-bucket="${item.bucket}" aria-label="选择标签：${esc(item.name)}">${esc(item.name)}</button>`;
+  const chipBtn = item => `<button class="chip chip-${item.bucket}${item.name === selectedTag ? ' sel' : ''}" type="button" data-action="${action}" data-tag="${esc(item.name)}" data-bucket="${item.bucket}" aria-pressed="${item.name === selectedTag}" aria-label="选择标签：${esc(item.name)}">${esc(item.name)}</button>`;
   const draftName = String(selectedTag || '').trim();
   const known = !draftName || config.mainline.includes(draftName) || config.chips.some(chip => chip.name === draftName);
   const draftBucket = bucketFilter === 'maintain' || bucketFilter === 'leak' ? bucketFilter : 'job';
@@ -487,11 +563,12 @@ export function renderHelpSheet() {
   return `
     ${sheetHead({ title: '说明', cancelText: '关闭', cancelAction: 'close-form', cancelAria: '关闭说明' })}
     <div class="form-sheet-body help-body">
-      <section><h2>怎么记</h2><p>点右下角悬浮的「＋ 记一条」记录刚才这一阵（副文案标着从哪续起）；点整张卡片进编辑，可改内容、标签和开始时间，编辑里有「删除这条」（智能删除：两侧同标签自动愈合，否则转未记录）；空隙卡点一下补录、段落卡「补一下/切一刀」做有界补录或切分；卡片也可左滑快速编辑。</p></section>
+      <section><h2>怎么记</h2><p>点右下角「＋ 记一条」记录刚才这一阵；点卡片可编辑内容、标签和完整起止时间。左滑卡片会露出编辑、删除；删除前会展示结果，删除后可撤销 8 秒。空隙卡可补录，段落卡「切一刀」只在原段内部切分。</p></section>
       <section><h2>4 桶</h2><p>先选归类桶，再选标签：主线=求职推进和自定义主线；维持=睡觉、吃饭、通勤等必要消耗；漏损=逃避娱乐；未记录=未知、孤儿标签和待确认长段。</p></section>
       <section><h2>计划</h2><p>计划条不计入 4 桶统计；时间到了可点「发生了」转为已发生记录。</p></section>
       <section><h2>3 小时确认</h2><p>超过 3 小时的非睡觉片段先进入未记录；确认后才按标签统计。睡觉默认 longOk，不要求确认。</p></section>
-      <section><h2>备份与合并</h2><p>右上角「···」更多菜单含复制、下载、分享、导入完整 JSON；摘要只导出当前视图，适合贴给 AI。</p></section>
+      <section><h2>备份与合并</h2><p>右上角「···」更多菜单含复制、下载、分享、导入完整 JSON；分享会依次尝试文件、文本和下载。导入会先完整预检，发现同 ID 不同内容或同时刻冲突时整批停止，不会静默覆盖。</p></section>
+      <section><h2>离线更新</h2><p>首次联网后可离线使用。发现新版时会显示「更新应用」，只有你点击后才刷新；记录和标签仍保留在本机。</p></section>
       <section><h2>双设备时区</h2><p>时间按设备壁钟保存，不做自动转换。导入时可整体平移 ±N 小时来对齐。</p></section>
       <section><h2>屏幕与隐私</h2><p>本应用不会主动保持屏幕常亮；数据只存在本机浏览器。</p></section>
     </div>`;
@@ -508,6 +585,8 @@ export function renderImportShiftDialog(opts = {}) {
         <div class="fl-label">平移小时数</div>
         <input type="number" class="inp" id="import-shift-hours" value="${esc(value)}" step="0.25" inputmode="decimal">
       </div>
+      <div class="import-summary" data-role="import-summary" aria-live="polite"></div>
+      <div class="form-inline-error" data-role="import-error" hidden></div>
     </div>`;
 }
 
@@ -546,7 +625,7 @@ export function renderConfigSheet(config = loadConfig(), opts = {}) {
   return `
     ${sheetHead({ title: '标签高级设置', cancelText: '取消', cancelAction: 'close-form', cancelAria: '取消配置', doneText: '保存', doneAction: 'save-tag-config', doneAria: '保存标签配置' })}
     <div class="form-sheet-body config-body">
-      <div class="form-hint">改名会同步迁移历史记录。录入时先选桶；自定义标签在同桶第二次使用后自动固定。内置标签不会在这里删除，可改名、改桶或设置超长段免确认。</div>
+      <div class="form-hint">改名会同步迁移历史记录。录入时先选桶；自定义标签首次使用就会固定。内置标签不会在这里删除，可改名、改桶或设置超长段免确认。</div>
       ${mainlineHint}
       ${section('maintain', '维持标签')}
       ${section('leak', '漏损标签')}

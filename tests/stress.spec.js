@@ -44,7 +44,9 @@ function generateEntries(count) {
 // can pay 400ms+ of process/cache setup that has nothing to do with app code.
 // Measured on localhost so network is negligible; the cost is parse + render.
 const SCALE_CASES = [
-  { count: 500,  label: '小压 500 条  (~1 个月)',  thresholdMs: 300  },
+  // The smallest case also carries the per-engine startup floor during the
+  // Chromium+WebKit run; larger cases retain tighter scaling expectations.
+  { count: 500,  label: '小压 500 条  (~1 个月)',  thresholdMs: 450  },
   { count: 2000, label: '中压 2000 条 (~4 个月)',  thresholdMs: 800  },
   { count: 5000, label: '极压 5000 条 (~11 个月)', thresholdMs: 2000 }
 ];

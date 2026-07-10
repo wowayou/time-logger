@@ -26,7 +26,10 @@ import {
 import {
   carveInsert,
   coalesceRedundant,
-  normalizeEntries
+  normalizeEntries,
+  planDeleteEntry,
+  planIntervalEdit,
+  planSegmentSplit
 } from './src/entry_model.js';
 
 function assert(condition, message) {
@@ -385,10 +388,15 @@ assert(normData.entries.some(e => e.ts === '2026-07-01T12:00' && e.what === '' &
 
 import { listPlannedEntries } from './src/stats.js';
 import {
+  bucketForTag,
+  mergeImportedConfig,
+  mergeImportedEntries,
   migrateEntryTags,
   countEntriesWithTag,
+  normalizeConfig,
   rememberCustomTagForBucket,
   loadConfig,
+  validateImportData,
   CONFIG_KEY
 } from './src/storage.js';
 
@@ -425,6 +433,131 @@ assert(loadConfig().chips.filter(chip => chip.name === '临时拉伸').length ==
 localStorage.setItem(CONFIG_KEY, JSON.stringify({ version: 1, mainline: ['求职推进'], chips: [{ name: '娱乐', bucket: 'leak', longOk: false }] }));
 rememberCustomTagForBucket('娱乐', 'maintain', []);
 assert(loadConfig().chips.find(chip => chip.name === '娱乐').bucket === 'leak', 'recording never silently re-buckets an existing chip');
+
+// --- v48 interval transactions ---
+let txSeq = 0;
+const txId = () => `tx${txSeq += 1}`;
+const editSource = [
+  { id: 'various', ts: '2026-07-09T15:39', what: '各种', tags: ['杂'] },
+  { id: 'focus', ts: '2026-07-09T16:14', what: '专注', tags: ['求职推进'] },
+  { id: 'meal', ts: '2026-07-09T19:11', what: '吃饭', tags: ['吃饭'] }
+];
+const movedSharedBoundary = planIntervalEdit(editSource, {
+  id: 'various',
+  startTs: '2026-07-09T15:39',
+  endTs: '2026-07-09T18:11',
+  endMode: 'fixed',
+  what: '各种',
+  tags: ['杂']
+}, { todayKey: '2026-07-10', nowTs: '2026-07-10T12:00', createId: txId });
+assert(movedSharedBoundary.ok, 'v48 text reproduction should allow moving the shared end boundary');
+assert(movedSharedBoundary.resultEntries.find(e => e.id === 'focus').ts === '2026-07-09T18:11', 'shared end moves the next record start');
+assert(movedSharedBoundary.resultEntries.find(e => e.id === 'meal').ts === '2026-07-09T19:11', 'shared end never swallows the following boundary');
+assert(movedSharedBoundary.preview.map(part => part.role).join(',') === 'previous,current,next', 'interval edit previews previous/current/next');
+
+const zeroByNeighbor = planIntervalEdit(editSource, {
+  id: 'focus', startTs: '2026-07-09T15:39', endTs: '2026-07-09T19:00', endMode: 'fixed', what: '专注', tags: ['求职推进']
+}, { todayKey: '2026-07-10', nowTs: '2026-07-10T12:00', createId: txId });
+assert(!zeroByNeighbor.ok && zeroByNeighbor.reason === 'before-min', 'edit cannot collapse the previous record to zero duration');
+
+const crossNaturalDay = planIntervalEdit([
+  { id: 'late', ts: '2026-07-09T22:00', what: '收尾', tags: ['求职推进'] }
+], {
+  id: 'late', startTs: '2026-07-09T22:00', endTs: '2026-07-10T00:01', endMode: 'fixed', what: '收尾', tags: ['求职推进']
+}, { todayKey: '2026-07-10', nowTs: '2026-07-10T12:00', createId: txId });
+assert(!crossNaturalDay.ok && crossNaturalDay.reason === 'cross-day', 'interval edit cannot cross the local natural day');
+
+const fixedTail = planIntervalEdit([
+  { id: 'tail', ts: '2026-07-10T10:00', what: '进行中', tags: ['求职推进'] }
+], {
+  id: 'tail', startTs: '2026-07-10T10:00', endTs: '2026-07-10T11:00', endMode: 'fixed', what: '进行中', tags: ['求职推进']
+}, { todayKey: '2026-07-10', nowTs: '2026-07-10T12:00', createId: txId });
+assert(fixedTail.ok, 'today tail accepts a fixed end');
+assert(fixedTail.resultEntries.some(e => e.ts === '2026-07-10T11:00' && e.what === ''), 'fixed tail leaves an unrecorded tail boundary');
+const ongoingTail = planIntervalEdit(fixedTail.resultEntries, {
+  id: 'tail', startTs: '2026-07-10T10:00', endTs: '2026-07-10T11:00', endMode: 'now', what: '进行中', tags: ['求职推进']
+}, { todayKey: '2026-07-10', nowTs: '2026-07-10T12:00', createId: txId });
+assert(ongoingTail.ok && ongoingTail.resultEntries.find(e => e.id === 'tail').ongoing === true, 'today tail supports a true ongoing end');
+assert(!ongoingTail.resultEntries.some(e => e.what === ''), 'ongoing tail removes the fixed unrecorded boundary');
+
+const splitBase = [
+  { id: 'source', ts: '2026-07-09T16:11', what: '原段', tags: ['求职推进'] },
+  { id: 'right', ts: '2026-07-09T19:11', what: '右段', tags: ['吃饭'] }
+];
+const splitInside = planSegmentSplit(splitBase, {
+  sourceId: 'source', frozenStart: '2026-07-09T16:11', frozenEnd: '2026-07-09T19:11',
+  startTs: '2026-07-09T17:00', endTs: '2026-07-09T18:00', what: '新段', tags: ['刷手机']
+}, { createId: txId });
+assert(splitInside.ok && splitInside.mode === 'inside' && splitInside.preview.length === 3, 'internal split previews three segments');
+assert(splitInside.resultEntries.some(e => e.ts === '2026-07-09T18:00' && e.what === '原段'), 'internal split restores the frozen source after the new segment');
+const splitEdge = planSegmentSplit(splitBase, {
+  sourceId: 'source', frozenStart: '2026-07-09T16:11', frozenEnd: '2026-07-09T19:11',
+  startTs: '2026-07-09T16:11', endTs: '2026-07-09T18:00', what: '新段', tags: ['刷手机']
+}, { createId: txId });
+assert(splitEdge.ok && splitEdge.mode === 'edge' && splitEdge.preview.length === 2, 'edge split degrades to two segments');
+const splitWhole = planSegmentSplit(splitBase, {
+  sourceId: 'source', frozenStart: '2026-07-09T16:11', frozenEnd: '2026-07-09T19:11',
+  startTs: '2026-07-09T16:11', endTs: '2026-07-09T19:11', what: '整段替换', tags: ['刷手机']
+}, { createId: txId });
+assert(splitWhole.ok && splitWhole.mode === 'whole' && splitWhole.preview.length === 1, 'whole split explicitly becomes one replacement segment');
+const splitOutside = planSegmentSplit(splitBase, {
+  sourceId: 'source', frozenStart: '2026-07-09T16:11', frozenEnd: '2026-07-09T19:11',
+  startTs: '2026-07-09T16:00', endTs: '2026-07-09T18:00', what: '越界', tags: ['刷手机']
+}, { createId: txId });
+assert(!splitOutside.ok && splitOutside.reason === 'outside-source', 'split picker cannot escape frozen source boundaries');
+
+const sameTagDifferentWhat = [
+  { id: 'left', ts: '2026-07-09T08:00', what: '写代码', tags: ['求职推进'] },
+  { id: 'middle', ts: '2026-07-09T09:00', what: '开会', tags: ['维持'] },
+  { id: 'right', ts: '2026-07-09T10:00', what: '写方案', tags: ['求职推进'] }
+];
+const deleteDifferent = planDeleteEntry(sameTagDifferentWhat, 'middle', { todayKey: '2026-07-10', nowTs: '2026-07-10T12:00' });
+assert(deleteDifferent.ok && deleteDifferent.outcome === 'unrecorded', 'same tag with different content must not reconnect');
+assert(deleteDifferent.resultEntries.find(e => e.id === 'middle').what === '', 'non-matching delete preserves the exact span as unrecorded');
+const deleteJoin = planDeleteEntry([
+  { id: 'left', ts: '2026-07-09T08:00', what: '同一内容', tags: ['求职推进'] },
+  { id: 'middle', ts: '2026-07-09T09:00', what: '插入段', tags: ['吃饭'] },
+  { id: 'right', ts: '2026-07-09T10:00', what: '同一内容', tags: ['求职推进'] },
+  { id: 'after', ts: '2026-07-09T11:00', what: '后续', tags: ['吃饭'] }
+], 'middle', { todayKey: '2026-07-10', nowTs: '2026-07-10T12:00' });
+assert(deleteJoin.ok && deleteJoin.outcome === 'join', 'exactly matching content and tags reconnect');
+assert(!deleteJoin.resultEntries.some(e => e.id === 'middle' || e.id === 'right'), 'reconnect coalesces the redundant right boundary');
+const deleteFirst = planDeleteEntry(sameTagDifferentWhat, 'left', { todayKey: '2026-07-10', nowTs: '2026-07-10T12:00' });
+assert(deleteFirst.outcome === 'unrecorded', 'first record deletion never stretches a neighbor backward');
+const deleteTail = planDeleteEntry(sameTagDifferentWhat, 'right', { todayKey: '2026-07-10', nowTs: '2026-07-10T12:00' });
+assert(deleteTail.outcome === 'unrecorded', 'tail deletion never stretches a neighbor forward');
+const deletePlan = planDeleteEntry([{ id: 'p', ts: '2026-07-11T09:00', what: '计划', tags: ['求职推进'], planned: true }], 'p');
+assert(deletePlan.outcome === 'remove-plan' && deletePlan.resultEntries.length === 0, 'planned entry deletes directly');
+
+// Config normalization respects explicit saved state: renamed defaults stay renamed,
+// and a mainline name can never be shadowed by a chip with the same name.
+const renamedDefaults = normalizeConfig({
+  version: 1,
+  mainline: ['求职推进'],
+  chips: [{ name: '休息', bucket: 'maintain', longOk: true }]
+});
+assert(!renamedDefaults.chips.some(chip => chip.name === '睡觉'), 'renamed default chip must not reappear');
+const noCrossBucketDuplicate = normalizeConfig({
+  version: 1,
+  mainline: ['同名'],
+  chips: [{ name: '同名', bucket: 'leak', longOk: false }]
+});
+assert(noCrossBucketDuplicate.chips.length === 0 && bucketForTag('同名', noCrossBucketDuplicate) === 'job', 'mainline wins and duplicate chip is removed');
+const mergedConfig = mergeImportedConfig(
+  { version: 1, mainline: ['本机'], chips: [{ name: '同名', bucket: 'maintain', longOk: true }] },
+  { version: 1, mainline: ['导入主线'], chips: [{ name: '同名', bucket: 'leak', longOk: false }, { name: '新增', bucket: 'leak', longOk: false }] }
+);
+assert(mergedConfig.chips.find(chip => chip.name === '同名').bucket === 'maintain', 'local same-name tag config wins import');
+assert(mergedConfig.mainline.includes('导入主线') && mergedConfig.chips.some(chip => chip.name === '新增'), 'new imported tags append');
+
+const currentImport = { version: 1, entries: [{ id: 'a', ts: '2026-07-09T09:00', what: '已有', tags: ['求职推进'] }] };
+const identicalImport = mergeImportedEntries(currentImport, [{ id: 'a', ts: '2026-07-09T09:00', what: '已有', tags: ['求职推进'] }]);
+assert(identicalImport.ok && identicalImport.imported === 0 && identicalImport.skipped === 1, 'identical import entry is skipped');
+const idConflict = mergeImportedEntries(currentImport, [{ id: 'a', ts: '2026-07-09T09:00', what: '不同', tags: ['求职推进'] }]);
+assert(!idConflict.ok && idConflict.conflicts[0].type === 'id', 'same id with different content blocks entire import');
+const timeConflict = mergeImportedEntries(currentImport, [{ id: 'b', ts: '2026-07-09T09:00', what: '同时刻', tags: ['吃饭'] }]);
+assert(!timeConflict.ok && timeConflict.conflicts[0].type === 'time', 'different record at same timestamp blocks entire import');
+assert(!validateImportData({ entries: [{ id: 42, ts: 'bad', what: '<img>', tags: 'nope' }] }).ok, 'import validates string ids, timestamps, content, and tags');
 
 console.log('confirm_logic_smoke passed');
 '''

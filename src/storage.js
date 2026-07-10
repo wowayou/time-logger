@@ -69,10 +69,19 @@ function normalizeChip(chip) {
 }
 
 export function normalizeConfig(raw) {
-  const mainline = uniqueNames([...(raw && raw.mainline || []), ...DEFAULT_CONFIG.mainline]);
+  if (!raw || typeof raw !== 'object') {
+    return {
+      version: 1,
+      mainline: DEFAULT_CONFIG.mainline.slice(),
+      chips: DEFAULT_CONFIG.chips.map(chip => ({ ...chip }))
+    };
+  }
+  const mainlineSource = Array.isArray(raw.mainline) ? raw.mainline : DEFAULT_CONFIG.mainline;
+  const chipsSource = Array.isArray(raw.chips) ? raw.chips : DEFAULT_CONFIG.chips;
+  const mainline = uniqueNames(mainlineSource);
   const chips = [];
-  const seen = new Set();
-  [...(raw && raw.chips || []), ...DEFAULT_CONFIG.chips].forEach(chip => {
+  const seen = new Set(mainline);
+  chipsSource.forEach(chip => {
     const clean = normalizeChip(chip);
     if (!clean || seen.has(clean.name)) return;
     seen.add(clean.name);
@@ -159,9 +168,9 @@ export function chipGroups(config = loadConfig()) {
 export function bucketForTag(tag, config = loadConfig()) {
   const name = cleanName(tag);
   if (!name || name === '未知') return 'unrecorded';
+  if (config.mainline.includes(name)) return 'job';
   const chip = config.chips.find(item => item.name === name);
   if (chip) return chip.bucket;
-  if (config.mainline.includes(name)) return 'job';
   return (LEGACY_ALIASES[name] && LEGACY_ALIASES[name].bucket) || 'unrecorded';
 }
 
@@ -188,10 +197,11 @@ export function load() {
 export function save(d) {
   try {
     localStorage.setItem(KEY, JSON.stringify(d));
+    return true;
   } catch (e) {
     if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
       console.error('[timelog] 存储已满，本次保存失败。请导出备份后删除旧数据。');
-      return;
+      return false;
     }
     throw e;
   }
@@ -205,9 +215,63 @@ export function validateImportData(imported) {
   if (!imported || !Array.isArray(imported.entries)) {
     return { ok: false, msg: '文件格式不对：缺少 entries 数组。' };
   }
-  const valid = imported.entries.every(en => en.id && en.ts && typeof en.what === 'string' && normalizeTimestamp(en.ts));
-  if (!valid) {
-    return { ok: false, msg: '文件格式不对：部分条目缺少必要字段（id/ts/what 字段）或时间格式不正确。' };
+  const errors = [];
+  imported.entries.forEach((entry, index) => {
+    const at = `第 ${index + 1} 条`;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      errors.push(`${at}不是记录对象`);
+      return;
+    }
+    if (typeof entry.id !== 'string' || !entry.id.trim()) errors.push(`${at}的 id 必须是非空字符串`);
+    if (typeof entry.ts !== 'string' || !normalizeTimestamp(entry.ts)) errors.push(`${at}的时间无效`);
+    if (typeof entry.what !== 'string') errors.push(`${at}的内容必须是字符串`);
+    if (!Array.isArray(entry.tags) || entry.tags.some(tag => typeof tag !== 'string')) {
+      errors.push(`${at}的 tags 必须是字符串数组`);
+    }
+    if ('planned' in entry && typeof entry.planned !== 'boolean') errors.push(`${at}的 planned 必须是布尔值`);
+    if ('ongoing' in entry && typeof entry.ongoing !== 'boolean') errors.push(`${at}的 ongoing 必须是布尔值`);
+    if ('longConfirm' in entry) {
+      const mark = entry.longConfirm;
+      if (!mark || typeof mark !== 'object'
+        || typeof mark.startTs !== 'string' || !normalizeTimestamp(mark.startTs)
+        || typeof mark.endTs !== 'string' || !normalizeTimestamp(mark.endTs)) {
+        errors.push(`${at}的 longConfirm 无效`);
+      }
+    }
+  });
+  if (imported.config !== undefined && (!imported.config || typeof imported.config !== 'object' || Array.isArray(imported.config))) {
+    errors.push('config 必须是对象');
+  } else if (imported.config) {
+    if (imported.config.mainline !== undefined
+      && (!Array.isArray(imported.config.mainline) || imported.config.mainline.some(name => typeof name !== 'string'))) {
+      errors.push('config.mainline 必须是字符串数组');
+    }
+    if (imported.config.chips !== undefined) {
+      if (!Array.isArray(imported.config.chips)) errors.push('config.chips 必须是数组');
+      else imported.config.chips.forEach((chip, index) => {
+        if (!chip || typeof chip !== 'object'
+          || typeof chip.name !== 'string'
+          || !['maintain', 'leak'].includes(chip.bucket)
+          || typeof chip.longOk !== 'boolean') {
+          errors.push(`config.chips 第 ${index + 1} 项无效`);
+        }
+      });
+    }
+  }
+  if (imported.meta !== undefined && (!imported.meta || typeof imported.meta !== 'object' || Array.isArray(imported.meta))) {
+    errors.push('meta 必须是对象');
+  } else if (imported.meta) {
+    const offset = imported.meta.sourceTimezoneOffsetMinutes;
+    if (offset !== undefined && !Number.isFinite(Number(offset))) errors.push('meta.sourceTimezoneOffsetMinutes 必须是数字');
+    if (imported.meta.sourceTimeZone !== undefined && typeof imported.meta.sourceTimeZone !== 'string') errors.push('meta.sourceTimeZone 必须是字符串');
+    if (imported.meta.exportedAt !== undefined && typeof imported.meta.exportedAt !== 'string') errors.push('meta.exportedAt 必须是字符串');
+  }
+  if (errors.length) {
+    return {
+      ok: false,
+      errors,
+      msg: `文件格式不对：${errors.slice(0, 4).join('；')}${errors.length > 4 ? `；另有 ${errors.length - 4} 项` : ''}。`
+    };
   }
   return { ok: true };
 }
@@ -221,8 +285,11 @@ function shiftedTimestamp(ts, shiftMinutes) {
 }
 
 function shiftedEntry(entry, shiftMinutes) {
-  if (!shiftMinutes) return entry;
-  const next = { ...entry, ts: shiftedTimestamp(entry.ts, shiftMinutes) };
+  const next = {
+    ...entry,
+    tags: Array.isArray(entry.tags) ? entry.tags.slice() : [],
+    ts: shiftedTimestamp(entry.ts, shiftMinutes)
+  };
   if (entry.longConfirm) {
     next.longConfirm = {
       ...entry.longConfirm,
@@ -233,11 +300,89 @@ function shiftedEntry(entry, shiftMinutes) {
   return next;
 }
 
-export function mergeImportedEntries(current, importedEntries, opts = {}) {
+function comparableImportEntry(entry) {
+  return JSON.stringify({
+    id: entry.id,
+    ts: entry.ts,
+    what: entry.what,
+    tags: Array.isArray(entry.tags) ? entry.tags : [],
+    planned: entry.planned === true || undefined,
+    ongoing: entry.ongoing === true || undefined,
+    longConfirm: entry.longConfirm
+      ? { startTs: entry.longConfirm.startTs, endTs: entry.longConfirm.endTs }
+      : undefined
+  });
+}
+
+export function preflightImportedEntries(current, importedEntries, opts = {}) {
   const shiftMinutes = Number(opts.shiftMinutes || 0);
-  const map = {};
-  current.entries.forEach(en => { map[en.id] = en; });
-  importedEntries.forEach(en => { map[en.id] = shiftedEntry(en, shiftMinutes); });
-  current.entries = Object.values(map).sort((a, b) => a.ts < b.ts ? -1 : 1);
-  return current;
+  const currentEntries = Array.isArray(current && current.entries) ? current.entries : [];
+  const byId = new Map();
+  const byTime = new Map();
+  currentEntries.forEach(entry => {
+    byId.set(entry.id, entry);
+    if (!byTime.has(entry.ts)) byTime.set(entry.ts, entry);
+  });
+  const additions = [];
+  const conflicts = [];
+  let skipped = 0;
+  for (const raw of importedEntries || []) {
+    const entry = shiftedEntry(raw, shiftMinutes);
+    const sameId = byId.get(entry.id);
+    if (sameId) {
+      if (comparableImportEntry(sameId) === comparableImportEntry(entry)) skipped += 1;
+      else conflicts.push({ type: 'id', id: entry.id, ts: entry.ts, message: `ID ${entry.id} 的内容不同` });
+      continue;
+    }
+    const sameTime = byTime.get(entry.ts);
+    if (sameTime) {
+      conflicts.push({
+        type: 'time',
+        id: entry.id,
+        ts: entry.ts,
+        message: `${entry.ts.replace('T', ' ')} 的导入记录 ${entry.id} 与本机记录 ${sameTime.id} 冲突`
+      });
+      continue;
+    }
+    byId.set(entry.id, entry);
+    byTime.set(entry.ts, entry);
+    additions.push(entry);
+  }
+  if (conflicts.length) {
+    return { ok: false, imported: 0, skipped, conflicts, resultEntries: currentEntries.map(entry => shiftedEntry(entry, 0)) };
+  }
+  const resultEntries = [...currentEntries.map(entry => shiftedEntry(entry, 0)), ...additions]
+    .sort((a, b) => a.ts === b.ts
+      ? String(a.id).localeCompare(String(b.id))
+      : (a.ts < b.ts ? -1 : 1));
+  return { ok: true, imported: additions.length, skipped, conflicts: [], resultEntries };
+}
+
+export function mergeImportedEntries(current, importedEntries, opts = {}) {
+  const plan = preflightImportedEntries(current, importedEntries, opts);
+  if (!plan.ok) return plan;
+  return {
+    ...plan,
+    data: { ...current, entries: plan.resultEntries }
+  };
+}
+
+export function mergeImportedConfig(localConfig, importedConfig) {
+  const local = normalizeConfig(localConfig);
+  if (!importedConfig || typeof importedConfig !== 'object') return local;
+  const imported = normalizeConfig(importedConfig);
+  const occupied = new Set([...local.mainline, ...local.chips.map(chip => chip.name)]);
+  const mainline = local.mainline.slice();
+  const chips = local.chips.map(chip => ({ ...chip }));
+  imported.mainline.forEach(name => {
+    if (occupied.has(name)) return;
+    occupied.add(name);
+    mainline.push(name);
+  });
+  imported.chips.forEach(chip => {
+    if (occupied.has(chip.name)) return;
+    occupied.add(chip.name);
+    chips.push({ ...chip });
+  });
+  return normalizeConfig({ version: 1, mainline, chips });
 }

@@ -10,6 +10,7 @@ const PAD = 80;
 const DAYS_BACK = 90;
 const DAYS_FWD = 7;
 const MAX_WINDOW_DAYS = 800;
+let wheelSequence = 0;
 
 export function setTimeInputError(scope, msg) {
   if (!scope) return;
@@ -100,10 +101,13 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
     onChangeCb(`${dateItems[selDate].val}T${p2(selH)}:${p2(selM)}`);
   }
 
-  function makeCol(items, initIdx, onSelect, extraClass) {
+  function makeCol(items, initIdx, onSelect, extraClass, ariaLabel) {
     const col = document.createElement('div');
     col.className = 'wheel-col' + (extraClass ? ' ' + extraClass : '');
     col.tabIndex = 0;
+    col.setAttribute('role', 'listbox');
+    col.setAttribute('aria-label', ariaLabel);
+    const colId = `wheel-${wheelSequence += 1}`;
 
     const inner = document.createElement('div');
     inner.style.paddingTop = PAD + 'px';
@@ -112,6 +116,10 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
     items.forEach((item, idx) => {
       const el = document.createElement('div');
       el.className = 'wheel-item';
+      el.id = `${colId}-${idx}`;
+      el.setAttribute('role', 'option');
+      el.setAttribute('aria-selected', String(idx === initIdx));
+      el.tabIndex = -1;
       el.textContent = item.label;
       el.addEventListener('click', () => col.scrollTo({ top: idx * ITEM_H, behavior: 'smooth' }));
       inner.appendChild(el);
@@ -121,7 +129,19 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
     function getIdx() {
       return Math.min(Math.max(Math.round(col.scrollTop / ITEM_H), 0), items.length - 1);
     }
-    function onSnap() { onSelect(getIdx()); }
+    function paintSelection(index) {
+      Array.from(inner.children).forEach((item, itemIndex) => {
+        const selected = itemIndex === index;
+        item.classList.toggle('is-selected', selected);
+        item.setAttribute('aria-selected', String(selected));
+      });
+      col.setAttribute('aria-activedescendant', `${colId}-${index}`);
+    }
+    function onSnap() {
+      const index = getIdx();
+      paintSelection(index);
+      onSelect(index);
+    }
 
     if ('onscrollend' in window) {
       col.addEventListener('scrollend', onSnap);
@@ -141,6 +161,7 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
       }
     });
 
+    paintSelection(initIdx);
     requestAnimationFrame(() => { col.scrollTop = initIdx * ITEM_H; });
     return col;
   }
@@ -149,12 +170,14 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
 
   const picker = document.createElement('div');
   picker.className = 'wheel-picker';
+  picker.setAttribute('role', 'group');
+  picker.setAttribute('aria-label', '日期和时间滚轮');
 
-  const dateCol = makeCol(dateItems, initDateIdx, idx => { selDate = idx; emit(); }, 'wheel-col-date');
-  const div1 = document.createElement('div'); div1.className = 'wheel-divider';
-  const hCol = makeCol(hourItems, initH, idx => { selH = idx; emit(); });
-  const div2 = document.createElement('div'); div2.className = 'wheel-divider';
-  const mCol = makeCol(minItems, initM, idx => { selM = idx; emit(); });
+  const dateCol = makeCol(dateItems, initDateIdx, idx => { selDate = idx; emit(); }, 'wheel-col-date', '日期');
+  const div1 = document.createElement('div'); div1.className = 'wheel-divider'; div1.setAttribute('aria-hidden', 'true');
+  const hCol = makeCol(hourItems, initH, idx => { selH = idx; emit(); }, '', '小时');
+  const div2 = document.createElement('div'); div2.className = 'wheel-divider'; div2.setAttribute('aria-hidden', 'true');
+  const mCol = makeCol(minItems, initM, idx => { selM = idx; emit(); }, '', '分钟');
 
   const highlight = document.createElement('div');
   highlight.className = 'wheel-highlight';
