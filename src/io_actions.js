@@ -8,6 +8,7 @@ import { fmtDateTime, fmtMins, fmtPlainMins, fmtTs, hhmm, p2 } from './time.js';
 export function createIoActions(deps) {
   let importShiftMinutes = 0;
   let pendingImport = null;
+  let importResolutions = {};
 
   function viewName(view = deps.state.view) {
     return ({ day: '天', week: '周', month: '月', year: '年' })[view] || view;
@@ -277,6 +278,7 @@ export function createIoActions(deps) {
   function importJSON() {
     pendingImport = null;
     importShiftMinutes = 0;
+    importResolutions = {};
     const fileInput = document.getElementById('import-file');
     if (fileInput) {
       fileInput.value = '';
@@ -287,6 +289,7 @@ export function createIoActions(deps) {
   function cancelImportShift() {
     pendingImport = null;
     importShiftMinutes = 0;
+    importResolutions = {};
     deps.closeForm();
   }
 
@@ -312,13 +315,17 @@ export function createIoActions(deps) {
     const error = document.querySelector('#form-sheet [data-role="import-error"]');
     const confirm = document.getElementById('import-confirm-btn');
     const conflicts = plan && plan.conflicts || [];
-    const blocked = conflicts.length > 0;
+    const resolvedCount = conflicts.filter(conflict => {
+      const resolution = importResolutions[conflict.key];
+      return resolution && resolution.signature === conflict.signature;
+    }).length;
+    const blocked = conflicts.length > resolvedCount;
     if (summary) {
       summary.classList.toggle('is-error', blocked);
       summary.textContent = !plan
         ? ''
-        : blocked
-          ? `发现 ${conflicts.length} 条冲突 · 本次不会写入`
+        : conflicts.length
+          ? `${conflicts.length} 条冲突 · 已处理 ${resolvedCount}/${conflicts.length}`
           : `可导入 ${plan.imported || 0} 条 · 已存在跳过 ${plan.skipped || 0} 条`;
     }
     if (confirm) {
@@ -333,7 +340,7 @@ export function createIoActions(deps) {
     }
     const intro = document.createElement('div');
     intro.className = 'import-conflict-intro';
-    intro.textContent = '请调整平移小时数，或先在本机处理对应时刻；所有冲突解决后才能导入。';
+    intro.textContent = '逐条选择处理方式；也可以调整平移小时数重新检查。全部处理后才会一次性写入。';
     const list = document.createElement('div');
     list.className = 'import-conflict-list';
     conflicts.slice(0, 8).forEach((conflict, index) => {
@@ -342,11 +349,39 @@ export function createIoActions(deps) {
       const title = document.createElement('div');
       title.className = 'import-conflict-title';
       title.textContent = `${index + 1}. ${conflict.type === 'id' ? '同一记录的内容不同' : '同一时刻有两条记录'}`;
+      const actions = document.createElement('div');
+      actions.className = 'import-conflict-actions';
+      actions.setAttribute('role', 'group');
+      actions.setAttribute('aria-label', `冲突 ${index + 1} 的处理方式`);
+      const selected = importResolutions[conflict.key];
+      [
+        ['local', '保留本机'],
+        ['incoming', '使用备份'],
+        ['merge', '合并文字']
+      ].forEach(([action, label]) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.action = 'resolve-import-conflict';
+        button.dataset.key = conflict.key;
+        button.dataset.resolution = action;
+        button.textContent = label;
+        const active = selected && selected.signature === conflict.signature && selected.action === action;
+        button.classList.toggle('active', Boolean(active));
+        button.setAttribute('aria-pressed', String(Boolean(active)));
+        actions.appendChild(button);
+      });
       card.append(
         title,
         importConflictSide('备份中', conflict.incoming),
-        importConflictSide('本机中', conflict.local)
+        importConflictSide('本机中', conflict.local),
+        actions
       );
+      if (selected && selected.signature === conflict.signature && selected.action === 'merge') {
+        const note = document.createElement('div');
+        note.className = 'import-conflict-merge-note';
+        note.textContent = '合并会保留本机时间、标签和状态，把两边不同的文字合成一条。';
+        card.appendChild(note);
+      }
       list.appendChild(card);
     });
     if (conflicts.length > 8) {
@@ -366,14 +401,36 @@ export function createIoActions(deps) {
   function previewImportShift(raw) {
     if (!pendingImport) return;
     importShiftMinutes = parseImportShiftHours(raw);
+    importResolutions = {};
     paintImportPlan(importPlan(pendingImport, importShiftMinutes));
+  }
+
+  function resolveImportConflict(key, action) {
+    if (!pendingImport || !['local', 'incoming', 'merge'].includes(action)) return;
+    const plan = importPlan(pendingImport, importShiftMinutes);
+    const conflict = (plan.conflicts || []).find(item => item.key === key);
+    if (!conflict) return;
+    importResolutions[key] = { action, signature: conflict.signature };
+    paintImportPlan(plan);
   }
 
   function applyImportedData(imported, shiftMinutes) {
     const current = deps.load();
-    const plan = deps.mergeImportedEntries(current, imported.entries, { shiftMinutes });
-    paintImportPlan(plan);
-    if (!plan.ok) return false;
+    const plan = deps.mergeImportedEntries(current, imported.entries, { shiftMinutes, resolutions: importResolutions });
+    if (!plan.ok) {
+      const latest = deps.mergeImportedEntries(current, imported.entries, { shiftMinutes });
+      importResolutions = {};
+      paintImportPlan(latest);
+      const error = document.querySelector('#form-sheet [data-role="import-error"]');
+      if (error && plan.resolutionError) {
+        const message = document.createElement('div');
+        message.className = 'import-resolution-error';
+        message.textContent = plan.resolutionError;
+        error.prepend(message);
+        error.hidden = false;
+      }
+      return false;
+    }
     const currentConfig = deps.loadConfig();
     const nextConfig = deps.mergeImportedConfig(currentConfig, imported.config);
     if (!deps.save(plan.data)) {
@@ -396,7 +453,7 @@ export function createIoActions(deps) {
       return false;
     }
     deps.render();
-    alert(`导入完成：新增 ${plan.imported} 条，跳过 ${plan.skipped} 条，冲突 0 条。`);
+    alert(`导入完成：写入 ${plan.imported} 条，保留/跳过 ${plan.skipped} 条，处理冲突 ${plan.resolvedConflicts || 0} 条。`);
     return true;
   }
 
@@ -407,6 +464,7 @@ export function createIoActions(deps) {
     if (!imported) return;
     if (!applyImportedData(imported, importShiftMinutes)) return;
     pendingImport = null;
+    importResolutions = {};
     deps.closeForm();
   }
 
@@ -422,6 +480,7 @@ export function createIoActions(deps) {
       if (!checked.ok) { alert(checked.msg); return; }
       pendingImport = imported;
       importShiftMinutes = suggestedShiftMinutes(imported);
+      importResolutions = {};
       deps.openFormSheet({
         mode: 'import-shift',
         importShiftHours: formatShiftHours(importShiftMinutes),
@@ -484,6 +543,7 @@ export function createIoActions(deps) {
     confirmImportShift,
     handleImport,
     previewImportShift,
+    resolveImportConflict,
     openMoreSheet,
     shareJSON,
     exportData

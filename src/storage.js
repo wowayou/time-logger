@@ -345,17 +345,20 @@ export function preflightImportedEntries(current, importedEntries, opts = {}) {
   const additions = [];
   const conflicts = [];
   let skipped = 0;
-  for (const raw of importedEntries || []) {
+  for (const [importIndex, raw] of (importedEntries || []).entries()) {
     const entry = shiftedEntry(raw, shiftMinutes);
     const sameId = byId.get(entry.id);
     if (sameId) {
       if (comparableImportEntry(sameId) === comparableImportEntry(entry)) skipped += 1;
       else conflicts.push({
+        key: `conflict-${importIndex}-id`,
+        index: importIndex,
         type: 'id',
         id: entry.id,
         ts: entry.ts,
         incoming: shiftedEntry(entry, 0),
         local: shiftedEntry(sameId, 0),
+        signature: `${comparableImportEntry(entry)}|${comparableImportEntry(sameId)}`,
         message: `ID ${entry.id} 的内容不同`
       });
       continue;
@@ -363,11 +366,14 @@ export function preflightImportedEntries(current, importedEntries, opts = {}) {
     const sameTime = byTime.get(entry.ts);
     if (sameTime) {
       conflicts.push({
+        key: `conflict-${importIndex}-time`,
+        index: importIndex,
         type: 'time',
         id: entry.id,
         ts: entry.ts,
         incoming: shiftedEntry(entry, 0),
         local: shiftedEntry(sameTime, 0),
+        signature: `${comparableImportEntry(entry)}|${comparableImportEntry(sameTime)}`,
         message: `${entry.ts.replace('T', ' ')} 的导入记录 ${entry.id} 与本机记录 ${sameTime.id} 冲突`
       });
       continue;
@@ -386,9 +392,96 @@ export function preflightImportedEntries(current, importedEntries, opts = {}) {
   return { ok: true, imported: additions.length, skipped, conflicts: [], resultEntries };
 }
 
+function mergedImportText(localWhat, incomingWhat) {
+  const local = String(localWhat || '').trim();
+  const incoming = String(incomingWhat || '').trim();
+  if (!local) return incoming;
+  if (!incoming || incoming === local) return local;
+  return `${local}\n\n${incoming}`;
+}
+
+function applyImportedResolutions(current, importedEntries, opts, basePlan) {
+  const shiftMinutes = Number(opts.shiftMinutes || 0);
+  const resolutions = opts.resolutions || {};
+  const working = (current.entries || []).map(entry => shiftedEntry(entry, 0));
+  const byId = new Map(working.map(entry => [entry.id, entry]));
+  const byTime = new Map(working.map(entry => [entry.ts, entry]));
+  const conflictsByIndex = new Map(basePlan.conflicts.map(conflict => [conflict.index, conflict]));
+  let imported = 0;
+  let skipped = 0;
+
+  const removeEntry = entry => {
+    if (!entry) return;
+    const index = working.findIndex(item => item.id === entry.id);
+    if (index >= 0) working.splice(index, 1);
+    byId.delete(entry.id);
+    if (byTime.get(entry.ts)?.id === entry.id) byTime.delete(entry.ts);
+  };
+  const addEntry = entry => {
+    const sameId = byId.get(entry.id);
+    const sameTime = byTime.get(entry.ts);
+    if (sameId || sameTime) return false;
+    const clean = shiftedEntry(entry, 0);
+    working.push(clean);
+    byId.set(clean.id, clean);
+    byTime.set(clean.ts, clean);
+    return true;
+  };
+
+  for (const [importIndex, raw] of (importedEntries || []).entries()) {
+    const incoming = shiftedEntry(raw, shiftMinutes);
+    const conflict = conflictsByIndex.get(importIndex);
+    if (conflict) {
+      const resolution = resolutions[conflict.key];
+      if (!resolution || resolution.signature !== conflict.signature) {
+        return { ...basePlan, stale: Boolean(resolution), resolutionError: resolution ? '本机数据或平移结果已变化，请重新选择冲突处理方式。' : '' };
+      }
+      if (resolution.action === 'local') {
+        skipped += 1;
+        continue;
+      }
+      removeEntry(conflict.local);
+      const candidate = resolution.action === 'merge'
+        ? { ...conflict.local, what: mergedImportText(conflict.local.what, conflict.incoming.what) }
+        : incoming;
+      if (!addEntry(candidate)) {
+        return { ...basePlan, resolutionError: '所选结果又产生了同 ID 或同时刻冲突，请改选“保留本机”或调整平移小时数。' };
+      }
+      imported += 1;
+      continue;
+    }
+
+    const sameId = byId.get(incoming.id);
+    if (sameId && comparableImportEntry(sameId) === comparableImportEntry(incoming)) {
+      skipped += 1;
+      continue;
+    }
+    if (!addEntry(incoming)) {
+      return { ...basePlan, resolutionError: '导入结果在重新计算时出现新的同 ID 或同时刻冲突。' };
+    }
+    imported += 1;
+  }
+
+  const resultEntries = working.sort((a, b) => a.ts === b.ts
+    ? String(a.id).localeCompare(String(b.id))
+    : (a.ts < b.ts ? -1 : 1));
+  return {
+    ok: true,
+    imported,
+    skipped,
+    conflicts: basePlan.conflicts,
+    resolvedConflicts: basePlan.conflicts.length,
+    resultEntries,
+    data: { ...current, entries: resultEntries }
+  };
+}
+
 export function mergeImportedEntries(current, importedEntries, opts = {}) {
   const plan = preflightImportedEntries(current, importedEntries, opts);
-  if (!plan.ok) return plan;
+  if (!plan.ok) {
+    if (opts.resolutions) return applyImportedResolutions(current, importedEntries, opts, plan);
+    return plan;
+  }
   return {
     ...plan,
     data: { ...current, entries: plan.resultEntries }

@@ -667,6 +667,7 @@ import {
       if (action === 'import-json') ioActions.importJSON();
       if (action === 'cancel-import-shift') ioActions.cancelImportShift();
       if (action === 'confirm-import-shift') ioActions.confirmImportShift();
+      if (action === 'resolve-import-conflict') ioActions.resolveImportConflict(el.dataset.key, el.dataset.resolution);
       if (action === 'send-backup') ioActions.shareJSON();
       if (action === 'update-app') applyUpdate();
       if (action === 'dismiss-cross-tab-banner') {
@@ -942,10 +943,14 @@ import {
     applyTheme(localStorage.getItem(THEME_KEY) || 'auto');
     const mq = window.matchMedia('(prefers-color-scheme: light)');
     if (mq.addEventListener) mq.addEventListener('change', () => applyTheme(localStorage.getItem(THEME_KEY) || 'auto'));
-    render();
+    const restoredBootFrame = window.__timelogBootRestored === true;
+    if (restoredBootFrame) lastIntervalSignature = dataSignature();
+    else render();
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         document.body.classList.add('app-ready');
+        document.body.classList.remove('boot-restored');
+        delete window.__timelogBootRestored;
         if (!navigator.webdriver && !localStorage.getItem(HELP_SEEN_KEY)) openHelp();
       });
     });

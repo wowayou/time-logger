@@ -1321,6 +1321,10 @@
        animateSheetClose）；不再是旧版瞬断。 */
     .form-sheet.sheet-closing .form-sheet-panel { transform: translateY(18px); opacity: 0; }
     .form-sheet.sheet-closing .form-sheet-backdrop { opacity: 0; }
+    .form-sheet.sheet-dragging .form-sheet-panel,
+    .form-sheet.sheet-dragging .form-sheet-backdrop { transition: none; }
+    .form-sheet.sheet-drag-dismiss.sheet-closing .form-sheet-panel { transform: translateY(100%); opacity: 0.35; }
+    .form-sheet.sheet-drag-dismiss.sheet-closing .form-sheet-backdrop { opacity: 0; }
     @media (prefers-reduced-motion: reduce) {
       .form-sheet-panel, .form-sheet-backdrop { transition: none; }
     }
@@ -1336,7 +1340,10 @@
       border-radius: 3px;
       background: var(--track);
       margin: 9px auto 0;
+      touch-action: none;
+      cursor: grab;
     }
+    .form-sheet.sheet-dragging .sh-grab { cursor: grabbing; }
     .form-sheet-head {
       /* v43: 置顶不滚——键盘只盖底部，保存 ✓ 永远在顶部可达（结构性根治 P2/⑧）。 */
       position: sticky;
@@ -1531,6 +1538,41 @@
     .import-conflict-role { color: var(--muted); font-size: 12px; margin-bottom: 2px; }
     .import-conflict-what { color: var(--text); font-size: 14px; overflow-wrap: anywhere; white-space: pre-wrap; }
     .import-conflict-meta { color: var(--faint); font-size: 12px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+    .import-conflict-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      padding: 9px 10px 10px;
+      border-top: 1px solid var(--border);
+    }
+    .import-conflict-actions button {
+      min-width: 0;
+      min-height: 38px;
+      padding: 5px 7px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: transparent;
+      color: var(--muted);
+      font: 600 12px/1.25 inherit;
+      cursor: pointer;
+    }
+    .import-conflict-actions button.active {
+      border-color: var(--accent);
+      background: var(--accent-bg);
+      color: var(--accent);
+    }
+    .import-conflict-merge-note {
+      padding: 0 11px 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .import-resolution-error {
+      padding-bottom: 8px;
+      color: var(--danger);
+      font-size: 13px;
+      font-weight: 650;
+    }
     .import-conflict-more { color: var(--muted); font-size: 13px; text-align: center; }
     .more-body { gap: 10px; }
     .app-version {

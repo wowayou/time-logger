@@ -44,6 +44,32 @@ for (const share of [false, true]) {
   });
 }
 
+test('mobile more sheet follows the grabber: short pulls rebound and long pulls dismiss', async ({ page }) => {
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  await openBackupMenu(page);
+  const dragGrabber = async distance => {
+    await page.locator('.sh-grab').evaluate((grabber, dy) => {
+      const fire = (type, y) => grabber.dispatchEvent(new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 17,
+        pointerType: 'touch',
+        clientX: 180,
+        clientY: y
+      }));
+      fire('pointerdown', 120);
+      fire('pointermove', 120 + dy);
+      fire('pointerup', 120 + dy);
+    }, distance);
+  };
+
+  await dragGrabber(30);
+  await expect(page.locator('#form-sheet')).toBeVisible();
+  await expect(page.locator('.form-sheet-panel')).toHaveAttribute('data-mode', 'more');
+  await dragGrabber(100);
+  await expect(page.locator('#form-sheet')).toBeHidden();
+});
+
 test('375px header hides title without overflowing', async ({ page }) => {
   await boot(page, 375, 'one-record');
   await expect(page.locator('.hdr-title')).toBeHidden();
@@ -598,6 +624,12 @@ test('reload starts with has-entries boot state and reaches app-ready', async ({
 test('Safari-style reload restores the last rendered frame before app.js arrives', async ({ page }) => {
   await boot(page, 375, 'one-record', false, FIXED_NOW);
   await expect(page.locator('#timeline')).toContainText('响应式测试记录');
+  await page.evaluate(() => {
+    document.querySelector('.entry').dataset.bootSentinel = 'kept';
+    const snapshot = JSON.parse(sessionStorage.getItem('timelog.bootSnapshot.v1'));
+    snapshot.appHtml = document.querySelector('.app').innerHTML;
+    sessionStorage.setItem('timelog.bootSnapshot.v1', JSON.stringify(snapshot));
+  });
 
   let releaseApp;
   let markAppRequested;
@@ -617,6 +649,8 @@ test('Safari-style reload restores the last rendered frame before app.js arrives
   releaseApp();
   await reload;
   await expect(page.locator('body')).toHaveClass(/app-ready/);
+  await expect(page.locator('.entry[data-boot-sentinel="kept"]')).toHaveCount(1);
+  await expect(page.locator('body')).not.toHaveClass(/boot-restored/);
 });
 
 test('editing an existing record persists content and tag (① commitEdit single load)', async ({ page }) => {
@@ -1064,7 +1098,7 @@ test('conflicting import shows safe side-by-side cards, blocks writing, and repl
       ]
     }))
   });
-  await expect(page.locator('[data-role="import-summary"]')).toHaveText('发现 2 条冲突 · 本次不会写入');
+  await expect(page.locator('[data-role="import-summary"]')).toHaveText('2 条冲突 · 已处理 0/2');
   await expect(page.locator('.import-conflict-card')).toHaveCount(2);
   await expect(page.locator('[data-role="import-error"]')).toContainText('备份中');
   await expect(page.locator('[data-role="import-error"]')).toContainText('本机中');
@@ -1087,6 +1121,47 @@ test('conflicting import shows safe side-by-side cards, blocks writing, and repl
   }));
   expect(result.pwned).toBe(0);
   expect(result.entries).toHaveLength(2);
+});
+
+test('import conflicts can be resolved per item with local, backup, or conservative text merge', async ({ page }) => {
+  await boot(page, 375, 'interval-three', false, '2026-06-29T20:00:30');
+  const chooserPromise = page.waitForEvent('filechooser');
+  await openBackupMenu(page);
+  await page.getByRole('button', { name: '导入 JSON 备份' }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    name: 'timelog-resolve-conflicts.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      version: 1,
+      entries: [
+        { id: 'backup-a', ts: '2026-06-29T14:30', what: '备份想替换前一段', tags: ['吃饭'] },
+        { id: 'backup-b', ts: '2026-06-29T15:39', what: '使用备份这一条', tags: ['睡觉'] },
+        { id: 'backup-c', ts: '2026-06-29T16:14', what: '补充的备份文字', tags: ['吃饭'] }
+      ]
+    }))
+  });
+
+  const cards = page.locator('.import-conflict-card');
+  await expect(cards).toHaveCount(3);
+  await cards.nth(0).getByRole('button', { name: '保留本机' }).click();
+  await cards.nth(1).getByRole('button', { name: '使用备份' }).click();
+  await cards.nth(2).getByRole('button', { name: '合并文字' }).click();
+  await expect(page.locator('[data-role="import-summary"]')).toHaveText('3 条冲突 · 已处理 3/3');
+  await expect(page.locator('#import-confirm-btn')).toBeEnabled();
+  await expect(cards.nth(2)).toContainText('保留本机时间、标签和状态');
+
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#import-confirm-btn').click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(entries.find(entry => entry.ts === '2026-06-29T14:30')).toMatchObject({ id: 'before', what: '前一段', tags: ['睡觉'] });
+  expect(entries.find(entry => entry.ts === '2026-06-29T15:39')).toMatchObject({ id: 'backup-b', what: '使用备份这一条', tags: ['睡觉'] });
+  expect(entries.find(entry => entry.ts === '2026-06-29T16:14')).toMatchObject({
+    id: 'focus',
+    what: '专注\n\n补充的备份文字',
+    tags: ['求职推进']
+  });
 });
 
 test('renamed defaults stay renamed and mainline/chip duplicates are rejected safely', async ({ page }) => {

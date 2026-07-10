@@ -49,6 +49,7 @@ export function createSheetController(deps) {
   let returnToMore = false;
   // R1：sheet 关闭走 class 驱动过渡；未收尾前的清理函数存这里，供重入保护调用。
   let sheetCloseCleanup = null;
+  let sheetDismissDrag = null;
 
   function getSheetMode() {
     const sheet = document.getElementById('form-sheet');
@@ -600,7 +601,15 @@ export function createSheetController(deps) {
   // reduced-motion/重入时的立即收尾，两条路径共享同一份清理逻辑。
   function finishSheetClose(sheet, panel) {
     sheet.hidden = true;
-    sheet.classList.remove('sheet-closing');
+    sheet.classList.remove('sheet-closing', 'sheet-dragging', 'sheet-drag-dismiss');
+    panel.style.removeProperty('transform');
+    panel.style.removeProperty('transition');
+    const backdrop = sheet.querySelector('.form-sheet-backdrop');
+    if (backdrop) {
+      backdrop.style.removeProperty('opacity');
+      backdrop.style.removeProperty('transition');
+    }
+    sheetDismissDrag = null;
     panel.innerHTML = '';
     delete panel.dataset.id;
     delete panel.dataset.mode;
@@ -729,6 +738,74 @@ export function createSheetController(deps) {
       const mode = closeFormSheet();
       if (mode === 'edit') deps.render();
     });
+  }
+
+  function registerSheetDismissGesture() {
+    const sheet = document.getElementById('form-sheet');
+    if (!sheet) return;
+    const resetInlineDrag = panel => {
+      const backdrop = sheet.querySelector('.form-sheet-backdrop');
+      sheet.classList.remove('sheet-dragging');
+      panel.style.transform = 'translateY(0)';
+      if (backdrop) backdrop.style.opacity = '1';
+      const cleanup = () => {
+        panel.removeEventListener('transitionend', cleanup);
+        panel.style.removeProperty('transform');
+        if (backdrop) backdrop.style.removeProperty('opacity');
+      };
+      if (prefersReducedMotion()) cleanup();
+      else panel.addEventListener('transitionend', cleanup);
+    };
+    sheet.addEventListener('pointerdown', event => {
+      const panel = event.target.closest('.form-sheet-panel');
+      if (!panel || panel.dataset.mode !== 'more' || window.innerWidth >= 720) return;
+      if (event.pointerType === 'mouse' || !event.target.closest('.sh-grab')) return;
+      sheetDismissDrag = {
+        panel,
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        lastY: event.clientY,
+        lastAt: performance.now(),
+        velocity: 0,
+        dy: 0
+      };
+      sheet.classList.add('sheet-dragging');
+      try { panel.setPointerCapture?.(event.pointerId); } catch {}
+    });
+    sheet.addEventListener('pointermove', event => {
+      const drag = sheetDismissDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const now = performance.now();
+      const dy = Math.max(0, event.clientY - drag.startY);
+      const elapsed = Math.max(1, now - drag.lastAt);
+      drag.velocity = (event.clientY - drag.lastY) / elapsed;
+      drag.lastY = event.clientY;
+      drag.lastAt = now;
+      drag.dy = dy;
+      drag.panel.style.transform = `translateY(${dy}px)`;
+      const backdrop = sheet.querySelector('.form-sheet-backdrop');
+      if (backdrop) backdrop.style.opacity = String(Math.max(0, 1 - dy / 240));
+      event.preventDefault();
+    });
+    const finish = event => {
+      const drag = sheetDismissDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      sheetDismissDrag = null;
+      try { drag.panel.releasePointerCapture?.(event.pointerId); } catch {}
+      const dismiss = drag.dy >= 72 || (drag.dy >= 24 && drag.velocity > 0.55);
+      if (!dismiss) {
+        resetInlineDrag(drag.panel);
+        return;
+      }
+      sheet.classList.remove('sheet-dragging');
+      sheet.classList.add('sheet-drag-dismiss');
+      drag.panel.style.removeProperty('transform');
+      const backdrop = sheet.querySelector('.form-sheet-backdrop');
+      if (backdrop) backdrop.style.removeProperty('opacity');
+      closeForm();
+    };
+    sheet.addEventListener('pointerup', finish);
+    sheet.addEventListener('pointercancel', finish);
   }
 
   function openForm() {
@@ -1327,6 +1404,8 @@ export function createSheetController(deps) {
     closeForm();
     deps.render();
   }
+
+  registerSheetDismissGesture();
 
   return {
     openForm,

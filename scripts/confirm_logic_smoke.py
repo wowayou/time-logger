@@ -560,6 +560,27 @@ const idConflict = mergeImportedEntries(currentImport, [{ id: 'a', ts: '2026-07-
 assert(!idConflict.ok && idConflict.conflicts[0].type === 'id', 'same id with different content blocks entire import');
 const timeConflict = mergeImportedEntries(currentImport, [{ id: 'b', ts: '2026-07-09T09:00', what: '同时刻', tags: ['吃饭'] }]);
 assert(!timeConflict.ok && timeConflict.conflicts[0].type === 'time', 'different record at same timestamp blocks entire import');
+const replaceConflict = timeConflict.conflicts[0];
+const replacedImport = mergeImportedEntries(
+  currentImport,
+  [{ id: 'b', ts: '2026-07-09T09:00', what: '同时刻', tags: ['吃饭'] }],
+  { resolutions: { [replaceConflict.key]: { action: 'incoming', signature: replaceConflict.signature } } }
+);
+assert(replacedImport.ok && replacedImport.data.entries[0].id === 'b', 'import resolution can atomically replace local with incoming');
+const mergeConflictPlan = mergeImportedEntries(currentImport, [{ id: 'b', ts: '2026-07-09T09:00', what: '补充文字', tags: ['吃饭'] }]);
+const mergeConflict = mergeConflictPlan.conflicts[0];
+const mergedImport = mergeImportedEntries(
+  currentImport,
+  [{ id: 'b', ts: '2026-07-09T09:00', what: '补充文字', tags: ['吃饭'] }],
+  { resolutions: { [mergeConflict.key]: { action: 'merge', signature: mergeConflict.signature } } }
+);
+assert(mergedImport.ok && mergedImport.data.entries[0].id === 'a' && mergedImport.data.entries[0].what === '已有\n\n补充文字', 'text merge preserves local identity and structure');
+const staleImport = mergeImportedEntries(
+  currentImport,
+  [{ id: 'b', ts: '2026-07-09T09:00', what: '同时刻', tags: ['吃饭'] }],
+  { resolutions: { [replaceConflict.key]: { action: 'incoming', signature: 'stale' } } }
+);
+assert(!staleImport.ok && staleImport.stale, 'stale import conflict choices are rejected');
 assert(!validateImportData({ entries: [{ id: 42, ts: 'bad', what: '<img>', tags: 'nope' }] }).ok, 'import validates string ids, timestamps, content, and tags');
 
 console.log('confirm_logic_smoke passed');

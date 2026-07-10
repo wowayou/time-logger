@@ -123,6 +123,7 @@
       if (snapshot.addAria) addBtn.setAttribute('aria-label', snapshot.addAria);
       if (listFade) listFade.hidden = Boolean(snapshot.fadeHidden);
       document.body.classList.add('boot-restored');
+      window.__timelogBootRestored = true;
     } catch {}
   })();
 </script>
