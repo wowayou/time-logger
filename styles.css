@@ -154,7 +154,7 @@
 
     /* Header */
     .hdr {
-      padding: 20px 0 16px;
+      padding: 12px 0 10px;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
@@ -207,8 +207,8 @@
     .hdr-title {
       flex: 0 0 auto;
       color: var(--text);
-      font-size: 20px;
-      font-weight: 700;
+      font-size: 17px;
+      font-weight: 650;
       line-height: 1.15;
       letter-spacing: 0.01em;
       white-space: nowrap;
@@ -260,7 +260,7 @@
       background: var(--card);
       color: var(--text);
       font-weight: 600;
-      box-shadow: var(--shadow-1), var(--top-light);
+      box-shadow: var(--shadow-1);
     }
     .theme-seg {
       flex: 0 0 auto;
@@ -290,7 +290,7 @@
       border-radius: 999px;
       font-family: inherit;
       cursor: pointer;
-      box-shadow: 0 5px 16px color-mix(in srgb, var(--accent) 30%, transparent);
+      box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 22%, transparent);
       transition: transform var(--t-fast), box-shadow var(--t-fast);
     }
     .fab-main { font-size: 16px; font-weight: 650; line-height: 1.15; }
@@ -302,7 +302,7 @@
     }
     .fab:active {
       transform: scale(0.97);
-      box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 24%, transparent);
+      box-shadow: 0 1px 5px color-mix(in srgb, var(--accent) 18%, transparent);
     }
     .fab[hidden] { display: none; }
     @media (prefers-reduced-motion: reduce) { .fab { transition: none; } }
@@ -445,7 +445,7 @@
     .nav-btn {
       min-width: 0;
       height: 44px;
-      background: var(--card);
+      background: var(--input);
       color: var(--text);
       border: 1px solid transparent;
       border-radius: var(--r-ctl);
@@ -455,7 +455,7 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      box-shadow: var(--shadow-1), var(--top-light);
+      box-shadow: none;
     }
     .nav-btn:active { opacity: 0.75; }
     .period-label {
@@ -464,7 +464,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--card);
+      background: var(--input);
       border: 1px solid transparent;
       border-radius: var(--r-ctl);
       color: var(--text);
@@ -474,7 +474,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
       padding: 0 10px;
-      box-shadow: var(--shadow-1), var(--top-light);
+      box-shadow: none;
     }
     /* R5：当前周期含今天时的常驻高亮字样——即便「回到今天」按钮已隐藏，这里仍
        给一个「你在今天」的持续信号。 */
@@ -858,7 +858,7 @@
       padding: 14px 16px;
       margin-bottom: 12px;
       min-height: 82px;
-      box-shadow: var(--shadow-1), var(--top-light);
+      box-shadow: var(--shadow-1);
     }
     .ruler-bar {
       height: 9px;
@@ -925,7 +925,7 @@
       font-size: 32px;
       font-weight: 700;
       line-height: 1.05;
-      color: var(--accent);
+      color: var(--text);
       font-variant-numeric: tabular-nums;
     }
     .hero-leak {
@@ -964,7 +964,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      min-height: 34px;
+      min-height: 30px;
     }
     #timeline { min-height: 160px; }
     html[data-boot="has-entries"] #timeline { min-height: 360px; }
@@ -975,7 +975,7 @@
       position: relative;
       overflow: hidden;
       min-width: 0;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       border-radius: var(--r-card);
       isolation: isolate;
     }
@@ -1019,13 +1019,13 @@
       background: var(--card);
       border-radius: var(--r-card);
       padding: 12px 14px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       display: flex;
       align-items: flex-start;
       gap: 10px;
       border: 1px solid transparent;
       min-width: 0;
-      box-shadow: var(--shadow-1), var(--top-light);
+      box-shadow: none;
       /* 纵向滚动仍归浏览器、横向手势归左滑编辑处理器（app.js registerCardSwipe），
          两者互不抢；transform 落在自己的合成层，回弹平滑。 */
       touch-action: pan-y;
