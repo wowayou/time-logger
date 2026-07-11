@@ -535,6 +535,22 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ---
 
+## P32 · PWA 后台恢复后进行中时长停在旧分钟（v54）
+
+**确诊日期**：2026-07-11 · **状态**：v54 修复，待 iOS 主屏 PWA 真机确认 · **严重度**：高（进行中时长、今日汇总和续记入口同时失真）
+
+**现象**：iOS 主屏 PWA 从后台切回后，系统状态栏已是 08:55，页面仍显示「截至 02:41」，进行中的未记录段和右下角「记一条」副文案也停在 02:41 的时长。
+
+**根因**：页面隐藏时会停止 60 秒 interval，但恢复可见时只重新启动 interval，不会立即按当前时间补算，因此至少有一分钟陈旧窗口；更糟的是 iOS standalone 可能在挂起时丢弃底层 timer，却保留页面内的 timer id，使 `if (tickTimer) return` 误以为刷新仍在运行。恢复路径又只监听 `visibilitychange`，漏掉 WebKit 可能派发的 `pageshow` / `focus`。
+
+**修法**：统一 `resumeLiveClock()`：每次前台 `visibilitychange`、`pageshow`、`focus` 都先清理旧 timer，立即用数据签名检查并按当前分钟重渲染，再建立对齐下一整分钟的单次 timeout；timeout 触发后自行续订。重复生命周期事件由签名去重，不增加业务状态。
+
+**护栏**：Playwright 固定页面从 12:34 直接跳到 18:55，再派发 PWA 恢复 `focus`；今日汇总「截至」和 FAB「已用时」必须在同次事件后都变为 18:55 对应值。原有自然分钟刷新用例继续覆盖常驻前台路径；Chromium/WebKit 双引擎执行。
+
+**经验**：Web/PWA 的 timer id 只代表 JavaScript 曾安排过任务，不证明系统挂起后任务仍存活；恢复前台必须以墙上时钟立即校准，不能靠补跑旧 interval。
+
+---
+
 ## 协作约束补记（v28）
 
 - 多步改动走主线程；避免并发 fan-out 子代理 / workflow（上游会 429，串行 workflow 亦然）。已同步进 `CLAUDE.md` / `AGENTS.md`「开发与维护红线」。

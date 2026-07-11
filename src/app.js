@@ -874,21 +874,36 @@ import {
   // --- Init ---
   let tickTimer = null;
 
+  function refreshLiveClock() {
+    if (document.hidden) return;
+    if (sheetEditId || sheetController.isFormOpen() || sheetController.getSheetMode()) return;
+    const signature = dataSignature();
+    if (signature === lastIntervalSignature) return;
+    render();
+  }
+
   function startTickTimer() {
-    if (tickTimer) return;
-    tickTimer = setInterval(() => {
-      if (document.hidden) return;
-      if (sheetEditId || sheetController.isFormOpen() || sheetController.getSheetMode()) return;
-      const signature = dataSignature();
-      if (signature === lastIntervalSignature) return;
-      render();
-    }, 60000);
+    if (tickTimer !== null) return;
+    const delay = 60000 - (Date.now() % 60000);
+    tickTimer = setTimeout(() => {
+      tickTimer = null;
+      refreshLiveClock();
+      startTickTimer();
+    }, delay);
   }
 
   function stopTickTimer() {
-    if (!tickTimer) return;
-    clearInterval(tickTimer);
+    if (tickTimer === null) return;
+    clearTimeout(tickTimer);
     tickTimer = null;
+  }
+
+  function resumeLiveClock() {
+    // iOS standalone may suspend/discard a timer without clearing its JS id.
+    // Always replace it, and reconcile immediately instead of waiting up to a minute.
+    stopTickTimer();
+    refreshLiveClock();
+    startTickTimer();
   }
 
   function init() {
@@ -917,8 +932,10 @@ import {
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) stopTickTimer();
-      else startTickTimer();
+      else resumeLiveClock();
     }, { passive: true });
+    window.addEventListener('pageshow', resumeLiveClock, { passive: true });
+    window.addEventListener('focus', resumeLiveClock, { passive: true });
     startTickTimer();
   }
 

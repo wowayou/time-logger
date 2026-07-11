@@ -1443,3 +1443,17 @@ test('ongoing minutes update on the minute without reopening the page', async ({
   await page.clock.fastForward(60_000);
   await expect.poll(() => page.locator('.entry[data-id="ongoing"] .e-dur').textContent()).not.toBe(before);
 });
+
+test('PWA resume immediately catches an ongoing duration up to the current minute', async ({ page }) => {
+  await boot(page, 375, 'tail-placeholder', false, '2026-06-29T12:34:30');
+  await expect(page.locator('.hero-aux')).toContainText('截至 12:34');
+  await expect(page.locator('#add-btn .fab-sub')).toContainText('已 ~2h34min');
+
+  await page.evaluate(() => {
+    window.__setFixedNow('2026-06-29T18:55:10');
+    window.dispatchEvent(new Event('focus'));
+  });
+
+  await expect(page.locator('.hero-aux')).toContainText('截至 18:55');
+  await expect(page.locator('#add-btn .fab-sub')).toContainText('已 ~8h55min');
+});
