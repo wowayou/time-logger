@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>连续日志容器 · 修正稿</title>
+<!--
+  时间尺 — 设计原型(非运行时文件,不进 sw.js 缓存)
+  continuous-log-container.html 变体 A 方向的评审修正稿。
+  修的三处硬伤:① hero 大数字回墨色(v55 决策)+ 比例条按真分钟;
+  ② 桶色改「通高竖脊」——行行相接,竖读=一天的形状;③「现在」改为
+  一根细线(未来在上、现在一线、过去在下),不再用 accent 洗底。
+  数据为通用假数据(隐私红线),与上一版 mock 同一份,可 1:1 对照。
+-->
+<style>
+  :root{
+    --r-ctl:12px; --r-card:16px;
+    --fs-cap:12px; --fs-ui:13px; --fs-body:15px;
+  }
+
+  /* ===== 页面外壳(评审台,与取景框主题无关) ===== */
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{
+    background:#0b0c10; color:#e8e9f1;
+    font-family:-apple-system,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',system-ui,sans-serif;
+    line-height:1.5; padding:28px 18px 64px;
+  }
+  .top{max-width:1000px;margin:0 auto 22px;}
+  .top h1{font-size:19px;font-weight:700;margin-bottom:6px;}
+  .top p{font-size:var(--fs-ui);color:#9fa1b8;max-width:72ch;}
+  .fixes{max-width:1000px;margin:14px auto 26px;padding:14px 18px;
+    background:#14151b;border:1px solid rgba(255,255,255,0.08);border-radius:14px;}
+  .fixes h2{font-size:var(--fs-ui);font-weight:700;color:#e8e9f1;margin-bottom:8px;}
+  .fixes ol{margin-left:18px;font-size:var(--fs-ui);color:#9fa1b8;display:grid;gap:5px;}
+  .fixes b{color:#e8e9f1;font-weight:600;}
+  .fixes .note{margin-top:10px;font-size:var(--fs-cap);color:#77747f;}
+  .frames{max-width:1000px;margin:0 auto;display:flex;gap:26px;flex-wrap:wrap;justify-content:center;align-items:flex-start;}
+  .frame{flex:0 0 auto;width:380px;max-width:100%;}
+  .frame-cap{font-size:var(--fs-cap);color:#77747f;letter-spacing:.05em;margin:0 6px 8px;}
+
+  /* ===== 主题作用域(令牌照搬 styles.css v55) ===== */
+  .scheme-dark{
+    --bg:#0e0f13; --card:#16171e; --input:#1d1f29;
+    --border:rgba(255,255,255,0.09); --track:#262838;
+    --accent:#a99fff; --accent-bg:rgba(139,124,255,0.14);
+    --maintain:#63c894; --leak:#e19a59;
+    --text:#e8e9f1; --muted:#9fa1b8; --faint:#898ba2;
+    --shadow-1:0 1px 2px rgba(0,0,0,0.40);
+    --shadow-2:0 4px 16px rgba(0,0,0,0.35);
+    --shadow-3:0 16px 48px rgba(0,0,0,0.50);
+    --top-light:inset 0 1px 0 rgba(255,255,255,0.045);
+  }
+  .scheme-light{
+    --bg:#f7f5f1; --card:#ffffff; --input:#f1efe9;
+    --border:rgba(48,42,30,0.10); --track:#e4e1d9;
+    --accent:#5745c7; --accent-bg:#efecfc;
+    --maintain:#237a52; --leak:#9a4f1e;
+    --text:#33323b; --muted:#686570; --faint:#77747f;
+    --shadow-1:0 1px 2px rgba(48,42,30,0.06),0 2px 8px rgba(48,42,30,0.05);
+    --shadow-2:0 2px 6px rgba(48,42,30,0.07),0 10px 28px rgba(48,42,30,0.08);
+    --shadow-3:0 8px 20px rgba(48,42,30,0.10),0 28px 64px rgba(48,42,30,0.14);
+    --top-light:none;
+  }
+
+  /* ===== 手机取景框 ===== */
+  .phone{
+    background:var(--bg); color:var(--text);
+    border:1px solid var(--border); border-radius:26px;
+    box-shadow:var(--shadow-3);
+    padding:18px 14px 96px; position:relative; overflow:hidden;
+  }
+
+  /* ===== 头部三行(照搬 v55 形态,静态) ===== */
+  .hd{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
+  .hd img{width:32px;height:32px;border-radius:8px;display:block;}
+  .hd-days{font-size:var(--fs-cap);color:var(--muted);font-variant-numeric:tabular-nums;}
+  .hd-sp{flex:1;}
+  .hd-more{width:44px;height:44px;margin:-6px -10px -6px 0;display:flex;align-items:center;justify-content:center;
+    background:none;border:none;color:var(--text);cursor:pointer;border-radius:var(--r-ctl);}
+  .hd-more svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2.6;stroke-linecap:round;}
+  .seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--input);
+    border-radius:var(--r-ctl);padding:2px;gap:2px;margin-bottom:10px;}
+  .seg button{background:transparent;border:none;color:var(--muted);border-radius:10px;
+    font-size:var(--fs-ui);font-family:inherit;padding:9px 0;cursor:pointer;}
+  .seg button.on{background:var(--card);color:var(--text);font-weight:600;box-shadow:var(--shadow-1);}
+  .dnav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:8px;margin-bottom:12px;}
+  .nav-btn{height:44px;background:var(--input);border:none;border-radius:var(--r-ctl);
+    color:var(--text);font-size:17px;line-height:1;cursor:pointer;font-family:inherit;}
+  .plabel{height:44px;display:flex;align-items:center;justify-content:center;gap:5px;
+    background:var(--input);border-radius:var(--r-ctl);font-size:14px;font-variant-numeric:tabular-nums;}
+  .badge{color:var(--accent);font-weight:700;}
+
+  /* ===== hero 结论卡:唯一带阴影的主表面(v55 海拔故事不破) ===== */
+  .day-hero{display:flex;flex-direction:column;gap:10px;min-width:0;
+    background:var(--card);border-radius:var(--r-card);padding:14px 16px;
+    box-shadow:var(--shadow-2),var(--top-light);margin-bottom:14px;}
+  .hero-nums{display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap;}
+  .hero-label{font-size:var(--fs-cap);color:var(--muted);margin-bottom:2px;}
+  /* 修正①:回墨色(v55 决策);32→36px 试作去色后的层级补偿 */
+  .hero-big{font-size:36px;font-weight:700;line-height:1.05;color:var(--text);font-variant-numeric:tabular-nums;}
+  .hero-leak{font-size:19px;font-weight:650;line-height:1.1;color:var(--leak);font-variant-numeric:tabular-nums;}
+  .hero-bar{height:6px;border-radius:3px;background:var(--border);display:flex;overflow:hidden;gap:2px;}
+  .hero-bar div:first-child{border-radius:3px 0 0 3px;}
+  .hero-bar div:last-child{border-radius:0 3px 3px 0;}
+  .hero-aux{font-size:var(--fs-cap);color:var(--faint);font-variant-numeric:tabular-nums;}
+
+  .tl-label{font-size:var(--fs-cap);color:var(--faint);letter-spacing:.04em;margin:0 2px 8px;}
+
+  /* ===== 连续日志容器:贴地的面(hairline 边、无阴影) ===== */
+  .log{background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden;}
+  .row{position:relative;display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;
+    align-items:start;padding:11px 14px 11px 16px;cursor:pointer;}
+  .row:active{background:color-mix(in srgb,var(--accent) 8%,transparent);}
+  /* 修正②:通高桶色竖脊——行行相接,竖读色序=一天的形状。
+     色相=桶;实=已发生,虚=计划,灰=未记录。 */
+  .row::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--rail,var(--track));}
+  .row[data-b="job"]{--rail:var(--accent);}
+  .row[data-b="maintain"]{--rail:var(--maintain);}
+  .row[data-b="leak"]{--rail:var(--leak);}
+  .row[data-b="unrecorded"]{--rail:var(--track);}
+  /* 虚线脊优雅版（与 v56 实现一致）：CSS mask 铺 4×7 圆头胶囊段（rx2、缝 4px），
+     比硬边渐变条纹柔和；mask 不支持时退化为实色脊。 */
+  .row.planned::before{
+    -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='11'%3E%3Crect x='0' y='2' width='4' height='7' rx='2'/%3E%3C/svg%3E");
+    -webkit-mask-repeat:repeat-y;-webkit-mask-size:4px 11px;
+    mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='11'%3E%3Crect x='0' y='2' width='4' height='7' rx='2'/%3E%3C/svg%3E");
+    mask-repeat:repeat-y;mask-size:4px 11px;
+  }
+  /* 发丝分隔线从时间列起、不横穿竖脊(脊不能断) */
+  .row + .row::after{content:"";position:absolute;left:16px;right:0;top:0;height:1px;background:var(--border);}
+  .nowline + .row::after{content:none;}
+  .t{font-size:var(--fs-ui);color:var(--muted);font-variant-numeric:tabular-nums;padding-top:1px;}
+  .w{font-size:var(--fs-body);color:var(--text);line-height:1.35;overflow-wrap:anywhere;}
+  .row.quiet .w{color:var(--muted);}
+  .m{font-size:var(--fs-cap);color:var(--faint);margin-top:2px;}
+  .lnk{color:var(--accent);}
+  .d{font-size:var(--fs-cap);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;padding-top:3px;}
+
+  /* 修正③:「现在」一线——未来在上、现在一线、过去在下;
+     进行中行本身保持中性,不再 accent 洗底。 */
+  .nowline{display:flex;align-items:center;gap:8px;padding:7px 14px 7px 16px;}
+  .nowline .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:0 0 auto;
+    animation:pulse 2s ease-in-out infinite;}
+  .nowline .lb{font-size:11px;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums;}
+  .nowline .ln{flex:1;height:1px;background:color-mix(in srgb,var(--accent) 40%,transparent);}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  @media (prefers-reduced-motion: reduce){.nowline .dot{animation:none;}}
+
+  /* ===== FAB(照搬 v55:唯一饱和 CTA) ===== */
+  .fab{position:absolute;right:16px;bottom:22px;display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+    padding:9px 18px;background:var(--accent);color:#fff;border:none;border-radius:999px;
+    font-family:inherit;cursor:pointer;
+    box-shadow:0 3px 10px color-mix(in srgb,var(--accent) 22%,transparent);}
+  .fab b{font-size:16px;font-weight:650;line-height:1.15;}
+  .fab span{font-size:var(--fs-cap);color:rgba(255,255,255,0.78);font-variant-numeric:tabular-nums;line-height:1.1;}
+
+  @media(max-width:840px){.frames{flex-direction:column;align-items:center;}}
+</style>
+</head>
+<body>
+  <div class="top">
+    <h1>连续日志容器 · 修正稿</h1>
+    <p>对上一版 mock(变体 A 演进)评审后的修正落地。同一份假数据、同一天,亮暗两主题并排;新增一条计划行,回答「计划在连续容器里长什么样」。</p>
+  </div>
+
+  <div class="fixes">
+    <h2>相对上一版 mock 的修正</h2>
+    <ol>
+      <li><b>hero 大数字回墨色</b>(v55 决策:FAB 保留唯一饱和 CTA);32→36px 试作去色后的层级补偿。</li>
+      <li><b>比例条按真分钟</b>:维持段最长(.55 透明)——mock 里紫段最长是失真的。</li>
+      <li><b>桶色改通高竖脊</b>:行行相接,竖读色序=一天的形状(hero 横条竖起来的同一个故事);实=已发生、虚线=计划、灰=未记录。</li>
+      <li><b>「现在」改为一根细线</b>:未来在上、现在一线、过去在下;进行中行不再 accent 洗底(紫=主线桶+可交互,不能挪用)。</li>
+      <li><b>文案单职责</b>:标题「还没记」/ tag「#未记录」/ 右列「已 ~40min」,不再三重复读;教学句「点卡片即编辑」移除,交互提示归帮助页。</li>
+      <li><b>行内动作只留指向缺口/待办的</b>:gap「补一下」、计划「标记已发生」,降为 meta 文字链;进行中行不放动作(FAB 已有「续 19:00 起」)。<b>切一刀不再逐行常显</b>——第一稿试过每行文字链,截图里 13 行 13 个紫词=换了位置的 card soup;移入编辑 sheet(或左滑轨道加一格)。这条改动破现行红线「段落卡 meta 保留切一刀」,需明确批准。</li>
+      <li><b>时间轴容器贴地</b>(hairline 边、无阴影),hero 仍是唯一带阴影的主表面。</li>
+      <li><b>计划行答案</b>:虚线桶色脊 + 右列「计划 ~1h」+「标记已发生」文字链。</li>
+    </ol>
+    <div class="note">落地约束(不在视觉稿里但必须带走):左滑轨道要求行自带不透明 --card 底再滑;入场过渡仍只 opacity 不碰 transform;分隔线不得横穿竖脊。原型文件不进 SW 缓存、不改运行时。</div>
+  </div>
+
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-cap">亮 · 宣纸</div>
+      <div class="phone scheme-light" id="ph-light"></div>
+    </div>
+    <div class="frame">
+      <div class="frame-cap">暗 · 石墨</div>
+      <div class="phone scheme-dark" id="ph-dark"></div>
+    </div>
+  </div>
+
+<script>
+// ---- 假数据(通用、无个人线索;与 continuous-log-container.html 同一份 + 一条计划) ----
+const NOW = "19:40";
+const DAY = [
+  {s:"00:00", e:"07:30", what:"睡觉",        tag:"睡觉",   b:"maintain",   min:450},
+  {s:"07:30", e:"08:10", what:"洗漱早饭",    tag:"洗漱",   b:"maintain",   min:40},
+  {s:"08:10", e:"09:00", what:"通勤",        tag:"通勤",   b:"maintain",   min:50},
+  {s:"09:00", e:"10:45", what:"写代码",      tag:"主线",   b:"job",        min:105},
+  {s:"10:45", e:"11:00", what:"刷手机",      tag:"刷手机", b:"leak",       min:15},
+  {s:"11:00", e:"12:30", what:"写代码",      tag:"主线",   b:"job",        min:90},
+  {s:"12:30", e:"13:15", what:"午饭",        tag:"吃饭",   b:"maintain",   min:45},
+  {s:"13:15", e:"13:40", what:"这一段还没记", tag:"未记录", b:"unrecorded", min:25, gap:true},
+  {s:"13:40", e:"15:30", what:"开会",        tag:"主线",   b:"job",        min:110},
+  {s:"15:30", e:"16:00", what:"刷手机",      tag:"刷手机", b:"leak",       min:30},
+  {s:"16:00", e:"18:20", what:"写代码",      tag:"主线",   b:"job",        min:140},
+  {s:"18:20", e:"19:00", what:"晚饭",        tag:"吃饭",   b:"maintain",   min:40},
+  {s:"19:00", e:NOW,     what:"还没记",      tag:"未记录", b:"unrecorded", min:40, ongoing:true},
+  {s:"21:00", e:"22:00", what:"跑步",        tag:"运动",   b:"maintain",   min:60, planned:true},
+];
+
+// fmtMins 照搬 src/time.js
+function fmtMins(m){
+  if(m<1) return "<1min";
+  if(m<60) return "~"+Math.round(m)+"min";
+  const h=Math.floor(m/60), r=Math.round(m%60);
+  return r? "~"+h+"h"+r+"min" : "~"+h+"h";
+}
+// 桶合计(分钟权威;计划不计入当日统计)
+const T={job:0,maintain:0,leak:0,unrecorded:0};
+DAY.forEach(d=>{ if(!d.planned) T[d.b]+=d.min; });
+const COLOR={job:"--accent",maintain:"--maintain",leak:"--leak",unrecorded:"--track"};
+
+function heroHTML(){
+  const seg=b=>`<div style="flex:${T[b]};background:var(${COLOR[b]})${b==='maintain'?';opacity:.55':''}"></div>`;
+  return `<div class="day-hero">
+    <div class="hero-nums">
+      <div><div class="hero-label">今日主线</div><div class="hero-big">${fmtMins(T.job)}</div></div>
+      <div><div class="hero-label">漏损</div><div class="hero-leak">${fmtMins(T.leak)}</div></div>
+    </div>
+    <div class="hero-bar">${['job','maintain','leak','unrecorded'].map(seg).join('')}</div>
+    <div class="hero-aux">维持 ${fmtMins(T.maintain)} · 未记录 ${fmtMins(T.unrecorded)} · 截至 ${NOW}</div>
+  </div>`;
+}
+
+function rowHTML(d){
+  const cls=["row"];
+  if(d.planned) cls.push("planned");
+  if(d.gap||d.ongoing) cls.push("quiet");
+  // meta:tag 说桶内标签。动作只留「真正指向缺口/待办」的:gap 补一下、planned 标记已发生。
+  // 切一刀不再逐行常显(否则 13 行 13 个动作 = 换了位置的 card soup),收进点/滑开的行状态里。
+  let action="";
+  if(d.planned) action=' · <span class="lnk">标记已发生</span>';
+  else if(d.gap) action=' · <span class="lnk">补一下</span>';
+  // 右列:时长说状态,一个词不重复
+  const right=d.planned?`计划 ${fmtMins(d.min)}`:d.ongoing?`已 ${fmtMins(d.min)}`:fmtMins(d.min);
+  return `<div class="${cls.join(' ')}" data-b="${d.b}">
+    <div class="t">${d.s}</div>
+    <div><div class="w">${d.what}</div><div class="m">#${d.tag}${action}</div></div>
+    <div class="d">${right}</div>
+  </div>`;
+}
+
+function logHTML(){
+  const desc=[...DAY].reverse();               // 最新在最上
+  const future=desc.filter(d=>d.planned);      // 未来在上
+  const past=desc.filter(d=>!d.planned);       // 现在一线、过去在下
+  const nowline=`<div class="nowline"><span class="dot"></span><span class="lb">现在 ${NOW}</span><span class="ln"></span></div>`;
+  return `<div class="log">${future.map(rowHTML).join('')}${nowline}${past.map(rowHTML).join('')}</div>`;
+}
+
+function phoneHTML(){
+  return `
+    <div class="hd">
+      <img src="../../icon.svg" alt="">
+      <span class="hd-days">使用第 5 天</span>
+      <span class="hd-sp"></span>
+      <button class="hd-more" aria-label="更多"><svg viewBox="0 0 24 24"><path d="M5 12h0M12 12h0M19 12h0"/></svg></button>
+    </div>
+    <div class="seg">
+      <button class="on">天</button><button>周</button><button>月</button><button>年</button>
+    </div>
+    <div class="dnav">
+      <button class="nav-btn">‹</button>
+      <div class="plabel">2026/07/11 周六 <span class="badge">今天</span></div>
+      <button class="nav-btn">›</button>
+    </div>
+    ${heroHTML()}
+    <div class="tl-label">时间轴</div>
+    ${logHTML()}
+    <button class="fab"><b>＋ 记一条</b><span>续 19:00 起 · 已 ${fmtMins(40)}</span></button>`;
+}
+
+document.getElementById('ph-light').innerHTML=phoneHTML();
+document.getElementById('ph-dark').innerHTML=phoneHTML();
+</script>
+</body>
+</html>

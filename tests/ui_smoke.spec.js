@@ -185,8 +185,9 @@ test('continuation save fills tail placeholder and opens unrecorded segment', as
   const opened = entries.find(entry => entry.ts === '2026-06-29T12:34' && entry.what === '');
   expect(completed).toMatchObject({ ts: '2026-06-29T10:00', what: '写方案', tags: ['求职推进'] });
   expect(opened).toMatchObject({ what: '', tags: [] });
-  await expect(page.locator('#timeline')).toContainText('进行中·还没记');
-  await expect(page.locator('#timeline')).toContainText('未记录·进行中');
+  // v56 文案单职责：占位行标题「还没记」，时长列「已 X」——不再有「未记录·进行中」复读。
+  await expect(page.locator('.entry.placeholder .e-what')).toHaveText('还没记');
+  await expect(page.locator('.entry.placeholder .e-dur')).toContainText('已 ');
 });
 
 test('past-day save does not create today placeholder', async ({ page }) => {
@@ -265,7 +266,7 @@ test('closed cross-day segment is sliced into the selected day timeline', async 
 
   await expect(page.locator('#period-label')).toContainText('2026/06/30');
   await expect(page.locator('#timeline')).toContainText('跨日切片记录');
-  await expect(page.locator('#timeline')).toContainText('进行中·还没记');
+  await expect(page.locator('.entry.placeholder .e-what')).toHaveText('还没记');
   // v47 R4：日视图尺子改 hero 结论卡——不再有百分比文字。切片生效＝维持有非零净时长
   // （2h35m 的睡觉从昨日切进今天），而非整天未记录（那样维持会是 0）。
   await expect(page.locator('#ruler')).toContainText(/维持 ~2h/);
@@ -459,7 +460,10 @@ test('plan mode uses plan copy and is hidden on historical days', async ({ page 
 
   // v47 R2+FAB：入口是悬浮 FAB；计划模式下主文案切「＋ 计划一条」（fab-main）。
   await expect(page.locator('#add-btn .fab-main')).toHaveText('＋ 计划一条');
-  await expect(page.locator('#timeline')).toContainText('计划·#求职推进');
+  // v56：tag 是素色 #标签，桶色走竖脊（data-b）；「计划」状态词在时长列，脊为虚线。
+  await expect(page.locator('#timeline')).toContainText('#求职推进');
+  await expect(page.locator('.entry.planned')).toHaveAttribute('data-b', 'job');
+  await expect(page.locator('.entry.planned .e-dur')).toHaveText('计划');
   const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
   expect(entries).toHaveLength(1);
   expect(entries[0]).toMatchObject({ what: '准备面试', tags: ['求职推进'], planned: true });
@@ -479,7 +483,7 @@ test('planned-only day has honest ruler copy and confirm opens placeholder', asy
   const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
   expect(entries.find(entry => entry.id === 'plan-1')).toMatchObject({ ts: '2026-06-29T09:30', what: '准备面试', tags: ['求职推进'] });
   expect(entries.find(entry => entry.ts === '2026-06-29T12:34' && entry.what === '')).toMatchObject({ tags: [] });
-  await expect(page.locator('#timeline')).toContainText('进行中·还没记');
+  await expect(page.locator('.entry.placeholder .e-what')).toHaveText('还没记');
 });
 
 test('summary includes a plan section for day view', async ({ page }) => {
@@ -784,7 +788,9 @@ test('splitting a labeled segment carves three parts and leaves neighbors intact
 
   // 写代码 spans 09:00→10:00. Carve 09:20→09:40 as a different activity; the
   // original 写代码 must resume at 09:40 and 改bug (10:00) must be untouched.
-  await page.locator('[data-action="backfill-seg"][data-ts="2026-06-29T09:00"]').click();
+  // v56：切一刀入口在编辑 sheet 里（行内不再逐行常显）。
+  await page.locator('.entry[data-id="today-1"] .e-what').click();
+  await page.getByRole('button', { name: '在这条记录内部切一刀' }).click();
   await page.locator('[data-role="backfill-start-mount"] [data-role="text"]').fill('2026-06-29 09:20');
   await page.locator('[data-role="backfill-start-mount"] [data-role="text"]').blur();
   await page.locator('[data-role="backfill-end-mount"] [data-role="text"]').fill('2026-06-29 09:40');
@@ -846,6 +852,37 @@ test('tapping a gap card opens the bounded backfill sheet', async ({ page }) => 
   await expect(page.locator('#form-sheet-title')).toContainText('补录');
   await expect(page.locator('#form-ts')).toHaveValue('2026-06-29T00:00');
   await expect(page.locator('#form-end-ts')).toHaveValue('2026-06-29T09:00');
+});
+
+test('v56 continuous log: single surface, bucket rails, now line, split lives in the edit sheet', async ({ page }) => {
+  await boot(page, 375, 'two-records', false, FIXED_NOW);
+  // 日视图时间轴收进一个连续容器；行按 data-b 上通高桶色竖脊。
+  await expect(page.locator('#timeline .log')).toHaveCount(1);
+  await expect(page.locator('.entry[data-id="today-1"]')).toHaveAttribute('data-b', 'job');
+  await expect(page.locator('.entry.gap').first()).toHaveAttribute('data-b', 'unrecorded');
+  // 今天视图有「现在」一线；已发生普通段行内不再有切一刀动作词。
+  await expect(page.locator('.tl-now')).toHaveCount(1);
+  await expect(page.locator('.tl-now')).toContainText('现在 12:34');
+  await expect(page.locator('#timeline')).not.toContainText('切一刀');
+  // 竖脊在容器左缘通高铺满（top≈行 top、bottom≈行 bottom），发丝分隔线避开它。
+  const rail = await page.locator('.entry[data-id="today-1"]').evaluate(card => {
+    const cardRect = card.getBoundingClientRect();
+    const railStyle = getComputedStyle(card, '::before');
+    return {
+      width: railStyle.width,
+      height: parseFloat(railStyle.height),
+      cardHeight: cardRect.height
+    };
+  });
+  expect(rail.width).toBe('4px');
+  expect(Math.abs(rail.height - rail.cardHeight)).toBeLessThanOrEqual(1);
+  // 切一刀住进编辑 sheet；打开后可见。
+  await page.locator('.entry[data-id="today-1"] .e-what').click();
+  await expect(page.getByRole('button', { name: '在这条记录内部切一刀' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  // 离开今天：「现在」一线只属于今天。
+  await page.locator('[data-action="shift-period"][data-delta="-1"]').click();
+  await expect(page.locator('.tl-now')).toHaveCount(0);
 });
 
 test('wheel columns paint above the highlight band (P22)', async ({ page }) => {
@@ -1002,7 +1039,9 @@ test('today tail switches between a true ongoing end and a fixed unrecorded tail
 
 test('split sheet freezes bounds and labels whole, edge, and internal previews', async ({ page }) => {
   await boot(page, 768, 'two-records', false, FIXED_NOW);
-  await page.locator('.entry[data-id="today-1"] [data-action="backfill-seg"]').click();
+  // v56：从编辑 sheet 进入切一刀（openFormSheet('new') 会清 sheetEditId 并整面换内容）。
+  await page.locator('.entry[data-id="today-1"] .e-what').click();
+  await page.getByRole('button', { name: '在这条记录内部切一刀' }).click();
   await expect(page.locator('#form-sheet-title')).toContainText('切一刀');
   await expect(page.locator('[data-role="backfill-limits"]')).toContainText('09:00');
   await expect(page.locator('[data-role="backfill-limits"]')).toContainText('10:00');

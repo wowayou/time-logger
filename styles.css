@@ -922,7 +922,9 @@
       margin-bottom: 2px;
     }
     .hero-big {
-      font-size: 32px;
+      /* v56：32→36px——大数字保持墨色（v55 决策：FAB 是唯一饱和 CTA），用字号
+         补偿去色后的层级。 */
+      font-size: 36px;
       font-weight: 700;
       line-height: 1.05;
       color: var(--text);
@@ -971,12 +973,73 @@
     /* R2+FAB：日视图列表底部预留 ≥72px，让最后一张卡片能滚到 FAB 上方（FAB 固定
        在视口右下）。非日视图 FAB 隐藏，多出的底部留白无害。 */
     #timeline { padding-bottom: 84px; }
+
+    /* v56：连续日志容器——把日视图从「一堆浮起的卡片」改为「一整块连续的日志面」。
+       时间是连续的（每段结束＝下段开始）；一块贴地的 --card 面 + 发丝分隔 + 通高
+       桶色竖脊表达它，而不是各自带阴影的方块。海拔：hero 结论卡是唯一带内容阴影的
+       主表面（v55），时间轴容器贴地（hairline 边、无阴影）。 */
+    .log {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      overflow: hidden;
+    }
+    /* 发丝分隔线：容器每个直接子行（swipe-row / 裸 entry / now 线）除首行外都在顶部
+       画一条，从 16px 起（越过 4px 竖脊）——竖脊因此全程不被打断，竖读色序＝一天的
+       形状。放在 wrapper 级 ::after、不随卡片左滑平移（竖脊占用 .entry::before）。 */
+    .log > * { position: relative; }
+    .log > * + *::after {
+      content: "";
+      position: absolute;
+      z-index: 5;
+      left: 16px;
+      right: 0;
+      top: 0;
+      height: 1px;
+      background: var(--border);
+      pointer-events: none;
+    }
+    /* 「现在」一线自身就是分隔——贴着它的上下行不再画发丝线，避免三线叠置。 */
+    .log > .tl-now::after,
+    .log > .tl-now + *::after { content: none; }
+    /* 「现在」一线：未来在上、现在一线、过去在下；进行中行本身保持中性（不 accent
+       洗底——紫＝主线桶＋可交互，不挪用）。呼吸点是本版签名。 */
+    .tl-now {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px 7px 16px;
+    }
+    .tl-now-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex: 0 0 auto;
+      animation: tl-now-pulse 2.4s ease-in-out infinite;
+    }
+    .tl-now-label {
+      font-size: var(--fs-cap);
+      font-weight: 600;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+    .tl-now-line {
+      flex: 1;
+      height: 1px;
+      background: color-mix(in srgb, var(--accent) 40%, transparent);
+    }
+    @keyframes tl-now-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .tl-now-dot { animation: none; }
+    }
     .swipe-row {
       position: relative;
       overflow: hidden;
       min-width: 0;
-      margin-bottom: 6px;
-      border-radius: var(--r-card);
       isolation: isolate;
     }
     .swipe-row .entry {
@@ -1015,15 +1078,18 @@
     .swipe-edit { background: var(--accent); }
     .swipe-delete { background: var(--danger); }
     .swipe-actions[aria-hidden="true"] { pointer-events: none; }
+    /* v56：行＝时间｜内容｜时长 三列网格，贴地无圆角无描边；--card 底必须保留且
+       不透明——左滑时行滑过底下的操作轨道，透明底会让轨道透出（v53 教训的行级版）。 */
     .entry {
+      position: relative;
       background: var(--card);
-      border-radius: var(--r-card);
-      padding: 12px 14px;
-      margin-bottom: 6px;
-      display: flex;
-      align-items: flex-start;
+      border-radius: 0;
+      padding: 11px 14px 11px 16px;
+      margin: 0;
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) auto;
+      align-items: start;
       gap: 10px;
-      border: 1px solid transparent;
       min-width: 0;
       box-shadow: none;
       /* 纵向滚动仍归浏览器、横向手势归左滑编辑处理器（app.js registerCardSwipe），
@@ -1039,71 +1105,89 @@
     @starting-style {
       .entry { opacity: 0; }
     }
-    .entry.sheet-editing { border-color: var(--accent); }
-    .entry.placeholder { border-color: var(--border); }
-    .entry.gap { border-style: dashed; border-color: var(--border); background: transparent; box-shadow: none; }
+    /* v56 通高桶色竖脊：色相＝桶（与 hero 比例条同源），实色＝已发生、虚线＝计划、
+       灰（--track）＝未记录。行行相接（行无纵向间距、分隔线避开左 16px），竖读色序
+       即一天的形状。随 .entry 一起左滑（属于行的内容）。 */
+    .entry::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--rail, var(--track));
+    }
+    .entry[data-b="job"] { --rail: var(--accent); }
+    .entry[data-b="maintain"] { --rail: var(--maintain); }
+    .entry[data-b="leak"] { --rail: var(--leak); }
+    .entry[data-b="unrecorded"] { --rail: var(--track); }
+    /* 计划＝虚线脊。CSS mask 铺圆头胶囊段（4×7、rx2、缝 4px），比硬边渐变条纹优雅；
+       mask 不支持时整段退化为实色脊（仍有桶色，只丢「未发生」的虚线语义）。 */
+    .entry.planned::before {
+      -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='11'%3E%3Crect x='0' y='2' width='4' height='7' rx='2'/%3E%3C/svg%3E");
+      -webkit-mask-repeat: repeat-y;
+      -webkit-mask-size: 4px 11px;
+      mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='11'%3E%3Crect x='0' y='2' width='4' height='7' rx='2'/%3E%3C/svg%3E");
+      mask-repeat: repeat-y;
+      mask-size: 4px 11px;
+    }
+    .entry.sheet-editing { background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
     .entry.gap .e-what { color: var(--muted); }
-    /* R6：整卡可点（role=button）——指针手型 + 按压/聚焦反馈；键盘 focus-visible 描边。 */
+    /* R6：整卡可点（role=button）——指针手型 + 按压/聚焦反馈；键盘 focus-visible 描边
+       （outline 内收，容器 overflow:hidden 会裁掉外扩的描边）。 */
     .entry[data-action] { cursor: pointer; }
-    .entry[data-action]:active { border-color: var(--accent); }
-    .entry[data-action]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .entry[data-action]:active { background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
+    .entry[data-action]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     .entry[data-action]:focus:not(:focus-visible) { outline: none; }
-    .e-body { flex: 1; min-width: 0; }
-    .e-time { font-size: var(--fs-ui); color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
-    .e-what { font-size: var(--fs-body); color: var(--text); word-break: break-word; white-space: pre-wrap; margin-bottom: 5px; }
+    .e-body { min-width: 0; }
+    .e-time { font-size: var(--fs-ui); color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+    .e-what { font-size: var(--fs-body); color: var(--text); word-break: break-word; white-space: pre-wrap; margin-bottom: 3px; }
     .entry.placeholder .e-what { color: var(--muted); }
-    .e-meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+    .e-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .e-meta > * { min-width: 0; }
+    /* v56：tag 降为素色小字——桶的颜色职责整体移交竖脊，列表只保留一个彩色通道。 */
     .e-tag {
       font-size: var(--fs-cap);
-      padding: 2px 9px;
-      border-radius: 8px;
-      background: var(--accent-bg);
-      color: var(--accent);
+      color: var(--faint);
       max-width: 100%;
       overflow-wrap: anywhere;
     }
-    .e-tag-job { background: var(--accent-bg); color: var(--accent); }
-    .e-tag-maintain { background: var(--maintain-bg); color: var(--maintain); }
-    .e-tag-leak { background: var(--leak-bg); color: var(--leak); }
-    .e-tag-unrecorded { background: var(--input); color: var(--muted); }
     .e-dur {
       font-size: var(--fs-cap);
       color: var(--muted);
       overflow-wrap: anywhere;
       font-variant-numeric: tabular-nums;
+      text-align: right;
+      padding-top: 3px;
     }
-    /* R6（v47）：gap 卡的「补一下」由 button 降级为纯提示胶囊——整卡即补录动作，
-       不再需要卡内独立按钮（避免重复 data-action / 嵌套交互）。 */
+    /* gap 行的「补一下」纯提示（整行即补录动作）——素色文字链形态，与 mini-btn 同语。 */
     .e-cta {
       font-size: var(--fs-cap);
       font-weight: 600;
       color: var(--accent);
-      background: var(--accent-bg);
-      border-radius: 9px;
-      padding: 2px 11px;
     }
+    /* v56：mini-btn（补一下/确认/标记已发生）从实心胶囊降为素色文字链——安静台账里
+       只有真正指向缺口/待办的动作保留 accent 文字；触控热区仍由透明伪元素补足。 */
     .mini-btn {
       position: relative;
       min-width: 0;
-      min-height: 30px;
-      padding: 2px 11px;
-      border: 1px solid transparent;
-      border-radius: 9px;
-      background: var(--accent-bg);
+      padding: 0;
+      border: none;
+      background: none;
       color: var(--accent);
       font-size: var(--fs-cap);
       font-weight: 600;
       font-family: inherit;
+      line-height: 1.4;
       cursor: pointer;
       white-space: normal;
       overflow-wrap: anywhere;
     }
-    /* 视觉高 30px 不变，透明伪元素把可点区扩到 44px（触控目标红线，T11）。 */
+    /* 视觉是一行小字，透明伪元素把可点区扩到 ≥44px（触控目标红线，T11）。 */
     .mini-btn::before {
       content: '';
       position: absolute;
-      inset: -7px 0;
+      inset: -13px -8px;
     }
     .mini-btn:active { opacity: 0.75; }
     /* Update prompt */
@@ -1388,6 +1472,21 @@
     }
     .cell-chevron { color: var(--faint); font-size: 16px; flex: 0 0 auto; }
     .cell-row .theme-seg { margin-left: auto; }
+    /* v56：编辑 sheet 内的「切一刀」——切分入口从时间轴行内迁到这里（行内逐行常显
+       的动作词是列表噪音）。与 cell-danger 同形态、accent 色。 */
+    .cell-action {
+      min-height: 48px;
+      border: none;
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      color: var(--accent);
+      font-size: var(--fs-body);
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      margin-bottom: 10px;
+    }
+    .cell-action:active { opacity: 0.75; }
     .cell-danger {
       min-height: 48px;
       border: none;
@@ -1690,23 +1789,11 @@
     }
 
     @container (max-width: 420px) {
-      .entry { padding: 12px; gap: 8px; }
+      .entry { padding: 11px 12px 11px 16px; gap: 8px; }
     }
 
     .bucket-seg { margin-bottom: 10px; }
     .record-mode-seg { margin-bottom: 12px; }
-    /* 新发现：gap 卡（真空、无内容）与 planned 卡（有真实内容，只是未来）此前同用
-       dashed 描边，语义不同视觉却相同。gap 保留 dashed（「还没有」的惯用语汇）；
-       planned 改实线 + accent 淡色调，读作「已安排」而非「未记录/占位」。 */
-    .entry.planned {
-      border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-      background: color-mix(in srgb, var(--bg) 92%, var(--muted));
-      box-shadow: none;
-    }
-    .entry.planned .e-tag-planned {
-      color: var(--muted);
-      border-color: var(--border);
-    }
     .cell-btn[aria-disabled="true"] {
       opacity: 0.45;
       cursor: not-allowed;

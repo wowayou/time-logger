@@ -236,7 +236,12 @@ import {
         isToday,
         asOf: nowStr().slice(11, 16)
       });
-      renderTimeline(day.timeline, { sheetEditId, plannedItems: day.planned });
+      renderTimeline(day.timeline, {
+        sheetEditId,
+        plannedItems: day.planned,
+        isToday,
+        nowLabel: nowStr().slice(11, 16)
+      });
       lastIntervalSignature = dataSignature();
       saveBootSnapshot();
       return;
@@ -255,6 +260,9 @@ import {
       const listFade = document.getElementById('list-fade');
       if (!app || !addBtn) return;
       sessionStorage.setItem(BOOT_SNAPSHOT_KEY, JSON.stringify({
+        // v56：快照带版本戳——应用更新后（SKIP_WAITING reload）不得把旧版 DOM 形态
+        // 交给新版 JS 还跳过首轮渲染；init() 里版本不符则按无快照走正常启动。
+        appVersion: APP_VERSION,
         appHtml: app.innerHTML,
         addHtml: addBtn.innerHTML,
         addHidden: addBtn.hidden,
@@ -324,7 +332,7 @@ import {
       const text = `切到${isPrev ? '上一' : '下一'}${periodNames[state.view]}。`;
       setButtonTip(btn, text, `${isPrev ? '上一' : '下一'}${periodNames[state.view]}`);
     });
-    const labels = { day: '当日时间轴 · 点卡片即编辑', week: '本周每日汇总', month: '本月每日汇总', year: '全年每月汇总' };
+    const labels = { day: '当日时间轴', week: '本周每日汇总', month: '本月每日汇总', year: '全年每月汇总' };
     document.getElementById('list-label').textContent = labels[state.view];
   }
 
@@ -919,7 +927,15 @@ import {
     applyTheme(localStorage.getItem(THEME_KEY) || 'auto');
     const mq = window.matchMedia('(prefers-color-scheme: light)');
     if (mq.addEventListener) mq.addEventListener('change', () => applyTheme(localStorage.getItem(THEME_KEY) || 'auto'));
-    const restoredBootFrame = window.__timelogBootRestored === true;
+    // v53：命中快照则跳过首轮渲染（恢复节点保持同一 DOM，不闪）。v56 补版本门：
+    // 快照是旧版本写的就当没有快照——旧 DOM 形态不能在新版 JS 下继续活着。
+    let restoredBootFrame = window.__timelogBootRestored === true;
+    if (restoredBootFrame) {
+      try {
+        const snap = JSON.parse(sessionStorage.getItem(BOOT_SNAPSHOT_KEY));
+        if (!snap || snap.appVersion !== APP_VERSION) restoredBootFrame = false;
+      } catch { restoredBootFrame = false; }
+    }
     if (restoredBootFrame) lastIntervalSignature = dataSignature();
     else render();
     requestAnimationFrame(() => {
