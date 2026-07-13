@@ -4,9 +4,9 @@ export const VIEWPORTS = [320, 375, 430, 768];
 export const STATES = ['empty', 'one-record', 'yesterday-residual'];
 export const FIXED_NOW = '2026-06-29T12:34:30';
 
-export async function boot(page, width, state, share = false, now = '', selectedDateOffset = null, timezoneOffsetMinutes = null) {
+export async function boot(page, width, state, share = false, now = '', selectedDateOffset = null, timezoneOffsetMinutes = null, recordMode = null) {
   await page.setViewportSize({ width, height: 820 });
-  await page.addInitScript(({ state, share, now, selectedDateOffset, timezoneOffsetMinutes }) => {
+  await page.addInitScript(({ state, share, now, selectedDateOffset, timezoneOffsetMinutes, recordMode }) => {
     if (now) {
       const RealDate = Date;
       let fixedNow = new RealDate(now).getTime();
@@ -147,6 +147,7 @@ export async function boot(page, width, state, share = false, now = '', selected
     localStorage.setItem('timelog.view', 'day');
     localStorage.setItem('timelog.selectedDate', selectedKey);
     localStorage.setItem('timelog.openDate', selectedKey);
+    if (recordMode) localStorage.setItem('timelog.recordMode', recordMode);
 
     Object.defineProperty(navigator, 'share', {
       configurable: true,
@@ -156,7 +157,7 @@ export async function boot(page, width, state, share = false, now = '', selected
       configurable: true,
       value: share ? () => false : undefined
     });
-  }, { state, share, now, selectedDateOffset, timezoneOffsetMinutes });
+  }, { state, share, now, selectedDateOffset, timezoneOffsetMinutes, recordMode });
   await page.goto('/');
   await page.waitForFunction(() => document.querySelector('#timeline')?.children.length > 0);
   await page.waitForFunction(() => document.body.classList.contains('app-ready'));

@@ -41,7 +41,7 @@
 - `src/stats.js`：保持统计逻辑集中；不访问 DOM / navigator；桶归类只能通过 `storage.js` 的配置 helper；日边界规则必须在这里测试。
 - `src/pickers.js`：只负责时间选择器 DOM；不直接保存业务数据。
 - `src/ui.js`：只负责模板、图标、tooltip helper 和 DOM 渲染；不做数据持久化。
-- `src/entry_model.js`：只放记录日期模型、续记默认起点、占位条、结算点、同刻冲突、`+1min`、补录有界插入（`carveInsert`）、无冗余边界归一化（`coalesceRedundant`）和写后统一出口（`normalizeEntries`，恒保今天尾占位）等纯/低副作用 helper；不访问 DOM / localStorage。
+- `src/entry_model.js`：只放记录日期模型、续记默认起点、占位条、结算点、同刻冲突、`+1min`、区间编辑/切分/删除事务 planner、无冗余边界归一化（`coalesceRedundant`）和写后统一出口（`normalizeEntries`，恒保今天尾占位）等纯/低副作用 helper；不访问 DOM / localStorage。
 - `src/io_actions.js`：只处理当前视图摘要、复制、下载、导入、分享；通过显式依赖接收 `load/save/render/state`，不拥有全局状态。
 - `src/sheet_controller.js`：只处理新建/编辑/config/import sheet、focus trap、picker 重挂载和表单保存；通过显式依赖读写状态和持久化。
 - `src/app.js`：只负责启动、状态组合、导航、渲染调度、事件委托和 Service Worker 注册。
@@ -60,7 +60,7 @@
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
-1. `sw.js` 第 1 行 `CACHE = 'timelog-vN'`
+1. `sw.js` 的 `CACHE = 'timelog-vN'` 声明
 2. `manifest.webmanifest` 的 `version`
 3. `sw.js` 的 `FILES` 运行时缓存列表
 4. `scripts/project_audit.py` 的 `EXPECTED_VERSION`、`REQUIRED_RUNTIME_ASSETS` 和运行时 import 检查列表
@@ -83,7 +83,7 @@
 - 禁止 `title=`，避免原生 tooltip 与自定义 tooltip 叠加。
 - 可见文字按钮不强制 tooltip；图标按钮必须同时有短 `data-tip` 和 `aria-label`。
 - tooltip 默认不能生成会撑宽页面的盒子；hover 延迟 800ms 后显示，移开立即隐藏；`focus-visible` 必须无延迟显示；触屏不能靠 hover 触发 tooltip。
-- 图标语义固定（v47 起日视图卡片已无图标按钮——点整卡编辑、删除进编辑 sheet；此规则约束将来若再引入图标处）：编辑=铅笔，保存=对勾，删除=垃圾桶，取消=回退/撤销箭头，关闭只读页=细线 ×。当前运行时唯一在用的 `iconSvg` 是 header「···」的 `more`（`edit/trash/check` 定义暂留备用）。
+- 图标语义固定（v47 起日视图卡片已无常驻图标按钮——点整行编辑、删除进编辑 sheet；此规则约束将来若再引入图标处）：编辑=铅笔，删除=垃圾桶，取消=回退/撤销箭头，关闭只读页=细线 ×。当前运行时 `iconSvg` 实际使用 `more/edit/trash`；不存在 `check` 定义，保存使用文字按钮。
 - 删除/取消禁用 x、`×`、`✕`，包括图标定义、按钮文本和渲染模板。
 - 输入字号不低于 16px，避免移动端聚焦放大。
 - 统一表单 sheet 打开后先把焦点收进 sheet 容器，首个 Tab 进入内部控件；“做了什么”是 textarea，Enter 必须换行，只有 Cmd/Ctrl+Enter 或「完成」按钮保存；定时刷新不能打断新增或编辑中的输入。

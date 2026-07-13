@@ -1120,8 +1120,8 @@ export function createSheetController(deps) {
     teardownNow(() => { closeForm(); deps.render(); });
   }
 
-  // 「补/切」: bounded insert into a segment. Carve [start, end) as the new label,
-  // restoring the segment's original label at end (see entry_model.carveInsert).
+  // Bounded backfill into a segment: plan [start, end) as the new label and
+  // restore the segment's original label at end through planSegmentSplit.
   function saveBackfill(panel) {
     const startScope = (panel && panel.querySelector('[data-role="backfill-start-mount"]')) || panel;
     const endScope = (panel && panel.querySelector('[data-role="backfill-end-mount"]')) || panel;

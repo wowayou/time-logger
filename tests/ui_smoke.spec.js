@@ -739,12 +739,7 @@ test('editing a long-note record keeps the save button on screen (SE2 textarea c
 });
 
 test('② backfill on today forces log mode even when plan pref leaked', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('timelog.recordMode', 'plan'));
-  await boot(page, 768, 'two-records', false, FIXED_NOW);
-
-  // Backfill the gap before the first record on *today*. Previously the leaked
-  await page.addInitScript(() => localStorage.setItem('timelog.recordMode', 'plan'));
-  await boot(page, 768, 'two-records', false, FIXED_NOW);
+  await boot(page, 768, 'two-records', false, FIXED_NOW, null, null, 'plan');
 
   // Backfill the gap before the first record on *today*. Previously the leaked
   // plan pref opened the form in 计划 mode with a past ts, so ✓ silently failed.
@@ -764,12 +759,12 @@ test('② backfill on today forces log mode even when plan pref leaked', async (
   expect(saved.tags).toEqual(['求职推进']);
 });
 
-test('③ backfilling a middle placeholder fills it in place via its 补/切 button', async ({ page }) => {
+test('③ backfilling a middle placeholder fills it in place via its 补录 entry point', async ({ page }) => {
   await boot(page, 768, 'mid-placeholder', false, FIXED_NOW);
 
-  // The stranded mid-day placeholder (09:00→11:00) now carries its own 补/切
-  // button, prefilled with the segment bounds. carveInsert reuses the placeholder
-  // (start == its ts) so it fills in place and keeps id 'mid-open'.
+  // The stranded mid-day placeholder (09:00→11:00) now carries its own 补录
+  // entry point, prefilled with the segment bounds. planSegmentSplit reuses the
+  // placeholder (start == its ts) so it fills in place and keeps id 'mid-open'.
   await page.locator('[data-action="backfill-seg"][data-ts="2026-06-29T09:00"]').click();
   await expect(page.locator('#form-sheet-title')).toContainText('补录');
   await page.locator('#form-what').fill('补中段');
@@ -783,7 +778,7 @@ test('③ backfilling a middle placeholder fills it in place via its 补/切 but
   expect(atNine[0]).toMatchObject({ id: 'mid-open', what: '补中段', tags: ['求职推进'] });
 });
 
-test('splitting a labeled segment carves three parts and leaves neighbors intact', async ({ page }) => {
+test('splitting a labeled segment makes three parts and leaves neighbors intact', async ({ page }) => {
   await boot(page, 768, 'two-records', false, FIXED_NOW);
 
   // 写代码 spans 09:00→10:00. Carve 09:20→09:40 as a different activity; the
@@ -806,7 +801,7 @@ test('splitting a labeled segment carves three parts and leaves neighbors intact
   expect(slices).toContain('09:00|求职推进');
   expect(slices).toContain('09:20|刷手机');
   expect(slices).toContain('09:40|求职推进');
-  // The carve never touched the next real record.
+  // The split never touched the next real record.
   expect(entries.find(e => e.ts === '2026-06-29T10:00')).toMatchObject({ what: '改 bug', tags: ['求职推进'] });
 });
 

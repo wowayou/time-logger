@@ -21,7 +21,7 @@
    - 纯时间/日期/格式化 → `src/time.js`（不碰 DOM / localStorage）
    - 本地数据、config、导入合并 → `src/storage.js`（不渲染）
    - 统计、按日分段、长段确认 → `src/stats.js`（不碰 DOM / navigator）
-   - 记录日期模型、续记起点、占位、结算点、`carveInsert` / `coalesceRedundant` / `normalizeEntries` → `src/entry_model.js`（纯/低副作用）
+   - 记录日期模型、续记起点、占位、结算点、区间事务 planner、`coalesceRedundant` / `normalizeEntries` → `src/entry_model.js`（纯/低副作用）
    - 时间选择器 DOM → `src/pickers.js`；模板/图标/tooltip/渲染 → `src/ui.js`
    - sheet、focus trap、表单保存 → `src/sheet_controller.js`；摘要/复制/下载/导入/分享 → `src/io_actions.js`
    - 启动、导航、渲染调度、事件委托、SW 注册 → `src/app.js`

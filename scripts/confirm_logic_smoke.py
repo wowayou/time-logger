@@ -24,7 +24,6 @@ import {
   summarizeEntries
 } from './src/stats.js';
 import {
-  carveInsert,
   coalesceRedundant,
   normalizeEntries,
   planDeleteEntry,
@@ -338,36 +337,11 @@ for (let round = 0; round < 250; round += 1) {
   }
 }
 
-// --- v30 backfill / normalization engine ---
+// --- normalization engine ---
 let genSeq = 0;
 const genId = () => `gen${genSeq += 1}`;
 
-// Bounded insert splits a labeled segment and restores the original label at end.
-const carveSplit = [
-  { id: 'sleep', ts: '2026-07-01T04:47', what: '睡觉', tags: ['睡觉'] },
-  { id: 'wash', ts: '2026-07-01T09:40', what: '洗漱', tags: ['洗漱'] }
-];
-carveInsert(carveSplit, { start: '2026-07-01T06:00', end: '2026-07-01T07:00', what: '写代码', tag: '求职推进', createId: genId });
-const carveSorted = carveSplit.slice().sort((a, b) => (a.ts < b.ts ? -1 : 1));
-assert(carveSorted.length === 4, 'carve splits into four points');
-assert(carveSorted[0].ts === '2026-07-01T04:47' && carveSorted[0].tags[0] === '睡觉', 'carve keeps the head 睡觉');
-assert(carveSorted[1].ts === '2026-07-01T06:00' && carveSorted[1].tags[0] === '求职推进', 'carve inserts the new label at start');
-assert(carveSorted[2].ts === '2026-07-01T07:00' && carveSorted[2].tags[0] === '睡觉' && carveSorted[2].what === '睡觉', 'carve restores the original label at end');
-assert(carveSorted[3].ts === '2026-07-01T09:40' && carveSorted[3].tags[0] === '洗漱', 'carve never touches the next segment');
-
-// Carving into an unrecorded (placeholder) stretch leaves both sides unrecorded.
-const carveGap = [
-  { id: 'ph', ts: '2026-07-01T04:00', what: '', tags: [] },
-  { id: 'wash', ts: '2026-07-01T09:40', what: '洗漱', tags: ['洗漱'] }
-];
-carveInsert(carveGap, { start: '2026-07-01T06:00', end: '2026-07-01T07:00', what: '写代码', tag: '求职推进', createId: genId });
-const gapSorted = carveGap.slice().sort((a, b) => (a.ts < b.ts ? -1 : 1));
-assert(gapSorted.length === 4, 'carve into a gap makes four points');
-assert(gapSorted[0].what === '' && gapSorted[0].ts === '2026-07-01T04:00', 'left of the fill stays unrecorded');
-assert(gapSorted[1].ts === '2026-07-01T06:00' && gapSorted[1].tags[0] === '求职推进', 'the filled middle carries the new label');
-assert(gapSorted[2].ts === '2026-07-01T07:00' && gapSorted[2].what === '' && gapSorted[2].tags.length === 0, 'right of the fill restores an unrecorded placeholder');
-
-// coalesceRedundant heals a carve-undo (identical adjacent) ...
+// coalesceRedundant heals a split undo (identical adjacent) ...
 const healEntries = [
   { id: 'a', ts: '2026-07-01T04:47', what: '睡觉', tags: ['睡觉'] },
   { id: 'b', ts: '2026-07-01T07:00', what: '睡觉', tags: ['睡觉'] },
@@ -493,6 +467,18 @@ const splitInside = planSegmentSplit(splitBase, {
 }, { createId: txId });
 assert(splitInside.ok && splitInside.mode === 'inside' && splitInside.preview.length === 3, 'internal split previews three segments');
 assert(splitInside.resultEntries.some(e => e.ts === '2026-07-09T18:00' && e.what === '原段'), 'internal split restores the frozen source after the new segment');
+const splitPlaceholder = planSegmentSplit([
+  { id: 'ph', ts: '2026-07-09T04:00', what: '', tags: [] },
+  { id: 'right', ts: '2026-07-09T09:40', what: '洗漱', tags: ['洗漱'] }
+], {
+  sourceId: 'ph', frozenStart: '2026-07-09T04:00', frozenEnd: '2026-07-09T09:40',
+  startTs: '2026-07-09T06:00', endTs: '2026-07-09T07:00', what: '写代码', tags: ['求职推进']
+}, { createId: txId });
+const placeholderParts = splitPlaceholder.resultEntries.slice().sort((a, b) => (a.ts < b.ts ? -1 : 1));
+assert(splitPlaceholder.ok && placeholderParts.length === 4, 'planner splits an unrecorded segment into four points');
+assert(placeholderParts[0].ts === '2026-07-09T04:00' && placeholderParts[0].what === '', 'planner keeps the left side unrecorded');
+assert(placeholderParts[1].ts === '2026-07-09T06:00' && placeholderParts[1].tags[0] === '求职推进', 'planner inserts the filled middle');
+assert(placeholderParts[2].ts === '2026-07-09T07:00' && placeholderParts[2].what === '' && placeholderParts[2].tags.length === 0, 'planner restores the right side as unrecorded');
 const splitEdge = planSegmentSplit(splitBase, {
   sourceId: 'source', frozenStart: '2026-07-09T16:11', frozenEnd: '2026-07-09T19:11',
   startTs: '2026-07-09T16:11', endTs: '2026-07-09T18:00', what: '新段', tags: ['刷手机']

@@ -81,60 +81,12 @@ function ensureOpenPlaceholderAt(entries, ts, completedId = '', createId) {
   return placeholder;
 }
 
-// Bounded insert (「补/切」): carve [start, end) out of the segment that owns
-// `start` and give it `tag`, restoring the segment's original label at `end` so
-// nothing after `end` is silently relabeled. This is the point-model realization
-// of the interval UX: it only ever writes points, so the zero-overlap tiling
-// invariant is preserved and buildRangeSegments stays untouched. See the v30
-// design notes in docs/postmortems.md (P9).
-export function carveInsert(entries, { start, end, what = '', tag = '未知', createId }) {
-  start = normalizeTimestamp(start);
-  end = normalizeTimestamp(end);
-  if (!start || !end || end <= start) return null;
-  const dayKey = start.slice(0, 10);
-  const sameDay = entries
-    .filter(entry => !entry.planned && normalizeTimestamp(entry.ts) && entry.ts.slice(0, 10) === dayKey)
-    .sort((a, b) => (a.ts < b.ts ? -1 : 1));
-  let owner = null;
-  let nextEntry = null;
-  for (const entry of sameDay) {
-    if (entry.ts <= start) owner = entry;
-    else { nextEntry = entry; break; }
-  }
-  // Never let the carve eat into the next segment: clamp end to the boundary.
-  if (nextEntry && end > nextEntry.ts) end = nextEntry.ts;
-  if (end <= start) return null;
-  const origWhat = owner ? owner.what : '';
-  const origTags = owner && Array.isArray(owner.tags) ? owner.tags.slice() : [];
-  let inserted;
-  if (owner && owner.ts === start) {
-    // Relabel from the segment start: reuse owner so we don't create a duplicate
-    // point on the same minute. The original label is restored at `end` below.
-    owner.what = what;
-    owner.tags = [tag];
-    delete owner.longConfirm;
-    delete owner.planned;
-    inserted = owner;
-  } else {
-    // Adjacent time boundary changed → the owner's confirmation is invalidated.
-    if (owner) delete owner.longConfirm;
-    inserted = { id: createId(), ts: start, what, tags: [tag] };
-    entries.push(inserted);
-  }
-  // Restore the original label at `end`, unless `end` already meets the boundary
-  // (then the restore point would be redundant / coalesced away anyway).
-  if (!(nextEntry && end === nextEntry.ts)) {
-    entries.push({ id: createId(), ts: end, what: origWhat, tags: origTags });
-  }
-  return inserted;
-}
-
 // Drop redundant boundary points: a logged entry that starts a segment carrying
 // the exact same content (primary tag AND `what` text) as the one before it adds
 // no information. Comparing `what` too is essential — two back-to-back records
 // that merely share a tag (写代码 / 写方案, both 求职推进) are distinct and must NOT
 // merge; only a true duplicate boundary or two adjacent empty placeholders do.
-// This is what lets a deleted carve-middle self-heal (the synthetic restore point
+// This is what lets a deleted split-middle self-heal (the synthetic restore point
 // duplicates the owner) and folds stray placeholders together. Planned entries
 // never participate. Mutates `entries` in place.
 export function coalesceRedundant(entries) {
