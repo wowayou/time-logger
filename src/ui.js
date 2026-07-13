@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-import { fmtMins, hhmm, localDateTimeKey, normalizeTimestamp } from './time.js';
+import { fmtMins, hhmm, localDateTimeKey, minsBetweenDates, normalizeTimestamp } from './time.js';
 import { formatPercent } from './stats.js';
 import {
   BUCKETS,
@@ -291,7 +291,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '56';
+export const APP_VERSION = '57';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -378,8 +378,11 @@ export function renderFormSheet(opts) {
   const config = loadConfig();
   const bucket = opts && opts.bucket ? opts.bucket : (isEdit ? bucketForTag(tag, config) : (opts && opts.defaultBucket) || 'job');
   const recordMode = opts && opts.recordMode ? opts.recordMode : 'log';
-  const isPlan = !isEdit && !isHistoryDay && recordMode === 'plan';
+  const recordModeLocked = Boolean(opts && opts.recordModeLocked);
   const isBackfill = !isEdit && Boolean(opts && opts.backfill);
+  const overnightContext = opts && opts.overnightContext || null;
+  const isOvernight = !isEdit && !isBackfill && Boolean(overnightContext && overnightContext.ok);
+  const isPlan = !isEdit && !isHistoryDay && recordMode === 'plan';
   const isSplit = isBackfill && opts && opts.backfillKind === 'split';
   const isEditPlanned = isEdit && e && e.planned;
   const isEditPlaceholder = isEdit && e && typeof e.what === 'string' && e.what.trim() === '';
@@ -388,14 +391,14 @@ export function renderFormSheet(opts) {
   const isKnownPickerTag = config.mainline.includes(tag) || config.chips.some(chip => chip.name === tag);
   const bucketSeg = renderBucketSeg(isEdit ? 'edit' : 'form', bucket);
   const chips = renderTagPicker(isEdit ? 'edit' : 'form', tag, config, bucket);
-  const recordModeSeg = isEdit || isHistoryDay || isBackfill ? '' : renderRecordModeSeg(recordMode);
-  const title = isEdit ? '编辑' : (isBackfill ? (isSplit ? '切一刀' : '补录') : (isPlan ? '计划' : (isToday ? '记一条' : '补记')));
+  const recordModeSeg = isEdit || isHistoryDay || isBackfill || recordModeLocked || isOvernight ? '' : renderRecordModeSeg(recordMode);
+  const title = isEdit ? '编辑' : (isBackfill ? (isSplit ? '切一刀' : '补录') : (isOvernight ? '过夜续记' : (isPlan ? '计划' : (isToday ? '记一条' : '补记'))));
   const summary = isEdit
     ? `${hhmm(e.ts)}${tag ? ` · #${esc(tag)}` : ''}`
-    : (isBackfill ? daySummary : (isPlan ? daySummary : (isToday ? '刚才这一阵' : daySummary)));
+    : (isBackfill ? daySummary : (isOvernight ? '昨晚到今天' : (isPlan ? daySummary : (isToday ? '刚才这一阵' : daySummary))));
   const whatText = isEdit
     ? (esc(e.what) || '未填写')
-    : (isBackfill ? '写下这一段做了什么' : (isPlan ? '写下计划要做什么' : (isToday ? '写下刚才做了什么' : '写下这一段做了什么')));
+    : (isBackfill || isOvernight ? '写下这一段做了什么' : (isPlan ? '写下计划要做什么' : (isToday ? '写下刚才做了什么' : '写下这一段做了什么')));
   const whatFieldLabel = isPlan || isEditPlanned ? '计划做什么' : '做了什么';
   const whatPlaceholder = isPlan || isEditPlanned ? '准备面试 / 写方案…' : (isEdit ? '做了什么' : '写邮件 / 刷手机 / 准备面试…');
   const saveAction = isEdit ? 'commit-edit' : 'save-entry';
@@ -441,6 +444,7 @@ export function renderFormSheet(opts) {
         ${tsInput}
         <div data-role="edit-wheel"></div>
       </div>
+      ${opts && opts.planOutsideWindow ? '<div class="form-hint plan-expired-hint">该计划时间已不在新的计划窗口内；可以修改文字和标签。若要记为已发生，请回到列表使用“标记已发生”。</div>' : ''}
       <div class="form-inline-error" data-role="conflict-error" hidden></div>`
     : (isEditPlaceholder || !intervalContext ? `
       <div class="fl">
@@ -522,8 +526,27 @@ export function renderFormSheet(opts) {
       <div class="fl start-time-section" data-role="start-time-section" hidden>
         <div data-role="form-wheel-mount"></div>
       </div>`;
+  const overnightDuration = isOvernight
+    ? fmtMins(minsBetweenDates(new Date(overnightContext.startTs), new Date(overnightContext.hardEndTs)))
+    : '';
+  const overnightTimeSection = isOvernight ? `
+      <input type="hidden" id="form-ts">
+      <input type="hidden" data-role="overnight-end-mode" value="${esc(opts && opts.overnightEndMode === 'day-end' ? 'day-end' : 'today')}">
+      <div class="overnight-summary" data-role="overnight-summary" role="status">续昨晚 ${esc(hhmm(overnightContext.startTs))} 起 · 到今天 ${esc(hhmm(overnightContext.hardEndTs))} · ${esc(overnightDuration)}</div>
+      <div class="fl" data-role="overnight-time-row">
+        <div class="fl-label">开始时间</div>
+        <div data-role="form-wheel-mount"></div>
+      </div>
+      <div class="seg end-mode-seg overnight-end-seg" role="group" aria-label="过夜续记结束方式">
+        <button type="button" data-action="pick-overnight-end-mode" data-mode="today" class="active" aria-pressed="true">到今天 ${esc(hhmm(overnightContext.hardEndTs))}</button>
+        <button type="button" data-action="pick-overnight-end-mode" data-mode="day-end" aria-pressed="false">只记到 24:00</button>
+      </div>
+      <div class="form-hint">默认延续到今天的第一条真实记录；若今天尚无真实记录，则到现在。计划不会被移动或覆盖。</div>
+      <div class="boundary-limits" data-role="overnight-limits"></div>
+      <div class="interval-preview" data-role="interval-preview" aria-live="polite"></div>
+      <div class="form-inline-error" data-role="conflict-error" hidden></div>` : '';
   const newBody = `
-      ${isBackfill ? backfillTimeSection : logTimeSection}
+      ${isBackfill ? backfillTimeSection : (isOvernight ? overnightTimeSection : logTimeSection)}
       <div class="fl">
         <div class="fl-label" data-role="what-label">${whatFieldLabel}</div>
         ${whatInput}
@@ -576,9 +599,9 @@ function renderHelpSheet() {
   return `
     ${sheetHead({ title: '说明', cancelText: '关闭', cancelAction: 'close-form', cancelAria: '关闭说明' })}
     <div class="form-sheet-body help-body">
-      <section><h2>怎么记</h2><p>点右下角「＋ 记一条」记录刚才这一阵。日视图是一整块连续日志：左侧竖脊颜色就是归类桶，实色＝已发生、虚线＝计划、灰色＝未记录；今天还有一根「现在」线，线上是计划、线下是已发生。点任意一行可编辑内容、标签和完整起止时间；「切一刀」在编辑页里，只在原段内部切分。未记录行点「补一下」补录。左滑一行会露出编辑、删除；删除前会展示确切结果，删除后可撤销 8 秒。</p></section>
+      <section><h2>怎么记</h2><p>点右下角「＋ 记一条」记录刚才这一阵。若页面仍停在昨天且尾部是未记录，新增表单会明确让你选择延续到今天，或只记到昨天 24:00。日视图是一整块连续日志：左侧竖脊颜色就是归类桶，实色＝已发生、虚线＝计划、灰色＝未记录；今天还有一根「现在」线，线上是计划、线下是已发生。点任意一行可编辑内容、标签和完整起止时间；「切一刀」在编辑页里，只在原段内部切分。未记录行点「补一下」补录。左滑一行会露出编辑、删除；删除前会展示确切结果，删除后可撤销 8 秒。</p></section>
       <section><h2>4 桶</h2><p>先选归类桶，再选标签：主线=求职推进和自定义主线；维持=睡觉、吃饭、通勤等必要消耗；漏损=逃避娱乐；未记录=未知、孤儿标签和待确认长段。</p></section>
-      <section><h2>计划</h2><p>计划条不计入 4 桶统计；时间到了可点「发生了」转为已发生记录。</p></section>
+      <section><h2>计划</h2><p>今天可在已发生/计划中切换；未来 1–7 天的新增入口固定为计划，第 8 天起只查看和编辑已有计划。计划必须严格晚于现在 5 分钟。计划条不计入 4 桶统计；时间到了可点「标记已发生」转为已发生记录。</p></section>
       <section><h2>3 小时确认</h2><p>超过 3 小时的非睡觉片段先进入未记录；确认后才按标签统计。睡觉默认 longOk，不要求确认。</p></section>
       <section><h2>备份与合并</h2><p>右上角「···」更多菜单含复制、存储、分享、导入完整 JSON；iPhone/iPad 点「存储备份」会打开系统菜单，可明确选择「存储到文件」和目录，其他浏览器使用下载。导入冲突可逐条保留本机、使用备份或合并文字；全部处理后才一次性写入。</p></section>
       <section><h2>离线更新</h2><p>首次联网后可离线使用。发现新版时会显示「更新应用」，只有你点击后才刷新；记录和标签仍保留在本机。</p></section>

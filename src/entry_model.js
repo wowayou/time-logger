@@ -5,7 +5,10 @@
 import { loggedEntriesFrom, primaryTag } from './stats.js';
 import {
   addDays,
+  hhmm,
+  localDateKey,
   localDateTimeKey,
+  minsBetweenDates,
   normalizeTimestamp,
   nowStr,
   p2,
@@ -248,6 +251,129 @@ function previewPart(role, entry, startTs, endTs, label) {
     startTs,
     endTs
   };
+}
+
+export function overnightContinuationContext(entries, viewedDate, opts = {}) {
+  const nowTs = normalizeTimestamp(opts.nowTs) || nowStr();
+  const todayKey = opts.todayKey || nowTs.slice(0, 10) || todayStr();
+  const today = parseDateKey(todayKey);
+  if (!today) return transactionError('invalid-date', '今天的日期无效。');
+  const yesterdayKey = localDateKey(addDays(startOfDay(today), -1));
+  if (viewedDate !== yesterdayKey) return transactionError('not-yesterday', '只有昨天的尾部空白可过夜续记。');
+  const yesterdayEntries = loggedOnDay(entries, yesterdayKey);
+  const source = yesterdayEntries[yesterdayEntries.length - 1] || null;
+  if (!source || !isPlaceholderEntry(source)) {
+    return transactionError('no-placeholder', '昨天最后一点不是未记录占位。');
+  }
+  const midnightTs = localDateTimeKey(startOfDay(today));
+  const realToday = (entries || [])
+    .filter(entry => !entry.planned
+      && !isPlaceholderEntry(entry)
+      && normalizeTimestamp(entry.ts)
+      && entry.ts.slice(0, 10) === todayKey
+      && entry.ts <= nowTs)
+    .sort((a, b) => a.ts < b.ts ? -1 : (a.ts > b.ts ? 1 : String(a.id).localeCompare(String(b.id))));
+  const hardEndEntry = realToday[0] || null;
+  const hardEndTs = hardEndEntry ? hardEndEntry.ts : nowTs;
+  if (hardEndTs <= midnightTs) {
+    return transactionError('no-today-span', '今天 00:00 已有真实记录，按普通历史续记到 24:00。');
+  }
+  return {
+    ok: true,
+    viewedDate,
+    yesterdayKey,
+    todayKey,
+    source,
+    sourceId: source.id,
+    startTs: source.ts,
+    startMin: source.ts,
+    startMax: shiftedMinute(hardEndTs, -1),
+    midnightTs,
+    hardEndTs,
+    hardEndEntry,
+    hardEndIsNow: !hardEndEntry,
+    dayEndTs: midnightTs
+  };
+}
+
+export function planOvernightContinuation(entries, request, opts = {}) {
+  const context = overnightContinuationContext(entries, request && request.viewedDate, opts);
+  if (!context.ok) return context;
+  if (request && request.sourceId && request.sourceId !== context.sourceId) {
+    return transactionError('stale', '昨天的尾部空白已经变化，请重新打开表单。', { context });
+  }
+  const frozenStart = normalizeTimestamp(request && request.frozenStart) || context.startTs;
+  const startTs = normalizeTimestamp(request && request.startTs);
+  if (!startTs) return transactionError('invalid-time', '请输入完整的开始时间。', { context });
+  const startMin = frozenStart > context.startTs ? frozenStart : context.startTs;
+  if (startTs < startMin) {
+    return transactionError('before-min', `开始时间不能早于空白起点 ${hhmm(startMin)}。`, { context: { ...context, startMin } });
+  }
+  if (startTs >= context.hardEndTs) {
+    return transactionError('after-max', `开始时间必须早于结束点 ${hhmm(context.hardEndTs)}。`, { context: { ...context, startMin } });
+  }
+  if (startTs.slice(0, 10) !== context.yesterdayKey && startTs.slice(0, 10) !== context.todayKey) {
+    return transactionError('outside-source', '开始时间只能在昨晚空白到今天结束点之间选择。', { context: { ...context, startMin } });
+  }
+
+  const what = String(request && request.what || '');
+  const tags = Array.isArray(request && request.tags) ? request.tags.slice() : [];
+  const resultEntries = cloneEntries(entries);
+  const crossMidnight = startTs < context.midnightTs;
+  const required = new Set([startTs, context.hardEndTs]);
+  if (crossMidnight) required.add(context.midnightTs);
+  for (let i = resultEntries.length - 1; i >= 0; i--) {
+    const entry = resultEntries[i];
+    if (isPlaceholderEntry(entry)
+      && entry.ts > startTs
+      && entry.ts < context.hardEndTs
+      && !required.has(entry.ts)) {
+      resultEntries.splice(i, 1);
+    }
+  }
+
+  const createId = opts.createId || (() => `overnight-${Date.now()}`);
+  const claimPoint = (ts, pointWhat, pointTags) => {
+    const existing = resultEntries.find(entry => entry.ts === ts);
+    if (existing && !isPlaceholderEntry(existing)) {
+      return transactionError('conflict', `${hhmm(ts)} 已有记录或计划，不能覆盖。`, { context, conflict: existing });
+    }
+    const point = existing || { id: createId(), ts, what: '', tags: [] };
+    point.what = pointWhat;
+    point.tags = pointTags.slice();
+    delete point.longConfirm;
+    delete point.planned;
+    delete point.ongoing;
+    if (!existing) resultEntries.push(point);
+    return { ok: true, point };
+  };
+
+  const startPoint = claimPoint(startTs, what, tags);
+  if (!startPoint.ok) return startPoint;
+  if (crossMidnight) {
+    const midnightPoint = claimPoint(context.midnightTs, what, tags);
+    if (!midnightPoint.ok) return midnightPoint;
+  }
+  if (context.hardEndIsNow) {
+    const endPoint = claimPoint(context.hardEndTs, '', []);
+    if (!endPoint.ok) return endPoint;
+  }
+
+  const duplicate = duplicateTimestamp(resultEntries);
+  if (duplicate) return transactionError('conflict', '新的过夜边界与其它记录重合。', { context, conflict: duplicate.second });
+  coalesceRedundant(resultEntries);
+  const preview = crossMidnight
+    ? [
+        previewPart('overnight-yesterday', startPoint.point, startTs, context.midnightTs, what || primaryTag(startPoint.point)),
+        previewPart('overnight-today', startPoint.point, context.midnightTs, context.hardEndTs, what || primaryTag(startPoint.point))
+      ]
+    : [previewPart('overnight-today', startPoint.point, startTs, context.hardEndTs, what || primaryTag(startPoint.point))];
+  return transactionResult(resultEntries, {
+    kind: 'overnight-continuation',
+    context: { ...context, startMin, crossMidnight },
+    preview,
+    durationMins: minsBetweenDates(new Date(startTs), new Date(context.hardEndTs))
+  });
 }
 
 export function intervalEditContext(entries, id, opts = {}) {

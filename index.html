@@ -16,6 +16,16 @@
   <script>
     (() => {
       try {
+        const enabled = new URLSearchParams(location.hash.slice(1)).get('boottrace') === '1';
+        if (enabled) {
+          window.__timelogBootTrace = {
+            marks: [{ name: 'html_inline_start', at: performance.now() }],
+            snapshot: 'pending',
+            snapshotStates: ['pending']
+          };
+        }
+      } catch {}
+      try {
         const pref = localStorage.getItem('timelog.theme') || 'auto';
         if (pref === 'light' || pref === 'dark') document.documentElement.setAttribute('data-theme', pref);
         // Resolve theme-color before paint so light-mode reloads don't flash a dark
@@ -103,16 +113,34 @@
     // 「主内容消失 / 回到今天误出现」。同标签页只保存已安全渲染的 DOM 快照，在模块
     // 到达前接住上一帧；sessionStorage 不跨标签、不上传，也不替代权威数据。
     try {
+      const trace = window.__timelogBootTrace;
+      const setSnapshotState = state => {
+        if (!trace) return;
+        trace.snapshot = state;
+        trace.snapshotStates.push(state);
+      };
       const snapshot = JSON.parse(sessionStorage.getItem('timelog.bootSnapshot.v1'));
-      if (!snapshot || typeof snapshot.appHtml !== 'string') return;
+      if (!snapshot || typeof snapshot.appHtml !== 'string') {
+        setSnapshotState('no-snapshot');
+        return;
+      }
       const now = new Date();
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       if (snapshot.dataRaw !== localStorage.getItem('timelog.v1')
-        || snapshot.configRaw !== localStorage.getItem('timelog.config')
-        || snapshot.view !== localStorage.getItem('timelog.view')
+        || snapshot.configRaw !== localStorage.getItem('timelog.config')) {
+        setSnapshotState('rejected:data');
+        return;
+      }
+      if (snapshot.today !== today) {
+        setSnapshotState('rejected:date');
+        return;
+      }
+      if (snapshot.view !== localStorage.getItem('timelog.view')
         || snapshot.selectedDate !== localStorage.getItem('timelog.selectedDate')
-        || snapshot.recordMode !== localStorage.getItem('timelog.recordMode')
-        || snapshot.today !== today) return;
+        || snapshot.recordMode !== localStorage.getItem('timelog.recordMode')) {
+        setSnapshotState('rejected:state');
+        return;
+      }
       const app = document.querySelector('.app');
       const addBtn = document.getElementById('add-btn');
       const listFade = document.getElementById('list-fade');
@@ -124,7 +152,13 @@
       if (listFade) listFade.hidden = Boolean(snapshot.fadeHidden);
       document.body.classList.add('boot-restored');
       window.__timelogBootRestored = true;
-    } catch {}
+      setSnapshotState('dom-restored');
+    } catch {
+      if (window.__timelogBootTrace) {
+        window.__timelogBootTrace.snapshot = 'rejected:invalid';
+        window.__timelogBootTrace.snapshotStates.push('rejected:invalid');
+      }
+    }
   })();
 </script>
 

@@ -4,7 +4,7 @@ export const VIEWPORTS = [320, 375, 430, 768];
 export const STATES = ['empty', 'one-record', 'yesterday-residual'];
 export const FIXED_NOW = '2026-06-29T12:34:30';
 
-export async function boot(page, width, state, share = false, now = '', selectedDateOffset = null, timezoneOffsetMinutes = null, recordMode = null) {
+export async function boot(page, width, state, share = false, now = '', selectedDateOffset = null, timezoneOffsetMinutes = null, recordMode = null, path = '/') {
   await page.setViewportSize({ width, height: 820 });
   await page.addInitScript(({ state, share, now, selectedDateOffset, timezoneOffsetMinutes, recordMode }) => {
     if (now) {
@@ -33,6 +33,8 @@ export async function boot(page, width, state, share = false, now = '', selected
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
+    const plusEight = new Date(today);
+    plusEight.setDate(plusEight.getDate() + 8);
     const entries = [];
     if (state === 'one-record') {
       entries.push({ id: 'today-1', ts: `${dateKey(today)}T00:05`, what: '响应式测试记录', tags: ['求职推进'] });
@@ -114,6 +116,49 @@ export async function boot(page, width, state, share = false, now = '', selected
     if (state === 'planned-only') {
       entries.push({ id: 'plan-1', ts: `${dateKey(today)}T09:30`, what: '准备面试', tags: ['求职推进'], planned: true });
     }
+    if (state === 'planned-expired') {
+      entries.push({ id: 'plan-expired', ts: `${dateKey(today)}T09:00`, what: '过期计划', tags: ['求职推进'], planned: true });
+    }
+    if (state === 'planned-near') {
+      entries.push({ id: 'plan-near', ts: `${dateKey(today)}T12:37`, what: '临近计划', tags: ['求职推进'], planned: true });
+    }
+    if (state === 'planned-far') {
+      entries.push({ id: 'plan-far', ts: `${dateKey(plusEight)}T09:00`, what: '远期计划', tags: ['求职推进'], planned: true });
+    }
+    if (state === 'overnight-with-today-real') {
+      entries.push(
+        { id: 'yesterday-open', ts: `${dateKey(yesterday)}T23:00`, what: '', tags: [] },
+        { id: 'today-real', ts: `${dateKey(today)}T07:30`, what: '洗漱', tags: ['洗漱'] }
+      );
+    }
+    if (state === 'overnight-boundaries') {
+      entries.push(
+        { id: 'yesterday-open', ts: `${dateKey(yesterday)}T23:00`, what: '', tags: [] },
+        { id: 'midnight-open', ts: `${dateKey(today)}T00:00`, what: '', tags: [] },
+        { id: 'inside-open', ts: `${dateKey(today)}T04:00`, what: '', tags: [] },
+        { id: 'now-open', ts: minuteKey(today), what: '', tags: [] },
+        { id: 'future-real', ts: `${dateKey(today)}T18:00`, what: '晚间安排', tags: ['求职推进'] },
+        { id: 'future-plan', ts: `${dateKey(today)}T20:00`, what: '未来计划', tags: ['求职推进'], planned: true }
+      );
+    }
+    if (state === 'overnight-midnight-plan') {
+      entries.push(
+        { id: 'yesterday-open', ts: `${dateKey(yesterday)}T23:00`, what: '', tags: [] },
+        { id: 'midnight-plan', ts: `${dateKey(today)}T00:00`, what: '午夜计划', tags: ['求职推进'], planned: true }
+      );
+    }
+    if (state === 'overnight-hardend-plan') {
+      entries.push(
+        { id: 'yesterday-open', ts: `${dateKey(yesterday)}T23:00`, what: '', tags: [] },
+        { id: 'now-plan', ts: minuteKey(today), what: '当前计划', tags: ['求职推进'], planned: true }
+      );
+    }
+    if (state === 'overnight-hardend-midnight') {
+      entries.push(
+        { id: 'yesterday-open', ts: `${dateKey(yesterday)}T23:00`, what: '', tags: [] },
+        { id: 'today-midnight-real', ts: `${dateKey(today)}T00:00`, what: '午夜开始', tags: ['求职推进'] }
+      );
+    }
     if (state === 'plan-collides-now') {
       // A future plan plus a real entry already sitting on the frozen "now"
       // minute, so confirming the plan must dodge the same-ts collision (⑥).
@@ -158,7 +203,7 @@ export async function boot(page, width, state, share = false, now = '', selected
       value: share ? () => false : undefined
     });
   }, { state, share, now, selectedDateOffset, timezoneOffsetMinutes, recordMode });
-  await page.goto('/');
+  await page.goto(path);
   await page.waitForFunction(() => document.querySelector('#timeline')?.children.length > 0);
   await page.waitForFunction(() => document.body.classList.contains('app-ready'));
 }

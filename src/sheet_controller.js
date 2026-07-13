@@ -10,8 +10,10 @@ import {
   intervalEditContext,
   isPlaceholderEntry,
   normalizeEntries,
+  overnightContinuationContext,
   openPlaceholderForDate,
   planIntervalEdit,
+  planOvernightContinuation,
   planSegmentSplit
 } from './entry_model.js';
 import {
@@ -21,7 +23,18 @@ import {
   migrateEntryTags,
   RECORD_MODE_KEY
 } from './storage.js';
-import { fmtMins, hhmm, minsBetweenDates, normalizeTimestamp, nowStr, todayStr, validateTs, validateTsForMode } from './time.js';
+import {
+  defaultPlannedTimestamp,
+  entryModeForDate,
+  fmtMins,
+  hhmm,
+  minsBetweenDates,
+  normalizeTimestamp,
+  nowStr,
+  todayStr,
+  validateTs,
+  validateTsForMode
+} from './time.js';
 import { bucketHint, renderFormSheet, renderTagPicker } from './ui.js';
 
 export function createSheetController(deps) {
@@ -34,12 +47,16 @@ export function createSheetController(deps) {
   let formBucket = 'job';
   let editBucket = 'job';
   let formRecordMode = 'log';
+  let formTargetDate = '';
+  let formDateMode = null;
   let formBackfill = false;
   let formBackfillEnd = '';
   let formBackfillKind = 'fill';
   let formSourceId = '';
   let formFrozenStart = '';
   let formFrozenEnd = '';
+  let formOvernightContext = null;
+  let formOvernightEndMode = 'today';
   let formBaseEntries = [];
   let formPlanIds = [];
   let lastPreviewSignature = '';
@@ -91,20 +108,17 @@ export function createSheetController(deps) {
   }
 
   function defaultPlanTimestamp() {
-    const dateKey = deps.state.selectedDate || todayStr();
-    if (dateKey > todayStr()) return `${dateKey}T09:00`;
-    const d = new Date();
-    d.setMinutes(0, 0, 0);
-    d.setHours(d.getHours() + 1);
-    return normalizeTimestamp(`${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()} ${d.getHours()}:${d.getMinutes()}`);
+    return defaultPlannedTimestamp(formTargetDate || deps.state.selectedDate || todayStr());
   }
 
-  function isHistoryDate(dateKey = deps.state.selectedDate) {
-    return Boolean(dateKey && dateKey < todayStr());
+  function isHistoryDate(dateKey = formTargetDate || deps.state.selectedDate) {
+    return entryModeForDate(dateKey).kind === 'history';
   }
 
   function getFormWheelMount(panel) {
     if (!panel) return null;
+    const overnight = panel.querySelector('[data-role="overnight-time-row"]');
+    if (overnight) return overnight.querySelector('[data-role="form-wheel-mount"]');
     const planRow = panel.querySelector('[data-role="plan-time-row"]');
     if (planRow && !planRow.hidden) return planRow.querySelector('[data-role="form-wheel-mount"]');
     const startSection = panel.querySelector('[data-role="start-time-section"]');
@@ -130,12 +144,13 @@ export function createSheetController(deps) {
     if (!tsEl) return;
     const startTs = normalizeTimestamp(ts) || (formRecordMode === 'plan' ? defaultPlanTimestamp() : deps.defaultFormTs());
     tsEl.value = startTs;
-    if (formRecordMode !== 'plan') paintPrevSegment(panel, startTs);
+    if (formRecordMode !== 'plan' && !formOvernightContext) paintPrevSegment(panel, startTs);
     if (!mountEl) return;
     if (formRecordMode === 'plan' || !(panel.querySelector('[data-role="start-time-section"]') || {}).hidden) {
       mountTimePicker(mountEl, startTs, v => {
         tsEl.value = v;
-        if (formRecordMode !== 'plan') paintPrevSegment(panel, v);
+        if (formOvernightContext) refreshOvernightPreview(panel);
+        else if (formRecordMode !== 'plan') paintPrevSegment(panel, v);
       });
     }
   }
@@ -193,10 +208,12 @@ export function createSheetController(deps) {
 
   function paintTransactionPreview(panel, plan) {
     const preview = panel ? panel.querySelector('[data-role="interval-preview"]') : null;
-    const limits = panel ? panel.querySelector('[data-role="edit-limits"], [data-role="backfill-limits"]') : null;
+    const limits = panel ? panel.querySelector('[data-role="edit-limits"], [data-role="backfill-limits"], [data-role="overnight-limits"]') : null;
     if (limits) {
       const c = plan && (plan.context || plan.constraints);
-      if (c) {
+      if (c && plan && (plan.kind === 'overnight-continuation' || plan.kind === 'overnight-day-end')) {
+        limits.textContent = `开始不得早于 ${hhmm(c.startMin || formOvernightContext.startTs)}；到今天最多记到 ${hhmm(c.hardEndTs || formOvernightContext.hardEndTs)}`;
+      } else if (c) {
         const timeLabel = value => value && c.dayEndTs && value === c.dayEndTs ? '24:00' : hhmm(value);
         limits.textContent = `开始 ${timeLabel(c.startMin)}-${timeLabel(c.startMax)}（${c.startReason}）；结束 ${timeLabel(c.endMin)}-${timeLabel(c.endMax)}（${c.endReason}）`;
       } else if (formFrozenStart && formFrozenEnd) {
@@ -213,7 +230,11 @@ export function createSheetController(deps) {
       preview.appendChild(headline);
       return;
     }
-    if (plan.kind === 'segment-split') {
+    if (plan.kind === 'overnight-continuation') {
+      headline.textContent = '到今天后的记录';
+    } else if (plan.kind === 'overnight-day-end') {
+      headline.textContent = '只记到昨天 24:00';
+    } else if (plan.kind === 'segment-split') {
       headline.textContent = plan.mode === 'whole'
         ? '整段改为'
         : (plan.mode === 'edge' ? '贴边后为两段' : '切分后为三段');
@@ -223,7 +244,8 @@ export function createSheetController(deps) {
     preview.appendChild(headline);
     const roleNames = {
       previous: '前一段', current: '本段', next: '后一段',
-      before: '前段', new: '新段', after: '后段'
+      before: '前段', new: '新段', after: '后段',
+      'overnight-yesterday': '昨天', 'overnight-today': '今天'
     };
     (plan.preview || []).forEach(part => {
       const row = document.createElement('div');
@@ -297,6 +319,91 @@ export function createSheetController(deps) {
     if (!plan) return null;
     paintTransactionPreview(panel, plan);
     if (remember && plan.ok) lastPreviewSignature = plan.resultSignature;
+    return plan;
+  }
+
+  function overnightMode(panel) {
+    const input = panel && panel.querySelector('[data-role="overnight-end-mode"]');
+    return input && input.value === 'day-end' ? 'day-end' : 'today';
+  }
+
+  function buildOvernightPlan(panel, entries = formBaseEntries) {
+    if (!formOvernightContext) return null;
+    const startEl = panel && panel.querySelector('#form-ts');
+    const whatEl = panel && panel.querySelector('#form-what');
+    if (!startEl) return null;
+    const startTs = normalizeTimestamp(startEl.value);
+    const what = whatEl ? whatEl.value.trim() : '';
+    const tags = [selectedTag(panel, 'form')];
+    if (overnightMode(panel) === 'day-end' && startTs && startTs < formOvernightContext.midnightTs) {
+      const source = entries.find(entry => entry.id === formOvernightContext.sourceId);
+      const laterLogged = entries.some(entry => !entry.planned
+        && entry.ts.slice(0, 10) === formOvernightContext.yesterdayKey
+        && entry.ts > formOvernightContext.startTs);
+      if (!source || !isPlaceholderEntry(source) || source.ts !== formOvernightContext.startTs || laterLogged) {
+        return { ok: false, reason: 'stale', message: '昨天的尾部空白已经变化，请重新打开表单。' };
+      }
+      const plan = planSegmentSplit(entries, {
+        sourceId: formOvernightContext.sourceId,
+        frozenStart: formOvernightContext.startTs,
+        frozenEnd: formOvernightContext.midnightTs,
+        startTs,
+        endTs: formOvernightContext.midnightTs,
+        what,
+        tags
+      }, { createId: planIdFactory() });
+      if (!plan.ok) return plan;
+      return {
+        ...plan,
+        kind: 'overnight-day-end',
+        preview: [{
+          role: 'overnight-yesterday',
+          label: what || tags[0] || '未记录',
+          startTs,
+          endTs: formOvernightContext.midnightTs
+        }],
+        durationMins: minsBetweenDates(new Date(startTs), new Date(formOvernightContext.midnightTs))
+      };
+    }
+    return planOvernightContinuation(entries, {
+      viewedDate: formTargetDate,
+      sourceId: formOvernightContext.sourceId,
+      frozenStart: formOvernightContext.startTs,
+      startTs,
+      what,
+      tags
+    }, { todayKey: todayStr(), nowTs: nowStr(), createId: planIdFactory() });
+  }
+
+  function refreshOvernightPreview(panel, entries = formBaseEntries, remember = true) {
+    if (!panel || !formOvernightContext) return null;
+    const startEl = panel.querySelector('#form-ts');
+    const modeEl = panel.querySelector('[data-role="overnight-end-mode"]');
+    const dayEndButton = panel.querySelector('[data-action="pick-overnight-end-mode"][data-mode="day-end"]');
+    const startTs = normalizeTimestamp(startEl && startEl.value);
+    const canStopAtDayEnd = Boolean(startTs && startTs < formOvernightContext.midnightTs);
+    if (dayEndButton) dayEndButton.hidden = !canStopAtDayEnd;
+    if (!canStopAtDayEnd && modeEl) {
+      modeEl.value = 'today';
+      formOvernightEndMode = 'today';
+    }
+    panel.querySelectorAll('[data-action="pick-overnight-end-mode"]').forEach(button => {
+      const selected = button.dataset.mode === overnightMode(panel);
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    });
+    const plan = buildOvernightPlan(panel, entries);
+    paintTransactionPreview(panel, plan);
+    const summary = panel.querySelector('[data-role="overnight-summary"]');
+    if (summary && plan && plan.ok) {
+      const startLabel = startTs < formOvernightContext.midnightTs ? `续昨晚 ${hhmm(startTs)} 起` : `续今天 ${hhmm(startTs)} 起`;
+      const endTs = plan.kind === 'overnight-day-end' ? formOvernightContext.midnightTs : plan.context.hardEndTs;
+      const endLabel = plan.kind === 'overnight-day-end' ? '只到 24:00' : `到今天 ${hhmm(endTs)}`;
+      summary.textContent = `${startLabel} · ${endLabel} · ${fmtMins(plan.durationMins)}`;
+    } else if (summary) {
+      summary.textContent = plan && plan.message || '请选择有效的开始时间。';
+    }
+    if (remember && plan && plan.ok) lastPreviewSignature = plan.resultSignature;
     return plan;
   }
 
@@ -469,7 +576,9 @@ export function createSheetController(deps) {
       deps.setSheetEditId(null);
       formTag = '';
       formBucket = defaultBucketFromEntries();
-      formRecordMode = loadRecordModePref();
+      formTargetDate = deps.state.selectedDate || todayStr();
+      formDateMode = entryModeForDate(formTargetDate);
+      formRecordMode = formDateMode.forcedMode || loadRecordModePref();
       formBackfill = Boolean(opts && opts.backfill);
       formBackfillEnd = (opts && opts.endTs) || '';
       formBackfillKind = (opts && opts.backfillKind) === 'split' ? 'split' : 'fill';
@@ -479,9 +588,18 @@ export function createSheetController(deps) {
       formBaseEntries = cloneEntries(loaded.entries);
       resetPlanIds();
       lastPreviewSignature = '';
+      formOvernightEndMode = 'today';
+      formOvernightContext = null;
       // Backfilling a known past gap is always an "already happened" record;
       // a leaked plan-mode pref would force a future ts and silently fail to save.
       if (isHistoryDate() || formBackfill) formRecordMode = 'log';
+      if (!formBackfill) {
+        const overnight = overnightContinuationContext(loaded.entries, formTargetDate, {
+          todayKey: todayStr(),
+          nowTs: nowStr()
+        });
+        if (overnight.ok) formOvernightContext = overnight;
+      }
     } else if (mode === 'edit') {
       deps.setSheetEditId(id);
       sheetTimeMounted = false;
@@ -499,11 +617,8 @@ export function createSheetController(deps) {
     const panel = sheet.querySelector('.form-sheet-panel');
     const ts = mode === 'edit'
       ? entry.ts
-      : (opts && opts.ts) || (formRecordMode === 'plan' ? defaultPlanTimestamp() : deps.defaultFormTs());
-    if (mode === 'new') {
-      deps.setSelectedDate((normalizeTimestamp(ts) || nowStr()).slice(0, 10));
-      deps.persistState();
-    }
+      : (opts && opts.ts) || (formOvernightContext && formOvernightContext.startTs)
+        || (formRecordMode === 'plan' ? defaultPlanTimestamp() : deps.defaultFormTs());
     const prevMode = sheet.hidden ? '' : (panel.dataset.mode || '');
     if (mode === 'config' || mode === 'help' || mode === 'import-shift') {
       if (prevMode === 'more') returnToMore = true;
@@ -525,14 +640,19 @@ export function createSheetController(deps) {
       entries: loaded.entries,
       importShiftHours: opts && opts.importShiftHours,
       importShiftHint: opts && opts.importShiftHint,
-      targetDate: deps.state.selectedDate,
-      isToday: deps.state.selectedDate === todayStr(),
-      isHistoryDay: isHistoryDate(),
+      targetDate: mode === 'new' ? formTargetDate : deps.state.selectedDate,
+      isToday: (mode === 'new' ? formTargetDate : deps.state.selectedDate) === todayStr(),
+      isHistoryDay: mode === 'new' ? formDateMode.kind === 'history' : isHistoryDate(deps.state.selectedDate),
       backfill: Boolean(opts && opts.backfill),
       backfillKind: formBackfillKind,
       bucket: mode === 'edit' ? editBucket : formBucket,
       defaultBucket: formBucket,
       recordMode: formRecordMode,
+      recordModeLocked: mode === 'new' && Boolean(formDateMode && formDateMode.forcedMode),
+      overnightContext: mode === 'new' ? formOvernightContext : null,
+      overnightEndMode: formOvernightEndMode,
+      planOutsideWindow: mode === 'edit' && Boolean(entry && entry.planned)
+        && !validateTsForMode(entry.ts, { planned: true }).ok,
       intervalContext: mode === 'edit'
         ? intervalEditContext(formBaseEntries, id, { todayKey: todayStr(), nowTs: nowStr() })
         : null,
@@ -569,7 +689,10 @@ export function createSheetController(deps) {
       }
     } else if (mode === 'new') {
       if (formBackfill) mountBackfillPickers(panel, ts, formBackfillEnd);
-      else mountNewTimePicker(panel, ts);
+      else {
+        mountNewTimePicker(panel, ts);
+        if (formOvernightContext) refreshOvernightPreview(panel);
+      }
       const whatEl = panel.querySelector('#form-what');
       const ctagEl = panel.querySelector('#form-ctag');
       if (whatEl) whatEl.value = '';
@@ -655,12 +778,16 @@ export function createSheetController(deps) {
     }
     deps.setSheetEditId(null);
     sheetTimeMounted = false;
+    formTargetDate = '';
+    formDateMode = null;
     formBackfill = false;
     formBackfillEnd = '';
     formBackfillKind = 'fill';
     formSourceId = '';
     formFrozenStart = '';
     formFrozenEnd = '';
+    formOvernightContext = null;
+    formOvernightEndMode = 'today';
     formBaseEntries = [];
     formPlanIds = [];
     lastPreviewSignature = '';
@@ -852,6 +979,7 @@ export function createSheetController(deps) {
       formTag = '';
       if (panel && panel.dataset.mode === 'edit') refreshEditPreview(panel);
       if (panel && panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
+      if (panel && panel.dataset.mode === 'new' && formOvernightContext) refreshOvernightPreview(panel);
       return;
     }
     el.classList.add('sel');
@@ -874,6 +1002,7 @@ export function createSheetController(deps) {
     if (custom) custom.value = '';
     if (panel && panel.dataset.mode === 'edit') refreshEditPreview(panel);
     if (panel && panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
+    if (panel && panel.dataset.mode === 'new' && formOvernightContext) refreshOvernightPreview(panel);
   }
 
   function pickBucket(el) {
@@ -905,11 +1034,12 @@ export function createSheetController(deps) {
     }
     if (panel && panel.dataset.mode === 'edit') refreshEditPreview(panel);
     if (panel && panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
+    if (panel && panel.dataset.mode === 'new' && formOvernightContext) refreshOvernightPreview(panel);
   }
 
   function pickRecordMode(el) {
     const panel = el.closest('.form-sheet-panel');
-    if (el.dataset.mode === 'plan' && isHistoryDate()) return;
+    if (!formDateMode || formDateMode.kind !== 'today' || formOvernightContext) return;
     formRecordMode = el.dataset.mode === 'plan' ? 'plan' : 'log';
     saveRecordModePref(formRecordMode);
     if (!panel) return;
@@ -926,10 +1056,10 @@ export function createSheetController(deps) {
     });
     const title = panel.querySelector('#form-sheet-title');
     const what = panel.querySelector('.form-sheet-what');
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(deps.state.selectedDate || '');
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(formTargetDate || '');
     const daySummary = m ? `${Number(m[2])}月${Number(m[3])}日` : '这一天';
-    if (title) title.textContent = formRecordMode === 'plan' ? `计划 · ${daySummary}` : `记一条 · ${deps.state.selectedDate === todayStr() ? '刚才这一阵' : '补记'}`;
-    if (what) what.textContent = formRecordMode === 'plan' ? '写下计划要做什么' : (deps.state.selectedDate === todayStr() ? '写下刚才做了什么' : '写下这一段做了什么');
+    if (title) title.textContent = formRecordMode === 'plan' ? `计划 · ${daySummary}` : `记一条 · ${formTargetDate === todayStr() ? '刚才这一阵' : '补记'}`;
+    if (what) what.textContent = formRecordMode === 'plan' ? '写下计划要做什么' : (formTargetDate === todayStr() ? '写下刚才做了什么' : '写下这一段做了什么');
     const whatLabel = panel.querySelector('[data-role="what-label"]');
     if (whatLabel) whatLabel.textContent = formRecordMode === 'plan' ? '计划做什么' : '做了什么';
     const whatInput = panel.querySelector('#form-what');
@@ -940,6 +1070,18 @@ export function createSheetController(deps) {
       mountNewTimePicker(panel, tsEl.value);
     }
     deps.renderChrome();
+  }
+
+  function pickOvernightEndMode(el) {
+    const panel = el.closest('.form-sheet-panel');
+    if (!panel || !formOvernightContext) return;
+    const mode = el.dataset.mode === 'day-end' ? 'day-end' : 'today';
+    const startTs = normalizeTimestamp((panel.querySelector('#form-ts') || {}).value);
+    if (mode === 'day-end' && (!startTs || startTs >= formOvernightContext.midnightTs)) return;
+    formOvernightEndMode = mode;
+    const input = panel.querySelector('[data-role="overnight-end-mode"]');
+    if (input) input.value = mode;
+    refreshOvernightPreview(panel);
   }
 
   function clearInlineError(scope, role = 'conflict-error') {
@@ -1049,20 +1191,65 @@ export function createSheetController(deps) {
     chipRoot.innerHTML = renderTagPicker(isEdit ? 'edit' : 'form', input.value.trim(), deps.loadConfig(), isEdit ? editBucket : formBucket);
     if (isEdit) refreshEditPreview(panel);
     else if (formBackfill) refreshSplitPreview(panel);
+    else if (formOvernightContext) refreshOvernightPreview(panel);
   }
 
   function rememberTag(tag, bucket, entries) {
     deps.rememberCustomTagForBucket(tag, safeBucket(bucket), entries);
   }
 
+  function saveOvernightEntry(panel) {
+    const timeScope = getFormWheelMount(panel) || panel;
+    const startTs = normalizeTimestamp((panel.querySelector('#form-ts') || {}).value);
+    if (!startTs) {
+      setTimeInputError(timeScope, '请输入完整的开始时间。');
+      return;
+    }
+    setTimeInputError(timeScope, '');
+    const whatEl = panel.querySelector('#form-what');
+    const what = whatEl ? whatEl.value.trim() : '';
+    if (!what) { if (whatEl) whatEl.focus(); return; }
+    const ctagEl = panel.querySelector('#form-ctag');
+    const ctag = ctagEl ? ctagEl.value.trim() : '';
+    const tag = ctag || formTag || '未知';
+    const expected = buildOvernightPlan(panel, formBaseEntries);
+    if (!expected || !expected.ok) {
+      showInlineError(panel, expected && expected.message || '这段过夜续记无法保存。');
+      paintTransactionPreview(panel, expected);
+      return;
+    }
+    const d = deps.load();
+    const latest = buildOvernightPlan(panel, d.entries);
+    if (!latest || !latest.ok) {
+      showInlineError(panel, latest && latest.message || '记录边界已经变化，请重新确认。');
+      paintTransactionPreview(panel, latest);
+      return;
+    }
+    if (lastPreviewSignature && latest.resultSignature !== lastPreviewSignature) {
+      formBaseEntries = cloneEntries(d.entries);
+      refreshOvernightPreview(panel, formBaseEntries, true);
+      showInlineError(panel, '数据已变化，预览已按最新记录重新计算；请再次确认。');
+      return;
+    }
+    d.entries = latest.resultEntries;
+    if (!deps.save(d)) {
+      showInlineError(panel, '本机存储空间不足，表单内容仍保留；请先导出备份并清理空间。');
+      return;
+    }
+    if (ctag) rememberTag(ctag, formBucket, d.entries);
+    const staysYesterday = latest.kind === 'overnight-day-end' && startTs < formOvernightContext.midnightTs;
+    deps.setSelectedDate(staysYesterday ? formOvernightContext.yesterdayKey : formOvernightContext.todayKey);
+    teardownNow(() => { closeForm(); deps.render(); });
+  }
+
   function saveEntry() {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
     if (formBackfill) { saveBackfill(panel); return; }
+    if (formOvernightContext) { saveOvernightEntry(panel); return; }
     const timeScope = getFormWheelMount(panel) || panel;
     const planned = formRecordMode === 'plan';
     const checked = validateTsForMode(document.getElementById('form-ts').value, {
-      planned,
-      dateKey: deps.state.selectedDate
+      planned
     });
     if (!checked.ok) {
       setTimeInputError(timeScope, checked.msg);
@@ -1193,10 +1380,10 @@ export function createSheetController(deps) {
     const d = deps.load();
     const entry = d.entries.find(e => e.id === id);
     const planned = Boolean(entry && entry.planned);
-    const checked = validateTsForMode(tsEl ? tsEl.value : '', {
-      planned,
-      dateKey: (tsEl && tsEl.value || '').slice(0, 10) || deps.state.selectedDate
-    });
+    const normalizedInputTs = normalizeTimestamp(tsEl ? tsEl.value : '');
+    const checked = planned && entry && normalizedInputTs === entry.ts
+      ? { ok: true, ts: normalizedInputTs }
+      : validateTsForMode(tsEl ? tsEl.value : '', { planned });
     if (!checked.ok) {
       // R3：折叠态下报错要先展开触发行，否则错误文案落在看不见的容器里。
       expandEditTimeSection(box);
@@ -1363,6 +1550,7 @@ export function createSheetController(deps) {
     if (!panel) return;
     if (panel.dataset.mode === 'edit') refreshEditPreview(panel);
     if (panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
+    if (panel.dataset.mode === 'new' && formOvernightContext) refreshOvernightPreview(panel);
   }
 
   function saveTagConfig() {
@@ -1425,6 +1613,7 @@ export function createSheetController(deps) {
     pickTag,
     pickBucket,
     pickRecordMode,
+    pickOvernightEndMode,
     useConflictPlusMinute,
     editConflictEntry,
     pickEditTag,

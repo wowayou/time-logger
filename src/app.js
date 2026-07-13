@@ -43,6 +43,7 @@ import {
   fmtMins,
   hhmm,
   inclusiveCalendarDayCount,
+  entryModeForDate,
   localDateKey,
   minsBetweenDates,
   nowStr,
@@ -62,6 +63,19 @@ import {
   renderTimeline,
   setButtonTip
 } from './ui.js';
+
+  const bootTrace = window.__timelogBootTrace || null;
+  function markBootTrace(name) {
+    if (!bootTrace) return;
+    const previous = bootTrace.marks.length ? bootTrace.marks[bootTrace.marks.length - 1].at : 0;
+    bootTrace.marks.push({ name, at: Math.max(previous, performance.now()) });
+  }
+  function setBootSnapshotState(state) {
+    if (!bootTrace) return;
+    bootTrace.snapshot = state;
+    bootTrace.snapshotStates.push(state);
+  }
+  markBootTrace('app_module_body_start');
 
   let sheetEditId = null;
   let pendingUpdateRegistration = null;
@@ -307,17 +321,19 @@ import {
     const addBtn = document.getElementById('add-btn');
     const listFade = document.getElementById('list-fade');
     const isDay = state.view === 'day';
-    addBtn.hidden = !isDay;
-    if (listFade) listFade.hidden = !isDay;
-    if (isDay) {
-      const canPlanOnDate = state.selectedDate >= todayStr();
+    const dateMode = entryModeForDate(state.selectedDate);
+    const canCreate = isDay && dateMode.canCreate;
+    addBtn.hidden = !canCreate;
+    if (listFade) listFade.hidden = !canCreate;
+    if (canCreate) {
       const preferPlan = localStorage.getItem(RECORD_MODE_KEY) === 'plan';
-      const mainLabel = canPlanOnDate && preferPlan ? '＋ 计划一条' : '＋ 记一条';
+      const isPlan = dateMode.forcedMode === 'plan' || (dateMode.kind === 'today' && preferPlan);
+      const mainLabel = isPlan ? '＋ 计划一条' : '＋ 记一条';
       const sub = fabSubCopy();
       addBtn.innerHTML = `<span class="fab-main">${mainLabel}</span>${sub ? `<span class="fab-sub">${esc(sub)}</span>` : ''}`;
       // FAB 有可见文案，不需要 hover tooltip；且 `button[data-tip]` 会把 position 强制
       // 成 relative（tooltip 定位规则），破坏 fixed 悬浮——所以只设 aria-label，不设 data-tip。
-      addBtn.setAttribute('aria-label', canPlanOnDate && preferPlan ? '计划一条新的时间记录' : '记一条新的时间记录');
+      addBtn.setAttribute('aria-label', isPlan ? '计划一条新的时间记录' : '记一条新的时间记录');
     }
     const periodNames = { day: '天', week: '周', month: '月', year: '年' };
     const todayLabels = { day: '回到今天', week: '回到本周', month: '回到本月', year: '回到今年' };
@@ -604,6 +620,7 @@ import {
       if (action === 'pick-form-tag') sheetController.pickTag(el);
       if (action === 'pick-form-bucket') sheetController.pickBucket(el);
       if (action === 'pick-record-mode') sheetController.pickRecordMode(el);
+      if (action === 'pick-overnight-end-mode') sheetController.pickOvernightEndMode(el);
       if (action === 'save-entry') sheetController.saveEntry();
       if (action === 'close-form') {
         if (sheetController.getSheetMode() === 'delete-confirm') cancelDelete();
@@ -915,6 +932,7 @@ import {
   }
 
   function init() {
+    markBootTrace('init_start');
     const today = todayStr();
     firstUsedDate = ensureFirstUsedDate(today, load().entries);
     const savedView = localStorage.getItem(VIEW_KEY);
@@ -933,14 +951,28 @@ import {
     if (restoredBootFrame) {
       try {
         const snap = JSON.parse(sessionStorage.getItem(BOOT_SNAPSHOT_KEY));
-        if (!snap || snap.appVersion !== APP_VERSION) restoredBootFrame = false;
-      } catch { restoredBootFrame = false; }
+        if (!snap || snap.appVersion !== APP_VERSION) {
+          restoredBootFrame = false;
+          setBootSnapshotState('rejected:version');
+        }
+      } catch {
+        restoredBootFrame = false;
+        setBootSnapshotState('rejected:invalid');
+      }
     }
-    if (restoredBootFrame) lastIntervalSignature = dataSignature();
-    else render();
+    if (restoredBootFrame) {
+      lastIntervalSignature = dataSignature();
+      setBootSnapshotState('adopted');
+      markBootTrace('snapshot_adopted');
+    } else {
+      render();
+      markBootTrace('first_render_complete');
+    }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         document.body.classList.add('app-ready');
+        markBootTrace('app_ready');
+        initBootTraceHud();
         document.body.classList.remove('boot-restored');
         delete window.__timelogBootRestored;
         if (!navigator.webdriver && !localStorage.getItem(HELP_SEEN_KEY)) openHelp();
@@ -953,6 +985,37 @@ import {
     window.addEventListener('pageshow', resumeLiveClock, { passive: true });
     window.addEventListener('focus', resumeLiveClock, { passive: true });
     startTickTimer();
+  }
+
+  function initBootTraceHud() {
+    if (!bootTrace || document.getElementById('boottrace-hud')) return;
+    const hud = document.createElement('div');
+    hud.id = 'boottrace-hud';
+    hud.setAttribute('aria-label', '启动分段诊断');
+    hud.style.cssText = 'position:fixed;left:4px;right:4px;bottom:max(4px,env(safe-area-inset-bottom));'
+      + 'z-index:2147483646;pointer-events:none;max-height:48vh;overflow:auto;'
+      + 'font:10px/1.45 ui-monospace,Menlo,monospace;color:#b8ffab;background:rgba(0,0,0,.82);'
+      + 'border:1px solid rgba(184,255,171,.35);border-radius:8px;padding:6px 8px;'
+      + 'white-space:pre-wrap;word-break:break-word';
+    const first = bootTrace.marks[0] ? bootTrace.marks[0].at : 0;
+    const marks = bootTrace.marks.map((mark, index) => {
+      const previous = index ? bootTrace.marks[index - 1].at : first;
+      return `${String(index + 1).padStart(2, '0')} ${mark.name} +${Math.round(mark.at - previous)}ms (${Math.round(mark.at - first)}ms)`;
+    });
+    const nav = performance.getEntriesByType('navigation')[0];
+    const navLines = nav
+      ? ['startTime', 'requestStart', 'responseStart', 'responseEnd', 'domInteractive', 'domContentLoadedEventEnd', 'loadEventEnd']
+          .filter(key => Number.isFinite(nav[key]) && (key === 'startTime' || nav[key] > 0))
+          .map(key => `${key}=${Math.round(nav[key])}ms`)
+      : ['Navigation Timing unavailable'];
+    hud.textContent = [
+      `boottrace v${APP_VERSION} snapshot=${bootTrace.snapshotStates.join(' → ')}`,
+      ...marks,
+      `page total=${Math.round((bootTrace.marks[bootTrace.marks.length - 1]?.at || first) - first)}ms`,
+      '── Navigation Timing（从 navigation 起算，不含点击主屏图标到 WebKit 开始导航前的系统时间）',
+      ...navLines
+    ].join('\n');
+    document.body.appendChild(hud);
   }
 
   // --- vv 诊断 HUD（?vvdebug=1 启用；P20 键盘时序与分享能力真机取证，无参数时零成本） ---

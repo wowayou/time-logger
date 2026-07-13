@@ -2,6 +2,24 @@ import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { FIXED_NOW, STATES, VIEWPORTS, boot, expectNoHorizontalOverflow, openBackupMenu } from './ui_fixture.js';
 
+async function setFormTimestamp(page, selector, value) {
+  await page.locator(selector).evaluate((input, next) => {
+    input.value = next;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }, value);
+}
+
+async function setPlannedEditTimestamp(page, value) {
+  const input = page.locator('[data-role="edit-wheel"] [data-role="text"]');
+  await input.fill(value.replace('T', ' '));
+  await input.evaluate(element => element.dispatchEvent(new Event('change', { bubbles: true })));
+}
+
+async function selectSleepTag(page) {
+  await page.locator('[data-action="pick-form-bucket"][data-bucket="maintain"]').click();
+  await page.getByRole('button', { name: '选择标签：睡觉' }).click();
+}
+
 for (const width of VIEWPORTS) {
   for (const state of STATES) {
     test(`no horizontal overflow at ${width}px with ${state}`, async ({ page }) => {
@@ -190,9 +208,10 @@ test('continuation save fills tail placeholder and opens unrecorded segment', as
   await expect(page.locator('.entry.placeholder .e-dur')).toContainText('已 ');
 });
 
-test('past-day save does not create today placeholder', async ({ page }) => {
+test('yesterday tail explicitly saved only to 24:00 does not create today placeholder', async ({ page }) => {
   await boot(page, 768, 'yesterday-placeholder', false, FIXED_NOW, -1);
   await page.getByRole('button', { name: '记一条新的时间记录' }).click();
+  await page.getByRole('button', { name: '只记到 24:00' }).click();
   await page.locator('#form-what').fill('补完昨天');
   await page.getByRole('button', { name: '选择标签：求职推进' }).click();
   await page.getByRole('button', { name: '保存时间记录' }).click();
@@ -1468,6 +1487,322 @@ test('waiting service worker prompt has a reachable update button above the mobi
   await expect.poll(() => page.evaluate(() => window.__swUpdates)).toBe(2);
   await page.locator('[data-action="update-app"]').click();
   expect(await page.evaluate(() => window.__swMessages)).toEqual([{ type: 'SKIP_WAITING' }]);
+});
+
+test('v57 date entry matrix forces history/future modes and hides creation at +8', async ({ page }) => {
+  await boot(page, 768, 'empty', false, FIXED_NOW, null, null, 'log');
+  await expect(page.locator('#add-btn')).toContainText('记一条');
+
+  await page.locator('[data-action="shift-period"][data-delta="1"]').click();
+  await expect(page.locator('#add-btn')).toContainText('计划一条');
+  await page.locator('#add-btn').click();
+  await expect(page.locator('#form-sheet-title')).toContainText('计划');
+  await expect(page.locator('[data-role="record-mode-seg"]')).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('timelog.recordMode'))).toBe('log');
+  await page.getByRole('button', { name: '取消新增记录' }).click();
+
+  for (let i = 0; i < 6; i += 1) await page.locator('[data-action="shift-period"][data-delta="1"]').click();
+  await expect(page.locator('#add-btn')).toBeVisible();
+  await expect(page.locator('#add-btn')).toContainText('计划一条');
+  await page.locator('[data-action="shift-period"][data-delta="1"]').click();
+  await expect(page.locator('#add-btn')).toBeHidden();
+  await expect(page.locator('#list-fade')).toBeHidden();
+
+  await page.locator('#today-btn').click();
+  await page.locator('[data-action="shift-period"][data-delta="-1"]').click();
+  await expect(page.locator('#add-btn')).toContainText('记一条');
+  await page.locator('#add-btn').click();
+  await expect(page.locator('#form-sheet-title')).toContainText('补记');
+  await expect(page.locator('[data-role="record-mode-seg"]')).toHaveCount(0);
+  await page.getByRole('button', { name: '取消新增记录' }).click();
+
+  await page.locator('#today-btn').click();
+  await page.locator('#add-btn').click();
+  await expect(page.locator('[data-role="record-mode-seg"]')).toBeVisible();
+  await expect(page.locator('[data-role="record-mode-seg"] [data-mode="log"]')).toHaveClass(/active/);
+});
+
+test('+8 day keeps existing plans viewable and editable while FAB stays hidden', async ({ page }) => {
+  await boot(page, 768, 'planned-far', false, FIXED_NOW, 8);
+  await expect(page.locator('#add-btn')).toBeHidden();
+  await expect(page.locator('.entry[data-id="plan-far"]')).toBeVisible();
+  await page.locator('.entry[data-id="plan-far"]').click();
+  await expect(page.locator('#form-sheet-title')).toContainText('编辑');
+});
+
+test('plan defaults use the first valid five-minute tick, including midnight rollover', async ({ page }) => {
+  await boot(page, 768, 'empty', false, '2026-06-29T12:56:00', null, null, 'plan');
+  await page.locator('#add-btn').click();
+  await expect(page.locator('#form-ts')).toHaveValue('2026-06-29T13:05');
+  await page.getByRole('button', { name: '取消新增记录' }).click();
+  await page.evaluate(() => window.__setFixedNow('2026-06-29T23:58:00'));
+  await page.locator('#add-btn').click();
+  await expect(page.locator('#form-ts')).toHaveValue('2026-06-30T00:05');
+});
+
+test('changing a new-plan date and cancelling leaves the main page date untouched; saving switches only after success', async ({ page }) => {
+  await boot(page, 768, 'empty', false, FIXED_NOW, null, null, 'log');
+  await page.locator('#add-btn').click();
+  await page.getByRole('button', { name: '记录计划中' }).click();
+  await setFormTimestamp(page, '#form-ts', '2026-07-06T23:59');
+  await page.getByRole('button', { name: '取消新增记录' }).click();
+  await expect(page.locator('#period-label')).toHaveAttribute('aria-label', /2026\/06\/29/);
+  expect(await page.evaluate(() => localStorage.getItem('timelog.selectedDate'))).toBe('2026-06-29');
+
+  await page.locator('#add-btn').click();
+  await setFormTimestamp(page, '#form-ts', '2026-07-06T23:59');
+  await page.locator('#form-what').fill('第七天计划');
+  await page.getByRole('button', { name: '选择标签：求职推进' }).click();
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  await expect(page.locator('#form-sheet')).toBeHidden();
+  expect(await page.evaluate(() => localStorage.getItem('timelog.selectedDate'))).toBe('2026-07-06');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(entry => entry.what === '第七天计划'));
+  expect(saved).toMatchObject({ ts: '2026-07-06T23:59', planned: true });
+});
+
+test('+8 plan time stays in the sheet with an inline error and never writes', async ({ page }) => {
+  await boot(page, 768, 'empty', false, FIXED_NOW, null, null, 'plan');
+  await page.locator('#add-btn').click();
+  await setFormTimestamp(page, '#form-ts', '2026-07-07T00:00');
+  await page.locator('#form-what').fill('越界计划');
+  await page.getByRole('button', { name: '选择标签：求职推进' }).click();
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  await expect(page.locator('#form-sheet')).toBeVisible();
+  await expect(page.locator('[data-role="time-error"]')).toContainText('第 7 天 23:59');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.some(entry => entry.what === '越界计划'))).toBe(false);
+});
+
+for (const planCase of [
+  { name: 'expired', state: 'planned-expired', offset: null, id: 'plan-expired', invalid: '2026-06-29T09:01' },
+  { name: 'within-five-minutes', state: 'planned-near', offset: null, id: 'plan-near', invalid: '2026-06-29T12:38' },
+  { name: 'beyond-seven-days', state: 'planned-far', offset: 8, id: 'plan-far', invalid: '2026-07-07T10:00' }
+]) {
+  test(`existing ${planCase.name} plan can edit text unchanged but any time change revalidates`, async ({ page }) => {
+    await boot(page, 768, planCase.state, false, FIXED_NOW, planCase.offset);
+    await page.locator(`.entry[data-id="${planCase.id}"]`).click();
+    await expect(page.locator('.plan-expired-hint')).toBeVisible();
+    await page.locator('[data-role="edit-what"]').fill(`${planCase.name} 文案已改`);
+    await page.getByRole('button', { name: '保存修改' }).click();
+    await expect(page.locator('#form-sheet')).toBeHidden();
+    expect(await page.evaluate(id => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(entry => entry.id === id).what, planCase.id)).toBe(`${planCase.name} 文案已改`);
+
+    await page.locator(`.entry[data-id="${planCase.id}"]`).click();
+    await setPlannedEditTimestamp(page, planCase.invalid);
+    await page.getByRole('button', { name: '保存修改' }).click();
+    await expect(page.locator('[data-role="time-error"]')).toBeVisible();
+    await setPlannedEditTimestamp(page, '2026-06-30T09:00');
+    await page.getByRole('button', { name: '保存修改' }).click();
+    await expect(page.locator('#form-sheet')).toBeHidden();
+    expect(await page.evaluate(id => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(entry => entry.id === id).ts, planCase.id)).toBe('2026-06-30T09:00');
+  });
+}
+
+test('planned edit exemption compares against the latest entry from the same load graph', async ({ page }) => {
+  await boot(page, 768, 'planned-expired', false, FIXED_NOW);
+  await page.locator('.entry[data-id="plan-expired"]').click();
+  await page.locator('[data-role="edit-what"]').fill('只改文字');
+  await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('timelog.v1'));
+    data.entries.find(entry => entry.id === 'plan-expired').ts = '2026-06-29T08:00';
+    localStorage.setItem('timelog.v1', JSON.stringify(data));
+  });
+  await page.getByRole('button', { name: '保存修改' }).click();
+  await expect(page.locator('[data-role="time-error"]')).toBeVisible();
+  const latest = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(entry => entry.id === 'plan-expired'));
+  expect(latest).toMatchObject({ ts: '2026-06-29T08:00', what: '过期计划' });
+});
+
+test('DST planning window uses a real Playwright timezone context', async ({ browser }) => {
+  const context = await browser.newContext({ timezoneId: 'America/New_York' });
+  const page = await context.newPage();
+  await boot(page, 768, 'empty', false, '2026-03-07T12:00:00');
+  const result = await page.evaluate(async () => {
+    const { planningWindow, validateTsForMode } = await import('/src/time.js');
+    const now = new Date(2026, 2, 7, 12, 0, 0);
+    const window = planningWindow(now);
+    return {
+      max: `${window.maxExclusive.getFullYear()}-${String(window.maxExclusive.getMonth() + 1).padStart(2, '0')}-${String(window.maxExclusive.getDate()).padStart(2, '0')}T${String(window.maxExclusive.getHours()).padStart(2, '0')}:${String(window.maxExclusive.getMinutes()).padStart(2, '0')}`,
+      calendarHours: (window.maxExclusive - new Date(2026, 2, 7, 0, 0, 0)) / 3600000,
+      lastMinuteOk: validateTsForMode('2026-03-14T23:59', { planned: true, now }).ok,
+      boundaryOk: validateTsForMode('2026-03-15T00:00', { planned: true, now }).ok,
+      offsetBefore: new Date(2026, 2, 7, 12).getTimezoneOffset(),
+      offsetAfter: new Date(2026, 2, 9, 12).getTimezoneOffset()
+    };
+  });
+  expect(result).toMatchObject({ max: '2026-03-15T00:00', calendarHours: 191, lastMinuteOk: true, boundaryOk: false });
+  expect(result.offsetBefore).not.toBe(result.offsetAfter);
+  await context.close();
+});
+
+test('overnight FAB defaults to today, writes two day-local segments, and switches to today', async ({ page }) => {
+  await boot(page, 768, 'yesterday-placeholder', false, '2026-06-29T08:00:00', -1);
+  await page.locator('#add-btn').click();
+  await expect(page.locator('#form-sheet-title')).toContainText('过夜续记');
+  await expect(page.locator('[data-role="overnight-summary"]')).toContainText('续昨晚 23:00 起 · 到今天 08:00 · ~9h');
+  await page.locator('#form-what').fill('睡觉');
+  await selectSleepTag(page);
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(entries).toEqual(expect.arrayContaining([
+    expect.objectContaining({ ts: '2026-06-28T23:00', what: '睡觉', tags: ['睡觉'] }),
+    expect.objectContaining({ ts: '2026-06-29T00:00', what: '睡觉', tags: ['睡觉'] }),
+    expect.objectContaining({ ts: '2026-06-29T08:00', what: '', tags: [] })
+  ]));
+  expect(await page.evaluate(() => localStorage.getItem('timelog.selectedDate'))).toBe('2026-06-29');
+});
+
+test('overnight can explicitly stop at 24:00 and remain on yesterday', async ({ page }) => {
+  await boot(page, 768, 'yesterday-placeholder', false, '2026-06-29T08:00:00', -1);
+  await page.locator('#add-btn').click();
+  await page.getByRole('button', { name: '只记到 24:00' }).click();
+  await page.locator('#form-what').fill('睡觉');
+  await selectSleepTag(page);
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(stored.find(entry => entry.id === 'yesterday-open')).toMatchObject({ ts: '2026-06-28T23:00', what: '睡觉', tags: ['睡觉'] });
+  expect(stored.some(entry => entry.ts.startsWith('2026-06-29'))).toBe(false);
+  expect(await page.evaluate(() => localStorage.getItem('timelog.selectedDate'))).toBe('2026-06-28');
+});
+
+test('moving overnight start into today creates one today segment and removes the day-end choice', async ({ page }) => {
+  await boot(page, 768, 'yesterday-placeholder', false, '2026-06-29T08:00:00', -1);
+  await page.locator('#add-btn').click();
+  await setFormTimestamp(page, '#form-ts', '2026-06-29T02:00');
+  await expect(page.getByRole('button', { name: '只记到 24:00' })).toBeHidden();
+  await page.locator('#form-what').fill('睡觉');
+  await selectSleepTag(page);
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(stored.find(entry => entry.id === 'yesterday-open')).toMatchObject({ what: '', tags: [] });
+  expect(stored).toEqual(expect.arrayContaining([
+    expect.objectContaining({ ts: '2026-06-29T02:00', what: '睡觉' }),
+    expect.objectContaining({ ts: '2026-06-29T08:00', what: '' })
+  ]));
+  expect(stored.some(entry => entry.ts === '2026-06-29T00:00')).toBe(false);
+});
+
+test('overnight uses the first real today entry as hard end and preserves it', async ({ page }) => {
+  await boot(page, 768, 'overnight-with-today-real', false, '2026-06-29T08:00:00', -1);
+  await page.locator('#add-btn').click();
+  await expect(page.locator('[data-role="overnight-summary"]')).toContainText('到今天 07:30');
+  await page.locator('#form-what').fill('睡觉');
+  await selectSleepTag(page);
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(stored.find(entry => entry.id === 'today-real')).toMatchObject({ ts: '2026-06-29T07:30', what: '洗漱' });
+  expect(stored.some(entry => entry.ts === '2026-06-29T08:00')).toBe(false);
+});
+
+test('overnight boundary plan blocks today branch but leaves the 24:00 branch usable', async ({ page }) => {
+  await boot(page, 768, 'overnight-midnight-plan', false, '2026-06-29T08:00:00', -1);
+  await page.locator('#add-btn').click();
+  await page.locator('#form-what').fill('睡觉');
+  await selectSleepTag(page);
+  await expect(page.locator('.preview-head.is-error')).toContainText('00:00');
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  await expect(page.locator('[data-role="conflict-error"]')).toContainText('00:00');
+  await page.getByRole('button', { name: '只记到 24:00' }).click();
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(stored.find(entry => entry.id === 'midnight-plan')).toMatchObject({ planned: true, what: '午夜计划' });
+  expect(stored.find(entry => entry.id === 'yesterday-open')).toMatchObject({ what: '睡觉' });
+  expect(await page.evaluate(() => localStorage.getItem('timelog.selectedDate'))).toBe('2026-06-28');
+});
+
+test('overnight preview invalidates after latest data changes and requires a second confirmation', async ({ page }) => {
+  await boot(page, 768, 'yesterday-placeholder', false, '2026-06-29T08:00:00', -1);
+  await page.locator('#add-btn').click();
+  await page.locator('#form-what').fill('睡觉');
+  await selectSleepTag(page);
+  await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('timelog.v1'));
+    data.entries.push({ id: 'cross-tab-real', ts: '2026-06-29T07:00', what: '洗漱', tags: ['洗漱'] });
+    localStorage.setItem('timelog.v1', JSON.stringify(data));
+  });
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  await expect(page.locator('[data-role="conflict-error"]')).toContainText('请再次确认');
+  await expect(page.locator('[data-role="overnight-summary"]')).toContainText('到今天 07:00');
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  await expect(page.locator('#form-sheet')).toBeHidden();
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
+  expect(stored.some(entry => entry.id === 'cross-tab-real')).toBe(true);
+  expect(stored.some(entry => entry.ts === '2026-06-29T08:00')).toBe(false);
+});
+
+test('overnight form is data-shape only: midnight hard end and backfill do not trigger it', async ({ page }) => {
+  await boot(page, 768, 'overnight-hardend-midnight', false, '2026-06-29T08:00:00', -1);
+  await page.locator('#add-btn').click();
+  await expect(page.locator('#form-sheet-title')).not.toContainText('过夜续记');
+  await page.getByRole('button', { name: '取消新增记录' }).click();
+});
+
+test('backfill on yesterday placeholder remains ordinary backfill, not overnight continuation', async ({ page }) => {
+  await boot(page, 768, 'yesterday-placeholder', false, '2026-06-29T08:00:00', -1);
+  await page.locator('[data-action="backfill-seg"]').first().click();
+  await expect(page.locator('#form-sheet-title')).toContainText('补录');
+  await expect(page.locator('[data-role="overnight-end-mode"]')).toHaveCount(0);
+});
+
+test('boottrace is absent without the exact fragment', async ({ page }) => {
+  await boot(page, 768, 'one-record', false, FIXED_NOW);
+  await expect(page.locator('#boottrace-hud')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__timelogBootTrace)).toBeUndefined();
+});
+
+test('boottrace reports ordered phases and snapshot outcomes outside the v53 snapshot range', async ({ page }) => {
+  await boot(page, 768, 'one-record', false, FIXED_NOW, null, null, null, '/#boottrace=1');
+  const hud = page.locator('#boottrace-hud');
+  await expect(hud).toBeVisible();
+  let text = await hud.textContent();
+  for (const mark of ['html_inline_start', 'app_module_body_start', 'init_start', 'first_render_complete', 'app_ready']) {
+    expect(text).toContain(mark);
+  }
+  expect(text).toContain('snapshot=pending → no-snapshot');
+  expect(text).toContain('不含点击主屏图标');
+  expect(text).not.toContain('响应式测试记录');
+  const placement = await page.locator('#boottrace-hud').evaluate(node => ({
+    bodyChild: node.parentElement === document.body,
+    insideApp: document.querySelector('.app').contains(node),
+    insideFab: document.getElementById('add-btn').contains(node)
+  }));
+  expect(placement).toEqual({ bodyChild: true, insideApp: false, insideFab: false });
+
+  await page.reload();
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  text = await page.locator('#boottrace-hud').textContent();
+  expect(text).toContain('snapshot=pending → dom-restored → adopted');
+  expect(text).toContain('snapshot_adopted');
+
+  await page.evaluate(() => {
+    const snapshot = JSON.parse(sessionStorage.getItem('timelog.bootSnapshot.v1'));
+    snapshot.appVersion = 'old';
+    sessionStorage.setItem('timelog.bootSnapshot.v1', JSON.stringify(snapshot));
+  });
+  await page.reload();
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  await expect(page.locator('#boottrace-hud')).toContainText('dom-restored → rejected:version');
+
+  await page.evaluate(() => {
+    const snapshot = JSON.parse(sessionStorage.getItem('timelog.bootSnapshot.v1'));
+    snapshot.today = '1999-01-01';
+    sessionStorage.setItem('timelog.bootSnapshot.v1', JSON.stringify(snapshot));
+  });
+  await page.reload();
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  await expect(page.locator('#boottrace-hud')).toContainText('rejected:date');
+
+  await page.evaluate(() => {
+    const snapshot = JSON.parse(sessionStorage.getItem('timelog.bootSnapshot.v1'));
+    snapshot.dataRaw = 'different';
+    sessionStorage.setItem('timelog.bootSnapshot.v1', JSON.stringify(snapshot));
+  });
+  await page.reload();
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  await expect(page.locator('#boottrace-hud')).toContainText('rejected:data');
+
+  await page.goto('/');
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  await expect(page.locator('#boottrace-hud')).toHaveCount(0);
 });
 
 test('ongoing minutes update on the minute without reopening the page', async ({ page }) => {

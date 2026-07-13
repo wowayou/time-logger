@@ -25,12 +25,21 @@ import {
 } from './src/stats.js';
 import {
   coalesceRedundant,
+  intervalEditContext,
   normalizeEntries,
+  overnightContinuationContext,
   planDeleteEntry,
   planIntervalEdit,
+  planOvernightContinuation,
   planSegmentSplit
 } from './src/entry_model.js';
-import { inclusiveCalendarDayCount } from './src/time.js';
+import {
+  defaultPlannedTimestamp,
+  entryModeForDate,
+  inclusiveCalendarDayCount,
+  planningWindow,
+  validateTsForMode
+} from './src/time.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -76,6 +85,23 @@ assert(formatPercent(33.34, 100) === '33.3%', '33.34% formatting changed');
 assert(formatPercent(33.33, 100) === '33.3%', '33.33% formatting changed');
 assert(inclusiveCalendarDayCount('2026-03-08', '2026-03-09') === 2, 'usage days must count local calendar dates across DST');
 assert(inclusiveCalendarDayCount('2026-06-29', '2026-06-29') === 1, 'first local usage date must be day 1');
+
+// --- v57 local-calendar planning window ---
+const planNow = new Date(2026, 11, 28, 12, 35, 0);
+const planWindow = planningWindow(planNow);
+assert(formatDate(planWindow.maxExclusive) === '2027-01-05T00:00', 'plan window advances eight local calendar days across year end');
+assert(!validateTsForMode('2026-12-28T12:40', { planned: true, now: planNow }).ok, 'exactly now +5min is rejected');
+assert(validateTsForMode('2026-12-28T12:41', { planned: true, now: planNow }).ok, 'strictly later than now +5min is accepted');
+assert(validateTsForMode('2027-01-04T23:59', { planned: true, now: planNow }).ok, '+7 day 23:59 is accepted');
+assert(!validateTsForMode('2027-01-05T00:00', { planned: true, now: planNow }).ok, '+8 day 00:00 is rejected');
+assert(defaultPlannedTimestamp('2026-12-28', new Date(2026, 11, 28, 12, 34, 30)) === '2026-12-28T12:40', 'seconds still round to the first valid five-minute tick');
+assert(defaultPlannedTimestamp('2026-12-28', planNow) === '2026-12-28T12:45', 'an exact +5min tick advances to the next five-minute tick');
+assert(defaultPlannedTimestamp('2026-12-28', new Date(2026, 11, 28, 23, 58, 0)) === '2026-12-29T00:05', 'late-night plan defaults roll into tomorrow');
+assert(defaultPlannedTimestamp('2026-12-29', planNow) === '2026-12-29T09:00', 'future-day plan defaults stay at 09:00');
+assert(entryModeForDate('2026-12-27', planNow).forcedMode === 'log', 'history forces logged mode');
+assert(entryModeForDate('2026-12-28', planNow).forcedMode === '', 'today keeps the saved preference switchable');
+assert(entryModeForDate('2027-01-04', planNow).forcedMode === 'plan', '+7 day forces plan mode');
+assert(entryModeForDate('2027-01-05', planNow).canCreate === false, '+8 day disables creation');
 
 const thresholdEntries = [
   entry('a', '2020-01-01T09:00', '求职推进'),
@@ -494,6 +520,131 @@ const splitOutside = planSegmentSplit(splitBase, {
   startTs: '2026-07-09T16:00', endTs: '2026-07-09T18:00', what: '越界', tags: ['刷手机']
 }, { createId: txId });
 assert(!splitOutside.ok && splitOutside.reason === 'outside-source', 'split picker cannot escape frozen source boundaries');
+
+// --- v57 overnight continuation transaction ---
+localStorage.setItem(CONFIG_KEY, JSON.stringify({
+  version: 1,
+  mainline: ['求职推进'],
+  chips: [{ name: '睡觉', bucket: 'maintain', longOk: true }, { name: '洗漱', bucket: 'maintain', longOk: false }]
+}));
+const overnightBase = [
+  { id: 'y-open', ts: '2026-07-12T23:00', what: '', tags: [] }
+];
+const overnight = planOvernightContinuation(overnightBase, {
+  viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T23:00',
+  startTs: '2026-07-12T23:00', what: '睡觉', tags: ['睡觉']
+}, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
+assert(overnight.ok && overnight.durationMins === 540, 'overnight planner previews an exact nine-hour span');
+assert(overnight.resultEntries.some(e => e.ts === '2026-07-12T23:00' && e.what === '睡觉'), 'overnight planner fills yesterday start');
+assert(overnight.resultEntries.some(e => e.ts === '2026-07-13T00:00' && e.what === '睡觉'), 'overnight planner creates the midnight day split');
+assert(overnight.resultEntries.some(e => e.ts === '2026-07-13T08:00' && e.what === ''), 'overnight planner creates the now placeholder');
+const overnightYesterday = summarizeEntries(overnight.resultEntries, new Date(2026, 6, 12), new Date(2026, 6, 13), { now: new Date(2026, 6, 13, 8) });
+const overnightToday = summarizeEntries(overnight.resultEntries, new Date(2026, 6, 13), new Date(2026, 6, 13, 8), { now: new Date(2026, 6, 13, 8) });
+assert(overnightYesterday.maintain === 60, 'yesterday receives 60 minutes of sleep');
+assert(overnightToday.maintain === 480, 'today receives 480 minutes of sleep');
+
+const adjustedOvernight = planOvernightContinuation(overnightBase, {
+  viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T23:00',
+  startTs: '2026-07-12T23:30', what: '睡觉', tags: ['睡觉']
+}, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
+assert(adjustedOvernight.ok, 'overnight start can move later inside the frozen blank span');
+assert(adjustedOvernight.resultEntries.some(e => e.ts === '2026-07-12T23:00' && e.what === ''), 'moving start later preserves the earlier unrecorded boundary');
+assert(adjustedOvernight.resultEntries.some(e => e.ts === '2026-07-12T23:30' && e.what === '睡觉'), 'moving start later creates the adjusted sleep point');
+
+const todayOnlyOvernight = planOvernightContinuation(overnightBase, {
+  viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T23:00',
+  startTs: '2026-07-13T02:00', what: '睡觉', tags: ['睡觉']
+}, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
+assert(todayOnlyOvernight.ok && todayOnlyOvernight.preview.length === 1, 'start at today degrades to one today-only segment');
+assert(todayOnlyOvernight.resultEntries.find(e => e.id === 'y-open').what === '', 'today-only branch leaves yesterday blank untouched');
+assert(!todayOnlyOvernight.resultEntries.some(e => e.ts === '2026-07-13T00:00'), 'today-only branch does not create a midnight boundary');
+
+const overnightWithBoundaries = planOvernightContinuation([
+  { id: 'y-open', ts: '2026-07-12T23:00', what: '', tags: [] },
+  { id: 'mid-open', ts: '2026-07-13T00:00', what: '', tags: [] },
+  { id: 'inside-open', ts: '2026-07-13T04:00', what: '', tags: [] },
+  { id: 'now-open', ts: '2026-07-13T08:00', what: '', tags: [] },
+  { id: 'future-real', ts: '2026-07-13T18:00', what: '晚间安排', tags: ['求职推进'] },
+  { id: 'future-plan', ts: '2026-07-13T20:00', what: '未来计划', tags: ['求职推进'], planned: true }
+], {
+  viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T23:00',
+  startTs: '2026-07-12T23:00', what: '睡觉', tags: ['睡觉']
+}, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
+assert(overnightWithBoundaries.ok, 'existing reusable boundaries remain valid');
+assert(overnightWithBoundaries.resultEntries.find(e => e.id === 'mid-open').what === '睡觉', 'midnight placeholder is reused');
+assert(!overnightWithBoundaries.resultEntries.some(e => e.id === 'inside-open'), 'strictly internal placeholder is removed');
+assert(overnightWithBoundaries.resultEntries.some(e => e.id === 'now-open' && e.what === ''), 'hardEnd placeholder is reused');
+assert(overnightWithBoundaries.resultEntries.some(e => e.id === 'future-real'), 'future real entry is preserved');
+assert(overnightWithBoundaries.resultEntries.some(e => e.id === 'future-plan' && e.planned), 'future plan is preserved');
+
+const overnightRealEnd = planOvernightContinuation([
+  { id: 'y-open', ts: '2026-07-12T23:00', what: '', tags: [] },
+  { id: 'wash', ts: '2026-07-13T07:30', what: '洗漱', tags: ['洗漱'] }
+], {
+  viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T23:00',
+  startTs: '2026-07-12T23:00', what: '睡觉', tags: ['睡觉']
+}, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
+assert(overnightRealEnd.ok && overnightRealEnd.context.hardEndTs === '2026-07-13T07:30', 'first real today entry becomes the hard end');
+assert(overnightRealEnd.resultEntries.some(e => e.id === 'wash'), 'real hard-end entry remains untouched');
+assert(!overnightRealEnd.resultEntries.some(e => e.ts === '2026-07-13T08:00'), 'real hard end does not add a now placeholder');
+
+const midnightConflict = planOvernightContinuation([
+  { id: 'y-open', ts: '2026-07-12T23:00', what: '', tags: [] },
+  { id: 'mid-plan', ts: '2026-07-13T00:00', what: '午夜计划', tags: ['求职推进'], planned: true }
+], {
+  viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T23:00',
+  startTs: '2026-07-12T23:00', what: '睡觉', tags: ['睡觉']
+}, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
+assert(!midnightConflict.ok && midnightConflict.reason === 'conflict', 'a plan on the required midnight boundary blocks overnight save');
+const hardEndConflict = planOvernightContinuation([
+  { id: 'y-open', ts: '2026-07-12T23:00', what: '', tags: [] },
+  { id: 'end-plan', ts: '2026-07-13T08:00', what: '当前计划', tags: ['求职推进'], planned: true }
+], {
+  viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T23:00',
+  startTs: '2026-07-12T23:00', what: '睡觉', tags: ['睡觉']
+}, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
+assert(!hardEndConflict.ok && hardEndConflict.reason === 'conflict', 'a plan on the required hard-end boundary blocks overnight save');
+assert(!overnightContinuationContext([
+  { id: 'y-open', ts: '2026-07-12T23:00', what: '', tags: [] },
+  { id: 'mid-real', ts: '2026-07-13T00:00', what: '午夜开始', tags: ['求职推进'] }
+], '2026-07-12', { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00' }).ok, 'hardEnd at midnight falls back to ordinary day-end continuation');
+assert(!overnightContinuationContext(overnightBase, '2026-07-11', {
+  todayKey: '2026-07-13', nowTs: '2026-07-13T08:00'
+}).ok, 'the same placeholder shape on a day before yesterday is not overnight continuation');
+const beforeOvernightStart = planOvernightContinuation(overnightBase, {
+  viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T23:00',
+  startTs: '2026-07-12T22:59', what: '睡觉', tags: ['睡觉']
+}, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
+assert(!beforeOvernightStart.ok && beforeOvernightStart.reason === 'before-min', 'overnight start cannot move before the frozen blank start');
+const atOvernightEnd = planOvernightContinuation(overnightBase, {
+  viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T23:00',
+  startTs: '2026-07-13T08:00', what: '睡觉', tags: ['睡觉']
+}, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
+assert(!atOvernightEnd.ok && atOvernightEnd.reason === 'after-max', 'overnight start must stay strictly before the hard end');
+const overnightYesterdayContext = intervalEditContext(overnight.resultEntries, 'y-open', {
+  todayKey: '2026-07-13', nowTs: '2026-07-13T08:00'
+});
+const overnightTodayEntry = overnight.resultEntries.find(e => e.ts === '2026-07-13T00:00' && e.what === '睡觉');
+const overnightTodayContext = intervalEditContext(overnight.resultEntries, overnightTodayEntry.id, {
+  todayKey: '2026-07-13', nowTs: '2026-07-13T08:00'
+});
+assert(overnightYesterdayContext.ok && overnightYesterdayContext.endTs === '2026-07-13T00:00', 'yesterday half remains a normal day-local editable interval');
+assert(overnightTodayContext.ok && overnightTodayContext.endTs === '2026-07-13T08:00', 'today half remains a normal day-local editable interval');
+const splitOvernightToday = planSegmentSplit(overnight.resultEntries, {
+  sourceId: overnightTodayEntry.id, frozenStart: '2026-07-13T00:00', frozenEnd: '2026-07-13T08:00',
+  startTs: '2026-07-13T03:00', endTs: '2026-07-13T04:00', what: '醒了一会', tags: ['杂']
+}, { createId: txId });
+assert(splitOvernightToday.ok, 'today half of an overnight write can still be split normally');
+assert(planDeleteEntry(overnight.resultEntries, overnightTodayEntry.id, {
+  todayKey: '2026-07-13', nowTs: '2026-07-13T08:00'
+}).ok, 'today half of an overnight write can still be deleted normally');
+const near48Hours = planOvernightContinuation([
+  { id: 'long-open', ts: '2026-07-12T00:01', what: '', tags: [] }
+], {
+  viewedDate: '2026-07-12', sourceId: 'long-open', frozenStart: '2026-07-12T00:01',
+  startTs: '2026-07-12T00:01', what: '睡觉', tags: ['睡觉']
+}, { todayKey: '2026-07-13', nowTs: '2026-07-13T23:58', createId: txId });
+assert(near48Hours.ok && near48Hours.durationMins === 2877, 'near-48h overnight span has no artificial duration cap');
 
 const sameTagDifferentWhat = [
   { id: 'left', ts: '2026-07-09T08:00', what: '写代码', tags: ['求职推进'] },

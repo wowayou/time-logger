@@ -123,24 +123,57 @@ export function validateTs(raw) {
   return { ok: true, ts };
 }
 
-function validatePlannedTs(raw, dateKey) {
+function validNow(value) {
+  const date = value instanceof Date ? new Date(value) : new Date(value === undefined ? Date.now() : value);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+export function planningWindow(now = new Date()) {
+  const current = validNow(now);
+  const todayStart = startOfDay(current);
+  return {
+    now: current,
+    todayKey: localDateKey(todayStart),
+    minExclusive: new Date(current.getTime() + 5 * 60000),
+    maxExclusive: addDays(todayStart, 8),
+    maxDateKey: localDateKey(addDays(todayStart, 8))
+  };
+}
+
+export function entryModeForDate(dateKey, now = new Date()) {
+  const window = planningWindow(now);
+  if (!parseDateKey(dateKey)) return { kind: 'unavailable', forcedMode: '', canCreate: false, ...window };
+  if (dateKey < window.todayKey) return { kind: 'history', forcedMode: 'log', canCreate: true, ...window };
+  if (dateKey === window.todayKey) return { kind: 'today', forcedMode: '', canCreate: true, ...window };
+  if (dateKey < window.maxDateKey) return { kind: 'future', forcedMode: 'plan', canCreate: true, ...window };
+  return { kind: 'unavailable', forcedMode: '', canCreate: false, ...window };
+}
+
+export function defaultPlannedTimestamp(dateKey, now = new Date()) {
+  const window = planningWindow(now);
+  if (dateKey && dateKey > window.todayKey) return `${dateKey}T09:00`;
+  const candidate = new Date(window.minExclusive);
+  candidate.setSeconds(0, 0);
+  const remainder = candidate.getMinutes() % 5;
+  if (remainder) candidate.setMinutes(candidate.getMinutes() + (5 - remainder));
+  if (candidate <= window.minExclusive) candidate.setMinutes(candidate.getMinutes() + 5);
+  return localDateTimeKey(candidate);
+}
+
+function validatePlannedTs(raw, opts = {}) {
   const ts = normalizeTimestamp(raw);
   if (!ts) return { ok: false, msg: '请输入完整日期和时间，例如 2026-06-28 09:05。' };
   const when = new Date(ts);
-  const now = new Date();
-  if (when <= new Date(now.getTime() + 5 * 60000)) {
-    return { ok: false, msg: '计划时间应晚于现在。' };
+  const window = planningWindow(opts.now);
+  if (when <= window.minExclusive) {
+    return { ok: false, msg: '计划时间必须严格晚于现在 5 分钟。' };
   }
-  const dayStart = parseDateKey(dateKey) || startOfDay(now);
-  const dayEnd = addDays(dayStart, 1);
-  const maxFuture = addDays(now, 7);
-  const max = dayEnd < maxFuture ? dayEnd : maxFuture;
-  if (when >= max) return { ok: false, msg: '计划时间不能超出所选日或 7 天后。' };
+  if (when >= window.maxExclusive) return { ok: false, msg: '计划时间最远可到第 7 天 23:59。' };
   return { ok: true, ts };
 }
 
 export function validateTsForMode(raw, opts = {}) {
-  if (opts.planned) return validatePlannedTs(raw, opts.dateKey);
+  if (opts.planned) return validatePlannedTs(raw, opts);
   return validateTs(raw);
 }
 

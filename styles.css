@@ -1508,6 +1508,18 @@
       overflow-wrap: anywhere;
     }
     .end-mode-seg { margin: 0; }
+    .overnight-summary {
+      padding: 10px 12px;
+      border-radius: var(--r-ctl);
+      background: var(--accent-bg);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 650;
+      line-height: 1.45;
+      font-variant-numeric: tabular-nums;
+    }
+    .overnight-end-seg button { min-width: 0; padding-inline: 8px; font-size: 13px; }
+    .plan-expired-hint { margin-top: -2px; }
     .interval-preview {
       display: grid;
       gap: 0;
