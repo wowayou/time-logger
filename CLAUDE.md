@@ -56,7 +56,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v57` / manifest `version: "57"`。
+当前版本：`timelog-v58` / manifest `version: "58"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -232,3 +232,4 @@ git diff --check
 | v55 | 2026-07-11 | 功能冻结后的明确批准视觉收敛：以“海拔＝信息层级”消除日视图 card soup——header 与日期控件贴地，记录卡保留背景差/边界但去阴影并收紧间距，hero 尺子成为唯一带内容阴影的主表面；主线大数字改用墨色，FAB 保留唯一饱和 CTA 并收敛发光。改动限于 CSS 与版本仪式，DOM、模板、业务 JS、左滑轨道、刷新快照和动画护栏均不动。 |
 | v56 | 2026-07-11 | 日视图改**连续日志容器**（`docs/prototypes/continuous-log-refined.html` 评审定稿，用户批准）：`.log` 单一贴地面 + 发丝分隔（wrapper 层、避开竖脊）+ 左缘 4px 通高桶色竖脊（`data-b`：实=已发生、CSS mask 圆头虚线=计划、灰=未记录），tag 降素色小字（桶色职责移交竖脊）；今天视图「现在 hh:mm」一线分隔计划与已发生（accent 呼吸点，reduced-motion 静止）；行改 时间｜内容｜时长 三列网格，时长右置、文案单职责（进行中「已 X」与 FAB 同语，去掉「未记录·进行中」复读）；行内动作只留缺口/待办文字链（补一下/标记已发生/确认，mini-btn 去底色留 44px 热区），**已发生普通段「切一刀」迁入编辑 sheet**（cell-action；经批准的入口红线变更）；hero 大数字 32→36px 补偿去色层级；boot 快照加 `appVersion` 门（应用更新后旧 DOM 形态不再被新 JS 采纳而跳过首渲）；行仍自带不透明 `--card` 底、入场只过渡 opacity（左滑/v53 护栏不变），周/月/年与「···」更多不动。Playwright 断言适配 + 新增容器/竖脊/现在线/切一刀入口回归。 |
 | v57 | 2026-07-13 | 日期计划窗口改为本地自然日统一规则（严格晚于 `now+5min`、上界 `今天+8日 00:00`）；历史/今天/未来 `+1…+7`/`+8` 入口分别强制已发生、沿用偏好、强制计划、隐藏新增，取消表单不再提前切主页面日期。既有计划按同一次最新 `load()` 的 `ts` 实施“时间未变”上下界对称豁免。新增纯数据形态的过夜续记：显式选择到今天硬终点或只到 24:00，跨午夜写成两条可独立编辑的日内记录，planner 复核 placeholder/真实记录/计划边界与结果签名。加入仅由 `#boottrace=1` 启用、位于启动快照范围外的隐私安全启动分段 HUD；不改 SW 策略/FILES，不做 lazy、A/B 或其它性能优化。补真实 `timezoneId` DST、日期矩阵、计划豁免、过夜与 boottrace 双引擎回归。 |
+| v58 | 2026-07-14 | PWA 冷启动加速：SW 注册提前到 `<head>` 内联脚本（脱离 ES module 图加载链路，`app.js` 末尾原注册在慢启动时要等全图加载完）；`<head>` 加 9 条 `modulepreload` 提示拉平 import 瀑布（实测 6×CPU+slow-3G 下 `app_ready` ↓~18%）。实测确认 parse+execute 极廉价（10×CPU 仍 ~0.3s），3.8s 冷启动几乎全是网络/SW 缓存未命中；Fix A 为低成本合理猜测，若真因是 iOS 定期回收 Cache Storage，则 daily opens 仍慢，下一步走 instrumentation（见 postmortem P33）。启动屏 Fix C 已 park。零业务逻辑改动。 |

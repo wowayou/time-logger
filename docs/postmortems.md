@@ -551,6 +551,32 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ---
 
+## P33 · PWA 冷启动 3.8s：模块执行很轻，时间耗在网络 / SW 缓存未命中（v58）
+
+**确诊日期**：2026-07-14 · **状态**：v58 以 Fix A + B 优化，Fix A 待 iOS 主屏 PWA 真机验证 · **严重度**：中（无数据损坏，但冷启动和 daily opens 明显迟缓）
+
+**现象与测量方法**：iOS 主屏 PWA 冷启动约 3.8s，经历白屏→骨架→内容，daily opens 也慢。用项目自带的 `#boottrace=1` marks，在 headless 浏览器读取 `window.__timelogBootTrace.marks`；分别测「完美缓存命中 + CPU 节流」与「网络节流」，用 `app_ready` 作为终点。
+
+| 场景 | `app_ready` 耗时 |
+|---|---:|
+| 完美缓存命中 + CPU 10× 节流 | ~496ms |
+| 完美缓存命中 + 无节流 | ~186ms |
+| 网络节流 4×CPU+3G（基线 waterfall） | 2309ms |
+| 网络节流 6×CPU+slow-3G（≈复现录像） | 4463ms |
+| 6×+3G + `modulepreload` | 3675ms（↓~18%） |
+
+**核心发现**：模块图的 parse+execute 极廉价，10× CPU 节流下也只有约 0.3s；3.8s 冷启动几乎全是网络等待 / Service Worker 缓存未命中。daily opens 仍慢说明 iOS standalone 没有给到本该有的缓存命中，启动动画无法覆盖这段时间，因为动画代码本身也尚未加载。
+
+**v58 修法**：Fix A 在 `<head>` 的早期内联脚本里注册 `sw.js`，让注册脱离 12 模块图的加载链路；`app.js` 原有 `registerServiceWorker()` 保留，继续负责 `updatefound` 与「更新应用」提示。Fix B 为 9 个现有 ES modules 增加 `modulepreload`，拉平 import 瀑布；不新增运行时资产、不改 `sw.js` 的 `FILES` 或 fetch 策略。Fix C（`apple-touch-startup-image` 启动屏）已 park，本次不做。
+
+**诚实的局限**：Fix A 是低成本、合理的猜测，不保证命中。录像里 `app.js` 最终确实跑完并显示内容，说明「注册被慢加载困住」不是全部真相；更可疑的是 iOS 在两次启动之间回收了 Cache Storage / Service Worker。iOS 对 PWA 存储有上限，也可能在数小时后或存储压力下回收；若缓存本来就已被清空，提前注册无法避免重新下载，daily opens 仍会慢。
+
+**下一步取证方向**：若 v58 后 daily opens 仍慢，用户已授权走 instrumentation 兜底路径。现有 HUD 在装好的 PWA 上跑不了，需要另想取证手段，例如把关键 boot 分段写入可导出的本地诊断，或加入一次性可视化 timing。若最终证实 iOS 会回收缓存，在不破铁律（尤其不能 bundle 减文件数）的前提下可能无解；届时再把 Fix C 启动屏作为感知优化重新上桌。
+
+**经验**：先用分段测量判断 CPU、模块执行和网络各占多少，再选优化点；对无法直接观测的 iOS 缓存生命周期必须把「合理猜测」与「已证实根因」分开记录。
+
+---
+
 ## 协作约束补记（v28）
 
 - 多步改动走主线程；避免并发 fan-out 子代理 / workflow（上游会 429，串行 workflow 亦然）。已同步进 `CLAUDE.md` / `AGENTS.md`「开发与维护红线」。

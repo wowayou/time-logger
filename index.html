@@ -47,12 +47,33 @@
       } catch { document.documentElement.setAttribute('data-boot', 'empty'); }
     })();
   </script>
+  <script>
+    // v58 Fix A：尽早注册 Service Worker，脱离 ES module 图的加载链路。
+    // app.js 末尾原注册在慢启动时要等整张 12模块图跑完才到达；register 幂等，
+    // app.js 仍负责 updatefound/更新提示，此处只保证注册尽早发生。
+    (() => {
+      try {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('sw.js').catch(() => {});
+        }
+      } catch {}
+    })();
+  </script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
   <title>时间尺</title>
+  <link rel="modulepreload" href="src/time.js">
+  <link rel="modulepreload" href="src/stats.js">
+  <link rel="modulepreload" href="src/storage.js">
+  <link rel="modulepreload" href="src/entry_model.js">
+  <link rel="modulepreload" href="src/ui.js">
+  <link rel="modulepreload" href="src/pickers.js">
+  <link rel="modulepreload" href="src/io_actions.js">
+  <link rel="modulepreload" href="src/sheet_controller.js">
+  <link rel="modulepreload" href="src/app.js">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>

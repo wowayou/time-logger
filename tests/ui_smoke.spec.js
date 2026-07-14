@@ -660,15 +660,31 @@ test('Safari-style reload restores the last rendered frame before app.js arrives
     sessionStorage.setItem('timelog.bootSnapshot.v1', JSON.stringify(snapshot));
   });
 
+  // v58 modulepreload lets WebKit reuse app.js without passing the reload request
+  // through page.route. Cache-bust only this test navigation's module script so
+  // the hold remains deterministic; production index.html stays untouched.
+  const reloadToken = '__snapshot_reload';
+  await page.route(url => url.pathname === '/' && url.searchParams.get(reloadToken) === '1', async route => {
+    const response = await route.fetch();
+    const html = await response.text();
+    const moduleScript = '<script type="module" src="src/app.js"></script>';
+    if (!html.includes(moduleScript)) throw new Error('snapshot reload could not find the app module script');
+    await route.fulfill({
+      response,
+      body: html.replace(moduleScript, `<script type="module" src="src/app.js?${reloadToken}=1"></script>`)
+    });
+  });
+
   let releaseApp;
   let markAppRequested;
   const appRequested = new Promise(resolve => { markAppRequested = resolve; });
-  await page.route('**/src/app.js', async route => {
+  await page.route(url => url.pathname.endsWith('/src/app.js') && url.searchParams.get(reloadToken) === '1', async route => {
     markAppRequested();
     await new Promise(resolve => { releaseApp = resolve; });
     await route.continue();
   });
 
+  await page.evaluate(token => history.replaceState(null, '', `/?${token}=1`), reloadToken);
   const reload = page.reload({ waitUntil: 'load' });
   await appRequested;
   await expect(page.locator('body')).toHaveClass(/boot-restored/);

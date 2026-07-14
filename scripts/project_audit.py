@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "57"
+EXPECTED_VERSION = "58"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -260,6 +260,8 @@ def audit_index(errors: list[str]) -> None:
         if "timelog.v1" in body and "data-boot" in body:
             continue
         if "timelog.bootSnapshot.v1" in body and "boot-restored" in body:
+            continue
+        if "serviceWorker" in body and "register('sw.js')" in body:
             continue
         fail(errors, "index.html may only contain the app module script and approved early boot scripts")
 
