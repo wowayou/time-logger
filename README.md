@@ -2,7 +2,7 @@
 
 > Status: active · 核心记录闭环可日常使用，新增功能仍受 gate 约束
 >
-> Release: v58
+> Release: v60
 >
 > Updated: 2026-07-15
 >
