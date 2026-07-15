@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  :root{
+    --tile:#171d1b;            /* site tile, warm near-black */
+    --teal:#0d766e;            /* site brand */
+    --v-base:#8b7cf7;          /* app violet, calm body */
+    --v-main:#b9adff;          /* app violet, bright main-line accent */
+    --v-dim:#6656b8;           /* app violet, dimmed non-main */
+  }
+  body{margin:0;background:#2a2a30;color:#cfcfd6;font:14px/1.4 system-ui,sans-serif;padding:28px}
+  h1{font-size:15px;color:#fff;margin:0 0 4px}
+  p.note{color:#9a9aa4;margin:0 0 24px;max-width:640px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:20px}
+  .cell{background:#1f1f25;border:1px solid #34343c;border-radius:12px;padding:16px;text-align:center}
+  .cell h2{font-size:12px;color:#fff;margin:0 0 2px}
+  .cell .sub{font-size:11px;color:#8a8a94;margin:0 0 14px;min-height:28px}
+  .sizes{display:flex;align-items:flex-end;justify-content:center;gap:16px}
+  .sizes .s{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .sizes .lab{font-size:10px;color:#70707a}
+  .b512{width:96px;height:96px}   /* rendered scale of the 512 master */
+  .b64{width:64px;height:64px}
+  .b32{width:32px;height:32px}
+  svg{display:block}
+</style>
+</head>
+<body>
+<h1>eigentime · app τ 图标候选</h1>
+<p class="note">同一个 τ 字形（与网站一致），应用版用紫色。众段横梁＝一天分桶，一段亮紫＝主线。每个方案在 512（缩显）/64/32 三档下同时看——32px 才是成败点。左上角是网站青色 τ 原样，作对照。</p>
+<div class="grid" id="grid"></div>
+
+<script>
+// canonical tau geometry from site favicon.svg
+// crossbar M9 11.5 h14  (x 9..23, y 11.5) ; stem M16 11.5 v8.5 q0 3 3.2 3
+const TILE = '<rect width="32" height="32" rx="7" fill="var(--tile)"/>';
+const STEM = c => `<path d="M16 11.5v8.5q0 3 3.2 3" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round"/>`;
+
+// helper: a crossbar segment
+function seg(x1,x2,color,cap='round',w=3){
+  return `<path d="M${x1} 11.5h${(x2-x1).toFixed(2)}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="${cap}"/>`;
+}
+
+const variants = [];
+
+// 0 — site reference, teal, solid crossbar
+variants.push({id:'site', name:'网站原样 (对照)', sub:'青色实心横梁 · 不改',
+  inner: seg(9,23,'var(--teal)') + STEM('var(--teal)')});
+
+// C — pure color control: identical tau, just violet
+variants.push({id:'C', name:'C · 纯换色', sub:'和网站完全同构，只是紫色。最省，但不含尺/桶语义',
+  inner: seg(9,23,'var(--v-base)') + STEM('var(--v-base)')});
+
+// A3-round — 3 segments, round caps, middle accent
+variants.push({id:'A3r', name:'A · 3段·圆头', sub:'圆头与网站同语言；主线为中段亮紫',
+  inner: seg(9,12.5,'var(--v-base)') + seg(15.5,19,'var(--v-main)') + seg(21.5,23,'var(--v-base)') + STEM('var(--v-base)')});
+
+// A3-butt — 3 segments, butt caps, crisper ruler
+variants.push({id:'A3b', name:'A · 3段·平头', sub:'平头更像刻度尺；段与段缝更利落',
+  inner: seg(9,13.2,'var(--v-base)','butt') + seg(14.3,18.3,'var(--v-main)','butt') + seg(19.4,23,'var(--v-base)','butt') + STEM('var(--v-base)')});
+
+// A3-dim — 3 segments butt, two dimmed + one bright (stronger one-accent)
+variants.push({id:'A3dim', name:'A · 3段·压暗衬托', sub:'非主线段压暗，只有主线亮——“一个重点”最强',
+  inner: seg(9,13.2,'var(--v-dim)','butt') + seg(14.3,18.3,'var(--v-main)','butt') + seg(19.4,23,'var(--v-dim)','butt') + STEM('var(--v-base)')});
+
+// A4-butt — 4 segments, legibility stress test
+variants.push({id:'A4b', name:'A · 4段·平头 (压力测试)', sub:'严格四桶。32px 是否糊成一团？',
+  inner: seg(9,11.8,'var(--v-base)','butt') + seg(12.6,15.4,'var(--v-main)','butt') + seg(16.2,19,'var(--v-base)','butt') + seg(19.8,23,'var(--v-base)','butt') + STEM('var(--v-base)')});
+
+// B — ticks below the crossbar (literal brief)
+variants.push({id:'B', name:'B · 横梁下挂刻度', sub:'最“尺子”，但字形拥挤；4刻度不等长',
+  inner: seg(9,23,'var(--v-base)')
+    + `<g stroke-linecap="round" stroke-width="2">`
+    + `<path d="M11 13.5v3" stroke="var(--v-base)"/>`
+    + `<path d="M14.5 13.5v4.5" stroke="var(--v-main)"/>`
+    + `<path d="M18 13.5v2.5" stroke="var(--v-base)"/>`
+    + `<path d="M21.5 13.5v3.5" stroke="var(--v-base)"/>`
+    + `</g>` + STEM('var(--v-base)')});
+
+// D — accent is the SHORT segment on the right (main-line often a slim slice)
+variants.push({id:'D', name:'D · 3段·主线在右短段', sub:'主线＝右侧最短段（净时长常是细切片）',
+  inner: seg(9,14,'var(--v-base)','butt') + seg(15,18.5,'var(--v-base)','butt') + seg(19.6,23,'var(--v-main)','butt') + STEM('var(--v-base)')});
+
+const grid = document.getElementById('grid');
+for(const v of variants){
+  const svg = i => `<svg class="b${i}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">${TILE}${v.inner}</svg>`;
+  grid.insertAdjacentHTML('beforeend', `
+    <div class="cell">
+      <h2>${v.name}</h2>
+      <div class="sub">${v.sub}</div>
+      <div class="sizes">
+        <div class="s">${svg(512)}<span class="lab">512→96</span></div>
+        <div class="s">${svg(64)}<span class="lab">64</span></div>
+        <div class="s">${svg(32)}<span class="lab">32</span></div>
+      </div>
+    </div>`);
+}
+</script>
+</body>
+</html>

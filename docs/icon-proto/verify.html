@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>icon verify</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; padding:32px 40px 64px; background:#2a2c31; color:#e7e6e3;
+    font:14px/1.5 -apple-system,"PingFang SC","Segoe UI",sans-serif; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .lede { color:#a9a7a2; margin:0 0 24px; }
+  h2 { font-size:14px; color:#c9c7c2; margin:28px 0 12px; border-bottom:1px solid rgba(255,255,255,.08); padding-bottom:6px; }
+  .row { display:flex; align-items:flex-end; gap:28px; flex-wrap:wrap; }
+  .cell { text-align:center; }
+  .cap { color:#86847e; font-size:11px; margin-top:6px; }
+  .mask-wrap { position:relative; }
+  /* Android adaptive-icon safe zone: content should sit within a centred circle
+     of diameter = 80% of the icon (the outer ~10% ring may be clipped). */
+  .safe { position:absolute; inset:10%; border:1px dashed rgba(255,120,120,.9);
+    border-radius:50%; pointer-events:none; }
+  /* simulate the common circular OS mask */
+  .circle-mask { border-radius:50%; overflow:hidden; }
+  img { display:block; }
+  .plate { background:#0e0f13; }
+  .swatch { display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:middle; margin-right:6px; }
+</style>
+</head>
+<body>
+<h1>时间尺 · app 图标验收（分段-τ / H1）</h1>
+<p class="lede">全部取自刚生成的真实 PNG。红色虚线圆 = Android 自适应图标安全区（直径 80%）。</p>
+
+<h2>「any」图标 — 圆角方板（icon-192 / icon-512）· 真实像素与常见缩显</h2>
+<div class="row">
+  <div class="cell"><img src="../../icons/icon-512.png" width="128" height="128"><div class="cap">512 → 128</div></div>
+  <div class="cell"><img src="../../icons/icon-192.png" width="96" height="96"><div class="cap">192 → 96</div></div>
+  <div class="cell"><img src="../../icons/icon-192.png" width="64" height="64"><div class="cap">→ 64</div></div>
+  <div class="cell"><img src="../../icons/icon-192.png" width="48" height="48"><div class="cap">→ 48</div></div>
+  <div class="cell"><img src="../../icons/icon-512.png" width="32" height="32"><div class="cap">→ 32</div></div>
+  <div class="cell"><img src="../../icons/icon-512.png" width="20" height="20"><div class="cap">→ 20</div></div>
+</div>
+
+<h2>maskable — 满幅 + 安全区检查</h2>
+<div class="row">
+  <div class="cell"><div class="mask-wrap" style="width:160px;height:160px">
+    <img src="../../icons/maskable-512.png" width="160" height="160"><div class="safe"></div>
+  </div><div class="cap">512 满幅 + 安全区</div></div>
+  <div class="cell"><div class="circle-mask" style="width:128px;height:128px">
+    <img src="../../icons/maskable-512.png" width="128" height="128">
+  </div><div class="cap">圆形遮罩模拟 128</div></div>
+  <div class="cell"><div class="circle-mask" style="width:64px;height:64px">
+    <img src="../../icons/maskable-192.png" width="64" height="64">
+  </div><div class="cap">圆形遮罩 64</div></div>
+  <div class="cell"><img src="../../icons/apple-touch-icon.png" width="120" height="120" style="border-radius:24px"><div class="cap">apple-touch (iOS 圆角) 120</div></div>
+</div>
+
+<h2>放在暗色应用底上（Android 抽屉 / iOS 主屏近似）</h2>
+<div class="row plate" style="padding:24px 28px; border-radius:12px;">
+  <div class="cell"><img src="../../icons/icon-192.png" width="72" height="72"><div class="cap">any 72</div></div>
+  <div class="cell"><div class="circle-mask" style="width:72px;height:72px"><img src="../../icons/maskable-512.png" width="72" height="72"></div><div class="cap">maskable→圆 72</div></div>
+  <div class="cell"><img src="../../icons/apple-touch-icon.png" width="72" height="72" style="border-radius:16px"><div class="cap">apple 72</div></div>
+</div>
+</body>
+</html>

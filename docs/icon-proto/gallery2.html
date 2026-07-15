@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eigentime · app τ 图标 · 第二轮</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 40px 48px 80px;
+    background: #2a2c31; color: #e7e6e3;
+    font: 15px/1.5 -apple-system, "PingFang SC", "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .lede { color: #a9a7a2; max-width: 900px; margin: 0 0 28px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+  .tile {
+    background: #22242a; border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px; padding: 18px 16px 20px;
+  }
+  .tile h2 { font-size: 15px; margin: 0 0 2px; text-align: center; }
+  .tile .sub { color: #9a988f; font-size: 12px; text-align: center; min-height: 32px; margin: 0 0 14px; }
+  .row { display: flex; align-items: flex-end; justify-content: center; gap: 18px; }
+  .cell { text-align: center; }
+  .cell .cap { color: #86847e; font-size: 11px; margin-top: 6px; }
+  .accent-tile { outline: 2px solid #a99fff; outline-offset: 3px; }
+  svg { display: block; }
+</style>
+</head>
+<body>
+<h1>eigentime · app τ 图标 · 第二轮（圆外/方内混合 + 调音）</h1>
+<p class="lede">
+  同一个 τ 字形（与网站一致）。<b>外端圆头</b>（延续网站 τ 语言）＋<b>内缝方切</b>（清晰分桶）。
+  众段横梁＝一天分桶，<b>一段亮紫＝主线</b>。每个方案三档：512（缩显 96）/64/32。
+  左上角＝网站青色 τ 原样；第二格＝上一轮平头胜者，作对照。紫框＝我的首推。
+</p>
+<div class="grid" id="grid"></div>
+
+<script>
+const TILE_BG = "#171d1b";       // 与网站 favicon 同底
+const TEAL   = "#0d766e";        // 网站青
+const VIOLET = "#a99fff";        // app 暗色主调 accent（图标底暗，用暗色板 accent）
+const VIOLET_CALM = "#7a6df0";   // 非主线段：同紫系但压一档，作层级
+const SW = 3;                    // 与网站一致
+
+// 横梁 x: 9..23 (14u), y=11.5。stem: M16 11.5 v8.5 q0 3 3.2 3
+// 混合画法：3 段用 butt 方头 → 内缝干净方切；两个外端各覆一个半径 1.5 的圆点 → 外端圆头。
+function buildIcon({props, accentIndex, gap, flatOuter=false}) {
+  const x0 = 9, W = 14, y = 11.5;
+  const n = props.length;
+  const sum = props.reduce((a,b)=>a+b,0);
+  const usable = W - gap*(n-1);
+  let x = x0;
+  const segs = [];
+  for (let i=0;i<n;i++){
+    const w = usable * props[i]/sum;
+    segs.push({x1:x, x2:x+w, i});
+    x += w + gap;
+  }
+  const strokeFor = i => i===accentIndex ? VIOLET : VIOLET_CALM;
+  const parts = [];
+  parts.push(`<rect width="32" height="32" rx="7" fill="${TILE_BG}"/>`);
+  // 段：butt 方头
+  for (const s of segs){
+    parts.push(`<path d="M${s.x1.toFixed(2)} ${y}H${s.x2.toFixed(2)}" stroke="${strokeFor(s.i)}" stroke-width="${SW}" stroke-linecap="butt"/>`);
+  }
+  // 外端圆头：两个圆点（除非 flatOuter）
+  if (!flatOuter){
+    const leftColor  = strokeFor(0);
+    const rightColor = strokeFor(n-1);
+    parts.push(`<circle cx="${x0}" cy="${y}" r="${SW/2}" fill="${leftColor}"/>`);
+    parts.push(`<circle cx="${(x0+W).toFixed(2)}" cy="${y}" r="${SW/2}" fill="${rightColor}"/>`);
+  }
+  // stem：与网站一致，圆头，颜色取主线段色以呼应
+  parts.push(`<path d="M16 ${y}v8.5q0 3 3.2 3" fill="none" stroke="${strokeFor(accentIndex)}" stroke-width="${SW}" stroke-linecap="round" stroke-linejoin="round"/>`);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">${parts.join("")}</svg>`;
+}
+
+function siteRef(){
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+    <rect width="32" height="32" rx="7" fill="${TILE_BG}"/>
+    <g fill="none" stroke="${TEAL}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 11.5h14"/><path d="M16 11.5v8.5q0 3 3.2 3"/>
+    </g></svg>`;
+}
+
+const CARDS = [
+  { title:"网站原样（对照）", sub:"青色实心横梁 · 不改", svg: siteRef() },
+  { title:"A·平头（上一轮胜者）", sub:"外端也方 —— 对照“外端圆头”的收益",
+    svg: buildIcon({props:[0.30,0.28,0.42], accentIndex:1, gap:1.1, flatOuter:true}) },
+  { title:"H1 · 混合基准", sub:"圆外方内 · 缝 1.1 · 主线=中段", accent:true,
+    svg: buildIcon({props:[0.30,0.28,0.42], accentIndex:1, gap:1.1}) },
+  { title:"H2 · 窄缝", sub:"缝 0.7 —— 更像一根被切开的梁",
+    svg: buildIcon({props:[0.30,0.28,0.42], accentIndex:1, gap:0.7}) },
+  { title:"H3 · 宽缝", sub:"缝 1.7 —— 更像三块独立刻度",
+    svg: buildIcon({props:[0.30,0.28,0.42], accentIndex:1, gap:1.7}) },
+  { title:"H4 · 主线在左", sub:"accent=左段",
+    svg: buildIcon({props:[0.42,0.28,0.30], accentIndex:0, gap:1.1}) },
+  { title:"H5 · 主线在右", sub:"accent=右段",
+    svg: buildIcon({props:[0.30,0.28,0.42], accentIndex:2, gap:1.1}) },
+  { title:"H6 · 更不等长", sub:"props [0.22,0.30,0.48] · 主线=中段",
+    svg: buildIcon({props:[0.22,0.30,0.48], accentIndex:1, gap:1.1}) },
+];
+
+const SIZES = [ {px:96, cap:"512→96"}, {px:64, cap:"64"}, {px:32, cap:"32"} ];
+const grid = document.getElementById("grid");
+for (const c of CARDS){
+  const cells = SIZES.map(s =>
+    `<div class="cell"><div style="width:${s.px}px;height:${s.px}px;margin:0 auto">
+       ${c.svg.replace('<svg ', `<svg width="${s.px}" height="${s.px}" `)}
+     </div><div class="cap">${s.cap}</div></div>`).join("");
+  grid.insertAdjacentHTML("beforeend",
+    `<div class="tile${c.accent?' accent-tile':''}">
+       <h2>${c.title}</h2><div class="sub">${c.sub}</div>
+       <div class="row">${cells}</div>
+     </div>`);
+}
+</script>
+</body>
+</html>
