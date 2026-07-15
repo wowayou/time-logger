@@ -370,6 +370,62 @@ test('help close is a text button and import shift dialog stays custom', async (
   await expect(page.locator('#form-sheet-title')).toHaveText('更多');
 });
 
+// 删掉主屏 PWA 换图标会清掉 localStorage；起始日必须能随完整备份回来，
+// 否则「使用第 N 天」只能退回按最早记录推导。导入只准把起点往更早挪。
+test('full backup carries firstUsedDate and import never rolls the counter back', async ({ page }) => {
+  await boot(page, 768, 'empty', false, FIXED_NOW, null, -480);
+  page.on('dialog', dialog => dialog.accept());
+
+  // 空环境（重装后）导入带起始日的备份：N 必须接上，而不是重新从最早记录推导。
+  await openBackupMenu(page);
+  const restore = async payload => {
+    // 导入从「更多」下钻进入，成功后按 v41 导航栈回到「更多」而不是整层关闭，
+    // 所以第二轮直接复用同一张「更多」，不需要重开 header 菜单。
+    await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+    const chooserPromise = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: '导入 JSON 备份' }).click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles({
+      name: 'timelog-restore.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(payload))
+    });
+    await expect(page.locator('#form-sheet-title')).toContainText('导入检查');
+    await page.getByRole('button', { name: '确认导入' }).click();
+  };
+
+  await restore({
+    version: 1,
+    firstUsedDate: '2026-06-28',
+    entries: [{ id: 'restored', ts: '2026-06-29T09:00', what: '恢复的记录', tags: ['求职推进'] }]
+  });
+  await expect.poll(async () => page.evaluate(() => localStorage.getItem('timelog.firstUsedDate'))).toBe('2026-06-28');
+  await expect(page.locator('#usage-day')).toHaveText('使用第 2 天');
+
+  // 再导入一份起始日更晚的备份：N 不得倒拨回去。
+  await restore({
+    version: 1,
+    firstUsedDate: '2026-06-29',
+    entries: [{ id: 'restored-2', ts: '2026-06-29T11:00', what: '第二份备份', tags: ['求职推进'] }]
+  });
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.length)).toBe(2);
+  expect(await page.evaluate(() => localStorage.getItem('timelog.firstUsedDate'))).toBe('2026-06-28');
+  await expect(page.locator('#usage-day')).toHaveText('使用第 2 天');
+
+  // 导出侧必须真的把起始日写进备份，否则上面的恢复路径永远拿不到它。
+  await page.evaluate(() => {
+    window.__exported = null;
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: payload => Boolean(payload.files) });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async payload => { window.__exported = await payload.files[0].text(); }
+    });
+  });
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  await page.locator('#backup-send-btn').click();
+  await expect.poll(() => page.evaluate(() => window.__exported && JSON.parse(window.__exported).firstUsedDate)).toBe('2026-06-28');
+});
+
 test('JSON import shifts time, merges config, and export stays sorted', async ({ page }) => {
   await boot(page, 768, 'empty', false, FIXED_NOW, null, -480);
   const imported = {

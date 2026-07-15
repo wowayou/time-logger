@@ -22,6 +22,8 @@ import {
   loadConfig,
   mergeImportedConfig,
   mergeImportedEntries,
+  mergeImportedFirstUsedDate,
+  readFirstUsedDate,
   rememberCustomTagForBucket,
   save,
   saveConfig,
@@ -562,6 +564,12 @@ import {
     validateImportData,
     mergeImportedEntries,
     mergeImportedConfig,
+    readFirstUsedDate,
+    // 起始日的权威副本是 app.js 的 firstUsedDate，导入后必须同步刷新，
+    // 否则 header 的「使用第 N 天」会停在导入前的值直到下次冷启动。
+    adoptImportedFirstUsedDate: value => {
+      firstUsedDate = mergeImportedFirstUsedDate(value, todayStr());
+    },
     periodRange,
     periodFullLabel,
     computeDay,
