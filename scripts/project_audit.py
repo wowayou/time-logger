@@ -40,6 +40,14 @@ REQUIRED_DEMO_ASSETS = [
     "docs/assets/demo-mobile-timeline.png",
     "docs/assets/demo-mobile-edit-drawer.png",
 ]
+# 图标原型评审渲染存档：只含合成图标，不含任何真实记录，README 不引用。
+# 显式列文件名而不是 icon-proto-*.png 通配：通配会让任何叫这个前缀的新 PNG
+# （包括误传的真实截图）自动过闸，显式清单保住存档又不降低护栏强度。
+ALLOWED_DOC_ASSETS = [
+    "docs/assets/icon-proto-gallery.png",
+    "docs/assets/icon-proto-gallery2.png",
+    "docs/assets/icon-proto-verify.png",
+]
 REQUIRED_MAINTENANCE_COMMANDS = [
     "python3 scripts/project_audit.py",
     "python3 scripts/confirm_logic_smoke.py",
@@ -159,9 +167,10 @@ def audit_demo_assets(errors: list[str]) -> None:
         if src not in readme:
             fail(errors, f"README.md must reference demo asset: {src}")
 
-    unexpected = [src for src in actual_pngs if src not in REQUIRED_DEMO_ASSETS]
+    allowed = {*REQUIRED_DEMO_ASSETS, *ALLOWED_DOC_ASSETS}
+    unexpected = [src for src in actual_pngs if src not in allowed]
     if unexpected:
-        fail(errors, "docs/assets must contain only fixed demo PNGs: " + ", ".join(unexpected))
+        fail(errors, "docs/assets must contain only fixed demo PNGs or archived icon-proto renders: " + ", ".join(unexpected))
 
 
 def audit_smoke_scripts(errors: list[str]) -> None:
