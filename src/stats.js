@@ -4,6 +4,7 @@
 // Commercial licensing available on request; contact via the repository above.
 import {
   addDays,
+  inclusiveCalendarDayCount,
   localDateTimeKey,
   minsBetweenDates,
   normalizeTimestamp,
@@ -21,6 +22,35 @@ export function sortedEntriesFrom(entries) {
 
 export function loggedEntriesFrom(entries) {
   return sortedEntriesFrom(entries).filter(e => !e.planned);
+}
+
+export function isPlaceholderEntry(entry) {
+  return Boolean(entry && typeof entry.what === 'string' && entry.what.trim() === '');
+}
+
+// 里程碑只认**真实记录**：计划条是未来意图，空占位条是「这段没记」的显式表达
+// （normalizeEntries 恒给今天留一条尾占位），两者都不构成「记过一天」。
+export function recordedDayKeys(entries) {
+  const seen = new Set();
+  loggedEntriesFrom(entries).forEach(entry => {
+    if (isPlaceholderEntry(entry)) return;
+    seen.add(entry.ts.slice(0, 10));
+  });
+  return [...seen].sort();
+}
+
+// 两个用户里程碑都从**当前数据**派生，因此随完整备份天然恢复，不依赖本机
+// 安装日期（`timelog.firstUsedDate` 已降为纯诊断值，不再是里程碑）。
+// 注意：这里的「已记录 N 天」是「有真实记录的自然日数」，机器可判定；它不等于
+// `docs/dogfood-freeze-handoff.md` 里需要人工判断的「有效记录日」，别混用。
+export function recordingMilestones(entries, todayKey) {
+  const days = recordedDayKeys(entries);
+  const firstRecordedDate = days[0] || '';
+  return {
+    firstRecordedDate,
+    journeyDay: firstRecordedDate ? inclusiveCalendarDayCount(firstRecordedDate, todayKey) : 0,
+    recordedDays: days.length
+  };
 }
 
 export function listPlannedEntries(entries, dateKey) {

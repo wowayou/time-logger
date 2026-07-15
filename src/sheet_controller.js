@@ -8,7 +8,6 @@ import {
   cloneEntries,
   findTimeConflict,
   intervalEditContext,
-  isPlaceholderEntry,
   normalizeEntries,
   overnightContinuationContext,
   openPlaceholderForDate,
@@ -16,6 +15,7 @@ import {
   planOvernightContinuation,
   planSegmentSplit
 } from './entry_model.js';
+import { isPlaceholderEntry } from './stats.js';
 import {
   BUCKETS,
   bucketForTag,
