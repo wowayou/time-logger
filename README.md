@@ -1,16 +1,34 @@
 # 时间尺
 
-> Status: active  
-> Updated: 2026-07-11
-> Intended user: 求职主线时间记录和每日复盘的个人使用者。  
-> Operating boundary: 本地静态 PWA，只记录时间去向，不做云同步、账号管理、KPI 考核或投资/合规判断。  
-> Risks and failure modes: 忘记记录导致“未记录”偏高、长时间间隔被整体计为未记录、周/月/年视图诱发过度复盘、浏览器本地数据被清理。  
+> Status: active · 核心记录闭环可日常使用，新增功能仍受 gate 约束
+>
+> Release: v58
+>
+> Updated: 2026-07-15
+>
+> Intended user: 求职主线时间记录和每日复盘的个人使用者。
+>
+> Operating boundary: 本地静态 PWA，只记录时间去向，不做云同步、账号管理、KPI 考核或投资/合规判断。
+>
+> Current blocker: iOS 主屏 PWA 冷启动仍慢；已确认运行 v58 后无可感知改善，根因仍待真机取证。
+>
+> Risks and failure modes: 忘记记录导致“未记录”偏高、长时间间隔被整体计为未记录、周/月/年视图诱发过度复盘、浏览器本地数据或运行缓存被系统清理。
 
 求职主线时间记录仪 — 每天看清时间进了哪里。
 
 ![固定演示数据的移动端时间轴](docs/assets/demo-mobile-timeline.png)
 
 ![固定演示数据的移动端编辑表单](docs/assets/demo-mobile-edit-drawer.png)
+
+## 当前项目状态
+
+- **已完成的核心闭环**：记录、计划、补录、完整区间编辑、切分、删除与撤销；天/周/月/年统计；完整 JSON 备份、安全合并导入和本地 Markdown 摘要。
+- **当前形态**：纯静态、零运行时依赖、无构建的原生 ES modules PWA；数据只在当前设备和 origin 的 `localStorage`，没有账号、后端或云同步。
+- **可靠性基础**：写操作使用事务 planner、最新数据复核和结果签名；Service Worker 提供离线缓存与显式更新；Chromium + WebKit 自动化覆盖主要交互、存储、导入和跨标签冲突路径。
+- **当前首要未解问题**：iOS 主屏 PWA 冷启动仍明显迟缓。v58 提前注册 Service Worker 并加入 `modulepreload` 后，用户已在确认显示 v58 的设备上复测，主观上没有任何缓解；现阶段不能把模拟网络数据当作真机成功证据。详见 [P33](docs/postmortems.md#p33--pwa-冷启动-38s模块执行很轻时间耗在网络--sw-缓存未命中v58)。
+- **当前治理状态**：功能扩张仍受“累计 28 天真实记录 + 求职有实质进展”门槛约束；外部建议可以挑战现有铁律，但必须把破界成本、证据和停止条件讲清楚，经评审后才实施。
+
+供外部 AI 或评审者使用的完整上下文、阅读顺序和固定输出要求见[《外部 AI 评审上下文》](docs/external-ai-review-brief.md)。它是评审入口，不替代 `CLAUDE.md` 的维护规范，也不授权直接改代码。
 
 ## 和「屏幕使用时间」类工具的区别
 
