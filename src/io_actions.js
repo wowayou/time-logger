@@ -158,11 +158,14 @@ export function createIoActions(deps) {
 
   function exportData() {
     const d = deps.load();
+    const firstUsedDate = deps.readFirstUsedDate();
     return {
       ...d,
       version: 1,
       meta: exportMeta(),
       config: deps.loadConfig(),
+      // 起始日只在存在时写入：空串会被 validateImportData 判为非法日期。
+      ...(firstUsedDate ? { firstUsedDate } : {}),
       entries: sortedEntriesFrom(d.entries).map(entry => ({ ...entry }))
     };
   }
@@ -446,6 +449,8 @@ export function createIoActions(deps) {
       }
       return false;
     }
+    // 记录与 config 都已落库后才接起始日：它单调不减且纯展示，失败不需要回滚。
+    deps.adoptImportedFirstUsedDate(imported.firstUsedDate);
     deps.render();
     alert(`导入完成：写入 ${plan.imported} 条，保留/跳过 ${plan.skipped} 条，处理冲突 ${plan.resolvedConflicts || 0} 条。`);
     return true;

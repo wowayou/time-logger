@@ -213,6 +213,28 @@ export function ensureFirstUsedDate(todayKey, entries = []) {
   return firstDate;
 }
 
+export function readFirstUsedDate() {
+  try {
+    const stored = localStorage.getItem(FIRST_USED_DATE_KEY);
+    return parseDateKey(stored) ? stored : '';
+  } catch {
+    return '';
+  }
+}
+
+// 完整备份带上起始日，删掉主屏 PWA 重装或换设备后 N 才能接上；否则只能退回
+// 按最早记录日期推导。导入只允许把起点往**更早**挪（N 单调不减），并拒绝未来
+// 日期——规范要求「不因联网、版本更新或导入更早历史而倒拨」，取较早值即满足。
+export function mergeImportedFirstUsedDate(importedValue, todayKey) {
+  const local = readFirstUsedDate();
+  if (!parseDateKey(importedValue) || !parseDateKey(todayKey)) return local;
+  if (importedValue > todayKey) return local;
+  const next = !local || importedValue < local ? importedValue : local;
+  if (next === local) return local;
+  try { localStorage.setItem(FIRST_USED_DATE_KEY, next); } catch {}
+  return next;
+}
+
 export function save(d) {
   try {
     localStorage.setItem(KEY, JSON.stringify(d));
@@ -284,6 +306,10 @@ export function validateImportData(imported) {
     if (offset !== undefined && !Number.isFinite(Number(offset))) errors.push('meta.sourceTimezoneOffsetMinutes 必须是数字');
     if (imported.meta.sourceTimeZone !== undefined && typeof imported.meta.sourceTimeZone !== 'string') errors.push('meta.sourceTimeZone 必须是字符串');
     if (imported.meta.exportedAt !== undefined && typeof imported.meta.exportedAt !== 'string') errors.push('meta.exportedAt 必须是字符串');
+  }
+  if (imported.firstUsedDate !== undefined
+    && (typeof imported.firstUsedDate !== 'string' || !parseDateKey(imported.firstUsedDate))) {
+    errors.push('firstUsedDate 必须是 YYYY-MM-DD 本地日期');
   }
   if (errors.length) {
     return {
