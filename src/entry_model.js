@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-import { loggedEntriesFrom, primaryTag } from './stats.js';
+import { isPlaceholderEntry, loggedEntriesFrom, primaryTag } from './stats.js';
 import {
   addDays,
   hhmm,
@@ -16,10 +16,6 @@ import {
   startOfDay,
   todayStr
 } from './time.js';
-
-export function isPlaceholderEntry(entry) {
-  return Boolean(entry && typeof entry.what === 'string' && entry.what.trim() === '');
-}
 
 function entriesOnDate(entries, dateKey) {
   return loggedEntriesFrom(entries).filter(entry => entry.ts.slice(0, 10) === dateKey);

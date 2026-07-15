@@ -36,6 +36,7 @@ import {
   buildRangeSegmentsFromEntries,
   confirmSegmentInData,
   listPlannedEntries,
+  recordingMilestones,
   summarizeEntries
 } from './stats.js';
 import {
@@ -44,7 +45,6 @@ import {
   addYears,
   fmtMins,
   hhmm,
-  inclusiveCalendarDayCount,
   entryModeForDate,
   localDateKey,
   minsBetweenDates,
@@ -85,7 +85,6 @@ import {
   let pendingDelete = null;
   let undoDeleteState = null;
   let lastIntervalSignature = '';
-  let firstUsedDate = '';
   let state = { view: 'day', selectedDate: '' };
   const HELP_SEEN_KEY = 'timelog.helpSeen.v16';
   const BOOT_SNAPSHOT_KEY = 'timelog.bootSnapshot.v1';
@@ -301,11 +300,17 @@ import {
       btn.classList.toggle('active', selected);
       btn.setAttribute('aria-pressed', String(selected));
     });
-    const usageDay = inclusiveCalendarDayCount(firstUsedDate, todayStr());
+    // 里程碑从当前数据派生（最早真实记录→今天 + 有真实记录的自然日数），因此随
+    // 完整备份天然恢复；本机安装日 firstUsedDate 已降为纯诊断值，不再上 header。
+    const { journeyDay, recordedDays } = recordingMilestones(load().entries, todayStr());
     const usageEl = document.getElementById('usage-day');
     if (usageEl) {
-      usageEl.textContent = `使用第 ${usageDay} 天`;
-      usageEl.setAttribute('aria-label', `已在本机使用第 ${usageDay} 天`);
+      // 一条真实记录都没有时不编造里程碑，直接不显示。
+      usageEl.hidden = recordedDays === 0;
+      if (recordedDays > 0) {
+        usageEl.textContent = `记录历程第 ${journeyDay} 天 · 已记录 ${recordedDays} 天`;
+        usageEl.setAttribute('aria-label', `记录历程第 ${journeyDay} 天，其中有真实记录的有 ${recordedDays} 天`);
+      }
     }
     // R5：当前周期是否包含今天——驱动「回到今天」按钮的条件渲染 + 日期行内的
     // 「今天」常驻高亮字样，两处共用同一次判定。
@@ -565,10 +570,9 @@ import {
     mergeImportedEntries,
     mergeImportedConfig,
     readFirstUsedDate,
-    // 起始日的权威副本是 app.js 的 firstUsedDate，导入后必须同步刷新，
-    // 否则 header 的「使用第 N 天」会停在导入前的值直到下次冷启动。
+    // 诊断值随备份延续：只并入 localStorage，不再有 header 状态要刷新。
     adoptImportedFirstUsedDate: value => {
-      firstUsedDate = mergeImportedFirstUsedDate(value, todayStr());
+      mergeImportedFirstUsedDate(value, todayStr());
     },
     periodRange,
     periodFullLabel,
@@ -942,7 +946,8 @@ import {
   function init() {
     markBootTrace('init_start');
     const today = todayStr();
-    firstUsedDate = ensureFirstUsedDate(today, load().entries);
+    // 只做诊断：写下本机首用日备查，不再驱动任何用户可见里程碑。
+    ensureFirstUsedDate(today, load().entries);
     const savedView = localStorage.getItem(VIEW_KEY);
     const savedDate = parseDateKey(localStorage.getItem(SELECTED_DATE_KEY));
     state.view = ['day', 'week', 'month', 'year'].includes(savedView) ? savedView : 'day';

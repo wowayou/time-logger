@@ -219,12 +219,18 @@
       align-items: baseline;
       gap: 8px;
     }
+    /* v61：里程碑文案比旧「使用第 N 天」长一倍，且天数会涨到三、四位数。
+       允许收缩并省略号收尾（`0 1 auto` + `min-width:0`），宁可截断也不撞上
+       「···」按钮——320px + 三位数时两者已经贴脸。完整文案在 aria-label 里。 */
     .usage-day {
-      flex: 0 0 auto;
+      flex: 0 1 auto;
+      min-width: 0;
       color: var(--muted);
       font-size: var(--fs-cap);
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     body:not(.app-ready):not(.boot-restored) .usage-day { visibility: hidden; }
     .hdr-actions {

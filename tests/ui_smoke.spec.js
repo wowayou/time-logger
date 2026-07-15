@@ -100,9 +100,13 @@ test('375px header hides title without overflowing', async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
-test('usage day is derived once from local history and stays fully local', async ({ page }) => {
+// v61：里程碑改从数据派生。安装日只做诊断，不再上 header——所以导入更早的历史
+// 现在**应该**把「记录历程」拉长，这与 v60 之前「不倒拨」的旧语义正好相反。
+test('milestones derive from records, not from the local install date', async ({ page }) => {
   await boot(page, 375, 'yesterday-residual', false, FIXED_NOW);
-  await expect(page.locator('#usage-day')).toHaveText('使用第 2 天');
+  // 只有 06-28T23:00 一条真实记录（今天的尾占位不算）：历程 06-28→06-29 = 2 天。
+  await expect(page.locator('#usage-day')).toHaveText('记录历程第 2 天 · 已记录 1 天');
+  // 安装日仍写入备查，但不再驱动任何用户可见文案。
   expect(await page.evaluate(() => localStorage.getItem('timelog.firstUsedDate'))).toBe('2026-06-28');
 
   await page.evaluate(() => {
@@ -111,8 +115,31 @@ test('usage day is derived once from local history and stays fully local', async
     localStorage.setItem('timelog.v1', JSON.stringify(data));
   });
   await page.getByRole('button', { name: '周视图' }).click();
-  await expect(page.locator('#usage-day')).toHaveText('使用第 2 天');
+  // 最早真实记录退到 05-01：历程按数据拉长到 60 天，已记录 +1（多了 05-01 这天）。
+  await expect(page.locator('#usage-day')).toHaveText('记录历程第 60 天 · 已记录 2 天');
   expect(await page.evaluate(() => localStorage.getItem('timelog.firstUsedDate'))).toBe('2026-06-28');
+});
+
+test('milestones ignore planned entries and empty placeholders', async ({ page }) => {
+  await boot(page, 375, 'empty', false, FIXED_NOW);
+  // 空数据：不编造里程碑。
+  await expect(page.locator('#usage-day')).toBeHidden();
+
+  await page.evaluate(() => {
+    localStorage.setItem('timelog.v1', JSON.stringify({
+      entries: [
+        // 空占位＝「这段没记」，不算记过。
+        { id: 'ph', ts: '2026-06-20T08:00', what: '', tags: [] },
+        // 计划＝未来意图，不算记过。
+        { id: 'plan', ts: '2026-06-21T08:00', what: '未来计划', tags: ['求职推进'], planned: true },
+        { id: 'real', ts: '2026-06-27T08:00', what: '真实记录', tags: ['求职推进'] }
+      ]
+    }));
+  });
+  // 不能 reload：fixture 走 addInitScript，每次导航都会把数据重写回 empty。
+  await page.getByRole('button', { name: '周视图' }).click();
+  // 只有 06-27 那条算数：历程 06-27→06-29 = 3 天，已记录 1 天。
+  await expect(page.locator('#usage-day')).toHaveText('记录历程第 3 天 · 已记录 1 天');
 });
 
 test('回到今天 only appears after leaving today, with a persistent 今天 badge while on it (R5)', async ({ page }) => {
@@ -370,13 +397,13 @@ test('help close is a text button and import shift dialog stays custom', async (
   await expect(page.locator('#form-sheet-title')).toHaveText('更多');
 });
 
-// 删掉主屏 PWA 换图标会清掉 localStorage；起始日必须能随完整备份回来，
-// 否则「使用第 N 天」只能退回按最早记录推导。导入只准把起点往更早挪。
-test('full backup carries firstUsedDate and import never rolls the counter back', async ({ page }) => {
+// 首用日自 v61 起是**纯诊断值**（不再驱动 header 里程碑），但仍必须随完整备份
+// 往返——删掉主屏 PWA 换图标会清掉 localStorage，诊断线索不该就此断掉。
+// 导入只准把它往更早挪，不得倒拨。
+test('full backup carries the diagnostic firstUsedDate and import never rolls it back', async ({ page }) => {
   await boot(page, 768, 'empty', false, FIXED_NOW, null, -480);
   page.on('dialog', dialog => dialog.accept());
 
-  // 空环境（重装后）导入带起始日的备份：N 必须接上，而不是重新从最早记录推导。
   await openBackupMenu(page);
   const restore = async payload => {
     // 导入从「更多」下钻进入，成功后按 v41 导航栈回到「更多」而不是整层关闭，
@@ -400,9 +427,8 @@ test('full backup carries firstUsedDate and import never rolls the counter back'
     entries: [{ id: 'restored', ts: '2026-06-29T09:00', what: '恢复的记录', tags: ['求职推进'] }]
   });
   await expect.poll(async () => page.evaluate(() => localStorage.getItem('timelog.firstUsedDate'))).toBe('2026-06-28');
-  await expect(page.locator('#usage-day')).toHaveText('使用第 2 天');
 
-  // 再导入一份起始日更晚的备份：N 不得倒拨回去。
+  // 再导入一份起始日更晚的备份：诊断值不得倒拨回去。
   await restore({
     version: 1,
     firstUsedDate: '2026-06-29',
@@ -410,7 +436,6 @@ test('full backup carries firstUsedDate and import never rolls the counter back'
   });
   await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.length)).toBe(2);
   expect(await page.evaluate(() => localStorage.getItem('timelog.firstUsedDate'))).toBe('2026-06-28');
-  await expect(page.locator('#usage-day')).toHaveText('使用第 2 天');
 
   // 导出侧必须真的把起始日写进备份，否则上面的恢复路径永远拿不到它。
   await page.evaluate(() => {
@@ -746,7 +771,8 @@ test('Safari-style reload restores the last rendered frame before app.js arrives
   await expect(page.locator('body')).toHaveClass(/boot-restored/);
   await expect(page.locator('#timeline')).toContainText('响应式测试记录');
   await expect(page.locator('#today-btn')).toBeHidden();
-  await expect(page.locator('#usage-day')).toHaveText('使用第 1 天');
+  // 里程碑必须由快照带回来：静态壳里是空的 hidden span，露出即证明恢复失败。
+  await expect(page.locator('#usage-day')).toHaveText('记录历程第 1 天 · 已记录 1 天');
   await expect(page.locator('.swipe-actions')).toBeHidden();
   releaseApp();
   await reload;
