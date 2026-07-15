@@ -4,6 +4,6 @@ const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 900, height: 1000 }, deviceScaleFactor: 2 });
 await p.goto(url);
 await p.waitForTimeout(200);
-await p.screenshot({ path: 'docs/icon-proto/gallery.png', fullPage: true });
+await p.screenshot({ path: 'docs/assets/icon-proto-gallery.png', fullPage: true });
 await b.close();
 console.log('shot');
