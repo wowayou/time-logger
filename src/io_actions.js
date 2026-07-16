@@ -184,6 +184,44 @@ export function createIoActions(deps) {
     copyText(buildCurrentViewSummaryMarkdown(), document.getElementById('summary-btn'), '✓ 已复制', '复制当前视图摘要');
   }
 
+  function bootDiagTime(epochMs) {
+    const d = new Date(epochMs);
+    return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  }
+
+  function bootDiagGap(gapMin) {
+    if (!Number.isFinite(gapMin)) return '首条';
+    if (gapMin < 60) return `${gapMin}min`;
+    return `${Math.floor(gapMin / 60)}h${p2(gapMin % 60)}m`;
+  }
+
+  // 启动诊断样本只含计时/布尔/缓存命中数（storage.appendBootDiagSample 的口径），
+  // 这里只做排版；UA 有助于区分 Safari 与主屏 PWA 的行为差异，一并带上。
+  function copyBootDiagnostics() {
+    const { samples } = deps.readBootDiag();
+    const lines = samples.map(s => [
+      bootDiagTime(s.at),
+      `v${s.ver || '?'}`,
+      `间隔 ${bootDiagGap(s.gapMin)}`,
+      s.nav || 'navigate',
+      `SW接管 ${s.controlled ? '是' : '否'}`,
+      `常驻存储 ${s.persisted === true ? '是' : s.persisted === false ? '否' : '未知'}`,
+      s.cache ? `缓存 ${s.cache}(${s.cacheFiles}文件${s.cacheCount > 1 ? `,共${s.cacheCount}套` : ''})` : '缓存 无',
+      `html ${s.htmlMs}ms`,
+      `模块 ${s.moduleMs}ms`,
+      `就绪 ${s.readyMs}ms`,
+      s.standalone ? 'standalone' : '浏览器',
+      s.snapshot ? '快照命中' : '快照未中'
+    ].join(' · '));
+    const text = [
+      `# 时间尺启动诊断（最近 ${samples.length} 次启动）`,
+      `- UA: ${navigator.userAgent}`,
+      '',
+      ...lines
+    ].join('\n');
+    copyText(text, document.getElementById('boot-diag-copy-btn'), '✓ 已复制', '复制启动诊断');
+  }
+
   function backupArtifact() {
     const json = JSON.stringify(exportData(), null, 2);
     const fname = backupFileName();
@@ -529,6 +567,7 @@ export function createIoActions(deps) {
   }
 
   return {
+    copyBootDiagnostics,
     copyCurrentViewSummary,
     copyJSON,
     downloadJSON,

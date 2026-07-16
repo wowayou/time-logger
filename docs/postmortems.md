@@ -555,6 +555,8 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 **确诊日期**：2026-07-14 · **真机复测**：2026-07-15 · **状态**：v58 已部署 Fix A + B；用户确认运行 v58 后无可感知改善，问题仍未解决 · **严重度**：中（无数据损坏，但冷启动和 daily opens 明显迟缓）
 
+**2026-07-16 升级与取证落地（v62）**：用户升级定性为「严重影响使用」，并补充关键规律——**起床后/长时间未打开后的第一次打开特别慢**，与「系统在长间隔后回收 Cache Storage/SW」假说一致。冻结期按协议取得维护者明确批准（方案：诊断 + persist() 一起上），v62 落地本节「下一步取证方向」：opt-in 设备端启动诊断（每次启动记各阶段耗时、SW 是否接管本次导航、Cache Storage 套数/文件命中数、`storage.persisted()`、standalone、快照命中、距上次打开间隔；只含计时/布尔/命中数，关闭即删）+ `navigator.storage.persist()` 尝试性缓解。根因判定等待真机慢启动样本：若慢样本呈现 `SW接管 否` 或 `缓存 无/文件数不足`，回收假说实锤；若缓存全命中仍慢，嫌疑转向 SW 冷启动延迟或网络复验。
+
 **现象与测量方法**：iOS 主屏 PWA 冷启动约 3.8s，经历白屏→骨架→内容，daily opens 也慢。用项目自带的 `#boottrace=1` marks，在 headless 浏览器读取 `window.__timelogBootTrace.marks`；分别测「完美缓存命中 + CPU 节流」与「网络节流」，用 `app_ready` 作为终点。
 
 | 场景 | `app_ready` 耗时 |

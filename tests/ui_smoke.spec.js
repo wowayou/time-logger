@@ -1903,6 +1903,105 @@ test('boottrace reports ordered phases and snapshot outcomes outside the v53 sna
   await expect(page.locator('#boottrace-hud')).toHaveCount(0);
 });
 
+test('boot diagnostics are off by default and write nothing', async ({ page }) => {
+  await boot(page, 768, 'one-record', false, FIXED_NOW);
+  expect(await page.evaluate(() => localStorage.getItem('timelog.bootDiag.v1'))).toBeNull();
+});
+
+test('enabled boot diagnostics append one privacy-bounded sample per boot with retention', async ({ page }) => {
+  await boot(page, 768, 'one-record', false, FIXED_NOW);
+  // boot() 的 init script 每次导航都 localStorage.clear() 后重新播种，所以诊断
+  // key 必须由**之后注册**（因此之后执行）的 init script 写入，再 reload 生效。
+  await page.addInitScript(() => {
+    // 35 条旧样本挤压 30 条环形上限；at 递增让新样本的 gapMin 可计算。
+    const samples = Array.from({ length: 35 }, (_, i) => ({ at: 1000000 + i * 60000, readyMs: 100 }));
+    localStorage.setItem('timelog.bootDiag.v1', JSON.stringify({ enabled: true, samples }));
+  });
+  await page.reload();
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  await page.waitForFunction(() => {
+    const parsed = JSON.parse(localStorage.getItem('timelog.bootDiag.v1') || 'null');
+    return Boolean(parsed && parsed.samples.length && parsed.samples[parsed.samples.length - 1].ver);
+  });
+  const raw = await page.evaluate(() => localStorage.getItem('timelog.bootDiag.v1'));
+  const parsed = JSON.parse(raw);
+  expect(parsed.enabled).toBe(true);
+  expect(parsed.samples.length).toBe(30);
+  const sample = parsed.samples[parsed.samples.length - 1];
+  // 字段白名单：只允许计时/布尔/命中数，任何新增字段都必须在这里显式过审。
+  expect(Object.keys(sample).sort()).toEqual([
+    'at', 'cache', 'cacheCount', 'cacheFiles', 'controlled', 'gapMin', 'htmlMs',
+    'moduleMs', 'nav', 'persisted', 'readyMs', 'snapshot', 'standalone', 'ver'
+  ]);
+  expect(typeof sample.at).toBe('number');
+  expect(typeof sample.controlled).toBe('boolean');
+  expect(typeof sample.standalone).toBe('boolean');
+  // same-tab reload 可能命中 v53 启动快照，snapshot 如实为 true；只锁类型。
+  expect(typeof sample.snapshot).toBe('boolean');
+  expect(sample.moduleMs).toBeGreaterThanOrEqual(0);
+  expect(sample.readyMs).toBeGreaterThanOrEqual(sample.moduleMs);
+  expect(typeof sample.gapMin).toBe('number');
+  // 隐私金丝雀：样本串里绝不能出现任何记录内容。
+  expect(raw).not.toContain('响应式测试记录');
+});
+
+test('more sheet toggles boot diagnostics, copies samples, and disable wipes them', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__copiedDiag = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: text => { window.__copiedDiag = text; return Promise.resolve(); } }
+    });
+  });
+  await boot(page, 768, 'one-record', false, FIXED_NOW);
+  await openBackupMenu(page);
+  await expect(page.locator('[data-action="toggle-boot-diag"]')).toContainText('启动诊断：关');
+  await expect(page.locator('#boot-diag-copy-btn')).toHaveCount(0);
+  await page.locator('[data-action="toggle-boot-diag"]').click();
+  await expect(page.locator('[data-action="toggle-boot-diag"]')).toContainText('启动诊断：开');
+  await expect(page.locator('#boot-diag-copy-btn')).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.bootDiag.v1')).enabled)).toBe(true);
+
+  // boot() 的 init script 每次导航都 clear() 存储，reload 前用后注册的 init
+  // script 把 UI 刚打开的开关接回去，才能覆盖「开着开关重启会记样本」。
+  await page.addInitScript(() => {
+    localStorage.setItem('timelog.bootDiag.v1', JSON.stringify({ enabled: true, samples: [] }));
+  });
+  await page.reload();
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  await page.waitForFunction(() => {
+    const parsed = JSON.parse(localStorage.getItem('timelog.bootDiag.v1') || 'null');
+    return Boolean(parsed && parsed.samples.length >= 1);
+  });
+  await openBackupMenu(page);
+  await page.locator('#boot-diag-copy-btn').click();
+  await page.waitForFunction(() => window.__copiedDiag !== '');
+  const text = await page.evaluate(() => window.__copiedDiag);
+  expect(text).toContain('# 时间尺启动诊断');
+  expect(text).toContain('- UA: ');
+  expect(text).toContain('SW接管');
+  expect(text).not.toContain('响应式测试记录');
+
+  await page.locator('[data-action="toggle-boot-diag"]').click();
+  await expect(page.locator('[data-action="toggle-boot-diag"]')).toContainText('启动诊断：关');
+  await expect(page.locator('#boot-diag-copy-btn')).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('timelog.bootDiag.v1'))).toBeNull();
+});
+
+test('persistent storage is requested at app-ready', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (window.StorageManager && StorageManager.prototype.persist) {
+      StorageManager.prototype.persist = function () { window.__persistRequested = true; return Promise.resolve(false); };
+    } else {
+      window.__persistRequested = 'unsupported';
+    }
+  });
+  await boot(page, 768, 'one-record', false, FIXED_NOW);
+  await page.waitForFunction(() => window.__persistRequested !== undefined);
+  const requested = await page.evaluate(() => window.__persistRequested);
+  expect(requested === true || requested === 'unsupported').toBe(true);
+});
+
 test('ongoing minutes update on the minute without reopening the page', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-06-29T12:34:30') });
   await boot(page, 768, 'ongoing-tail');

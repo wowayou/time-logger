@@ -17,14 +17,17 @@ import {
   SELECTED_DATE_KEY,
   THEME_KEY,
   VIEW_KEY,
+  appendBootDiagSample,
   ensureFirstUsedDate,
   load,
   loadConfig,
   mergeImportedConfig,
   mergeImportedEntries,
   mergeImportedFirstUsedDate,
+  readBootDiag,
   readFirstUsedDate,
   rememberCustomTagForBucket,
+  setBootDiagEnabled,
   save,
   saveConfig,
   uid,
@@ -78,6 +81,12 @@ import {
     bootTrace.snapshotStates.push(state);
   }
   markBootTrace('app_module_body_start');
+  // v62 启动诊断（P33 取证）的两个早期采样点：模块图就绪时刻，以及「本次导航是否
+  // 已被 SW 接管」——controller 必须赶在注册/claim 改变世界之前读，晚了读到的就
+  // 不再是本次导航的真相。
+  const bootDiagModuleAt = Math.round(performance.now());
+  const bootDiagControlled = Boolean(navigator.serviceWorker && navigator.serviceWorker.controller);
+  let bootDiagSnapshotAdopted = false;
 
   let sheetEditId = null;
   let pendingUpdateRegistration = null;
@@ -569,6 +578,7 @@ import {
     validateImportData,
     mergeImportedEntries,
     mergeImportedConfig,
+    readBootDiag,
     readFirstUsedDate,
     // 诊断值随备份延续：只并入 localStorage，不再有 header 状态要刷新。
     adoptImportedFirstUsedDate: value => {
@@ -662,6 +672,8 @@ import {
       if (action === 'confirm-import-shift') ioActions.confirmImportShift();
       if (action === 'resolve-import-conflict') ioActions.resolveImportConflict(el.dataset.key, el.dataset.resolution);
       if (action === 'send-backup') ioActions.shareJSON();
+      if (action === 'toggle-boot-diag') toggleBootDiag();
+      if (action === 'copy-boot-diag') ioActions.copyBootDiagnostics();
       if (action === 'update-app') applyUpdate();
       if (action === 'dismiss-cross-tab-banner') {
         const b = document.getElementById('cross-tab-banner');
@@ -943,6 +955,63 @@ import {
     startTickTimer();
   }
 
+  // P33 缓解押注：申请常驻存储，降低系统在长间隔后回收 Cache Storage/SW 的概率。
+  // 这只是申请、不保证生效；真实效果由启动诊断样本里的 persisted 布尔佐证。
+  function requestPersistentStorage() {
+    try {
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    } catch {}
+  }
+
+  // 启动诊断（v62）：开关关闭时这里一次早退，不留任何监听器/timer/持久化痕迹。
+  // 样本只含计时、布尔与缓存命中数——用来区分「缓存被回收」「SW 没接管」「纯网络
+  // 慢」「模块执行慢」四种根因，绝不记录条目内容、标签或备份数据。
+  async function recordBootDiagnostics(readyMs) {
+    if (!readBootDiag().enabled) return;
+    const sample = {
+      at: Date.now(),
+      ver: APP_VERSION,
+      nav: '',
+      htmlMs: 0,
+      moduleMs: bootDiagModuleAt,
+      readyMs,
+      controlled: bootDiagControlled,
+      snapshot: bootDiagSnapshotAdopted,
+      standalone: Boolean((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true),
+      persisted: null,
+      cache: '',
+      cacheFiles: -1,
+      cacheCount: 0
+    };
+    try {
+      const nav = performance.getEntriesByType('navigation')[0];
+      if (nav) {
+        sample.nav = nav.type || '';
+        sample.htmlMs = Math.round(nav.responseEnd || 0);
+      }
+    } catch {}
+    try {
+      if (navigator.storage && navigator.storage.persisted) sample.persisted = await navigator.storage.persisted();
+    } catch {}
+    try {
+      if (window.caches) {
+        const names = (await caches.keys()).filter(name => /^timelog-v\d+$/.test(name));
+        sample.cacheCount = names.length;
+        names.sort((a, b) => Number(a.slice(9)) - Number(b.slice(9)));
+        const newest = names[names.length - 1] || '';
+        sample.cache = newest;
+        if (newest) sample.cacheFiles = (await (await caches.open(newest)).keys()).length;
+      }
+    } catch {}
+    appendBootDiagSample(sample);
+  }
+
+  // 开关翻转后经 openMoreSheet 原地重渲染（returnToMore 已验证的重入路径）。
+  function toggleBootDiag() {
+    setBootDiagEnabled(!readBootDiag().enabled);
+    sheetController.openMoreSheet();
+  }
+
   function init() {
     markBootTrace('init_start');
     const today = todayStr();
@@ -975,6 +1044,7 @@ import {
     }
     if (restoredBootFrame) {
       lastIntervalSignature = dataSignature();
+      bootDiagSnapshotAdopted = true;
       setBootSnapshotState('adopted');
       markBootTrace('snapshot_adopted');
     } else {
@@ -985,6 +1055,8 @@ import {
       requestAnimationFrame(() => {
         document.body.classList.add('app-ready');
         markBootTrace('app_ready');
+        requestPersistentStorage();
+        recordBootDiagnostics(Math.round(performance.now())).catch(() => {});
         initBootTraceHud();
         document.body.classList.remove('boot-restored');
         delete window.__timelogBootRestored;
