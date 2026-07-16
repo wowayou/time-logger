@@ -1631,7 +1631,14 @@
       font-size: 13px;
       font-weight: 650;
     }
-    .more-body { gap: 10px; }
+    /* P34（v63）：更多正文脱离 .form-sheet-body 的 grid auto 轨道——v62 内容首次
+       超过面板可用高度后，grid（min-height:0 的 flex 子项）把各分组轨道压到低于
+       内容高，.cell-group 的 overflow:hidden 拦腰裁掉后续行（P21 的上一层复发：
+       那次是组内 grid，这次是正文 grid；双引擎均可复现，非 iOS 特有）。块级流中
+       分组高度恒被尊重，超高由正文 overflow-y 滚动接住。 */
+    /* 复合选择器压过后文 .form-sheet-body 的 display:grid（同优先级按序会输）。 */
+    .form-sheet-body.more-body { display: block; }
+    .more-body > * + * { margin-top: 10px; }
     .app-version {
       text-align: center;
       color: var(--faint);
