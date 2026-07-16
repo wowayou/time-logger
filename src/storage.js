@@ -235,6 +235,44 @@ export function mergeImportedFirstUsedDate(importedValue, todayKey) {
   return next;
 }
 
+// 启动诊断（v62，P33 取证）：用户在「更多」里显式开启后，每次启动记一条只含
+// 计时、布尔与缓存命中数的样本——绝不含记录内容、标签或备份数据。样本是本机
+// 诊断值，不进备份；关闭开关即整键删除。
+const BOOT_DIAG_KEY = 'timelog.bootDiag.v1';
+const BOOT_DIAG_MAX_SAMPLES = 30;
+
+export function readBootDiag() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(BOOT_DIAG_KEY));
+    if (parsed && typeof parsed === 'object') {
+      return {
+        enabled: parsed.enabled === true,
+        samples: Array.isArray(parsed.samples) ? parsed.samples : []
+      };
+    }
+  } catch {}
+  return { enabled: false, samples: [] };
+}
+
+export function setBootDiagEnabled(on) {
+  try {
+    if (on) localStorage.setItem(BOOT_DIAG_KEY, JSON.stringify({ enabled: true, samples: readBootDiag().samples }));
+    else localStorage.removeItem(BOOT_DIAG_KEY);
+  } catch {}
+}
+
+export function appendBootDiagSample(sample) {
+  const diag = readBootDiag();
+  if (!diag.enabled) return;
+  const previous = diag.samples[diag.samples.length - 1];
+  // 距上次打开的间隔是「起床/久不开才慢」假说的关键变量，落库时一并算好。
+  const gapMin = previous && Number.isFinite(previous.at)
+    ? Math.max(0, Math.round((sample.at - previous.at) / 60000))
+    : null;
+  const samples = [...diag.samples, { ...sample, gapMin }].slice(-BOOT_DIAG_MAX_SAMPLES);
+  try { localStorage.setItem(BOOT_DIAG_KEY, JSON.stringify({ enabled: true, samples })); } catch {}
+}
+
 export function save(d) {
   try {
     localStorage.setItem(KEY, JSON.stringify(d));

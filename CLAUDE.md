@@ -57,7 +57,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v61` / manifest `version: "61"`。
+当前版本：`timelog-v62` / manifest `version: "62"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -73,7 +73,7 @@
 
 - 响应式默认用 container query、CSS Grid/Flex 和文档流布局；禁止按 iPhone/iPad/设备名堆叠 viewport 补丁。
 - Header 排版固定为三行信息架构：第一行站点标识（图标即 GitHub 入口）和「···」更多入口；第二行天/周/月/年视图切换；第三行 `< 当前周期 >` 与回到今天按钮；不要把日期导航塞回第一行；说明入口在「···」更多菜单里，不放回 header。v46（R5）：回到今天/本周/本月/今年按钮**条件渲染**——只在当前周期已不含今天时出现；`.date-nav` 用 `:has(#today-btn[hidden])` 在 ≥430px 断点收窄 grid 列数，避免显式轨道在按钮隐藏后留死区。当前周期含今天时，`#period-label` 内追加常驻 `.period-today-badge`（「今天」高亮字样）。「···」按钮改 `iconSvg('more')`（三点，零长度 round-linecap 描边），app.js `registerActions` 一次性注入（唯一不走 JS 模板渲染的图标按钮）。
-- 低频动作（摘要、备份四项、标签高级设置、主题、说明）收纳在「···」更多 sheet 的 cell 分组里；footer 已退役，不得重新引入常驻底栏；分享 cell 与复制/存储/导入一样**常显**（v43：不再按能力检测显隐——旧 reveal 时序在 footer→更多 迁移后丢失、iOS 卡隐藏态，P24），点击时若无 Web Share 能力则回退下载完整备份。
+- 低频动作（摘要、备份四项、标签高级设置、主题、启动诊断、说明）收纳在「···」更多 sheet 的 cell 分组里；footer 已退役，不得重新引入常驻底栏；分享 cell 与复制/存储/导入一样**常显**（v43：不再按能力检测显隐——旧 reveal 时序在 footer→更多 迁移后丢失、iOS 卡隐藏态，P24），点击时若无 Web Share 能力则回退下载完整备份。
 - 窄屏第一行优先保留站点标识和「···」入口；空间不足时可以隐藏站点标题文字。
 - Header 站点标识旁的里程碑（v61 起）**只从当前数据派生**，显示「记录历程第 N 天 · 已记录 N 天」：前者＝最早**非计划、非占位**记录到今天的自然日跨度，后者＝有真实记录的不同自然日数；逻辑集中在 `stats.js` 的 `recordingMilestones`，一条真实记录都没有时隐藏整块、不编造里程碑。计划条和空占位条永远不算「记过」（`normalizeEntries` 恒给今天留尾占位，不排除会让每天都算已记录）。因为派生自 `entries`，它随完整备份天然恢复，**不得**再改回依赖本机安装日。
 - 「已记录 N 天」是机器可判定的「有真实记录的自然日数」，**不等于** `docs/dogfood-freeze-handoff.md` 的「有效记录日」（后者要求人工判断当天时间线是否足以重建主要活动），两者不得混用或互相冒充。
@@ -99,7 +99,7 @@
 - 进行中时长必须按分钟刷新；iOS PWA 从后台恢复时，`visibilitychange`、`pageshow` 或 `focus` 必须立即按当前时间补算并重建分钟 timer，不能等待下一轮或信任暂停前的 timer id。
 - v57 新增入口按本地自然日分类：历史日强制已发生；今天沿用并可切换 `timelog.recordMode`；未来 `+1…+7` 日强制计划且不得改写今天偏好；`+8` 日起隐藏 FAB/底部渐隐层，但既有计划仍可查看编辑。计划时刻必须严格晚于 `now +5min`，且早于本地“今天 +8 日 00:00”；编辑既有计划时，只有规范化时间与同一次 `load()` 取得的最新 `ts` 完全相同，才可跳过整个窗口校验。
 - v57 过夜续记只由数据形态触发：日视图恰好停在昨天、尾点为未记录 placeholder、且从 FAB 普通新增时，表单显式选择“到今天硬终点”或“只记到 24:00”。跨午夜原子写成昨/今两条日内记录；提交前必须在同一次最新 `load()` 对象图上重算签名，计划占用必写边界时不得移动或覆盖。
-- `#boottrace=1` 只用于启动分段诊断：无 fragment 时不得创建 HUD、监听器、timer 或持久化诊断状态；HUD 只能在 `app-ready` 后挂到 `.app`/FAB 快照范围外，且不得显示记录内容、标签或备份数据。不得用 query 触发、不得改 SW 缓存策略或 `FILES`。
+- `#boottrace=1` 只用于启动分段诊断：无 fragment 时不得创建 HUD、监听器、timer 或持久化诊断状态；HUD 只能在 `app-ready` 后挂到 `.app`/FAB 快照范围外，且不得显示记录内容、标签或备份数据。不得用 query 触发、不得改 SW 缓存策略或 `FILES`。**v62 起唯一的持久化例外**是「更多」里用户显式开启的启动诊断（P33 真机取证，fragment 带不进主屏 PWA 冷启动）：开启后每次启动向 `localStorage['timelog.bootDiag.v1']` 追加一条**只含计时、布尔与缓存命中数**的样本（环形 ≤30 条，附距上次打开的间隔分钟数），绝不含记录内容、标签或备份数据，不进备份；关闭即整键删除样本；默认关闭时不得有任何读写、监听器或 timer。
 
 ## 隐私红线
 
@@ -248,6 +248,7 @@ git diff --check
 | v55 | 2026-07-11 | 功能冻结后的明确批准视觉收敛：以“海拔＝信息层级”消除日视图 card soup——header 与日期控件贴地，记录卡保留背景差/边界但去阴影并收紧间距，hero 尺子成为唯一带内容阴影的主表面；主线大数字改用墨色，FAB 保留唯一饱和 CTA 并收敛发光。改动限于 CSS 与版本仪式，DOM、模板、业务 JS、左滑轨道、刷新快照和动画护栏均不动。 |
 | v56 | 2026-07-11 | 日视图改**连续日志容器**（`docs/prototypes/continuous-log-refined.html` 评审定稿，用户批准）：`.log` 单一贴地面 + 发丝分隔（wrapper 层、避开竖脊）+ 左缘 4px 通高桶色竖脊（`data-b`：实=已发生、CSS mask 圆头虚线=计划、灰=未记录），tag 降素色小字（桶色职责移交竖脊）；今天视图「现在 hh:mm」一线分隔计划与已发生（accent 呼吸点，reduced-motion 静止）；行改 时间｜内容｜时长 三列网格，时长右置、文案单职责（进行中「已 X」与 FAB 同语，去掉「未记录·进行中」复读）；行内动作只留缺口/待办文字链（补一下/标记已发生/确认，mini-btn 去底色留 44px 热区），**已发生普通段「切一刀」迁入编辑 sheet**（cell-action；经批准的入口红线变更）；hero 大数字 32→36px 补偿去色层级；boot 快照加 `appVersion` 门（应用更新后旧 DOM 形态不再被新 JS 采纳而跳过首渲）；行仍自带不透明 `--card` 底、入场只过渡 opacity（左滑/v53 护栏不变），周/月/年与「···」更多不动。Playwright 断言适配 + 新增容器/竖脊/现在线/切一刀入口回归。 |
 | v57 | 2026-07-13 | 日期计划窗口改为本地自然日统一规则（严格晚于 `now+5min`、上界 `今天+8日 00:00`）；历史/今天/未来 `+1…+7`/`+8` 入口分别强制已发生、沿用偏好、强制计划、隐藏新增，取消表单不再提前切主页面日期。既有计划按同一次最新 `load()` 的 `ts` 实施“时间未变”上下界对称豁免。新增纯数据形态的过夜续记：显式选择到今天硬终点或只到 24:00，跨午夜写成两条可独立编辑的日内记录，planner 复核 placeholder/真实记录/计划边界与结果签名。加入仅由 `#boottrace=1` 启用、位于启动快照范围外的隐私安全启动分段 HUD；不改 SW 策略/FILES，不做 lazy、A/B 或其它性能优化。补真实 `timezoneId` DST、日期矩阵、计划豁免、过夜与 boottrace 双引擎回归。 |
+| v62 | 2026-07-16 | 冻结期阻断处理（P33 复发，维护者批准方案「诊断 + persist() 一起上」）：用户确认 v58 后启动仍严重迟缓，且规律为**起床/长时间未打开后第一次打开特别慢**——与「系统在长间隔后回收 Cache Storage/SW」假说一致，但真机无法带 `#boottrace` fragment，取证缺位。落地两件事：① **opt-in 设备端启动诊断**——「更多」新增「启动诊断」开关（默认关、零监听器零写入），开启后每次启动记一条样本进 `localStorage['timelog.bootDiag.v1']`（环形 ≤30 条）：各阶段耗时（html 到达/模块图就绪/app-ready）、SW 是否接管本次导航（模块顶早读，晚了会被 claim 污染）、Cache Storage 现存 `timelog-v*` 套数与文件命中数、`storage.persisted()`、standalone 与快照命中、距上次打开间隔分钟数——只有计时/布尔/命中数，绝不含记录内容，不进备份，关闭即整键删除；「复制启动诊断」cell 一键导出全部样本+UA。② **`navigator.storage.persist()`**——app-ready 后申请常驻存储，直击头号嫌疑的低风险缓解，效果由样本里 persisted 布尔佐证。诊断读写 helper 落 `storage.js`，文本排版落 `io_actions.js`，开关经 openMoreSheet 原地重渲染（returnToMore 同路径）。`#boottrace` 红线补「用户显式开启的持久化例外」条款 |
 | v61 | 2026-07-15 | Header 里程碑改为**从数据派生**：「使用第 N 天」（基于本机安装日 `timelog.firstUsedDate`）退役，改显示「记录历程第 N 天 · 已记录 N 天」——前者＝当前数据中最早**非计划、非占位**记录到今天的自然日跨度，后者＝有真实记录的不同自然日数。动机：安装日是虚荣指标，装了不等于记了；两个新数字都从 `entries` 派生，因此随完整备份天然恢复（删主屏 PWA 换图标或换设备都不再丢里程碑），且「已记录 N 天」直接就是 28 天 gate 的计量口径。`firstUsedDate` **降为纯诊断值**：仍写入并随备份延续（v60）备查，但不再驱动任何用户可见里程碑。里程碑逻辑落在 `stats.js`（`recordedDayKeys` / `recordingMilestones`），`isPlaceholderEntry` 一并从 `entry_model.js` 移入 `stats.js`——`entry_model` 本就 import `stats`，反向引用会成循环依赖，移动后单一真源、`sheet_controller` 改从 `stats.js` 取。一条真实记录都没有时不编造里程碑，直接隐藏。注意：「已记录 N 天」是机器可判定的「有真实记录的自然日」，**不等于** `docs/dogfood-freeze-handoff.md` 里需人工判断的「有效记录日」，不得混用 |
 | v60 | 2026-07-15 | 版本仪式一致性修复（零业务逻辑）：v59 只改了 manifest + `sw.js`，漏掉 `src/ui.js` 的 `APP_VERSION`、`project_audit.py` 的 `EXPECTED_VERSION`、`CLAUDE.md` 与 README，导致 audit 必然失败、且**已安装 v59 的设备在「更多」页显示「v58」**——版本探针说谎。修复不能回填成 v59：`src/ui.js` 在 SW `FILES` 预缓存列表内，而 `sw.js` fetch 是纯 cache-first 无 revalidation（`caches.match(r) \|\| fetch`），若 `CACHE` 字符串不变则 `sw.js` 字节不变 → 浏览器判定无更新 → 永不 install/addAll → 已安装客户端永远拿不到修正后的 `ui.js`。只有 bump `CACHE` 才能失效缓存，故走完整窄范围 v60（`CACHE`/manifest/`APP_VERSION`/`EXPECTED_VERSION`/CLAUDE/README 六处同步），由 v44 自动更新链路送达真机。同时放宽 `audit_demo_assets`：`docs/assets/` 允许 3 张已存档的 icon-proto 评审渲染（显式文件名白名单，非通配——通配会让未来误传的真实截图自动过闸）。不改 `FILES`（无新资产），不改 `index.html` 的 v58 历史注释，不夹带任何 UI/图标/业务改动。同版本另修一处「完整备份并不完整」：`timelog.firstUsedDate` 此前不进备份，删主屏 PWA 换图标（iOS 唯一的换图标途径，会清 localStorage）或换设备后「使用第 N 天」只能退回按最早记录推导——现纳入导出/导入，导入只准把起点往更早挪并拒绝未来日期（N 单调不减），`app.js` 经 `adoptImportedFirstUsedDate` 同步刷新缓存值 |
 | v59 | 2026-07-15 | （追记）app 图标统一为网站 τ（分段-τ H1）：`icon.svg` 与 `icons/*.png` 重绘，manifest + `sw.js` 升 v59。**当时漏做版本联动**（`APP_VERSION`/audit/CLAUDE/README 仍为 58），断裂由 v60 修复 |

@@ -11,7 +11,8 @@ import {
   bucketForTag,
   chipGroups,
   countEntriesWithTag,
-  loadConfig
+  loadConfig,
+  readBootDiag
 } from './storage.js';
 
 export function esc(s) {
@@ -291,7 +292,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '61';
+export const APP_VERSION = '62';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -330,6 +331,7 @@ function renderDeleteConfirmSheet(opts = {}) {
 function renderMoreSheet(opts = {}) {
   let themePref = 'auto';
   try { themePref = localStorage.getItem(THEME_KEY) || 'auto'; } catch {}
+  const bootDiag = readBootDiag();
   const themeBtn = (value, label) =>
     `<button type="button" data-action="theme" data-theme="${value}" class="${themePref === value ? 'active' : ''}" aria-pressed="${themePref === value}" aria-label="主题：${label}">${label}</button>`;
   return `
@@ -354,6 +356,11 @@ function renderMoreSheet(opts = {}) {
         </div>
         <button class="cell-btn" type="button" data-action="open-help" aria-label="打开说明">说明${cellChevron}</button>
       </div>
+      <div class="cell-group">
+        <button class="cell-btn" type="button" data-action="toggle-boot-diag" aria-pressed="${bootDiag.enabled}" aria-label="启动诊断，当前${bootDiag.enabled ? '开启，点击关闭并清除样本' : '关闭，点击开启'}"><span data-role="cell-label">启动诊断：${bootDiag.enabled ? '开' : '关'}</span>${cellChevron}</button>
+        ${bootDiag.enabled ? `<button class="cell-btn" id="boot-diag-copy-btn" type="button" data-action="copy-boot-diag" aria-label="复制启动诊断样本"><span data-role="cell-label">复制启动诊断</span>${cellChevron}</button>` : ''}
+      </div>
+      ${bootDiag.enabled ? '<div class="form-hint">每次启动记录耗时与缓存状态（不含任何记录内容），最近 30 条；关闭即清除。</div>' : ''}
       <div class="app-version">时间尺 v${APP_VERSION}</div>
     </div>`;
 }
