@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-const CACHE = 'timelog-v63';
+const CACHE = 'timelog-v64';
 const FILES = [
   './',
   './index.html',

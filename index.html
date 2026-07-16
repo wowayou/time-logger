@@ -184,8 +184,10 @@
 </script>
 
 <div class="update-banner" id="update-banner" hidden>
-  <span>发现新版。当前数据仍保存在本机。</span>
+  <span data-role="update-prompt">发现新版。当前数据仍保存在本机。</span>
   <button class="update-btn" type="button" data-action="update-app" data-tip="刷新并加载新版应用。" aria-label="更新应用">更新应用</button>
+  <span data-role="update-stuck" hidden>没生效？完全退出应用（Safari 关闭本站全部标签页）后重新打开即可完成更新，数据不受影响。</span>
+  <button class="update-btn" type="button" data-action="dismiss-update-banner" hidden aria-label="知道了，稍后完全退出后重开">知道了</button>
 </div>
 
 <div class="cross-tab-banner" id="cross-tab-banner" hidden>

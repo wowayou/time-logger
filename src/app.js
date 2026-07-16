@@ -595,10 +595,35 @@ import {
   });
 
   // --- App update prompt ---
+  // C1（v64）：skipWaiting → controllerchange 在 iOS 上会整链无声失败，点击后
+  // 版本纹丝不动（2026-07-15/16 两次真机复现）。三层处理：① statechange→activated
+  // 作为第二条成功路径（controllerchange 丢了它可能还在）；② 8 秒超时兜底——两条
+  // 都没来就承认没生效，横幅换成可执行的绕法指引（完全退出后重开，waiting worker
+  // 自然激活），按钮不再无声装死；③ 指引可「知道了」收起。
+  const UPDATE_APPLY_TIMEOUT_MS = 8000;
+  let updateApplyTimer = null;
+  function setUpdateBannerStuck(stuck) {
+    const banner = document.getElementById('update-banner');
+    if (!banner) return;
+    const prompt = banner.querySelector('[data-role="update-prompt"]');
+    const applyBtn = banner.querySelector('[data-action="update-app"]');
+    const stuckMsg = banner.querySelector('[data-role="update-stuck"]');
+    const dismissBtn = banner.querySelector('[data-action="dismiss-update-banner"]');
+    if (prompt) prompt.hidden = stuck;
+    if (applyBtn) applyBtn.hidden = stuck;
+    if (stuckMsg) stuckMsg.hidden = !stuck;
+    if (dismissBtn) dismissBtn.hidden = !stuck;
+  }
   function showUpdatePrompt(registration) {
     pendingUpdateRegistration = registration;
+    setUpdateBannerStuck(false);
     const banner = document.getElementById('update-banner');
     if (banner) banner.hidden = false;
+  }
+  function clearUpdateApplyTimer() {
+    if (updateApplyTimer === null) return;
+    clearTimeout(updateApplyTimer);
+    updateApplyTimer = null;
   }
   function applyUpdate() {
     const worker = pendingUpdateRegistration && pendingUpdateRegistration.waiting;
@@ -607,6 +632,20 @@ import {
       return;
     }
     updateReloading = true;
+    clearUpdateApplyTimer();
+    if (typeof worker.addEventListener === 'function') {
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'activated' && updateReloading) {
+          clearUpdateApplyTimer();
+          window.location.reload();
+        }
+      });
+    }
+    updateApplyTimer = setTimeout(() => {
+      updateApplyTimer = null;
+      updateReloading = false;
+      setUpdateBannerStuck(true);
+    }, UPDATE_APPLY_TIMEOUT_MS);
     worker.postMessage({ type: 'SKIP_WAITING' });
   }
 
@@ -675,6 +714,10 @@ import {
       if (action === 'toggle-boot-diag') toggleBootDiag();
       if (action === 'copy-boot-diag') ioActions.copyBootDiagnostics();
       if (action === 'update-app') applyUpdate();
+      if (action === 'dismiss-update-banner') {
+        const banner = document.getElementById('update-banner');
+        if (banner) banner.hidden = true;
+      }
       if (action === 'dismiss-cross-tab-banner') {
         const b = document.getElementById('cross-tab-banner');
         if (b) b.hidden = true;
@@ -892,7 +935,10 @@ import {
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (updateReloading) window.location.reload();
+      if (updateReloading) {
+        clearUpdateApplyTimer();
+        window.location.reload();
+      }
     });
     navigator.serviceWorker.register('sw.js').then(reg => {
       // 新 worker 进入 waiting 后始终提示，由用户点击后才 skipWaiting + reload。
