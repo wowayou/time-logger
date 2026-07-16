@@ -1546,9 +1546,10 @@ test('waiting service worker prompt has a reachable update button above the mobi
       configurable: true,
       get: () => window.__visibility
     });
-    const waiting = {
-      postMessage(message) { window.__swMessages.push(message); }
-    };
+    // waiting 必须是 EventTarget：v64 起 applyUpdate 会挂 statechange 第二成功路径。
+    const waiting = new EventTarget();
+    waiting.state = 'installed';
+    waiting.postMessage = message => { window.__swMessages.push(message); };
     const registration = new EventTarget();
     registration.waiting = waiting;
     registration.installing = null;
@@ -1585,6 +1586,66 @@ test('waiting service worker prompt has a reachable update button above the mobi
   await expect.poll(() => page.evaluate(() => window.__swUpdates)).toBe(2);
   await page.locator('[data-action="update-app"]').click();
   expect(await page.evaluate(() => window.__swMessages)).toEqual([{ type: 'SKIP_WAITING' }]);
+});
+
+test('unacknowledged update click times out into an actionable full-quit hint', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-06-29T12:34:30') });
+  await page.addInitScript(() => {
+    // C1 现场复刻：SKIP_WAITING 石沉大海，statechange 与 controllerchange 都不来。
+    const waiting = new EventTarget();
+    waiting.state = 'installed';
+    waiting.postMessage = () => {};
+    const registration = new EventTarget();
+    registration.waiting = waiting;
+    registration.installing = null;
+    registration.update = () => Promise.resolve();
+    const serviceWorker = new EventTarget();
+    serviceWorker.controller = {};
+    serviceWorker.register = () => Promise.resolve(registration);
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: serviceWorker });
+  });
+  await boot(page, 375, 'one-record');
+  await expect(page.locator('#update-banner')).toBeVisible();
+  await page.locator('[data-action="update-app"]').click();
+  await page.clock.runFor(8000);
+  const stuck = page.locator('[data-role="update-stuck"]');
+  await expect(stuck).toBeVisible();
+  await expect(stuck).toContainText('完全退出');
+  await expect(page.locator('[data-action="update-app"]')).toBeHidden();
+  await page.locator('[data-action="dismiss-update-banner"]').click();
+  await expect(page.locator('#update-banner')).toBeHidden();
+});
+
+test('update click reloads when the waiting worker activates without controllerchange', async ({ page }) => {
+  await page.addInitScript(() => {
+    // C1 第二成功路径：iOS 丢 controllerchange 时，waiting worker 自身的
+    // statechange→activated 仍应触发 reload，不能吊死在超时指引上。
+    const waiting = new EventTarget();
+    waiting.state = 'installed';
+    waiting.postMessage = message => {
+      if (message && message.type === 'SKIP_WAITING') {
+        setTimeout(() => {
+          waiting.state = 'activated';
+          waiting.dispatchEvent(new Event('statechange'));
+        }, 0);
+      }
+    };
+    const registration = new EventTarget();
+    registration.waiting = waiting;
+    registration.installing = null;
+    registration.update = () => Promise.resolve();
+    const serviceWorker = new EventTarget();
+    serviceWorker.controller = {};
+    serviceWorker.register = () => Promise.resolve(registration);
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: serviceWorker });
+  });
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  await expect(page.locator('#update-banner')).toBeVisible();
+  await page.evaluate(() => { window.__preReloadSentinel = true; });
+  await page.locator('[data-action="update-app"]').click();
+  // reload 后 window 属性清空——sentinel 消失即证明页面真的重载了。
+  await page.waitForFunction(() => window.__preReloadSentinel === undefined);
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
 });
 
 test('v57 date entry matrix forces history/future modes and hides creation at +8', async ({ page }) => {

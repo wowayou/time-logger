@@ -34,6 +34,9 @@
 - 本地真 SW 双引擎复现（WebKit + Chromium）：v58 → 发布 v61 → 横幅 → 点击 → 4 秒内成功更新。**干净路径工作正常**，故差异在设备/网络侧，不是逻辑写错。
 - 现有 `npm run test:ui` 的更新用例**把 SW 整个 mock 掉**（只断言点击会 post `SKIP_WAITING`），真实的 skipWaiting → activate → controllerchange → reload 链路**无测试覆盖**。
 
+**2026-07-17 部分处理（v64，维护者点名要求修）**
+「无声装死」已修：`applyUpdate` 补 `statechange→activated` 第二成功路径 + 8 秒超时兜底，超时后横幅切换为「完全退出后重开」可执行指引。**未修也修不了的部分**：skipWaiting 本身在 iOS 的不可靠（OS 侧丢消息/不唤醒 waiting worker），本条继续开着观察后续真机表现；若 v64 后点击更新的成功率仍然为零，复盘时应评估是否干脆把按钮语义改为「引导完全退出」。
+
 **14 天后是否仍然重要**
 待 2026-07-30 复盘回答。
 
