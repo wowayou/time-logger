@@ -581,6 +581,22 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 ---
 
+## P34 · v62 更多菜单全分组压扁裁切：cell-group 坐在被压缩的 grid 轨道上（v63）
+
+**确诊日期**：2026-07-17 · **状态**：v63 已修 · **严重度**：高（Safari 入口的导入/分享备份不可达，属阻断级；维护者明确要求立即修）
+
+**现象**：v62 真机（iOS Safari）更多菜单每个 cell 分组只显示约 1.5 行，其余被拦腰裁掉：存储备份剩半行，导入备份、分享备份、说明、复制启动诊断完全不可见。
+
+**根因**：`.form-sheet-body` 是 `display:grid`，同时又是 `min-height:0` 的 flex 子项。v62 新增启动诊断分组和提示行后，更多正文内容总高**首次**超过面板 `max-height`——grid 不走正文滚动，而是把各 auto 轨道压到低于内容高，`.cell-group` 为 inset 圆角设置的 `overflow:hidden` 随即把溢出行裁掉。**Chromium 与 WebKit 在 375×600 视口均可本地复现**，非 iOS 特有。与 P21 同缺陷家族但高一层：P21 是组内 grid 轨道（iOS 特有计量缺陷），P34 是正文 grid 轨道（标准压缩行为撞上 overflow:hidden）。
+
+**为什么 v61 没事**：v61 更多正文内容不超高，压缩路径从未被走到。v62 没改任何 CSS，纯内容增量触发——**容量边界之外的布局路径等于没测过**。
+
+**修法（v63，沿 v37/P21 判例）**：`.form-sheet-body.more-body { display:block }` + 相邻兄弟 margin 复刻 gap。注意第一版写 `.more-body{display:block}` 无效——它在源码里先于 `.form-sheet-body{display:grid}` 且同优先级，按序被覆盖；必须用复合选择器。块级流中分组高度恒被尊重，超高由正文 `overflow-y` 滚动接住。config sheet（标签高级设置）同为 cell-group×grid 正文结构，经矮视口探针实测**不受影响**，但回归测试把两处一起锁住（375×600 + 启动诊断开 = 最大内容量）。
+
+**经验**：① `overflow:hidden` 的容器绝不能坐在可被压缩的 grid/flex 轨道上；② 同优先级选择器按源码顺序定胜负，修 display 冲突用复合选择器，别赌规则位置；③ 回归测试要在「内容最大化 × 视口最小化」的组合下跑，新增任何会加高 sheet 内容的功能都要重跑这一组。
+
+---
+
 ## 协作约束补记（v28）
 
 - 多步改动走主线程；避免并发 fan-out 子代理 / workflow（上游会 429，串行 workflow 亦然）。已同步进 `CLAUDE.md` / `AGENTS.md`「开发与维护红线」。

@@ -1988,6 +1988,43 @@ test('more sheet toggles boot diagnostics, copies samples, and disable wipes the
   expect(await page.evaluate(() => localStorage.getItem('timelog.bootDiag.v1'))).toBeNull();
 });
 
+test('short viewport more sheet scrolls instead of compressing cell groups', async ({ page }) => {
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  // 最坏内容量：开启启动诊断（第四个分组 + 提示行），并压到 SE 级矮视口，
+  // 让内容总高必然超过面板可用高度——v62 真机上这会把所有分组压扁裁切（P34）。
+  await page.evaluate(() => localStorage.setItem('timelog.bootDiag.v1', JSON.stringify({ enabled: true, samples: [] })));
+  await page.setViewportSize({ width: 375, height: 600 });
+  await openBackupMenu(page);
+  const clipped = await page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('.more-body .cell-group').forEach(group => {
+      if (group.scrollHeight > group.clientHeight + 1) {
+        out.push(`${group.textContent.trim().slice(0, 10)}: ${group.scrollHeight}>${group.clientHeight}`);
+      }
+    });
+    return out;
+  });
+  expect(clipped).toEqual([]);
+  // 超高必须转为正文滚动：滚到底后版本号可见，证明尾部内容可达而非被裁。
+  const version = page.locator('.app-version');
+  await version.scrollIntoViewIfNeeded();
+  await expect(version).toBeVisible();
+  // 同缺陷类的第二现场：标签高级设置同样是 cell-group 装在 grid 正文里（且为
+  // .tall 定高面板），矮视口下分组同样不得被压缩裁切。
+  await page.getByRole('button', { name: '配置标签' }).click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('标签高级设置');
+  const configClipped = await page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('.config-body .cell-group').forEach(group => {
+      if (group.scrollHeight > group.clientHeight + 1) {
+        out.push(`${group.textContent.trim().slice(0, 10)}: ${group.scrollHeight}>${group.clientHeight}`);
+      }
+    });
+    return out;
+  });
+  expect(configClipped).toEqual([]);
+});
+
 test('persistent storage is requested at app-ready', async ({ page }) => {
   await page.addInitScript(() => {
     if (window.StorageManager && StorageManager.prototype.persist) {
