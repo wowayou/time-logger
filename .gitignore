@@ -44,3 +44,6 @@ memory/
 
 # Design handoff bundles are external inputs, not runtime files.
 *.zip
+
+# 外部输入收件箱（截图、外部交接文档），含个人线索，永不入库。
+外部 /
