@@ -2,15 +2,15 @@
 
 > Status: active · 核心记录闭环可日常使用；2026-07-16 → 07-29 处于 14 天功能冻结
 >
-> Release: v64
+> Release: v65
 >
-> Updated: 2026-07-15
+> Updated: 2026-07-17
 >
 > Intended user: 求职主线时间记录和每日复盘的个人使用者。
 >
 > Operating boundary: 本地静态 PWA，只记录时间去向，不做云同步、账号管理、KPI 考核或投资/合规判断。
 >
-> Current blocker: iOS 主屏 PWA 冷启动仍慢；已确认运行 v58 后无可感知改善，根因仍待真机取证。
+> Current blocker: iOS 主屏 PWA 冷启动仍慢；启动诊断已证明页面侧毫秒级健康，慢段收窄指向系统冷拉起进程（页面计时零点之前，待录屏取证判决）。
 >
 > Risks and failure modes: 忘记记录导致“未记录”偏高、长时间间隔被整体计为未记录、周/月/年视图诱发过度复盘、浏览器本地数据或运行缓存被系统清理。
 
