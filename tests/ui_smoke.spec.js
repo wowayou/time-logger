@@ -2121,3 +2121,24 @@ test('PWA resume immediately catches an ongoing duration up to the current minut
   await expect(page.locator('.hero-aux')).toContainText('截至 18:55');
   await expect(page.locator('#add-btn .fab-sub')).toContainText('已 ~8h55min');
 });
+
+test('minute tick re-render keeps the day view scroll position (P35)', async ({ page }) => {
+  // P35：WebKit 无 scroll anchoring，分钟 tick 的整页重渲染会把窗口滚动钳回顶部
+  // ——回看今天早些的记录时每分钟被拽回一次。走真实 tick 路径（page.clock 快进
+  // 跨分钟触发 setTimeout → refreshLiveClock → render），断言滚动位置不动。
+  await page.clock.install({ time: new Date('2026-06-29T20:53:30') });
+  await boot(page, 375, 'interval-three');
+  // 压矮视口让今天视图必然可滚动，再滚进较早的记录。
+  await page.setViewportSize({ width: 375, height: 420 });
+  const target = await page.evaluate(() => {
+    const max = document.scrollingElement.scrollHeight - window.innerHeight;
+    window.scrollTo(0, Math.min(300, max - 20));
+    return window.scrollY;
+  });
+  expect(target).toBeGreaterThan(100);
+  const nowBefore = await page.locator('.tl-now-label').textContent();
+  await page.clock.fastForward(60_000);
+  // 渲染确实发生了（「现在」一线跨过分钟），而滚动位置纹丝不动。
+  await expect.poll(() => page.locator('.tl-now-label').textContent()).not.toBe(nowBefore);
+  expect(Math.abs(await page.evaluate(() => window.scrollY) - target)).toBeLessThanOrEqual(1);
+});

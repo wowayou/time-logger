@@ -974,7 +974,12 @@ import {
     if (sheetEditId || sheetController.isFormOpen() || sheetController.getSheetMode()) return;
     const signature = dataSignature();
     if (signature === lastIntervalSignature) return;
+    // P35：WebKit 无 scroll anchoring，#timeline 整块替换的瞬间文档变矮，窗口滚动
+    // 被钳回 0——回看今天早些的记录时每分钟被拽回顶部。这里是唯一的被动重渲染
+    // 路径（用户没有操作、不该动视口），渲染后同帧还原滚动位置。
+    const scrollY = window.scrollY;
     render();
+    if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
   }
 
   function startTickTimer() {
