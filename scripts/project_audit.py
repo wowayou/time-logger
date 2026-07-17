@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "65"
+EXPECTED_VERSION = "66"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -35,6 +35,7 @@ REQUIRED_ICON_SIZES = {
     "icons/maskable-192.png": (192, 192),
     "icons/maskable-512.png": (512, 512),
     "icons/apple-touch-icon.png": (180, 180),
+    "icons/splash-750x1334.png": (750, 1334),
 }
 REQUIRED_DEMO_ASSETS = [
     "docs/assets/demo-mobile-timeline.png",

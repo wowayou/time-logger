@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-const CACHE = 'timelog-v65';
+const CACHE = 'timelog-v66';
 const FILES = [
   './',
   './index.html',
@@ -23,7 +23,8 @@ const FILES = [
   './icons/icon-512.png',
   './icons/maskable-192.png',
   './icons/maskable-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/apple-touch-icon.png',
+  './icons/splash-750x1334.png'
 ];
 
 self.addEventListener('install', e => {
