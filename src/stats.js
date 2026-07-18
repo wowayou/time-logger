@@ -30,7 +30,7 @@ export function isPlaceholderEntry(entry) {
 
 // 里程碑只认**真实记录**：计划条是未来意图，空占位条是「这段没记」的显式表达
 // （normalizeEntries 恒给今天留一条尾占位），两者都不构成「记过一天」。
-export function recordedDayKeys(entries) {
+function recordedDayKeys(entries) {
   const seen = new Set();
   loggedEntriesFrom(entries).forEach(entry => {
     if (isPlaceholderEntry(entry)) return;
@@ -90,6 +90,7 @@ export function classifySegment(entry, rawMins, endTs, isOngoing) {
   };
 }
 
+/** @param {boolean | { unrecorded?: boolean, pending?: boolean }} [flags] */
 function addBucket(totals, tag, mins, flags = {}) {
   if (mins <= 0) return;
   const unrecorded = typeof flags === 'boolean' ? flags : Boolean(flags.unrecorded);
@@ -154,8 +155,8 @@ export function buildRangeSegmentsFromEntries(inputEntries, start, end, opts = {
   const segments = [];
   for (let dayStart = startOfDay(s); dayStart < e; dayStart = addDays(dayStart, 1)) {
     const dayEnd = addDays(dayStart, 1);
-    const rangeStart = new Date(Math.max(s, dayStart));
-    const rangeEnd = new Date(Math.min(e, dayEnd));
+    const rangeStart = new Date(Math.max(+s, +dayStart));
+    const rangeEnd = new Date(Math.min(+e, +dayEnd));
     if (rangeEnd <= rangeStart) continue;
 
     let cursor = new Date(rangeStart);
@@ -164,11 +165,11 @@ export function buildRangeSegmentsFromEntries(inputEntries, start, end, opts = {
       if (rawEnd <= rangeStart || rawStart >= rangeEnd) return;
 
       if (rawStart > cursor) {
-        pushUnknownSegment(segments, new Date(cursor), new Date(Math.min(rawStart, rangeEnd)));
+        pushUnknownSegment(segments, new Date(cursor), new Date(Math.min(+rawStart, +rangeEnd)));
       }
 
-      const segStart = new Date(Math.max(rawStart, rangeStart));
-      const segEnd = new Date(Math.min(rawEnd, rangeEnd));
+      const segStart = new Date(Math.max(+rawStart, +rangeStart));
+      const segEnd = new Date(Math.min(+rawEnd, +rangeEnd));
       const mins = minsBetweenDates(segStart, segEnd);
       if (mins > 0) {
         const rawMins = minsBetweenDates(rawStart, rawEnd);
@@ -185,7 +186,7 @@ export function buildRangeSegmentsFromEntries(inputEntries, start, end, opts = {
         });
       }
 
-      if (rawEnd > cursor) cursor = new Date(Math.min(rawEnd, rangeEnd));
+      if (rawEnd > cursor) cursor = new Date(Math.min(+rawEnd, +rangeEnd));
     });
   }
   return segments;

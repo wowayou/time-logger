@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-import { isPlaceholderEntry, loggedEntriesFrom, primaryTag } from './stats.js';
+import { GAP, isPlaceholderEntry, loggedEntriesFrom, primaryTag } from './stats.js';
 import {
   addDays,
   hhmm,
@@ -212,6 +212,14 @@ function loggedOnDay(entries, dateKey) {
     .filter(entry => entry.ts.slice(0, 10) === dateKey);
 }
 
+/**
+ * 事务 planner 统一返回形态：`ok` 必须保持字面量类型，`npm run typecheck`
+ * 才能对 `if (!x.ok) return x` 之后的分支收窄。
+ * @typedef {{ ok: true } & Record<string, any>} TxOk
+ * @typedef {{ ok: false, reason: string, message: string } & Record<string, any>} TxError
+ */
+
+/** @returns {TxOk} */
 function transactionResult(resultEntries, details = {}) {
   resultEntries.sort((a, b) => a.ts === b.ts
     ? String(a.id).localeCompare(String(b.id))
@@ -224,6 +232,7 @@ function transactionResult(resultEntries, details = {}) {
   };
 }
 
+/** @returns {TxError} */
 function transactionError(reason, message, details = {}) {
   return { ok: false, reason, message, ...details };
 }
@@ -249,6 +258,7 @@ function previewPart(role, entry, startTs, endTs, label) {
   };
 }
 
+/** @returns {TxOk | TxError} */
 export function overnightContinuationContext(entries, viewedDate, opts = {}) {
   const nowTs = normalizeTimestamp(opts.nowTs) || nowStr();
   const todayKey = opts.todayKey || nowTs.slice(0, 10) || todayStr();
@@ -329,6 +339,7 @@ export function planOvernightContinuation(entries, request, opts = {}) {
   }
 
   const createId = opts.createId || (() => `overnight-${Date.now()}`);
+  /** @returns {TxOk | TxError} */
   const claimPoint = (ts, pointWhat, pointTags) => {
     const existing = resultEntries.find(entry => entry.ts === ts);
     if (existing && !isPlaceholderEntry(existing)) {
@@ -346,14 +357,26 @@ export function planOvernightContinuation(entries, request, opts = {}) {
 
   const startPoint = claimPoint(startTs, what, tags);
   if (!startPoint.ok) return startPoint;
+  let midnightPoint = null;
   if (crossMidnight) {
-    const midnightPoint = claimPoint(context.midnightTs, what, tags);
+    midnightPoint = claimPoint(context.midnightTs, what, tags);
     if (!midnightPoint.ok) return midnightPoint;
   }
   if (context.hardEndIsNow) {
     const endPoint = claimPoint(context.hardEndTs, '', []);
     if (!endPoint.ok) return endPoint;
   }
+
+  // D10/C7A：过夜表单两端都是用户显式断言，写入即视为已确认——只标超过
+  // 确认阈值的段（短段标记无信息量）；若起点被 coalesceRedundant 并入前一条
+  // 同内容记录，标记随点消亡，沿用「相邻边界变化即失效」的保守语义。
+  const markConfirmed = (point, segStartTs, segEndTs) => {
+    if (point && minsBetweenDates(new Date(segStartTs), new Date(segEndTs)) > GAP) {
+      point.longConfirm = { startTs: segStartTs, endTs: segEndTs };
+    }
+  };
+  markConfirmed(startPoint.point, startTs, crossMidnight ? context.midnightTs : context.hardEndTs);
+  if (midnightPoint) markConfirmed(midnightPoint.point, context.midnightTs, context.hardEndTs);
 
   const duplicate = duplicateTimestamp(resultEntries);
   if (duplicate) return transactionError('conflict', '新的过夜边界与其它记录重合。', { context, conflict: duplicate.second });
@@ -372,6 +395,7 @@ export function planOvernightContinuation(entries, request, opts = {}) {
   });
 }
 
+/** @returns {TxOk | TxError} */
 export function intervalEditContext(entries, id, opts = {}) {
   const entry = (entries || []).find(item => item.id === id);
   if (!entry) return transactionError('missing', '这条记录已经不存在。');

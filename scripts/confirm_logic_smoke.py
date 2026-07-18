@@ -588,6 +588,31 @@ assert(overnightRealEnd.ok && overnightRealEnd.context.hardEndTs === '2026-07-13
 assert(overnightRealEnd.resultEntries.some(e => e.id === 'wash'), 'real hard-end entry remains untouched');
 assert(!overnightRealEnd.resultEntries.some(e => e.ts === '2026-07-13T08:00'), 'real hard end does not add a now placeholder');
 
+// --- v67 D10/C7A：过夜写入即确认（显式双端断言不再落待确认） ---
+const c7aPlan = planOvernightContinuation([
+  { id: 'y-open', ts: '2026-07-12T20:00', what: '', tags: [] }
+], {
+  viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T20:00',
+  startTs: '2026-07-12T20:00', what: '收拾行李', tags: ['洗漱']
+}, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
+assert(c7aPlan.ok, 'C7A overnight plan succeeds');
+const c7aYesterday = c7aPlan.resultEntries.find(e => e.ts === '2026-07-12T20:00');
+const c7aMidnight = c7aPlan.resultEntries.find(e => e.ts === '2026-07-13T00:00');
+assert(c7aYesterday.longConfirm && c7aYesterday.longConfirm.startTs === '2026-07-12T20:00' && c7aYesterday.longConfirm.endTs === '2026-07-13T00:00', 'C7A marks the yesterday part confirmed with exact segment bounds');
+assert(c7aMidnight.longConfirm && c7aMidnight.longConfirm.startTs === '2026-07-13T00:00' && c7aMidnight.longConfirm.endTs === '2026-07-13T08:00', 'C7A marks the today part confirmed with exact segment bounds');
+const c7aYesterdaySummary = summarizeEntries(c7aPlan.resultEntries, new Date(2026, 6, 12), new Date(2026, 6, 13), { now: new Date(2026, 6, 13, 8) });
+const c7aTodaySummary = summarizeEntries(c7aPlan.resultEntries, new Date(2026, 6, 13), new Date(2026, 6, 13, 8), { now: new Date(2026, 6, 13, 8) });
+assert(c7aYesterdaySummary.pending === 0 && c7aYesterdaySummary.maintain === 240, 'C7A yesterday 4h part is counted, not pending');
+assert(c7aTodaySummary.pending === 0 && c7aTodaySummary.maintain === 480, 'C7A today 8h part is counted, not pending');
+const c7aShort = planOvernightContinuation([
+  { id: 'y-open', ts: '2026-07-12T23:30', what: '', tags: [] }
+], {
+  viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T23:30',
+  startTs: '2026-07-12T23:30', what: '收拾行李', tags: ['洗漱']
+}, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
+assert(c7aShort.ok && !c7aShort.resultEntries.find(e => e.ts === '2026-07-12T23:30').longConfirm, 'C7A leaves sub-threshold parts unmarked');
+assert(c7aShort.resultEntries.find(e => e.ts === '2026-07-13T00:00').longConfirm.endTs === '2026-07-13T08:00', 'C7A still marks the today part beyond threshold');
+
 const midnightConflict = planOvernightContinuation([
   { id: 'y-open', ts: '2026-07-12T23:00', what: '', tags: [] },
   { id: 'mid-plan', ts: '2026-07-13T00:00', what: '午夜计划', tags: ['求职推进'], planned: true }

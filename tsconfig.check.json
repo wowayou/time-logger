@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "es2022",
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "lib": ["es2022", "dom"],
+    "strict": false,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": false
+  },
+  "include": [
+    "src/time.js",
+    "src/storage.js",
+    "src/stats.js",
+    "src/entry_model.js"
+  ]
+}

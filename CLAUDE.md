@@ -19,7 +19,7 @@
 - `manifest.webmanifest`：PWA 清单
 - `icon.svg` 与 `icons/*.png`：运行时图标资产
 
-允许的开发期工具包括 `scripts/project_audit.py`、`scripts/confirm_logic_smoke.py` 和 Playwright UI smoke。Python 脚本使用标准库；确认逻辑 smoke 会调用本机 `node` 导入真实 ES modules；Playwright 只用于开发期响应式验证。
+允许的开发期工具包括 `scripts/project_audit.py`、`scripts/confirm_logic_smoke.py`、`scripts/bump_version.py`（版本仪式六处锚点一键联动）、`npm run typecheck`（tsc 对 `time/storage/stats/entry_model` 四个纯逻辑模块做 JSDoc 类型检查，devDependency、无构建产物）和 Playwright UI smoke。Python 脚本使用标准库；确认逻辑 smoke 会调用本机 `node` 导入真实 ES modules；Playwright 只用于开发期响应式验证。
 
 **铁律：无运行时依赖 / 无构建 / 原生 ES modules。** npm 只允许作为开发期测试依赖；不引入打包器、框架、账号、云同步或后端。
 
@@ -57,7 +57,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v66` / manifest `version: "66"`。
+当前版本：`timelog-v67` / manifest `version: "67"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -68,6 +68,8 @@
 5. `src/ui.js` 的 `APP_VERSION`（更多 sheet 底部展示的版本号，audit 脚本校验同步）
 
 运行时资产必须进 SW 缓存；文档和开发脚本不进缓存。
+
+六处版本锚点（上表 1/2/5 + CLAUDE.md 当前版本行 + README Release 行）可用 `python3 scripts/bump_version.py <N>` 一键联动；CHANGELOG 行与 `FILES` 清单属内容判断仍需手动，脚本会在锚点漂移时拒绝改写任何文件。
 
 ## UI 红线
 
@@ -119,7 +121,7 @@
 - 统计以分钟数为权威值：`job` / `maintain` / `leak` / `unrecorded` / `pending` / `total` 先累加分钟；百分比只用于展示，不反向参与统计，不强行凑满 100%。
 - 标签 taxonomy 固定 4 桶：主线 `job`、维持 `maintain`、漏损 `leak`、未记录 `unrecorded`。桶在渲染/统计时由 tag→bucket 映射派生；孤儿 tag 落未记录。
 - 本地自然日 00:00 是统计硬边界；空日不继承前一天最后标签；有明确右邻记录的跨日闭合段会切入后续日期；有首条记录的日期从 00:00 到首条之间计为未记录；周/月/年汇总按每日独立统计累加。
-- 超过 3h 的非 `longOk` 明确标签段确认只绑定 `longConfirm.startTs` 和 `longConfirm.endTs`；相邻时间变化或中间补录自动失效，改成另一个明确标签不自动失效；跨日闭合段使用真实右邻作为确认结束，没有右邻时才使用本地日边界。默认只有“睡觉” `longOk:true`。
+- 超过 3h 的非 `longOk` 明确标签段确认只绑定 `longConfirm.startTs` 和 `longConfirm.endTs`；相邻时间变化或中间补录自动失效，改成另一个明确标签不自动失效；跨日闭合段使用真实右邻作为确认结束，没有右邻时才使用本地日边界。默认只有“睡觉” `longOk:true`。v67（C7A）：过夜续记（`planOvernightContinuation`）写入时即对超阈值段落 `longConfirm`——显式双端断言视为已确认，不再落待确认；「只记到 24:00」模式与普通补录**不**自确认；起点被 coalesce 并入前段时标记随点消亡。
 - 时间戳是本地壁钟值，不做时区转换；跨设备导入可根据备份 `meta.sourceTimezoneOffsetMinutes` 建议“整体平移 ±N 小时”，用户仍可覆盖。
 - 续记模型以所看日期为准：空日默认从 00:00 开始；有记录日默认续最后一条或当天空占位条；补录到已有右邻记录之前时结束点吸附右邻；今天无右邻到当前时间，非今天无右邻到 24:00。
 - 数据只存在 `localStorage['timelog.v1']`；标签配置只存在 `localStorage['timelog.config']`。
@@ -160,6 +162,7 @@
 ```bash
 python3 scripts/project_audit.py
 python3 scripts/confirm_logic_smoke.py
+npm run typecheck
 npm run test:ui
 git diff --check
 ```
@@ -250,6 +253,7 @@ git diff --check
 | v55 | 2026-07-11 | 功能冻结后的明确批准视觉收敛：以“海拔＝信息层级”消除日视图 card soup——header 与日期控件贴地，记录卡保留背景差/边界但去阴影并收紧间距，hero 尺子成为唯一带内容阴影的主表面；主线大数字改用墨色，FAB 保留唯一饱和 CTA 并收敛发光。改动限于 CSS 与版本仪式，DOM、模板、业务 JS、左滑轨道、刷新快照和动画护栏均不动。 |
 | v56 | 2026-07-11 | 日视图改**连续日志容器**（`docs/prototypes/continuous-log-refined.html` 评审定稿，用户批准）：`.log` 单一贴地面 + 发丝分隔（wrapper 层、避开竖脊）+ 左缘 4px 通高桶色竖脊（`data-b`：实=已发生、CSS mask 圆头虚线=计划、灰=未记录），tag 降素色小字（桶色职责移交竖脊）；今天视图「现在 hh:mm」一线分隔计划与已发生（accent 呼吸点，reduced-motion 静止）；行改 时间｜内容｜时长 三列网格，时长右置、文案单职责（进行中「已 X」与 FAB 同语，去掉「未记录·进行中」复读）；行内动作只留缺口/待办文字链（补一下/标记已发生/确认，mini-btn 去底色留 44px 热区），**已发生普通段「切一刀」迁入编辑 sheet**（cell-action；经批准的入口红线变更）；hero 大数字 32→36px 补偿去色层级；boot 快照加 `appVersion` 门（应用更新后旧 DOM 形态不再被新 JS 采纳而跳过首渲）；行仍自带不透明 `--card` 底、入场只过渡 opacity（左滑/v53 护栏不变），周/月/年与「···」更多不动。Playwright 断言适配 + 新增容器/竖脊/现在线/切一刀入口回归。 |
 | v57 | 2026-07-13 | 日期计划窗口改为本地自然日统一规则（严格晚于 `now+5min`、上界 `今天+8日 00:00`）；历史/今天/未来 `+1…+7`/`+8` 入口分别强制已发生、沿用偏好、强制计划、隐藏新增，取消表单不再提前切主页面日期。既有计划按同一次最新 `load()` 的 `ts` 实施“时间未变”上下界对称豁免。新增纯数据形态的过夜续记：显式选择到今天硬终点或只到 24:00，跨午夜写成两条可独立编辑的日内记录，planner 复核 placeholder/真实记录/计划边界与结果签名。加入仅由 `#boottrace=1` 启用、位于启动快照范围外的隐私安全启动分段 HUD；不改 SW 策略/FILES，不做 lazy、A/B 或其它性能优化。补真实 `timezoneId` DST、日期矩阵、计划豁免、过夜与 boottrace 双引擎回归。 |
+| v67 | 2026-07-18 | D10 定向解冻批次（AI 协作窗口收尾）：**C7A** 过夜写入即确认——`planOvernightContinuation` 对超阈值段写入时落 `longConfirm`，显式双端断言不再落待确认、昨天统计不再静默计未记录（「只记到 24:00」与普通补录**不**自确认；起点被 coalesce 并入前段时标记随点消亡），confirm smoke 补三组回归；**C8** 说明文案两处（「删除后 8 秒内可撤销」语序；「第 8 天起只查看和编辑已有计划」改「计划最多建到未来 7 天，再往后的日期不能新增」）；死 export 清理（`stats.js` `recordedDayKeys` 转模块内私有）；**C11b** 模型层类型检查落地——`npm run typecheck`（tsc checkJs 仅查 time/storage/stats/entry_model 四纯逻辑模块，devDependency、零构建产物、入自测清单），事务 planner 加 `TxOk`/`TxError` 字面量 JSDoc（131 行推断错误收敛为 0），stats 六处 `Math.max/min(Date)` 显式数值化（行为等价）；C11a bump 脚本已先行合入。零布局/交互改动 |
 | v66 | 2026-07-17 | P33 感知缓解（维护者批准的冻结期观感改动，不缩短等待）：新增 `apple-touch-startup-image` 启动图——录屏判决确认冷孵化进程的 ~1.4s+ 发生在页面计时零点之前、仓库内不可修，唯一可触及该时段的杠杆是 OS 层启动图资产。最小范围：只做 SE 尺寸（750×1334，唯一真实设备）暗色一张（`icons/splash-750x1334.png`，Playwright 从 `icon.svg` 确定性渲染：品牌暗底 #0e0f13 + 居中 τ），其它设备保持系统默认；iOS 该机制只认静态图（动图不存在，连原生 launch screen 都被规定为静态）。资产进 `sw.js` FILES 与 audit `REQUIRED_ICON_SIZES` 双护栏。诚实边界：真机生效性待验证（iOS 可能要求重新添加主屏图标才刷新启动图），无效即 revert；对将来「原生壳」架构选项零耦合（原生用自己的 launch storyboard，此标签直接删除）。经录屏交叉验证的缓解杠杆全景：习惯（不上滑杀 PWA）> 本启动图（纯观感）> 页面侧（已到边际，435ms）> 原生壳（gate 外最后选项） |
 | v65 | 2026-07-17 | 冻结期修复 P35（维护者明确批准）：分钟 tick 的整页重渲染把日视图窗口滚动钳回顶部——WebKit 无 scroll anchoring，`#timeline` 整块 `innerHTML` 替换瞬间文档变矮、滚动被钳到 0（Chromium 有锚定不受影响），回看今天早些的记录时每分钟被拽回一次（用户真机报告，双引擎脚本复现：WebKit 600→0、Chromium 600→600）。修＝`refreshLiveClock` 渲染前后保存/还原 `window.scrollY`——它是唯一的被动重渲染路径（用户没有操作、不该动视口），主动路径（切视图/切周期/保存）不受影响。回归测试走真实 tick 路径（`page.clock` 快进跨分钟、矮视口滚动保持断言），验证过无修复时 WebKit 必红。教训（测试环境）：`reuseExistingServer: true` 会把 4173 上任何陈旧 server 当被测应用——本轮它正服务着另一个项目，228 用例烧 4.5h 全部假超时；跑套件前先确认 4173 是时间尺或为空 |
 | v64 | 2026-07-17 | 冻结期修复 C1「点『更新应用』后无声装死」（维护者点名要求修）：iOS 上 skipWaiting → controllerchange 整链可无声失败（2026-07-15/16 两次真机复现，点击后版本纹丝不动、无任何反馈，用户只能靠再次完全退出这条自然激活路径脱困）。`applyUpdate` 三层处理：① waiting worker 自身 `statechange→activated` 作为第二成功路径（controllerchange 丢失时可能仍达）；② 8 秒超时兜底——两条都没来就承认没生效，横幅切换为「完全退出应用（Safari 关闭本站全部标签页）后重新打开」可执行指引，不再无声；③ 指引可「知道了」收起，`showUpdatePrompt` 复位回按钮态。静态壳横幅改双态 span/button（`data-role="update-prompt"/"update-stuck"`）。**诚实边界：本修复不能强迫 iOS 应答 skipWaiting**——它把按钮从「可能生效、失败装死」变成「多一条生效路径、失败给出路」；skipWaiting 本身在 iOS 的不可靠性仍留在候选 C1 观察。测试：mock waiting 升级为 EventTarget，新增超时→指引→收起与 statechange→reload 两条回归（page.clock 快进 8s；sentinel 消失证明真实 reload） |

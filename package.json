@@ -3,9 +3,11 @@
   "type": "module",
   "scripts": {
     "test:ui": "playwright test",
-    "test:stress": "playwright test tests/stress.spec.js"
+    "test:stress": "playwright test tests/stress.spec.js",
+    "typecheck": "tsc -p tsconfig.check.json"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.1"
+    "@playwright/test": "^1.49.1",
+    "typescript": "^7.0.2"
   }
 }
