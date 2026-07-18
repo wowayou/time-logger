@@ -1989,11 +1989,15 @@ test('enabled boot diagnostics append one privacy-bounded sample per boot with r
   expect(parsed.enabled).toBe(true);
   expect(parsed.samples.length).toBe(30);
   const sample = parsed.samples[parsed.samples.length - 1];
-  // 字段白名单：只允许计时/布尔/命中数，任何新增字段都必须在这里显式过审。
+  // 字段白名单：只允许计时/布尔/命中数/固定枚举 SW 态，任何新增字段都必须在这里显式过审。
   expect(Object.keys(sample).sort()).toEqual([
-    'at', 'cache', 'cacheCount', 'cacheFiles', 'controlled', 'gapMin', 'htmlMs',
-    'moduleMs', 'nav', 'persisted', 'readyMs', 'snapshot', 'standalone', 'ver'
+    'at', 'cache', 'cacheCount', 'cacheFiles', 'controlled', 'fcpMs', 'gapMin', 'htmlMs',
+    'moduleMs', 'nav', 'persisted', 'readyMs', 'snapshot', 'standalone', 'sw', 'ver'
   ]);
+  // 诊断 v2（v68）：sw 只能是固定枚举拼接（i/w/a + Worker.state），fcpMs 数值或 -1。
+  expect(sample.sw).toMatch(/^(|none|empty|[iwa]:[a-z]+(\+[iwa]:[a-z]+){0,2})$/);
+  expect(typeof sample.fcpMs).toBe('number');
+  expect(sample.fcpMs).toBeGreaterThanOrEqual(-1);
   expect(typeof sample.at).toBe('number');
   expect(typeof sample.controlled).toBe('boolean');
   expect(typeof sample.standalone).toBe('boolean');

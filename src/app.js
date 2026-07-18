@@ -87,6 +87,25 @@ import {
   const bootDiagModuleAt = Math.round(performance.now());
   const bootDiagControlled = Boolean(navigator.serviceWorker && navigator.serviceWorker.controller);
   let bootDiagSnapshotAdopted = false;
+  // 诊断 v2（v68，C6 第一优先）：SW 注册三态同样必须早读——冷启动的 reg.update()
+  // 会在网络返回后改变 installing/waiting，晚读就分不清「启动继承的卡死态」与
+  // 「本次更新检查新产生的过渡态」。值是固定枚举（i/w/a + Worker.state），无内容。
+  let bootDiagSwStates = '';
+  const bootDiagFormatSwStates = reg => {
+    if (!reg) return 'none';
+    const parts = [];
+    if (reg.installing) parts.push(`i:${reg.installing.state}`);
+    if (reg.waiting) parts.push(`w:${reg.waiting.state}`);
+    if (reg.active) parts.push(`a:${reg.active.state}`);
+    return parts.join('+') || 'empty';
+  };
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+      navigator.serviceWorker.getRegistration()
+        .then(reg => { bootDiagSwStates = bootDiagFormatSwStates(reg); })
+        .catch(() => {});
+    }
+  } catch {}
 
   let sheetEditId = null;
   let pendingUpdateRegistration = null;
@@ -1014,9 +1033,10 @@ import {
     } catch {}
   }
 
-  // 启动诊断（v62）：开关关闭时这里一次早退，不留任何监听器/timer/持久化痕迹。
-  // 样本只含计时、布尔与缓存命中数——用来区分「缓存被回收」「SW 没接管」「纯网络
-  // 慢」「模块执行慢」四种根因，绝不记录条目内容、标签或备份数据。
+  // 启动诊断（v62；v68 诊断 v2 增补 SW 注册态与首绘）：开关关闭时这里一次早退，
+  // 不留任何监听器/timer/持久化痕迹。样本只含计时、布尔、缓存命中数与固定枚举的
+  // SW 注册态——用来区分「缓存被回收」「SW 没接管」「waiting 交接卡死」「纯网络慢」
+  // 「模块执行慢」等根因，绝不记录条目内容、标签或备份数据。
   async function recordBootDiagnostics(readyMs) {
     if (!readBootDiag().enabled) return;
     const sample = {
@@ -1026,7 +1046,9 @@ import {
       htmlMs: 0,
       moduleMs: bootDiagModuleAt,
       readyMs,
+      fcpMs: -1,
       controlled: bootDiagControlled,
+      sw: bootDiagSwStates,
       snapshot: bootDiagSnapshotAdopted,
       standalone: Boolean((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true),
       persisted: null,
@@ -1039,6 +1061,17 @@ import {
       if (nav) {
         sample.nav = nav.type || '';
         sample.htmlMs = Math.round(nav.responseEnd || 0);
+      }
+    } catch {}
+    try {
+      const paint = performance.getEntriesByType('paint').find(entry => entry.name === 'first-contentful-paint');
+      if (paint) sample.fcpMs = Math.round(paint.startTime);
+    } catch {}
+    try {
+      // 早读 promise 极少数情况在 app-ready 前未回来；兜底晚读仍是同一固定枚举，
+      // 只是可能混入本次 reg.update() 的过渡态。
+      if (!sample.sw && navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+        sample.sw = bootDiagFormatSwStates(await navigator.serviceWorker.getRegistration());
       }
     } catch {}
     try {

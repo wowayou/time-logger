@@ -195,8 +195,8 @@ export function createIoActions(deps) {
     return `${Math.floor(gapMin / 60)}h${p2(gapMin % 60)}m`;
   }
 
-  // 启动诊断样本只含计时/布尔/缓存命中数（storage.appendBootDiagSample 的口径），
-  // 这里只做排版；UA 有助于区分 Safari 与主屏 PWA 的行为差异，一并带上。
+  // 启动诊断样本只含计时/布尔/缓存命中数/固定枚举 SW 态（storage.appendBootDiagSample
+  // 的口径），这里只做排版；UA 有助于区分 Safari 与主屏 PWA 的行为差异，一并带上。
   function copyBootDiagnostics() {
     const { samples } = deps.readBootDiag();
     const lines = samples.map(s => [
@@ -205,14 +205,16 @@ export function createIoActions(deps) {
       `间隔 ${bootDiagGap(s.gapMin)}`,
       s.nav || 'navigate',
       `SW接管 ${s.controlled ? '是' : '否'}`,
+      s.sw ? `SW态 ${s.sw}` : '',
       `常驻存储 ${s.persisted === true ? '是' : s.persisted === false ? '否' : '未知'}`,
       s.cache ? `缓存 ${s.cache}(${s.cacheFiles}文件${s.cacheCount > 1 ? `,共${s.cacheCount}套` : ''})` : '缓存 无',
       `html ${s.htmlMs}ms`,
       `模块 ${s.moduleMs}ms`,
+      Number.isFinite(s.fcpMs) && s.fcpMs >= 0 ? `首绘 ${s.fcpMs}ms` : '',
       `就绪 ${s.readyMs}ms`,
       s.standalone ? 'standalone' : '浏览器',
       s.snapshot ? '快照命中' : '快照未中'
-    ].join(' · '));
+    ].filter(Boolean).join(' · '));
     const text = [
       `# 时间尺启动诊断（最近 ${samples.length} 次启动）`,
       `- UA: ${navigator.userAgent}`,
