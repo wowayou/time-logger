@@ -5,6 +5,7 @@
 > 冻结周期：2026-07-16 00:00 → 2026-07-29 23:59（GMT+8）
 > 阶段复盘：2026-07-30
 > 决策记录：`docs/decisions.md` D9
+> **2026-07-18 修订**：D10 定向提前处置（v67/v68 已发；非整体解冻，本文其余边界与复盘安排不变）——见 `docs/decisions.md` D10 与 `docs/freeze-candidates.md` 顶部状态注记。
 
 本文是当前阶段的执行边界。它**取代** `docs/product-direction-validation-handoff.md` 作为当下两周的行动依据；后者仍是未来恢复外部验证时的决策输入，不删除、不改写。
 
