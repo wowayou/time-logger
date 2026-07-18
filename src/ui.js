@@ -292,7 +292,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '66';
+export const APP_VERSION = '67';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -606,9 +606,9 @@ function renderHelpSheet() {
   return `
     ${sheetHead({ title: '说明', cancelText: '关闭', cancelAction: 'close-form', cancelAria: '关闭说明' })}
     <div class="form-sheet-body help-body">
-      <section><h2>怎么记</h2><p>点右下角「＋ 记一条」记录刚才这一阵。若页面仍停在昨天且尾部是未记录，新增表单会明确让你选择延续到今天，或只记到昨天 24:00。日视图是一整块连续日志：左侧竖脊颜色就是归类桶，实色＝已发生、虚线＝计划、灰色＝未记录；今天还有一根「现在」线，线上是计划、线下是已发生。点任意一行可编辑内容、标签和完整起止时间；「切一刀」在编辑页里，只在原段内部切分。未记录行点「补一下」补录。左滑一行会露出编辑、删除；删除前会展示确切结果，删除后可撤销 8 秒。</p></section>
+      <section><h2>怎么记</h2><p>点右下角「＋ 记一条」记录刚才这一阵。若页面仍停在昨天且尾部是未记录，新增表单会明确让你选择延续到今天，或只记到昨天 24:00。日视图是一整块连续日志：左侧竖脊颜色就是归类桶，实色＝已发生、虚线＝计划、灰色＝未记录；今天还有一根「现在」线，线上是计划、线下是已发生。点任意一行可编辑内容、标签和完整起止时间；「切一刀」在编辑页里，只在原段内部切分。未记录行点「补一下」补录。左滑一行会露出编辑、删除；删除前会展示确切结果，删除后 8 秒内可撤销。</p></section>
       <section><h2>4 桶</h2><p>先选归类桶，再选标签：主线=求职推进和自定义主线；维持=睡觉、吃饭、通勤等必要消耗；漏损=逃避娱乐；未记录=未知、孤儿标签和待确认长段。</p></section>
-      <section><h2>计划</h2><p>今天可在已发生/计划中切换；未来 1–7 天的新增入口固定为计划，第 8 天起只查看和编辑已有计划。计划必须严格晚于现在 5 分钟。计划条不计入 4 桶统计；时间到了可点「标记已发生」转为已发生记录。</p></section>
+      <section><h2>计划</h2><p>今天可在已发生/计划中切换；未来 1–7 天的新增入口固定为计划，计划最多建到未来 7 天，再往后的日期不能新增。计划必须严格晚于现在 5 分钟。计划条不计入 4 桶统计；时间到了可点「标记已发生」转为已发生记录。</p></section>
       <section><h2>3 小时确认</h2><p>超过 3 小时的非睡觉片段先进入未记录；确认后才按标签统计。睡觉默认 longOk，不要求确认。</p></section>
       <section><h2>备份与合并</h2><p>右上角「···」更多菜单含复制、存储、分享、导入完整 JSON；iPhone/iPad 点「存储备份」会打开系统菜单，可明确选择「存储到文件」和目录，其他浏览器使用下载。导入冲突可逐条保留本机、使用备份或合并文字；全部处理后才一次性写入。</p></section>
       <section><h2>离线更新</h2><p>首次联网后可离线使用。发现新版时会显示「更新应用」，只有你点击后才刷新；记录和标签仍保留在本机。</p></section>
