@@ -45,7 +45,9 @@ export default defineConfig({
   webServer: {
     command: `node -e ${JSON.stringify(staticServer)}`,
     url: 'http://127.0.0.1:4173/',
-    reuseExistingServer: true,
+    // v65 教训：true 会把 4173 上任何陈旧 server 当被测应用（228 用例假超时烧 4.5h）。
+    // false＝端口被占直接报错，宁可失败也不静默测错对象。
+    reuseExistingServer: false,
     stdout: 'ignore',
     stderr: 'pipe'
   }
