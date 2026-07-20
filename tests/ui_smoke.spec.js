@@ -2146,3 +2146,146 @@ test('minute tick re-render keeps the day view scroll position (P35)', async ({ 
   await expect.poll(() => page.locator('.tl-now-label').textContent()).not.toBe(nowBefore);
   expect(Math.abs(await page.evaluate(() => window.scrollY) - target)).toBeLessThanOrEqual(1);
 });
+
+// ---- v69 阶段格言（C13）：默认/自定义/隐藏三态、更多入口、导入合并、注入惰性 ----
+
+const DEFAULT_MOTTO = '记录是手段，推进主线才是目的。';
+
+test('day view shows the default stage motto; other views hide it (C13 ①)', async ({ page }) => {
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  const motto = page.locator('#motto-line');
+  await expect(motto).toBeVisible();
+  await expect(motto).toHaveText(DEFAULT_MOTTO);
+  // 静态壳纪律：文案由 JS 填充，视觉引号来自 CSS 生成内容，不进 DOM 文本。
+  await page.getByRole('button', { name: '周视图' }).click();
+  await expect(motto).toBeHidden();
+  await page.getByRole('button', { name: '天视图' }).click();
+  await expect(motto).toBeVisible();
+});
+
+test('motto edits persist to config and clearing hides the line (C13 ②③)', async ({ page }) => {
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  await page.locator('#motto-line').click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('阶段格言');
+  const input = page.locator('[data-role="motto-input"]');
+  await expect(input).toHaveValue(DEFAULT_MOTTO);
+  await input.fill('先投三份简历，再谈打磨');
+  await page.getByRole('button', { name: '保存阶段格言' }).click();
+  await expect(page.locator('#form-sheet')).toBeHidden();
+  await expect(page.locator('#motto-line')).toHaveText('先投三份简历，再谈打磨');
+  let config = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.config')));
+  expect(config.motto).toBe('先投三份简历，再谈打磨');
+
+  // 清空保存＝显式隐藏：行消失，config 落 ''（不是删键——删键会退回默认）。
+  await page.locator('#motto-line').click();
+  await page.locator('[data-role="motto-input"]').fill('');
+  await page.getByRole('button', { name: '保存阶段格言' }).click();
+  await expect(page.locator('#motto-line')).toBeHidden();
+  config = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.config')));
+  expect(config.motto).toBe('');
+});
+
+test('hidden motto stays reachable from 更多 and 恢复默认 round-trips to unset (C13 ③④)', async ({ page }) => {
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  // 先显式隐藏。
+  await page.locator('#motto-line').click();
+  await page.locator('[data-role="motto-input"]').fill('');
+  await page.getByRole('button', { name: '保存阶段格言' }).click();
+  await expect(page.locator('#motto-line')).toBeHidden();
+
+  // 隐藏后唯一入口：「···」更多 → 阶段格言；从更多进入，取消要回到更多。
+  await openBackupMenu(page);
+  await page.getByRole('button', { name: '设置阶段格言' }).click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('阶段格言');
+  await expect(page.locator('[data-role="motto-input"]')).toHaveValue('');
+  await page.getByRole('button', { name: '取消编辑阶段格言' }).click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+
+  // 恢复默认 → 保存：行回到默认文案，且恰等于默认的值归一化回「未设置」（无 motto 键）。
+  await page.getByRole('button', { name: '设置阶段格言' }).click();
+  await page.getByRole('button', { name: '恢复默认格言' }).click();
+  await expect(page.locator('[data-role="motto-input"]')).toHaveValue(DEFAULT_MOTTO);
+  await page.getByRole('button', { name: '保存阶段格言' }).click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  await page.getByRole('button', { name: '关闭更多菜单' }).click();
+  await expect(page.locator('#motto-line')).toHaveText(DEFAULT_MOTTO);
+  const config = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.config')));
+  expect('motto' in config).toBe(false);
+});
+
+test('motto import merge keeps the local explicit value and adopts only when unset (C13 ⑤)', async ({ page }) => {
+  await boot(page, 375, 'empty', false, FIXED_NOW);
+  const merged = await page.evaluate(async () => {
+    const s = await import('/src/storage.js');
+    const importedCfg = { version: 1, mainline: [], chips: [], motto: '备份里的格言' };
+    return {
+      // 本机未设置 → 采备份值。
+      adopt: s.mergeImportedConfig({ version: 1, mainline: [], chips: [] }, importedCfg).motto,
+      // 本机自定义 → 本机优先。
+      keepCustom: s.mergeImportedConfig({ version: 1, mainline: [], chips: [], motto: '本机格言' }, importedCfg).motto,
+      // 本机显式隐藏('') → 同样是显式值，保留。
+      keepHidden: s.mergeImportedConfig({ version: 1, mainline: [], chips: [], motto: '' }, importedCfg).motto,
+      // 备份也没有 → 维持未设置。
+      bothUnset: s.mergeImportedConfig({ version: 1, mainline: [], chips: [] }, { version: 1, mainline: [], chips: [] }).motto,
+      // 导出面：config 进完整备份时 motto 一并携带（validateImportData 只认字符串）。
+      validateBad: s.validateImportData({ entries: [], config: { motto: 42 } }).ok,
+      validateGood: s.validateImportData({ entries: [], config: { motto: '好句子' } }).ok
+    };
+  });
+  expect(merged.adopt).toBe('备份里的格言');
+  expect(merged.keepCustom).toBe('本机格言');
+  expect(merged.keepHidden).toBe('');
+  expect(merged.bothUnset).toBeUndefined();
+  expect(merged.validateBad).toBe(false);
+  expect(merged.validateGood).toBe(true);
+});
+
+test('injected motto content renders inert via textContent/esc (C13 ⑥)', async ({ page }) => {
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  const payload = '<img src=x onerror=window.__pwned=1>';
+  await page.locator('#motto-line').click();
+  await page.locator('[data-role="motto-input"]').fill(payload);
+  await page.getByRole('button', { name: '保存阶段格言' }).click();
+  await expect(page.locator('#motto-line')).toHaveText(payload);
+  // 行内不得出现真实 <img>；重开编辑 sheet（value 属性经 esc）同样惰性。
+  expect(await page.locator('#motto-line img').count()).toBe(0);
+  await page.locator('#motto-line').click();
+  await expect(page.locator('[data-role="motto-input"]')).toHaveValue(payload);
+  expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
+});
+
+// ---- v69 C14：第三桶显示名 漏损→偏航，内部键 leak 不变 ----
+
+test('the third bucket reads 偏航 everywhere while its stored key stays leak (C14)', async ({ page }) => {
+  // hero 只在当天有可统计记录时渲染（排除 empty）；又需要一个尾占位让续记能落库，
+  // 否则续记起点与既有记录同刻会被同刻冲突拦下（那是既有行为，不是本用例的靶子）。
+  await boot(page, 768, 'tail-placeholder', false, FIXED_NOW);
+
+  // hero 次要数字标签 + 归类段控件都用新显示名；旧词不得残留在日视图。
+  await expect(page.locator('.hero-label').nth(1)).toHaveText('偏航');
+  await page.getByRole('button', { name: '记一条新的时间记录' }).click();
+  await expect(page.locator('[data-action="pick-form-bucket"][data-bucket="leak"]')).toHaveText('偏航');
+
+  // 选新桶 + 自定义标签保存：UI 说「偏航」，落库的桶键必须仍是 'leak'——存量备份和
+  // CSS 令牌都按键走，改键会要求数据迁移。
+  await page.getByRole('button', { name: '偏航' }).click();
+  await expect(page.locator('[data-role="mainline-hint"]')).toContainText('偏航');
+  await page.locator('#form-what').fill('放空一会');
+  await page.locator('#form-ctag').fill('放空');
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  const config = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.config')));
+  expect(config.chips).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: '放空', bucket: 'leak' })
+  ]));
+
+  // 摘要 Markdown 与标签高级设置也走新显示名。
+  const summary = await page.evaluate(async () => {
+    const { BUCKETS } = await import('/src/storage.js');
+    return BUCKETS.leak;
+  });
+  expect(summary).toBe('偏航');
+  await openBackupMenu(page);
+  await page.getByRole('button', { name: '配置标签' }).click();
+  await expect(page.locator('.config-body')).toContainText('偏航标签');
+  await expect(page.locator('.config-body')).not.toContainText('漏损');
+});

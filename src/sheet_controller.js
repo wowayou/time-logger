@@ -18,6 +18,7 @@ import {
 import { isPlaceholderEntry } from './stats.js';
 import {
   BUCKETS,
+  DEFAULT_MOTTO,
   bucketForTag,
   countEntriesWithTag,
   migrateEntryTags,
@@ -564,7 +565,7 @@ export function createSheetController(deps) {
     // 打开的新内容又清空、又 hidden 掉。
     if (sheetCloseCleanup) sheetCloseCleanup();
     const requestedMode = opts && opts.mode;
-    const mode = ['edit', 'help', 'config', 'import-shift', 'more', 'delete-confirm'].includes(requestedMode) ? requestedMode : 'new';
+    const mode = ['edit', 'help', 'config', 'import-shift', 'more', 'delete-confirm', 'motto'].includes(requestedMode) ? requestedMode : 'new';
     const id = opts && opts.id;
     const loaded = deps.load();
     const entry = mode === 'edit' ? loaded.entries.find(e => e.id === id) : null;
@@ -620,7 +621,7 @@ export function createSheetController(deps) {
       : (opts && opts.ts) || (formOvernightContext && formOvernightContext.startTs)
         || (formRecordMode === 'plan' ? defaultPlanTimestamp() : deps.defaultFormTs());
     const prevMode = sheet.hidden ? '' : (panel.dataset.mode || '');
-    if (mode === 'config' || mode === 'help' || mode === 'import-shift') {
+    if (mode === 'config' || mode === 'help' || mode === 'import-shift' || mode === 'motto') {
       if (prevMode === 'more') returnToMore = true;
       else if (prevMode !== mode) returnToMore = false;
     } else {
@@ -630,7 +631,8 @@ export function createSheetController(deps) {
     // v43: 只有会召唤软键盘的表单（新建/编辑/标签设置）用定高高 sheet——内容从顶部流下、
     // 焦点控件滚到键盘上方，面板几何不随键盘变。不弹键盘的短 sheet（更多/说明/导入平移）
     // 保持内容自适应 bottom sheet，避免短菜单底部空一截。
-    panel.classList.toggle('tall', mode === 'new' || mode === 'edit' || mode === 'config');
+    // motto 也召唤软键盘（单行 input），同走 v43 定高 tall 规则。
+    panel.classList.toggle('tall', mode === 'new' || mode === 'edit' || mode === 'config' || mode === 'motto');
     if (mode === 'edit') panel.dataset.id = id;
     else delete panel.dataset.id;
     panel.innerHTML = renderFormSheet({
@@ -1563,7 +1565,7 @@ export function createSheetController(deps) {
       longOk: row.querySelector('.cfg-long-ok').checked
     })).filter(chip => chip.name && (chip.bucket === 'maintain' || chip.bucket === 'leak'));
     if (!rowStates.length) {
-      showInlineError(panel, '至少保留一个维持/漏损 chip。', 'config-error');
+      showInlineError(panel, '至少保留一个维持/偏航 chip。', 'config-error');
       return;
     }
     const duplicate = rowStates.find((chip, index) => rowStates.findIndex(item => item.name === chip.name) !== index);
@@ -1597,6 +1599,26 @@ export function createSheetController(deps) {
     deps.render();
   }
 
+  // 阶段格言（v69，C13）：三态归一化在 storage.normalizeConfig 里做（trim/60 字上限/
+  // 恰等于默认→未设置），这里只负责把输入原样交给 saveConfig。空串会被保留为
+  // 「显式隐藏」。
+  function saveMotto() {
+    const input = document.querySelector('#form-sheet [data-role="motto-input"]');
+    if (!input) { closeForm(); return; }
+    const config = deps.loadConfig();
+    config.motto = input.value;
+    deps.saveConfig(config);
+    closeForm();
+    deps.render();
+  }
+
+  function resetMottoInput() {
+    const input = document.querySelector('#form-sheet [data-role="motto-input"]');
+    if (!input) return;
+    input.value = DEFAULT_MOTTO;
+    input.focus();
+  }
+
   registerSheetDismissGesture();
 
   return {
@@ -1627,6 +1649,8 @@ export function createSheetController(deps) {
     pickEditEndMode,
     handleFormInput,
     saveTagConfig,
+    saveMotto,
+    resetMottoInput,
     handleResponsiveResize
   };
 }

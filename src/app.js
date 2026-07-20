@@ -27,6 +27,7 @@ import {
   readBootDiag,
   readFirstUsedDate,
   rememberCustomTagForBucket,
+  resolveMotto,
   setBootDiagEnabled,
   save,
   saveConfig,
@@ -151,7 +152,7 @@ import {
       html.setAttribute('data-theme', pref);
     }
     const effective = pref === 'auto' ? getSysPref() : pref;
-    document.getElementById('meta-theme-color').setAttribute('content', effective === 'light' ? '#f7f5f1' : '#0e0f13');
+    document.getElementById('meta-theme-color').setAttribute('content', effective === 'light' ? '#f6f6f5' : '#0e0f13');
     document.querySelectorAll('#theme-seg button').forEach(btn => {
       const selected = btn.dataset.theme === pref;
       btn.classList.toggle('active', selected);
@@ -369,6 +370,18 @@ import {
       // FAB 有可见文案，不需要 hover tooltip；且 `button[data-tip]` 会把 position 强制
       // 成 relative（tooltip 定位规则），破坏 fixed 悬浮——所以只设 aria-label，不设 data-tip。
       addBtn.setAttribute('aria-label', isPlan ? '计划一条新的时间记录' : '记一条新的时间记录');
+    }
+    // 阶段格言（v69，C13）：只在日视图显示；textContent 填充（用户/导入文案不进
+    // innerHTML）。'' ＝显式隐藏——此时唯一入口是「···」更多里的「阶段格言」。
+    const mottoEl = document.getElementById('motto-line');
+    if (mottoEl) {
+      const motto = resolveMotto(loadConfig());
+      const showMotto = isDay && Boolean(motto);
+      mottoEl.hidden = !showMotto;
+      if (showMotto) {
+        mottoEl.textContent = motto;
+        mottoEl.setAttribute('aria-label', `阶段格言：${motto}。点击编辑`);
+      }
     }
     const periodNames = { day: '天', week: '周', month: '月', year: '年' };
     const todayLabels = { day: '回到今天', week: '回到本周', month: '回到本月', year: '回到今年' };
@@ -694,6 +707,9 @@ import {
       if (action === 'open-help') openHelp();
       if (action === 'open-more') sheetController.openMoreSheet();
       if (action === 'open-tag-config') openTagConfig();
+      if (action === 'open-motto') sheetController.openFormSheet({ mode: 'motto' });
+      if (action === 'save-motto') sheetController.saveMotto();
+      if (action === 'reset-motto-input') sheetController.resetMottoInput();
       if (action === 'toggle-start-time') sheetController.toggleStartTime(el);
       if (action === 'toggle-edit-start-time') sheetController.toggleEditStartTime(el);
       if (action === 'pick-edit-end-mode') sheetController.pickEditEndMode(el);

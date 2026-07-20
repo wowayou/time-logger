@@ -6,6 +6,7 @@
 
   v33 视觉令牌层（阶段0 提案 D 定稿）：
   - 双色板：暗=石墨冷（默认）、亮=宣纸暖；三个有彩桶色均过 dataviz 六项校验
+  - v69（D11）：亮色底色冷移一档 #f7f5f1→#f6f6f5（仅 --bg；卡面暖令牌保留），对比度重校全部持平或微升
   - 结构令牌全站唯一：圆角 12/16/22、动效 140/280ms、字阶 12/13/15/17
   - 海拔用阴影（亮）/ 阴影+顶光（暗），描边整体降级为 hairline 或透明占位
   - 行为零变更：选择器、布局机制（P13-P16 护栏）与 v32 完全一致
@@ -46,7 +47,7 @@
     /* === 亮·宣纸（跟随系统） === */
     @media (prefers-color-scheme: light) {
       :root {
-        --bg: #f7f5f1;
+        --bg: #f6f6f5;
         --card: #ffffff;
         --input: #f1efe9;
         --border: rgba(48,42,30,0.10);
@@ -69,7 +70,7 @@
     }
     /* === 手动覆盖（优先级高于 media query） === */
     html[data-theme="light"] {
-      --bg: #f7f5f1;
+      --bg: #f6f6f5;
       --card: #ffffff;
       --input: #f1efe9;
       --border: rgba(48,42,30,0.10);
@@ -968,6 +969,33 @@
       text-transform: uppercase;
       margin-bottom: 8px;
     }
+    /* v69 阶段格言（C13）：hero 结论卡与时间轴之间的一行安静小字。真按钮（点击
+       编辑）但视觉上是文本行；44px 最小高度守触控红线，引号用 CSS 生成内容（读屏
+       只读正文）。 */
+    .motto-line {
+      display: block;
+      width: 100%;
+      min-height: var(--control-h);
+      margin: -4px 0 2px;
+      padding: 6px 16px;
+      background: transparent;
+      border: 0;
+      border-radius: var(--r-ctl);
+      font-family: inherit;
+      font-size: var(--fs-ui);
+      line-height: 1.5;
+      color: var(--muted);
+      text-align: center;
+      cursor: pointer;
+      transition: color var(--t-fast);
+    }
+    /* display:block 会压过 UA 的 [hidden]{display:none}，必须显式让位。 */
+    .motto-line[hidden] { display: none; }
+    .motto-line::before { content: '「'; }
+    .motto-line::after { content: '」'; }
+    .motto-line:hover { color: var(--text); }
+    .motto-line:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
     .tl-head {
       display: flex;
       align-items: center;
@@ -1639,6 +1667,13 @@
     /* 复合选择器压过后文 .form-sheet-body 的 display:grid（同优先级按序会输）。 */
     .form-sheet-body.more-body { display: block; }
     .more-body > * + * { margin-top: 10px; }
+    /* v69 阶段格言 sheet：内容极少，grid 拉伸轨道会把元素撑出大空隙；同走 P34 的
+       块级流判例（复合选择器必须写在下方 .form-sheet-body 的 grid 定义之前）。 */
+    .form-sheet-body.motto-body { display: block; }
+    .motto-body > * + * { margin-top: 12px; }
+    /* 块级流里按钮缩到内容宽；补回 grid 轨道下的整行形态（与编辑 sheet 的
+       cell-action 一致）。 */
+    .motto-body .cell-action { display: block; width: 100%; }
     .app-version {
       text-align: center;
       color: var(--faint);
