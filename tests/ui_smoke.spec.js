@@ -2289,3 +2289,47 @@ test('the third bucket reads 偏航 everywhere while its stored key stays leak (
   await expect(page.locator('.config-body')).toContainText('偏航标签');
   await expect(page.locator('.config-body')).not.toContainText('漏损');
 });
+
+// ---- v70：长格言不得撑破窄屏（v69 引入的缺陷，修前 320px 实测必红）----
+
+test('a long unbreakable motto wraps instead of overflowing at 320px', async ({ page }) => {
+  await boot(page, 320, 'one-record', false, FIXED_NOW);
+  // 中文可任意位置断行、从不暴露；一串不带空格的拉丁字符（粘 URL 即触发）无处可断，
+  // 修复前会把 480px 的行挤进 279px 容器并撑出文档横向滚动。
+  // 经真实编辑路径写入——不要走 localStorage + reload：boot() 的 addInitScript 会在
+  // 每次导航重跑 localStorage.clear()，reload 会把刚写的格言擦掉，测试即变成绿色装饰。
+  await page.locator('#motto-line').click();
+  await page.locator('[data-role="motto-input"]').fill('a'.repeat(60));
+  await page.getByRole('button', { name: '保存阶段格言' }).click();
+  await expect(page.locator('#form-sheet')).toBeHidden();
+  await expect(page.locator('#motto-line')).toHaveText('a'.repeat(60));
+  // 点「完成」后指针停在原坐标，sheet 关闭后那个位置正好压在 header「···」上，触发它
+  // 的 hover tooltip——该 tooltip 在 320px 下会把文档撑到 399px（**先于本功能就存在**
+  // 的缺陷，见 freeze-candidates C15）。先把指针移开，否则这里测到的是那个 bug 而不是格言。
+  await page.mouse.move(5, 700);
+
+  const metrics = await page.evaluate(() => {
+    const doc = document.documentElement;
+    const el = document.getElementById('motto-line');
+    return {
+      docScrollWidth: doc.scrollWidth,
+      docClientWidth: doc.clientWidth,
+      lineScrollWidth: el.scrollWidth,
+      lineClientWidth: el.clientWidth
+    };
+  });
+  expect(metrics.docScrollWidth).toBeLessThanOrEqual(metrics.docClientWidth);
+  expect(metrics.lineScrollWidth).toBeLessThanOrEqual(metrics.lineClientWidth + 1);
+  await expectNoHorizontalOverflow(page);
+});
+
+test('a motto truncated exactly on a space keeps no trailing blank', async ({ page }) => {
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  // 第 60 个字符恰是空格时，slice 会留下尾空格并渲染成「…… 」。
+  const stored = await page.evaluate(async () => {
+    const { normalizeConfig } = await import('/src/storage.js');
+    return normalizeConfig({ version: 1, mainline: [], chips: [], motto: 'a'.repeat(59) + ' b' }).motto;
+  });
+  expect(stored).toBe('a'.repeat(59));
+  expect(stored.endsWith(' ')).toBe(false);
+});
