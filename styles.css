@@ -988,6 +988,10 @@
       text-align: center;
       cursor: pointer;
       transition: color var(--t-fast);
+      /* v70：格言是用户自由文本，可能是一串不带空格的拉丁字符（粘 URL 就会触发）。
+         中文可任意位置断行所以从未暴露，但 320px 下实测长拉丁串会撑破文档宽度
+         （480px 挤进 279px 容器），撞「窄屏不得横向溢出」红线。 */
+      overflow-wrap: anywhere;
     }
     /* display:block 会压过 UA 的 [hidden]{display:none}，必须显式让位。 */
     .motto-line[hidden] { display: none; }

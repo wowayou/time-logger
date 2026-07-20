@@ -42,7 +42,9 @@ const MOTTO_MAX_LEN = 60;
 
 function normalizeMotto(raw) {
   if (typeof raw !== 'string') return undefined;
-  const clean = raw.replace(/\s+/g, ' ').trim().slice(0, MOTTO_MAX_LEN);
+  // 末尾再 trim 一次：截断点恰好落在空格上时（第 60 个字符是空格）会留下尾空格，
+  // 渲染成「…… 」。v70 修。
+  const clean = raw.replace(/\s+/g, ' ').trim().slice(0, MOTTO_MAX_LEN).trim();
   return clean === DEFAULT_MOTTO ? undefined : clean;
 }
 
