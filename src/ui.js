@@ -7,6 +7,7 @@ import { formatPercent } from './stats.js';
 import {
   BUCKETS,
   BUCKET_ORDER,
+  DEFAULT_MOTTO,
   THEME_KEY,
   bucketForTag,
   chipGroups,
@@ -60,7 +61,7 @@ export function renderRuler(totals, hasItems, view) {
 }
 
 // R4（v47）：日视图尺子从「四桶清单」改「结论卡」——主线净时长是屏幕唯一大数字，
-// 漏损为次要数字，比例条 + 百分比降为辅助。只用于 day 视图；周/月/年仍走 renderRuler。
+// 偏航（v69 前称漏损）为次要数字，比例条 + 百分比降为辅助。只用于 day 视图；周/月/年仍走 renderRuler。
 export function renderDayHero(totals, hasItems, opts = {}) {
   const el = document.getElementById('ruler');
   const { isToday = false, asOf = '' } = opts;
@@ -71,7 +72,7 @@ export function renderDayHero(totals, hasItems, opts = {}) {
   }
   const parts = bucketParts(totals);
   const bar = parts.map(part => {
-    // 维持段 .55 透明度（设计稿：主线/漏损为焦点，维持退到背景）。
+    // 维持段 .55 透明度（设计稿：主线/偏航为焦点，维持退到背景）。
     const dim = part.bucket === 'maintain' ? ';opacity:0.55' : '';
     return `<div style="flex:${part.value};background:var(${part.color})${dim}"></div>`;
   }).join('');
@@ -89,7 +90,7 @@ export function renderDayHero(totals, hasItems, opts = {}) {
           <div class="hero-big">${fmtMins(totals.job)}</div>
         </div>
         <div class="hero-cell">
-          <div class="hero-label">漏损</div>
+          <div class="hero-label">偏航</div>
           <div class="hero-leak">${fmtMins(totals.leak)}</div>
         </div>
       </div>
@@ -255,7 +256,7 @@ export function renderSummaryRows(rows) {
 
 export function bucketHint(bucket) {
   if (bucket === 'maintain') return '自定义标签将归入「维持」；已有同名标签保持原归类。';
-  if (bucket === 'leak') return '自定义标签将归入「漏损」；已有同名标签保持原归类。';
+  if (bucket === 'leak') return '自定义标签将归入「偏航」；已有同名标签保持原归类。';
   return '自定义标签将归入「主线」；已有同名标签保持原归类。';
 }
 
@@ -292,7 +293,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '68';
+export const APP_VERSION = '69';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -349,6 +350,7 @@ function renderMoreSheet(opts = {}) {
       </div>
       <div class="cell-group">
         <button class="cell-btn" type="button" data-action="open-tag-config" aria-label="配置标签">标签高级设置${cellChevron}</button>
+        <button class="cell-btn" type="button" data-action="open-motto" aria-label="设置阶段格言">阶段格言${cellChevron}</button>
         <div class="cell-row"><span>主题</span>
           <div class="seg theme-seg" id="theme-seg" role="group" aria-label="主题">
             ${themeBtn('auto', '自动')}${themeBtn('light', '亮色')}${themeBtn('dark', '暗色')}
@@ -365,8 +367,27 @@ function renderMoreSheet(opts = {}) {
     </div>`;
 }
 
+// 阶段格言编辑（v69，C13）：input 预填当前生效文案（未设置＝默认），清空保存＝隐藏，
+// 「恢复默认」回填默认句（保存时 storage 会把恰等于默认的值归一化回「未设置」）。
+function renderMottoSheet(opts = {}) {
+  const config = opts.config || loadConfig();
+  const value = config.motto === undefined ? DEFAULT_MOTTO : config.motto;
+  return `
+    ${sheetHead({ title: '阶段格言', cancelText: '取消', cancelAction: 'close-form', cancelAria: '取消编辑阶段格言', doneText: '完成', doneAction: 'save-motto', doneAria: '保存阶段格言' })}
+    <div class="form-sheet-body motto-body">
+      <div class="form-hint">这一阶段对你有用的一句话，显示在日视图结论卡下方。</div>
+      <div class="fl">
+        <div class="fl-label">格言</div>
+        <input type="text" class="inp" data-role="motto-input" maxlength="60" value="${esc(value)}" placeholder="写一句对现在的你有用的话" aria-label="阶段格言内容">
+      </div>
+      <div class="form-hint">清空并保存＝不显示格言；之后可从「···」更多里重新设置。</div>
+      <button class="cell-action" type="button" data-action="reset-motto-input" aria-label="恢复默认格言">恢复默认</button>
+    </div>`;
+}
+
 export function renderFormSheet(opts) {
   if (opts && opts.mode === 'help') return renderHelpSheet();
+  if (opts && opts.mode === 'motto') return renderMottoSheet(opts);
   if (opts && opts.mode === 'config') return renderConfigSheet(opts.config || loadConfig(), opts);
   if (opts && opts.mode === 'import-shift') return renderImportShiftDialog(opts);
   if (opts && opts.mode === 'more') return renderMoreSheet(opts);
@@ -598,7 +619,7 @@ export function renderTagPicker(prefix, selectedTag, config = loadConfig(), buck
   if (draftChip) parts.push(`<div class="chips">${draftChip}</div>`);
   if (mainline.length) parts.push(`<div class="chips">${mainline.map(chipBtn).join('')}</div>`);
   if (groups.maintain.length) parts.push(`<div class="chip-group-label">维持</div><div class="chips">${groups.maintain.map(chipBtn).join('')}</div>`);
-  if (groups.leak.length) parts.push(`<div class="chip-group-label">漏损</div><div class="chips">${groups.leak.map(chipBtn).join('')}</div>`);
+  if (groups.leak.length) parts.push(`<div class="chip-group-label">偏航</div><div class="chips">${groups.leak.map(chipBtn).join('')}</div>`);
   return parts.join('');
 }
 
@@ -607,7 +628,7 @@ function renderHelpSheet() {
     ${sheetHead({ title: '说明', cancelText: '关闭', cancelAction: 'close-form', cancelAria: '关闭说明' })}
     <div class="form-sheet-body help-body">
       <section><h2>怎么记</h2><p>点右下角「＋ 记一条」记录刚才这一阵。若页面仍停在昨天且尾部是未记录，新增表单会明确让你选择延续到今天，或只记到昨天 24:00。日视图是一整块连续日志：左侧竖脊颜色就是归类桶，实色＝已发生、虚线＝计划、灰色＝未记录；今天还有一根「现在」线，线上是计划、线下是已发生。点任意一行可编辑内容、标签和完整起止时间；「切一刀」在编辑页里，只在原段内部切分。未记录行点「补一下」补录。左滑一行会露出编辑、删除；删除前会展示确切结果，删除后 8 秒内可撤销。</p></section>
-      <section><h2>4 桶</h2><p>先选归类桶，再选标签：主线=求职推进和自定义主线；维持=睡觉、吃饭、通勤等必要消耗；漏损=逃避娱乐；未记录=未知、孤儿标签和待确认长段。</p></section>
+      <section><h2>4 桶</h2><p>先选归类桶，再选标签：主线=求职推进和自定义主线；维持=睡觉、吃饭、通勤等必要消耗；偏航=偏离当前主线的时间，例如娱乐、刷手机、放空；未记录=未知、孤儿标签和待确认长段。</p><p>偏航不等于错误。适时放空是必要的，这个桶只回答「今天离主线偏了多少」，不做道德评判；某个标签你认为其实是必要消耗，可在「标签高级设置」里把它改到维持。</p></section>
       <section><h2>计划</h2><p>今天可在已发生/计划中切换；未来 1–7 天的新增入口固定为计划，计划最多建到未来 7 天，再往后的日期不能新增。计划必须严格晚于现在 5 分钟。计划条不计入 4 桶统计；时间到了可点「标记已发生」转为已发生记录。</p></section>
       <section><h2>3 小时确认</h2><p>超过 3 小时的非睡觉片段先进入未记录；确认后才按标签统计。睡觉默认 longOk，不要求确认。</p></section>
       <section><h2>备份与合并</h2><p>右上角「···」更多菜单含复制、存储、分享、导入完整 JSON；iPhone/iPad 点「存储备份」会打开系统菜单，可明确选择「存储到文件」和目录，其他浏览器使用下载。导入冲突可逐条保留本机、使用备份或合并文字；全部处理后才一次性写入。</p></section>
@@ -644,7 +665,7 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
         <input class="inp cfg-name" type="text" value="${esc(chip.name)}" aria-label="标签名称">
         <select class="inp cfg-bucket" aria-label="桶">
           <option value="maintain"${chip.bucket === 'maintain' ? ' selected' : ''}>维持</option>
-          <option value="leak"${chip.bucket === 'leak' ? ' selected' : ''}>漏损</option>
+          <option value="leak"${chip.bucket === 'leak' ? ' selected' : ''}>偏航</option>
         </select>
       </div>
       <div class="cfg-sub">
@@ -671,7 +692,7 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
       <div class="form-hint">改名会同步迁移历史记录。录入时先选桶；自定义标签首次使用就会固定。内置标签不会在这里删除，可改名、改桶或设置超长段免确认。</div>
       ${mainlineHint}
       ${section('maintain', '维持标签')}
-      ${section('leak', '漏损标签')}
+      ${section('leak', '偏航标签')}
       <div class="form-inline-error" data-role="config-error" hidden></div>
     </div>`;
 }

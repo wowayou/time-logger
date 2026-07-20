@@ -38,7 +38,7 @@
           ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
           : pref;
         const meta = document.getElementById('meta-theme-color');
-        if (meta) meta.setAttribute('content', effective === 'light' ? '#f7f5f1' : '#0e0f13');
+        if (meta) meta.setAttribute('content', effective === 'light' ? '#f6f6f5' : '#0e0f13');
       } catch {}
     })();
   </script>
@@ -114,6 +114,10 @@
   <div class="ruler" id="ruler">
     <div class="ruler-bar"></div>
   </div>
+
+  <!-- v69 阶段格言（C13）：静态壳保持空 + hidden，由 JS 按三态填充（同 #usage-day
+       的纪律，不得写死任何文案）。点击打开编辑 sheet。 -->
+  <button class="motto-line" id="motto-line" type="button" data-action="open-motto" hidden></button>
 
   <div>
     <div class="tl-head">

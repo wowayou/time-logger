@@ -64,7 +64,7 @@ export function createIoActions(deps) {
       const { jp, mp, lp, up } = statsParts(totals);
       const totalText = totals.total ? fmtMins(totals.total) : '无记录';
       const pendingText = totals.pending ? ` / 待确认 ${fmtPlainMins(totals.pending)}` : '';
-      return `- ${row.label}: ${totalText}；主线 ${jp} / 维持 ${mp} / 漏损 ${lp} / 未记录 ${up}${pendingText}`;
+      return `- ${row.label}: ${totalText}；主线 ${jp} / 维持 ${mp} / 偏航 ${lp} / 未记录 ${up}${pendingText}`;
     });
   }
 
@@ -97,7 +97,7 @@ export function createIoActions(deps) {
       `- 总计：${fmtPlainMins(totals.total)}`,
       `- 主线：${jp}（${fmtPlainMins(totals.job)}）`,
       `- 维持：${mp}（${fmtPlainMins(totals.maintain)}）`,
-      `- 漏损：${lp}（${fmtPlainMins(totals.leak)}）`,
+      `- 偏航：${lp}（${fmtPlainMins(totals.leak)}）`,
       `- 未记录：${up}（${fmtPlainMins(totals.unrecorded)}）`,
       `- 待确认：${fmtPlainMins(totals.pending || 0)}`,
       '',

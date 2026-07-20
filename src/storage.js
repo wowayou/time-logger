@@ -12,10 +12,14 @@ export const SELECTED_DATE_KEY = 'timelog.selectedDate';
 export const OPEN_DATE_KEY = 'timelog.openDate';
 export const RECORD_MODE_KEY = 'timelog.recordMode';
 const FIRST_USED_DATE_KEY = 'timelog.firstUsedDate';
+// v69（D11 追加）：第三桶显示名 漏损→偏航。**内部键 `leak` 不变**——所有存量
+// config、备份 JSON 和 CSS 令牌（--leak/.chip-leak）都按键走，改键会要求数据迁移
+// 且让旧备份读不回来。语义也随之调整：偏航＝偏离当前主线的时间，不是道德意义上
+// 的浪费（维护者原话：适时地放空是必要的）。
 export const BUCKETS = {
   job: '主线',
   maintain: '维持',
-  leak: '漏损',
+  leak: '偏航',
   unrecorded: '未记录'
 };
 export const BUCKET_ORDER = ['job', 'maintain', 'leak', 'unrecorded'];
@@ -30,6 +34,23 @@ const LEGACY_ALIASES = {
   '求职推进': { bucket: 'job', longOk: false },
   '未知': { bucket: 'unrecorded', longOk: false }
 };
+// 阶段格言（v69，C13）三态：config 键缺失＝未设置（跟随默认）；空串＝显式隐藏；
+// 非空＝自定义。恰等于默认文案时归一化回「未设置」，让没改过主意的用户在未来
+// 默认文案更新时继续跟随，而不是被钉在旧句子上。
+export const DEFAULT_MOTTO = '记录是手段，推进主线才是目的。';
+const MOTTO_MAX_LEN = 60;
+
+function normalizeMotto(raw) {
+  if (typeof raw !== 'string') return undefined;
+  const clean = raw.replace(/\s+/g, ' ').trim().slice(0, MOTTO_MAX_LEN);
+  return clean === DEFAULT_MOTTO ? undefined : clean;
+}
+
+// 展示层唯一入口：返回要显示的文案，'' 表示隐藏。
+export function resolveMotto(config = loadConfig()) {
+  return config.motto === undefined ? DEFAULT_MOTTO : config.motto;
+}
+
 const DEFAULT_CONFIG = {
   version: 1,
   mainline: ['求职推进'],
@@ -74,7 +95,8 @@ export function normalizeConfig(raw) {
     return {
       version: 1,
       mainline: DEFAULT_CONFIG.mainline.slice(),
-      chips: DEFAULT_CONFIG.chips.map(chip => ({ ...chip }))
+      chips: DEFAULT_CONFIG.chips.map(chip => ({ ...chip })),
+      motto: undefined
     };
   }
   const mainlineSource = Array.isArray(raw.mainline) ? raw.mainline : DEFAULT_CONFIG.mainline;
@@ -88,7 +110,9 @@ export function normalizeConfig(raw) {
     seen.add(clean.name);
     chips.push(clean);
   });
-  return { version: 1, mainline, chips };
+  // motto: undefined 会被 JSON.stringify 丢掉——「未设置」在 localStorage 里
+  // 就是没有这个键，与三态模型一致。
+  return { version: 1, mainline, chips, motto: normalizeMotto(raw.motto) };
 }
 
 export function loadConfig() {
@@ -336,6 +360,9 @@ export function validateImportData(imported) {
         }
       });
     }
+    if (imported.config.motto !== undefined && typeof imported.config.motto !== 'string') {
+      errors.push('config.motto 必须是字符串');
+    }
   }
   if (imported.meta !== undefined && (!imported.meta || typeof imported.meta !== 'object' || Array.isArray(imported.meta))) {
     errors.push('meta 必须是对象');
@@ -569,5 +596,8 @@ export function mergeImportedConfig(localConfig, importedConfig) {
     occupied.add(chip.name);
     chips.push({ ...chip });
   });
-  return normalizeConfig({ version: 1, mainline, chips });
+  // 格言合并与标签同一精神——本机优先：本机的显式值（含显式隐藏 ''）保留，
+  // 只有本机从未设置过时才采用备份里的值。
+  const motto = local.motto !== undefined ? local.motto : imported.motto;
+  return normalizeConfig({ version: 1, mainline, chips, motto });
 }
