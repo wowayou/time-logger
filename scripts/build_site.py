@@ -81,6 +81,12 @@ def copy_file(src: Path, dest: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Assemble the time.eigentime.org deployment mirror")
     parser.add_argument("--out", required=True, help="output directory (must be outside this repo)")
+    parser.add_argument(
+        "--no-cname",
+        action="store_true",
+        help="omit the CNAME file (pre-launch verification only: a CNAME in the published "
+        "branch makes GitHub Pages bind the custom domain immediately)",
+    )
     args = parser.parse_args()
 
     out = Path(args.out)
@@ -100,12 +106,16 @@ def main() -> int:
     site_files = [p for p in sorted(SITE_DIR.rglob("*")) if p.is_file()]
     for path in site_files:
         copy_file(path, out / path.relative_to(SITE_DIR))
-    (out / "CNAME").write_text(CUSTOM_DOMAIN + "\n", encoding="utf-8")
+    if args.no_cname:
+        cname_note = "omitted (--no-cname, pre-launch verification)"
+    else:
+        (out / "CNAME").write_text(CUSTOM_DOMAIN + "\n", encoding="utf-8")
+        cname_note = CUSTOM_DOMAIN
     (out / ".nojekyll").write_text("", encoding="utf-8")
 
     print(f"build_site: {len(runtime_files)} runtime files -> {out / 'app'}")
     print(f"build_site: {len(site_files)} homepage files -> {out}")
-    print(f"build_site: CNAME={CUSTOM_DOMAIN}, .nojekyll written")
+    print(f"build_site: CNAME={cname_note}, .nojekyll written")
     return 0
 
 
