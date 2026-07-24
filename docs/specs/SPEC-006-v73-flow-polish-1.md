@@ -29,6 +29,12 @@ owner: 执行方认领后填分支名
 - 替换后运行时**不得再含任何 `alert(`/`confirm(`/`prompt(`**（grep 断言进测试或 PR 自查贴输出）。
 - **平台边界（不做）**：导入的文件选择器是 OS 系统 UI，Web 内不可定制；那是未来原生载体阶段的事（D8-B）。
 
+### C. 滚轮挂载潜伏 bug（SPEC-004 执行方发现并报告，2026-07-24 Fable 核实定案）
+
+- **事实**：`src/ui.js:556` 的 plan-time-row 用 `class="fl hidden"` 隐藏——但 `styles.css` 里**不存在** `.hidden` 类；兄弟行 log-time-row（`ui.js:552`）用的是 `hidden` **属性**。挂载点解析（`sheet_controller.js:123-124`）检查的是 `planRow.hidden` 属性，因此首渲染窗口内（`updateRecordModeUI` 尚未把属性写正之前）新建-记录模式的时间滚轮会挂进 plan 行的挂载点。v46 R3 的折叠触发行掩盖了日常可见影响（滚轮展开时属性已被纠正），属**潜伏缺陷**。
+- **修复**：`ui.js:556` 改为与兄弟行一致的 `hidden` 属性渲染（一行）；顺带删掉无效的 `hidden` class 引用。
+- **测试**：修正现有用例中被 `.first()` 掩盖的定位（按执行方 PR #27 描述里指认的用例），断言首渲染时滚轮挂载点位于 log-time-row 内；P35 红灯证明。
+
 ## 版本仪式
 
 `bump_version.py 73` + CHANGELOG 行；FILES 不变、零新资产。
