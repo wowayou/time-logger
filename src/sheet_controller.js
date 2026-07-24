@@ -642,6 +642,7 @@ export function createSheetController(deps) {
       entries: loaded.entries,
       importShiftHours: opts && opts.importShiftHours,
       importShiftHint: opts && opts.importShiftHint,
+      importEarlyError: opts && opts.importEarlyError,
       targetDate: mode === 'new' ? formTargetDate : deps.state.selectedDate,
       isToday: (mode === 'new' ? formTargetDate : deps.state.selectedDate) === todayStr(),
       isHistoryDay: mode === 'new' ? formDateMode.kind === 'history' : isHistoryDate(deps.state.selectedDate),

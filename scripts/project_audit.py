@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "72"
+EXPECTED_VERSION = "73"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -281,6 +281,8 @@ def audit_index(errors: list[str]) -> None:
         fail(errors, "keyboard focus-visible tooltip must show without delay")
     if "window.__timelogTest" in app or "window.__TIMELOG_TEST__" in app:
         fail(errors, "src/app.js must not carry a test-only runtime branch")
+    if re.search(r"\b(?:alert|confirm|prompt)\(", app + io_actions):
+        fail(errors, "runtime files must not use native alert/confirm/prompt dialogs (SPEC-006)")
     if "iconSvg('x')" in runtime or re.search(r"^\s*x\s*:", ui, re.MULTILINE):
         fail(errors, "runtime files must not define or use the x icon")
     if re.search(r'data-action="start-edit"[^>]*>\s*改\s*</button>', runtime):

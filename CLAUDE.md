@@ -57,7 +57,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v72` / manifest `version: "72"`。
+当前版本：`timelog-v73` / manifest `version: "73"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -213,6 +213,7 @@ git diff --check
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v73 | 2026-07-24 | SPEC-006（流程优雅性批次一）：**A 离线守卫**——`checkForUpdate` 加 `navigator.onLine === false` 判断即跳过 `reg.update()`，消除飞行模式下每次进入 PWA 必弹的 iOS 系统对话框（诚实边界：WebKit 自身按导航节奏的 SW 复查不受 JS 控制，极偶发系统提示仍可能出现，本改动只消除主要来源）。**B 原生弹窗清零**：全仓 4 处 `alert(` 替换——新增 `#info-toast`（复用 `.undo-toast` 视觉形态、无动作按钮、3 秒自动消退，独立于 `#undo-toast` 避免抢占撤销窗口）承接导入完成摘要与区间确认签名过期两处提示；导入解析失败/校验失败改为打开导入检查 sheet 的极简错误态（`renderImportEarlyErrorDialog`，只有「关闭」，复用 `.import-conflicts` 危险色块样式）。`project_audit.py` 新增 grep 规则永久禁止 `alert(`/`confirm(`/`prompt(` 回归。**C 滚轮挂载潜伏缺陷**（SPEC-004 执行方 PR #27 报告、Fable 核实定案）：`ui.js` L556 `plan-time-row` 曾用不存在样式规则的 `class="fl hidden"` 隐藏而非 `hidden` 属性，导致新建-记录（已发生模式）首次展开时间滚轮误挂进计划行的挂载点；修复为与兄弟行一致的属性写法（一行），`getFormWheelMount`/`mountNewTimePicker` 零改动即恢复正确路由。同步修正被 `.first()` 掩盖真实缺陷的现有测试定位符。零布局/交互改动（弹窗替换为应用内反馈本身即是本轮唯一交互变化）。 |
 | v72 | 2026-07-24 | SPEC-004：亮色主题整体回归冷白（维护者推翻 D11 折中，「亮色还是怪怪的」）——`styles.css` 两处亮色令牌块（`@media (prefers-color-scheme: light)` + `html[data-theme="light"]`）同步改 `--bg`（`#f6f6f5`→`#f7f7fa`）、`--input`（`#f1efe9`→`#eef0f4`）、`--track`（`#e4e1d9`→`#e2e5eb`）、`--border` 与 `--shadow-1/2/3`（`rgba(48,42,30,…)`→`rgba(28,32,44,…)`，各档 alpha 不变）；`--card`、三桶彩色本体/tint、`--text`/`--muted`/`--faint`、`--top-light` 不动。`src/app.js` 与 `index.html` 的 `#meta-theme-color` 亮色锚点、`site/index.html` 亮色 `--bg` 同步（manifest `theme_color` 是暗色值，不动）。WCAG 重校：新 bg 更亮，对比度只升不降（正文 11.70→11.83、muted 5.27→5.33、danger 3.98→4.03，muted 对新 input 5.00 ≥ 4.5 门槛；三桶彩色对新 bg/card 对比度均高于旧值，无需调整明度）。暗色主题一字不动，零布局/交互改动。 |
 | v71 | 2026-07-24 | SPEC-001（多模型协作协议首个执行批次）：旧 origin（`wowayou.github.io/time-logger/`）迁移横幅，host-gated——`src/app.js` 新增 `isLegacyOrigin()`（host + 带尾斜杠的 path 双条件，镜像预览路径 `time-logger-site/app/` 不误命中），新增 `#migration-notice`（渲染在 `.app` 之外、不进 v53 boot 快照范围，普通文档流、不与 fixed 的更新提示/FAB 竞争层级）；「知道了」写 `localStorage['timelog.migrationNotice.dismissed.v1']` 跨会话持久，「···」更多菜单新增仅旧 origin 可见的「迁移到新地址」cell 作为永久重开入口。新站与 localhost 零字节行为差异（门控之外的代码路径未改动）。零新运行时资产，`sw.js` FILES 不变。 |
 | v1 | 2026-06 | 初版：记录/编辑/删除、尺子、复制 JSON、离线 PWA |

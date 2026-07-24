@@ -214,6 +214,15 @@ export async function boot(page, width, state, share = false, now = '', selected
     if (state === 'custom-chip') {
       entries.push({ id: 'stretch-1', ts: `${dateKey(today)}T08:00`, what: '拉伸', tags: ['拉伸'] });
     }
+    if (state === 'pending-confirm-lunch') {
+      // A closed 4h "吃饭" segment (not longOk, > GAP) — pending confirmation
+      // with a stable computed end (real right neighbor), for SPEC-006 B's
+      // stale-confirmation toast test.
+      entries.push(
+        { id: 'lunch-start', ts: `${dateKey(today)}T08:00`, what: '吃饭', tags: ['吃饭'] },
+        { id: 'lunch-end', ts: `${dateKey(today)}T12:00`, what: '下午工作', tags: ['求职推进'] }
+      );
+    }
     localStorage.clear();
     localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
     if (state === 'custom-chip') {
@@ -250,6 +259,17 @@ export async function boot(page, width, state, share = false, now = '', selected
   await page.goto(path);
   await page.waitForFunction(() => document.querySelector('#timeline')?.children.length > 0);
   await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+}
+
+// SPEC-006 B：alert 清零回归护栏——注册后 dialogs.count 必须全程保持 0；native
+// dialogs auto-dismiss so a stray one can't hang the test into a false pass.
+export function trackDialogs(page) {
+  const dialogs = { count: 0 };
+  page.on('dialog', dialog => {
+    dialogs.count += 1;
+    dialog.dismiss().catch(() => {});
+  });
+  return dialogs;
 }
 
 // v34: 摘要/备份/配置/主题/说明收进 header「···」更多 sheet；名字保留少改调用点。

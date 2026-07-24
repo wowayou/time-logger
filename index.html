@@ -216,6 +216,12 @@
   <button class="undo-btn" type="button" data-action="undo-delete">撤销</button>
 </div>
 
+<!-- SPEC-006 B：非阻塞提示（导入完成摘要、区间确认签名过期），无动作按钮，
+     自动消退。与 #undo-toast 同款视觉形态，独立元素避免抢占撤销窗口。 -->
+<div class="undo-toast" id="info-toast" role="status" aria-live="polite" hidden>
+  <span data-role="info-message"></span>
+</div>
+
 <div class="form-sheet" id="form-sheet" hidden>
   <div class="form-sheet-backdrop" data-action="close-form" aria-hidden="true"></div>
   <section class="form-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="form-sheet-title"></section>

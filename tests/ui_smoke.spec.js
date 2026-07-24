@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { FIXED_NOW, STATES, VIEWPORTS, boot, expectNoHorizontalOverflow, openBackupMenu, routeStaticOrigin } from './ui_fixture.js';
+import { FIXED_NOW, STATES, VIEWPORTS, boot, expectNoHorizontalOverflow, openBackupMenu, routeStaticOrigin, trackDialogs } from './ui_fixture.js';
 
 async function setFormTimestamp(page, selector, value) {
   await page.locator(selector).evaluate((input, next) => {
@@ -199,12 +199,29 @@ test('new entry shows continuation context and recomputes start', async ({ page 
   expect(tooltipVisibility).toBe('hidden');
 
   await page.locator('[data-action="toggle-start-time"]').click();
-  await expect(page.locator('[data-role="form-wheel-mount"]').first()).toBeVisible();
-  await expect(page.locator('[data-role="text"]').first()).toBeVisible();
+  // SPEC-006 C: the log-mode wheel/desktop picker mounts inside start-time-section,
+  // not plan-time-row — `.first()` used to mask a wrong-mount bug (both rows carry
+  // their own [data-role="form-wheel-mount"], and only one is supposed to be the
+  // real target). Scope explicitly to the section the trigger actually reveals.
+  const startSection = page.locator('[data-role="start-time-section"]');
+  await expect(startSection.locator('[data-role="form-wheel-mount"]')).toBeVisible();
+  await expect(startSection.locator('[data-role="text"]')).toBeVisible();
 
-  await page.locator('[data-role="text"]').fill('2026-06-29 09:30');
-  await page.locator('[data-role="text"]').blur();
+  await startSection.locator('[data-role="text"]').fill('2026-06-29 09:30');
+  await startSection.locator('[data-role="text"]').blur();
   await expect(page.locator('[data-role="start-time-label"]')).toHaveText('09:30');
+});
+
+test('new entry in log mode keeps plan-time-row genuinely hidden on first render (SPEC-006 C)', async ({ page }) => {
+  await boot(page, 768, 'empty', false, FIXED_NOW);
+  await page.getByRole('button', { name: '记一条新的时间记录' }).click();
+  const planRow = page.locator('[data-role="plan-time-row"]');
+  // Before the fix this row was hidden only via a CSS class with no matching
+  // stylesheet rule (styles.css never defines .hidden) — genuinely visible despite
+  // looking hidden in the template. The real `hidden` attribute is what both the
+  // mount-routing logic (getFormWheelMount) and the browser's rendering agree on.
+  await expect(planRow).toHaveAttribute('hidden', '');
+  await expect(planRow).toBeHidden();
 });
 
 test('past-day continuation settles at day end and restores selected date', async ({ page }) => {
@@ -402,7 +419,7 @@ test('help close is a text button and import shift dialog stays custom', async (
 // 导入只准把它往更早挪，不得倒拨。
 test('full backup carries the diagnostic firstUsedDate and import never rolls it back', async ({ page }) => {
   await boot(page, 768, 'empty', false, FIXED_NOW, null, -480);
-  page.on('dialog', dialog => dialog.accept());
+  const dialogs = trackDialogs(page);
 
   await openBackupMenu(page);
   const restore = async payload => {
@@ -449,6 +466,7 @@ test('full backup carries the diagnostic firstUsedDate and import never rolls it
   await expect(page.locator('#form-sheet-title')).toHaveText('更多');
   await page.locator('#backup-send-btn').click();
   await expect.poll(() => page.evaluate(() => window.__exported && JSON.parse(window.__exported).firstUsedDate)).toBe('2026-06-28');
+  expect(dialogs.count).toBe(0);
 });
 
 test('JSON import shifts time, merges config, and export stays sorted', async ({ page }) => {
@@ -464,11 +482,7 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
       chips: [{ name: '拉伸', bucket: 'maintain', longOk: true }]
     }
   };
-  let alertText = '';
-  page.on('dialog', async dialog => {
-    alertText = dialog.message();
-    await dialog.accept();
-  });
+  const dialogs = trackDialogs(page);
 
   const chooserPromise = page.waitForEvent('filechooser');
   await openBackupMenu(page);
@@ -485,7 +499,9 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
   await page.getByRole('button', { name: '确认导入' }).click();
 
   await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.length)).toBe(2);
-  expect(alertText).toContain('导入完成');
+  // SPEC-006 B: import success now surfaces via #info-toast, not a native alert().
+  await expect(page.locator('#info-toast [data-role="info-message"]')).toContainText('导入完成');
+  expect(dialogs.count).toBe(0);
   const stored = await page.evaluate(() => ({
     data: JSON.parse(localStorage.getItem('timelog.v1')),
     config: JSON.parse(localStorage.getItem('timelog.config'))
@@ -522,9 +538,7 @@ test('JSON import uses timezone metadata to suggest default shift', async ({ pag
       { id: 'tokyo-entry', ts: '2026-06-29T09:00', what: '东京设备记录', tags: ['求职推进'] }
     ]
   };
-  page.on('dialog', async dialog => {
-    await dialog.accept();
-  });
+  const dialogs = trackDialogs(page);
 
   const chooserPromise = page.waitForEvent('filechooser');
   await openBackupMenu(page);
@@ -544,6 +558,75 @@ test('JSON import uses timezone metadata to suggest default shift', async ({ pag
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
   expect(stored).toHaveLength(1);
   expect(stored[0]).toMatchObject({ id: 'tokyo-entry', ts: '2026-06-29T08:00' });
+  expect(dialogs.count).toBe(0);
+});
+
+test('a malformed JSON file opens an inline import error, not a native alert (SPEC-006 B)', async ({ page }) => {
+  await boot(page, 768, 'empty', false, FIXED_NOW);
+  const dialogs = trackDialogs(page);
+
+  const chooserPromise = page.waitForEvent('filechooser');
+  await openBackupMenu(page);
+  await page.getByRole('button', { name: '导入 JSON 备份' }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    name: 'broken.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('not valid json{')
+  });
+
+  await expect(page.locator('#form-sheet-title')).toContainText('导入检查');
+  await expect(page.locator('.import-conflicts')).toContainText('文件解析失败');
+  await expect(page.locator('[data-action="confirm-import-shift"]')).toHaveCount(0);
+  await page.locator('[data-action="cancel-import-shift"]').click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  expect(dialogs.count).toBe(0);
+});
+
+test('a schema-invalid backup opens an inline import error, not a native alert (SPEC-006 B)', async ({ page }) => {
+  await boot(page, 768, 'empty', false, FIXED_NOW);
+  const dialogs = trackDialogs(page);
+
+  const chooserPromise = page.waitForEvent('filechooser');
+  await openBackupMenu(page);
+  await page.getByRole('button', { name: '导入 JSON 备份' }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    name: 'no-entries.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ version: 1 }))
+  });
+
+  await expect(page.locator('#form-sheet-title')).toContainText('导入检查');
+  await expect(page.locator('.import-conflicts')).toContainText('缺少 entries 数组');
+  await expect(page.locator('[data-action="confirm-import-shift"]')).toHaveCount(0);
+  await page.locator('[data-action="cancel-import-shift"]').click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  expect(dialogs.count).toBe(0);
+});
+
+test('stale segment confirmation shows an inline toast, not a native alert (SPEC-006 B)', async ({ page }) => {
+  await boot(page, 768, 'pending-confirm-lunch', false, FIXED_NOW);
+  const dialogs = trackDialogs(page);
+
+  const confirmBtn = page.locator('[data-action="confirm-segment"]');
+  await expect(confirmBtn).toBeVisible();
+  // Go stale behind the DOM's back: insert a record inside the pending segment
+  // directly in storage (no save()/render() cycle), so the confirm button on
+  // screen still carries the now-outdated data-end.
+  await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('timelog.v1'));
+    const now = new Date();
+    const p2 = n => String(n).padStart(2, '0');
+    const dateKey = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}`;
+    data.entries.push({ id: 'lunch-interrupt', ts: `${dateKey}T10:00`, what: '临时插入', tags: ['求职推进'] });
+    localStorage.setItem('timelog.v1', JSON.stringify(data));
+  });
+  await confirmBtn.click();
+
+  await expect(page.locator('#info-toast')).toBeVisible();
+  await expect(page.locator('#info-toast [data-role="info-message"]')).toHaveText('这段时间已经变化，请重新查看后再确认。');
+  expect(dialogs.count).toBe(0);
 });
 
 test('plan mode uses plan copy and is hidden on historical days', async ({ page }) => {
@@ -1535,6 +1618,38 @@ test('dismissing a cross-tab notice renders the latest stored data', async ({ pa
   await expect(page.locator('.entry[data-id="today-2"] .e-what')).toHaveText('另一标签页的新内容');
   await expect(page.locator('#form-sheet')).toBeVisible();
   await other.close();
+});
+
+test('checkForUpdate skips reg.update() while offline, avoiding the iOS airplane-mode dialog (SPEC-006 A)', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__swUpdates = 0;
+    window.__online = false;
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => window.__online });
+    window.__visibility = 'visible';
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => window.__visibility });
+    const registration = new EventTarget();
+    registration.waiting = null;
+    registration.installing = null;
+    registration.update = () => { window.__swUpdates += 1; return Promise.resolve(); };
+    const serviceWorker = new EventTarget();
+    serviceWorker.controller = {};
+    serviceWorker.register = () => Promise.resolve(registration);
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: serviceWorker });
+  });
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+
+  // Cold start ran with onLine=false — must not have called update() at all.
+  expect(await page.evaluate(() => window.__swUpdates)).toBe(0);
+
+  // Coming to foreground while still offline must not call update() either
+  // (this request is exactly what triggers iOS's airplane-mode system dialog).
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  expect(await page.evaluate(() => window.__swUpdates)).toBe(0);
+
+  // Back online: the next foreground event checks normally, unchanged from v72.
+  await page.evaluate(() => { window.__online = true; });
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect.poll(() => page.evaluate(() => window.__swUpdates)).toBe(1);
 });
 
 test('waiting service worker prompt has a reachable update button above the mobile FAB', async ({ page }) => {
