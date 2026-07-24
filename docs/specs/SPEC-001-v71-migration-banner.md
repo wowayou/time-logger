@@ -1,7 +1,7 @@
 # SPEC-001 · v71：旧 origin 迁移横幅（host-gated）
 
-status: ready
-owner: 执行方认领后填分支名
+status: in-progress
+owner: spec/001-migration-banner
 验收人: Fable
 
 ## 目标

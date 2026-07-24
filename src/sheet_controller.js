@@ -655,6 +655,7 @@ export function createSheetController(deps) {
       overnightEndMode: formOvernightEndMode,
       planOutsideWindow: mode === 'edit' && Boolean(entry && entry.planned)
         && !validateTsForMode(entry.ts, { planned: true }).ok,
+      isLegacyOrigin: mode === 'more' && Boolean(deps.isLegacyOrigin && deps.isLegacyOrigin()),
       intervalContext: mode === 'edit'
         ? intervalEditContext(formBaseEntries, id, { todayKey: todayStr(), nowTs: nowStr() })
         : null,

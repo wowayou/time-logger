@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { FIXED_NOW, STATES, VIEWPORTS, boot, expectNoHorizontalOverflow, openBackupMenu } from './ui_fixture.js';
+import { FIXED_NOW, STATES, VIEWPORTS, boot, expectNoHorizontalOverflow, openBackupMenu, routeStaticOrigin } from './ui_fixture.js';
 
 async function setFormTimestamp(page, selector, value) {
   await page.locator(selector).evaluate((input, next) => {
@@ -2332,4 +2332,77 @@ test('a motto truncated exactly on a space keeps no trailing blank', async ({ pa
   });
   expect(stored).toBe('a'.repeat(59));
   expect(stored.endsWith(' ')).toBe(false);
+});
+
+test.describe('SPEC-001: legacy-origin migration banner', () => {
+  const LEGACY_ORIGIN = 'https://wowayou.github.io';
+  const LEGACY_PATH = '/time-logger/';
+  const MIRROR_PATH = '/time-logger-site/app/';
+
+  test('legacy origin shows a dismissible banner with a permanent 更多 reopen entry', async ({ page }) => {
+    await routeStaticOrigin(page, LEGACY_ORIGIN, LEGACY_PATH);
+    await boot(page, 768, 'empty', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${LEGACY_PATH}`);
+
+    const notice = page.locator('#migration-notice');
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText('time.eigentime.org/app/');
+    const openNew = notice.locator('[href]');
+    await expect(openNew).toHaveAttribute('href', 'https://time.eigentime.org/app/');
+    await expect(openNew).toHaveAttribute('target', '_blank');
+    await expect(openNew).toHaveAttribute('rel', 'noopener');
+
+    // 「知道了」关闭横幅并写入跨会话持久标志。
+    await page.locator('[data-action="dismiss-migration-notice"]').click();
+    await expect(notice).toBeHidden();
+    await expect.poll(() =>
+      page.evaluate(() => localStorage.getItem('timelog.migrationNotice.dismissed.v1'))
+    ).toBe('1');
+
+    // P35 陷阱（v70 已记录同款）：boot() 的 addInitScript 在每次导航都会先
+    // localStorage.clear() 再重新播种，所以 page.reload() 本身证明不了持久化——
+    // 会把刚写的 dismissed 标志一起冲掉，变成「假绿」。这里改为在 boot() 之后
+    // 追加一个 initScript，在 boot 的清空+重播种之后再写回同一个标志，模拟
+    // 「用户上次会话已关闭过」的下一次真实到访，从而验证读取侧的持久化效果。
+    await page.addInitScript(() => {
+      localStorage.setItem('timelog.migrationNotice.dismissed.v1', '1');
+    });
+    await page.reload();
+    await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+    await expect(page.locator('#migration-notice')).toBeHidden();
+
+    // 「···」更多菜单保留永久重开入口。
+    await openBackupMenu(page);
+    const reopenCell = page.locator('[data-action="reopen-migration-notice"]');
+    await expect(reopenCell).toBeVisible();
+    await expect(reopenCell).toContainText('迁移到新地址');
+    await reopenCell.click();
+    await expect(page.locator('#form-sheet')).toBeHidden();
+    await expect(page.locator('#migration-notice')).toBeVisible();
+  });
+
+  test('legacy origin banner sits in normal flow above the header and never overlaps the fixed FAB', async ({ page }) => {
+    await routeStaticOrigin(page, LEGACY_ORIGIN, LEGACY_PATH);
+    await boot(page, 768, 'empty', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${LEGACY_PATH}`);
+    const noticeBox = await page.locator('#migration-notice').boundingBox();
+    const fabBox = await page.locator('#add-btn').boundingBox();
+    expect(noticeBox).toBeTruthy();
+    expect(fabBox).toBeTruthy();
+    expect(noticeBox.y).toBeLessThan(fabBox.y);
+    expect(noticeBox.y + noticeBox.height).toBeLessThanOrEqual(fabBox.y);
+  });
+
+  test('new origin (localhost baseline) never renders the banner or its 更多 entry', async ({ page }) => {
+    await boot(page, 768, 'empty', false, FIXED_NOW);
+    await expect(page.locator('#migration-notice')).toBeHidden();
+    await openBackupMenu(page);
+    await expect(page.locator('[data-action="reopen-migration-notice"]')).toHaveCount(0);
+  });
+
+  test('mirror preview path (time-logger-site/app/) does not trigger the legacy gate', async ({ page }) => {
+    await routeStaticOrigin(page, LEGACY_ORIGIN, MIRROR_PATH);
+    await boot(page, 768, 'empty', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${MIRROR_PATH}`);
+    await expect(page.locator('#migration-notice')).toBeHidden();
+    await openBackupMenu(page);
+    await expect(page.locator('[data-action="reopen-migration-notice"]')).toHaveCount(0);
+  });
 });

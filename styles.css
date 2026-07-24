@@ -1228,6 +1228,55 @@
       inset: -13px -8px;
     }
     .mini-btn:active { opacity: 0.75; }
+    /* SPEC-001: legacy-origin migration notice — normal document flow above the
+       .app shell (not fixed), so it never competes with the fixed update banner
+       or FAB for the same screen real estate. Host-gated in src/app.js. */
+    .migration-notice {
+      width: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+      padding: 10px clamp(12px, 4vw, 16px);
+      background: var(--accent-bg);
+      border-bottom: 1px solid var(--border);
+    }
+    .migration-notice[hidden] { display: none; }
+    .migration-notice span {
+      flex: 1 1 240px;
+      min-width: 0;
+      color: var(--text);
+      font-size: var(--fs-ui);
+      line-height: 1.4;
+    }
+    .migration-notice-actions {
+      display: flex;
+      flex: 0 0 auto;
+      gap: 8px;
+    }
+    .migration-btn {
+      min-width: 44px;
+      min-height: 44px;
+      padding: 0 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      text-decoration: none;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .migration-btn.secondary {
+      background: var(--input);
+      color: var(--text);
+    }
+
     /* Update prompt */
     .update-banner {
       position: fixed;

@@ -1,4 +1,48 @@
 import { expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { extname, join, normalize } from 'node:path';
+
+const STATIC_CONTENT_TYPES = {
+  '.css': 'text/css; charset=utf-8',
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.webmanifest': 'application/manifest+json; charset=utf-8'
+};
+
+// SPEC-001: drives the page at a real cross-origin URL (the legacy GitHub
+// Pages host, or its mirror preview path) while serving this repo's own
+// files as the response body — so isLegacyOrigin()'s host+path gate can be
+// exercised against an actual location.hostname/pathname instead of a stub.
+export async function routeStaticOrigin(page, origin, basePath) {
+  const root = process.cwd();
+  await page.route(`${origin}/**`, async route => {
+    const url = new URL(route.request().url());
+    if (!url.pathname.startsWith(basePath)) {
+      await route.fulfill({ status: 404, body: 'not found' });
+      return;
+    }
+    let rel = url.pathname.slice(basePath.length) || 'index.html';
+    if (rel.endsWith('/')) rel += 'index.html';
+    const filePath = normalize(join(root, rel));
+    if (!filePath.startsWith(root)) {
+      await route.fulfill({ status: 403, body: 'forbidden' });
+      return;
+    }
+    try {
+      const body = await readFile(filePath);
+      await route.fulfill({
+        status: 200,
+        contentType: STATIC_CONTENT_TYPES[extname(filePath)] || 'application/octet-stream',
+        body
+      });
+    } catch {
+      await route.fulfill({ status: 404, body: 'not found' });
+    }
+  });
+}
 
 export const VIEWPORTS = [320, 375, 430, 768];
 export const STATES = ['empty', 'one-record', 'yesterday-residual'];

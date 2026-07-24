@@ -293,7 +293,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '70';
+export const APP_VERSION = '71';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -335,9 +335,17 @@ function renderMoreSheet(opts = {}) {
   const bootDiag = readBootDiag();
   const themeBtn = (value, label) =>
     `<button type="button" data-action="theme" data-theme="${value}" class="${themePref === value ? 'active' : ''}" aria-pressed="${themePref === value}" aria-label="主题：${label}">${label}</button>`;
+  // SPEC-001：旧 origin 专属入口——给关掉迁移横幅的用户一个永久重开途径；
+  // 新 origin（isLegacyOrigin 为 false）下这个 cell-group 完全不渲染。
+  const migrationCell = opts.isLegacyOrigin
+    ? `<div class="cell-group">
+        <button class="cell-btn" type="button" data-action="reopen-migration-notice" aria-label="重新显示迁移到新地址的提示"><span data-role="cell-label">迁移到新地址</span>${cellChevron}</button>
+      </div>`
+    : '';
   return `
     ${sheetHead({ title: '更多', cancelText: '关闭', cancelAction: 'close-form', cancelAria: '关闭更多菜单' })}
     <div class="form-sheet-body more-body">
+      ${migrationCell}
       <div class="cell-group">
         <button class="cell-btn" id="summary-btn" type="button" data-action="copy-summary" aria-label="复制当前视图摘要"><span data-role="cell-label">复制当前视图摘要</span>${cellChevron}</button>
       </div>

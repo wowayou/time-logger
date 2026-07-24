@@ -118,6 +118,36 @@ import {
   const HELP_SEEN_KEY = 'timelog.helpSeen.v16';
   const BOOT_SNAPSHOT_KEY = 'timelog.bootSnapshot.v1';
   const UNRECORDED_GAP_FLOOR_MIN = 15;
+  const MIGRATION_NOTICE_DISMISSED_KEY = 'timelog.migrationNotice.dismissed.v1';
+
+  // SPEC-001：同一份代码同时部署在旧 origin（GitHub Pages）和新 origin
+  // （time.eigentime.org），迁移横幅只在旧 origin 出现。带尾斜杠的
+  // startsWith('/time-logger/') 特意排除镜像预览路径 /time-logger-site/app/
+  // （该路径的下一个字符是 '-'，不是 '/'，不会误命中）。
+  function isLegacyOrigin() {
+    return location.hostname === 'wowayou.github.io' && location.pathname.startsWith('/time-logger/');
+  }
+
+  function updateMigrationNotice() {
+    const notice = document.getElementById('migration-notice');
+    if (!notice) return;
+    if (!isLegacyOrigin()) {
+      notice.hidden = true;
+      return;
+    }
+    notice.hidden = localStorage.getItem(MIGRATION_NOTICE_DISMISSED_KEY) === '1';
+  }
+
+  function dismissMigrationNotice() {
+    localStorage.setItem(MIGRATION_NOTICE_DISMISSED_KEY, '1');
+    updateMigrationNotice();
+  }
+
+  function reopenMigrationNotice() {
+    localStorage.removeItem(MIGRATION_NOTICE_DISMISSED_KEY);
+    sheetController.closeForm();
+    updateMigrationNotice();
+  }
 
   function defaultFormTs() {
     const entries = load().entries;
@@ -597,6 +627,7 @@ import {
     setSelectedDate,
     render,
     renderChrome,
+    isLegacyOrigin,
     getSheetEditId: () => sheetEditId,
     setSheetEditId: value => { sheetEditId = value; }
   });
@@ -759,6 +790,8 @@ import {
         cancelUndoForConflict();
         render();
       }
+      if (action === 'dismiss-migration-notice') dismissMigrationNotice();
+      if (action === 'reopen-migration-notice') reopenMigrationNotice();
     });
     document.getElementById('import-file').addEventListener('change', ioActions.handleImport);
     document.addEventListener('input', e => {
@@ -1114,6 +1147,7 @@ import {
 
   function init() {
     markBootTrace('init_start');
+    updateMigrationNotice();
     const today = todayStr();
     // 只做诊断：写下本机首用日备查，不再驱动任何用户可见里程碑。
     ensureFirstUsedDate(today, load().entries);
