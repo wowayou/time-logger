@@ -1,7 +1,7 @@
 # SPEC-005 · 产品主页 v2：landing 叙事升级（参考 otty.sh 的结构语言）
 
-status: ready（可与 SPEC-004 并行；亮色 `--bg` 直接写死 SPEC-004 的 `#f7f7fa`）
-owner: 执行方认领后填分支名
+status: in-progress（可与 SPEC-004 并行；亮色 `--bg` 直接写死 SPEC-004 的 `#f7f7fa`）
+owner: spec/005-landing-v2
 验收人: Fable
 
 ## 背景

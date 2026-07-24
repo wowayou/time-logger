@@ -4,8 +4,10 @@
   Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
   SPDX-License-Identifier: AGPL-3.0-or-later
 
-  非运行时静态主页：不进 SW 缓存、零第三方脚本、零追踪（ADR 0001 零追踪区）。
+  非运行时静态主页：不进 SW 缓存、零第三方脚本、零追踪（ADR 0001 零追踪区）、零 JS。
   文案只描述边界与用法，不声称市场需求已验证（decisions.md D9）。
+  SPEC-005（landing v2）：结构语言参考 otty.sh（短句特性标题 + demo 截图 + 重复
+  CTA + 分组 footer），像素不抄袭；图标复用应用自己的 icon.svg（不另画仿制品）。
 -->
 <html lang="zh">
 <head>
@@ -13,127 +15,278 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#0e0f13">
-  <meta name="description" content="时间尺：单页离线 PWA 时间记录工具。数据只存在你的浏览器本地，零账号、零后端、零追踪，完整备份随时导出。">
-  <title>时间尺 — 本地优先的时间记录</title>
+  <meta name="description" content="时间尺：5 秒记下真实做了什么——本地、离线、可信的一天时间线。零账号、零后端、零追踪，完整备份随时导出。">
+  <title>时间尺 — 5 秒记下真实做了什么</title>
   <style>
     :root {
       color-scheme: dark light;
       --bg: #0e0f13;
-      --card: #16181f;
-      --text: #e8e9ec;
-      --muted: #9aa0ab;
+      --card: #16171e;
+      --text: #e8e9f1;
+      --muted: #9fa1b8;
+      --faint: #898ba2;
       --border: rgba(255, 255, 255, 0.09);
-      --accent: #5b8def;
+      --accent: #a99fff;
+      --accent-soft: rgba(139, 124, 255, 0.14);
+      --shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
     }
     @media (prefers-color-scheme: light) {
       :root {
-        --bg: #f6f6f5;
+        --bg: #f7f7fa;
         --card: #ffffff;
-        --text: #23252b;
-        --muted: #5f6570;
-        --border: rgba(0, 0, 0, 0.10);
-        --accent: #2f66d8;
+        --text: #33323b;
+        --muted: #686570;
+        --faint: #77747f;
+        --border: rgba(28, 32, 44, 0.10);
+        --accent: #5745c7;
+        --accent-soft: #efecfc;
+        --shadow: 0 16px 40px rgba(28, 32, 44, 0.10);
       }
     }
     * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
     body {
       margin: 0;
       background: var(--bg);
       color: var(--text);
-      font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-      padding: 0 20px calc(48px + env(safe-area-inset-bottom));
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      overflow-x: hidden;
     }
-    main { max-width: 640px; margin: 0 auto; }
-    .hero { padding: 64px 0 40px; text-align: center; }
-    .hero .tau {
-      display: inline-block;
-      width: 72px; height: 72px;
-      border-radius: 18px;
-      background: #0e0f13;
-      color: #e8e9ec;
-      font-size: 42px; line-height: 72px;
-      font-family: Georgia, "Times New Roman", serif;
-      border: 1px solid var(--border);
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 0 clamp(18px, 5vw, 28px) calc(64px + env(safe-area-inset-bottom));
     }
-    h1 { font-size: 28px; margin: 20px 0 8px; }
-    .tagline { color: var(--muted); margin: 0 0 28px; }
+    a { color: var(--accent); }
+
+    /* Hero — 极简：图标 + 名字 + 一句话身份 + 直达 CTA。 */
+    .hero {
+      padding: clamp(56px, 12vh, 96px) 0 48px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+    }
+    .hero img { width: 64px; height: 64px; border-radius: 15px; display: block; }
+    .hero h1 { font-size: 22px; font-weight: 650; margin: 0; letter-spacing: 0.01em; }
+    .tagline {
+      font-size: clamp(22px, 4.6vw, 30px);
+      font-weight: 700;
+      line-height: 1.32;
+      letter-spacing: -0.01em;
+      max-width: 30ch;
+      margin: 0;
+      text-wrap: balance;
+    }
     .cta {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 50px;
       background: var(--accent);
       color: #fff;
       text-decoration: none;
-      font-weight: 600;
-      padding: 14px 32px;
+      font-weight: 650;
+      font-size: 16px;
+      padding: 0 34px;
       border-radius: 14px;
+      margin-top: 6px;
     }
     .cta:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
-    .cta-sub { color: var(--muted); font-size: 13px; margin-top: 12px; }
-    section {
+    .cta-sub { color: var(--faint); font-size: 13px; margin: 0; }
+
+    /* 特性区——短句诗式标题，每条一行说明，克制不堆形容词。 */
+    .features {
+      display: flex;
+      flex-direction: column;
+      gap: clamp(56px, 10vh, 88px);
+      padding: 40px 0 8px;
+    }
+    .feature { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+    .feature h2 {
+      font-size: clamp(24px, 4vw, 28px);
+      font-weight: 700;
+      line-height: 1.28;
+      letter-spacing: -0.01em;
+      margin: 0;
+      text-wrap: balance;
+    }
+    .feature p {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.6;
+      max-width: 40ch;
+      margin: 0;
+    }
+    .feature figure {
+      margin: 14px 0 0;
+      width: min(240px, 68vw);
+    }
+    .feature img {
+      width: 100%;
+      display: block;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+
+    /* 保留信息区——安装/迁移/数据边界，收进紧凑的卡片分组。 */
+    .info {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 64px 0 8px;
+    }
+    .info section {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 16px;
       padding: 20px 22px;
-      margin: 16px 0;
     }
-    h2 { font-size: 17px; margin: 0 0 10px; }
-    p, li { color: var(--text); font-size: 15px; }
-    section p, section li { color: var(--muted); }
-    ul { margin: 0; padding-left: 20px; }
-    li { margin: 6px 0; }
-    a { color: var(--accent); overflow-wrap: anywhere; }
-    footer {
-      max-width: 640px;
-      margin: 40px auto 0;
-      color: var(--muted);
-      font-size: 13px;
+    .info h3 { font-size: 15px; margin: 0 0 10px; font-weight: 650; }
+    .info p, .info li { color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .info p { margin: 0; }
+    .info ul { margin: 0; padding-left: 20px; }
+    .info li { margin: 5px 0; }
+    .info code { font-size: 13px; }
+
+    /* 结尾重复 CTA。 */
+    .closing {
       text-align: center;
+      padding: 72px 0 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+    .closing h2 { font-size: clamp(22px, 4vw, 26px); font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+    .usage-note { color: var(--faint); font-size: 13px; max-width: 40ch; margin: 4px 0 0; }
+
+    /* Footer——分组，克制（Product / Legal / Contact）。 */
+    footer {
+      margin-top: 56px;
+      padding-top: 28px;
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    @media (max-width: 460px) {
+      footer { grid-template-columns: 1fr; gap: 20px; }
+    }
+    footer .group h4 {
+      font-size: 11px;
+      font-weight: 650;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--faint);
+      margin: 0 0 10px;
+    }
+    footer .group ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+    footer .group a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    footer .group a:hover, footer .group a:focus-visible { color: var(--text); }
+    footer .copyright {
+      grid-column: 1 / -1;
+      margin-top: 8px;
+      color: var(--faint);
+      font-size: 12px;
     }
   </style>
 </head>
 <body>
   <main>
     <div class="hero">
-      <span class="tau" aria-hidden="true">τ</span>
+      <img src="./app/icon.svg" alt="时间尺">
       <h1>时间尺</h1>
       <p class="tagline">5 秒记下真实做了什么——本地、离线、可信的一天时间线</p>
       <a class="cta" href="./app/">打开应用</a>
       <p class="cta-sub">免费 · 无账号 · 数据只在你的设备上</p>
     </div>
 
-    <section>
-      <h2>它是什么</h2>
-      <p>一个单页离线 PWA：按时间段记录一天做了什么，按「主线 / 维持 / 偏航 / 未记录」四桶统计时间去向，支持补录、区间编辑、跨日记录和计划。零运行时依赖、无构建、无后端——打开网页即用。</p>
-    </section>
+    <div class="features">
+      <div class="feature">
+        <h2>一天的形状，一眼看清。</h2>
+        <p>连续日志时间轴，左侧一条竖脊按主线/维持/偏航/未记录上色——不用逐条翻记录，一眼就知道今天大致是怎么过的。</p>
+        <figure>
+          <img src="./assets/demo-mobile-timeline.png" alt="时间尺移动端时间轴界面，展示一天的连续记录与四桶归类色条（固定演示数据，非真实记录）">
+        </figure>
+      </div>
 
-    <section>
-      <h2>数据边界</h2>
-      <ul>
-        <li>所有记录只存在浏览器本地（<code>localStorage</code>），不上传、不同步、无账号。</li>
-        <li>本站不加载任何统计、广告或第三方脚本。</li>
-        <li>完整备份可随时复制、下载或分享为 JSON；换设备或换浏览器用「导出 → 导入」迁移，导入是按记录逐条校验的安全合并。</li>
-        <li>清除浏览器站点数据会删除记录——请定期导出备份。</li>
-      </ul>
-    </section>
+      <div class="feature">
+        <h2>没记的时间，不会被抹掉。</h2>
+        <p>忘记记录的时间段会诚实地显示为「未记录」，不会被四舍五入进其它桶、也不会为了凑满 100% 而悄悄消失。</p>
+        <figure>
+          <img src="./assets/demo-mobile-edit-drawer.png" alt="时间尺移动端编辑表单界面，可修改一段记录的内容、标签与起止时间（固定演示数据，非真实记录）">
+        </figure>
+      </div>
 
-    <section>
-      <h2>安装到主屏幕（可选）</h2>
-      <ul>
-        <li>iPhone / iPad：在 Safari 打开 <a href="./app/">应用</a> → 分享 → 「添加到主屏幕」，即可离线全屏使用。</li>
-        <li>桌面 Chrome / Edge：地址栏右侧「安装」图标。</li>
-        <li>不安装也可以直接在浏览器里使用，功能相同。</li>
-      </ul>
-    </section>
+      <div class="feature">
+        <h2>你的数据只在你手里。</h2>
+        <p>所有记录只存在浏览器本地 <code>localStorage</code>，零账号、零后端、零追踪；完整 JSON 备份随时复制、下载或分享。</p>
+      </div>
 
-    <section>
-      <h2>从旧地址迁移</h2>
-      <p>如果你此前在 <code>wowayou.github.io/time-logger/</code> 使用时间尺：浏览器数据按域名隔离，记录不会自动跟过来。在旧地址「···」菜单里「存储备份」导出完整 JSON，然后在<a href="./app/">新应用</a>「···」菜单里「导入」即可，导入前会逐条校验并预览冲突。</p>
-    </section>
+      <div class="feature">
+        <h2>偏航不是错误。</h2>
+        <p>时间按主线 / 维持 / 偏航 / 未记录四桶归类——维持是睡觉吃饭这类必要消耗，偏航只回答「今天离主线偏了多少」，不做道德评判。</p>
+      </div>
+    </div>
 
-    <section>
-      <h2>开源</h2>
-      <p>源码以 AGPL-3.0-or-later 许可发布：<a href="https://github.com/wowayou/time-logger" rel="noopener">github.com/wowayou/time-logger</a>。本站页面由源码仓库自动发布，欢迎 issue 反馈。</p>
-    </section>
+    <div class="info">
+      <section>
+        <h3>安装到主屏幕（可选）</h3>
+        <ul>
+          <li>iPhone / iPad：在 Safari 打开<a href="./app/">应用</a> → 分享 → 「添加到主屏幕」，即可离线全屏使用。</li>
+          <li>桌面 Chrome / Edge：地址栏右侧「安装」图标。</li>
+          <li>不安装也可以直接在浏览器里使用，功能相同。</li>
+        </ul>
+      </section>
+      <section id="migrate">
+        <h3>从旧地址迁移</h3>
+        <p>如果你此前在 <code>wowayou.github.io/time-logger/</code> 使用时间尺：浏览器数据按域名隔离，记录不会自动跟过来。在旧地址「···」菜单里「存储备份」导出完整 JSON，然后在<a href="./app/">新应用</a>「···」菜单里「导入」即可，导入前会逐条校验并预览冲突。</p>
+      </section>
+      <section id="privacy">
+        <h3>数据边界</h3>
+        <ul>
+          <li>所有记录只存在浏览器本地（<code>localStorage</code>），不上传、不同步、无账号。</li>
+          <li>本站不加载任何统计、广告或第三方脚本。</li>
+          <li>完整备份可随时复制、下载或分享为 JSON；换设备或换浏览器用「导出 → 导入」迁移，导入是按记录逐条校验的安全合并。</li>
+          <li>清除浏览器站点数据会删除记录——请定期导出备份。</li>
+        </ul>
+      </section>
+    </div>
+
+    <div class="closing">
+      <h2>要试试时间尺吗？</h2>
+      <a class="cta" href="./app/">打开应用</a>
+      <p class="usage-note">作者本人已自用 30+ 天，个人工具起步；未做过外部市场验证。</p>
+    </div>
+
+    <footer>
+      <div class="group">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="./app/">打开应用</a></li>
+          <li><a href="https://github.com/wowayou/time-logger" rel="noopener">GitHub 仓库</a></li>
+          <li><a href="#migrate">从旧地址迁移</a></li>
+        </ul>
+      </div>
+      <div class="group">
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="https://github.com/wowayou/time-logger/blob/main/LICENSE" rel="noopener">AGPL-3.0-or-later</a></li>
+          <li><a href="#privacy">数据边界</a></li>
+        </ul>
+      </div>
+      <div class="group">
+        <h4>Contact</h4>
+        <ul>
+          <li><a href="https://eigentime.org/" rel="noopener">eigentime.org</a></li>
+          <li><a href="https://github.com/wowayou/time-logger/issues" rel="noopener">提 issue</a></li>
+        </ul>
+      </div>
+      <p class="copyright">© 2026 wowayou · 源码以 AGPL-3.0-or-later 许可发布，本站由源码仓库自动发布。</p>
+    </footer>
   </main>
-  <footer>© 2026 wowayou · <a href="https://eigentime.org/" rel="noopener">eigentime.org</a></footer>
 </body>
 </html>

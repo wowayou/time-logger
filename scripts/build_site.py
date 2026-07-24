@@ -9,6 +9,8 @@
 - 运行时清单**直接解析 `sw.js` 的 FILES 数组**（单一真源，不另维护拷贝清单），
   逐文件复制到 `<out>/app/`；
 - `site/` 产品主页源码复制到 `<out>/`（根目录）；
+- 主页截图复用 `project_audit.py` 的 `REQUIRED_DEMO_ASSETS`（同一份 README 已用的
+  固定 demo PNG，单一真源）复制到 `<out>/assets/`；`site/` 目录本身不持有 PNG；
 - 写 `<out>/CNAME`（time.eigentime.org）与 `<out>/.nojekyll`。
 
 输出目录必须显式指定且**不得位于本仓库内**——本仓库红线不新增产物目录。
@@ -27,6 +29,9 @@ import re
 import shutil
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from project_audit import REQUIRED_DEMO_ASSETS  # noqa: E402  单一真源，避免与 audit 白名单漂移
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE_DIR = ROOT / "site"
@@ -106,6 +111,14 @@ def main() -> int:
     site_files = [p for p in sorted(SITE_DIR.rglob("*")) if p.is_file()]
     for path in site_files:
         copy_file(path, out / path.relative_to(SITE_DIR))
+    # SPEC-005：主页截图只能引用 docs/assets/ 白名单里的固定 demo PNG（同一批 README
+    # 已在用的图），复制而不是让 site/ 目录本身持有 PNG——.gitignore 的白名单机制不变。
+    demo_assets = [ROOT / rel for rel in REQUIRED_DEMO_ASSETS]
+    missing_demo = [str(p) for p in demo_assets if not p.exists()]
+    if missing_demo:
+        raise SystemExit("build_site: missing required demo asset(s): " + ", ".join(missing_demo))
+    for path in demo_assets:
+        copy_file(path, out / "assets" / path.name)
     if args.no_cname:
         cname_note = "omitted (--no-cname, pre-launch verification)"
     else:
@@ -115,6 +128,7 @@ def main() -> int:
 
     print(f"build_site: {len(runtime_files)} runtime files -> {out / 'app'}")
     print(f"build_site: {len(site_files)} homepage files -> {out}")
+    print(f"build_site: {len(demo_assets)} demo assets -> {out / 'assets'}")
     print(f"build_site: CNAME={cname_note}, .nojekyll written")
     return 0
 
