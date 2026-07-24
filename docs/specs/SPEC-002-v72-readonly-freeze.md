@@ -1,4 +1,6 @@
-# SPEC-002 · v72：旧 origin 只读冻结（host-gated 只读开关）
+# SPEC-002 · v73：旧 origin 只读冻结（host-gated 只读开关）
+
+> 2026-07-24 改号：原编 v72 让位给 SPEC-004（亮色冷白回归）；本规格发版号顺延为 v73，内容不变。
 
 status: blocked（等 runbook Phase C/D：维护者完成权威设备迁移并浸泡数日后解锁；解锁由 Fable 把本状态改为 ready）
 owner: —
@@ -14,7 +16,7 @@ owner: —
    - 隐藏 FAB 与底部渐隐层；隐藏/禁用一切写路径入口：行点击改为只读展示（不开编辑 sheet）、左滑轨道不启用、「补一下 / 标记已发生 / 确认」动作链不渲染、更多菜单「导入」cell 移除；
    - 保留：天/周/月/年浏览、摘要、复制、存储备份、分享备份、主题、说明；
    - SPEC-001 横幅转为**常驻不可关闭**（去掉「知道了」，保留「打开新地址」），文案改为：`此旧地址已转为只读。请在新地址 time.eigentime.org/app/ 继续记录；历史数据可随时在此导出。`
-2. 版本仪式 bump 72 + CHANGELOG 行；FILES 不变。
+2. 版本仪式 bump 73 + CHANGELOG 行；FILES 不变。
 3. 测试：legacy origin（route+fulfill）断言各写入口不可达且导出/分享可用；localhost/镜像路径行为与 v71 零差异；P35 红灯证明。
 
 ## 明确不做
