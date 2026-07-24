@@ -1,6 +1,6 @@
-# SPEC-002 · v73：旧 origin 只读冻结（host-gated 只读开关）
+# SPEC-002 · 旧 origin 只读冻结（host-gated 只读开关；版本号随解锁时排期定）
 
-> 2026-07-24 改号：原编 v72 让位给 SPEC-004（亮色冷白回归）；本规格发版号顺延为 v73，内容不变。
+> 2026-07-24 改号二次说明：不再预占版本号（此前 v72→v73 已让位两次）；解锁时由 Fable 按当时版本序列指定 N，规格内「bump 73」按当时实际号执行。
 
 status: blocked（等 runbook Phase C/D：维护者完成权威设备迁移并浸泡数日后解锁；解锁由 Fable 把本状态改为 ready）
 owner: —
