@@ -293,7 +293,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '72';
+export const APP_VERSION = '73';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -553,7 +553,7 @@ export function renderFormSheet(opts) {
         <button class="start-time-trigger" type="button" data-action="toggle-start-time" aria-expanded="false" aria-label="修改起点时间"><span data-role="start-time-label">--:--</span></button>
         <span class="form-time-arrow">→ <span data-role="end-label">现在</span> · 已 <span data-role="duration-label">--</span></span>
       </div>
-      <div class="fl${isPlan ? '' : ' hidden'}" data-role="plan-time-row">
+      <div class="fl"${isPlan ? '' : ' hidden'} data-role="plan-time-row">
         <div class="fl-label">计划时间</div>
         <div data-role="form-wheel-mount"></div>
         <div class="form-hint">计划是未来的事；要记现在或过去的，切到「已发生」。</div>
@@ -646,7 +646,18 @@ function renderHelpSheet() {
     </div>`;
 }
 
+// SPEC-006 B：文件选完就解析/校验失败时，sheet 还没进入正常的平移检查态——
+// 只显示错误与「关闭」，不给平移输入和「导入」按钮（没有可导入的数据）。
+function renderImportEarlyErrorDialog(message) {
+  return `
+    ${sheetHead({ title: '导入检查', cancelText: '关闭', cancelAction: 'cancel-import-shift', cancelAria: '关闭导入检查' })}
+    <div class="form-sheet-body import-shift-body">
+      <div class="import-conflicts" role="alert">${esc(message)}</div>
+    </div>`;
+}
+
 function renderImportShiftDialog(opts = {}) {
+  if (opts.importEarlyError) return renderImportEarlyErrorDialog(opts.importEarlyError);
   const value = opts.importShiftHours !== undefined ? opts.importShiftHours : '0';
   const hint = opts.importShiftHint || '导入前可把所有时间整体平移。例：iPhone 记在 UTC+8、电脑 UTC-5，填 -13；留空或 0 不平移。';
   return `

@@ -1367,6 +1367,12 @@
     }
     .undo-toast[hidden] { display: none; }
     .undo-toast span { flex: 1; min-width: 0; color: var(--text); font-size: 14px; }
+    /* SPEC-006 B：#undo-toast 与 #info-toast 共用同一 fixed 位置；两者理论上可能
+       同时可见（例如撤销窗口内触发一条普通提示），此时把 info-toast 挪到上方，
+       避免两条 toast 视觉重叠。 */
+    body:has(#undo-toast:not([hidden])) #info-toast {
+      bottom: calc(148px + env(safe-area-inset-bottom));
+    }
     .undo-btn {
       min-width: 64px;
       min-height: 36px;

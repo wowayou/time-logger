@@ -492,7 +492,7 @@ export function createIoActions(deps) {
     // 记录与 config 都已落库后才接起始日：它单调不减且纯展示，失败不需要回滚。
     deps.adoptImportedFirstUsedDate(imported.firstUsedDate);
     deps.render();
-    alert(`导入完成：写入 ${plan.imported} 条，保留/跳过 ${plan.skipped} 条，处理冲突 ${plan.resolvedConflicts || 0} 条。`);
+    deps.showInfoToast(`导入完成：写入 ${plan.imported} 条，保留/跳过 ${plan.skipped} 条，处理冲突 ${plan.resolvedConflicts || 0} 条。`);
     return true;
   }
 
@@ -514,9 +514,15 @@ export function createIoActions(deps) {
     reader.onload = e => {
       let imported;
       try { imported = JSON.parse(e.target.result); }
-      catch { alert('文件解析失败，请确认是有效的 JSON 文件。'); return; }
+      catch {
+        deps.openFormSheet({ mode: 'import-shift', importEarlyError: '文件解析失败，请确认是有效的 JSON 文件。' });
+        return;
+      }
       const checked = deps.validateImportData(imported);
-      if (!checked.ok) { alert(checked.msg); return; }
+      if (!checked.ok) {
+        deps.openFormSheet({ mode: 'import-shift', importEarlyError: checked.msg });
+        return;
+      }
       pendingImport = imported;
       importShiftMinutes = suggestedShiftMinutes(imported);
       importResolutions = {};

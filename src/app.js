@@ -458,7 +458,7 @@ import {
     const result = confirmSegmentInData(d, id, endTs);
     if (!result.ok) {
       if (result.reason === 'stale') {
-        alert('这段时间已经变化，请重新查看后再确认。');
+        showInfoToast('这段时间已经变化，请重新查看后再确认。');
       }
       render();
       return;
@@ -530,6 +530,19 @@ import {
       toast.hidden = false;
       setTimeout(() => { toast.hidden = true; }, 3000);
     }
+  }
+
+  // SPEC-006 B：原生弹窗清零——非阻塞、自动消退、无动作按钮的通用提示，供导入
+  // 完成摘要和区间确认签名过期复用。独立于 #undo-toast，避免抢占撤销窗口。
+  let infoToastTimer = null;
+  function showInfoToast(message) {
+    const toast = document.getElementById('info-toast');
+    if (!toast) return;
+    const span = toast.querySelector('[data-role="info-message"]');
+    if (span) span.textContent = message;
+    toast.hidden = false;
+    clearTimeout(infoToastTimer);
+    infoToastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
   }
 
   function confirmDelete(id) {
@@ -654,6 +667,7 @@ import {
     summarizeRange,
     openFormSheet: opts => sheetController.openFormSheet(opts),
     closeForm: () => sheetController.closeForm(),
+    showInfoToast,
     render
   });
 
@@ -1026,7 +1040,14 @@ import {
       });
       // 主动、及时地复查新版本——iOS Safari（尤其 standalone PWA）不会主动/及时
       // 复查 sw.js。每次冷启动 + 每次切回前台都强制 update()，让新版尽快到达。
-      const checkForUpdate = () => { reg.update().catch(() => {}); };
+      // SPEC-006 A：飞行模式下 reg.update() 的网络请求会触发 iOS 系统弹窗（"打开
+      // 飞行模式或使用 Wi-Fi"），离线时跳过——恢复在线后下一次前台事件照常检查，
+      // 不需要补偿逻辑。诚实边界：WebKit 自身按导航节奏的 SW 复查不受 JS 控制，
+      // 极偶发的系统提示仍可能出现；这里消除的是每次进入必弹的主要来源。
+      const checkForUpdate = () => {
+        if (navigator.onLine === false) return;
+        reg.update().catch(() => {});
+      };
       checkForUpdate();
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') checkForUpdate();
