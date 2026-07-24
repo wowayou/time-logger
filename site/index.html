@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<!--
+  时间尺 (time-logger) — 产品主页（time.eigentime.org）
+  Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
+  SPDX-License-Identifier: AGPL-3.0-or-later
+
+  非运行时静态主页：不进 SW 缓存、零第三方脚本、零追踪（ADR 0001 零追踪区）。
+  文案只描述边界与用法，不声称市场需求已验证（decisions.md D9）。
+-->
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0e0f13">
+  <meta name="description" content="时间尺：单页离线 PWA 时间记录工具。数据只存在你的浏览器本地，零账号、零后端、零追踪，完整备份随时导出。">
+  <title>时间尺 — 本地优先的时间记录</title>
+  <style>
+    :root {
+      color-scheme: dark light;
+      --bg: #0e0f13;
+      --card: #16181f;
+      --text: #e8e9ec;
+      --muted: #9aa0ab;
+      --border: rgba(255, 255, 255, 0.09);
+      --accent: #5b8def;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f6f6f5;
+        --card: #ffffff;
+        --text: #23252b;
+        --muted: #5f6570;
+        --border: rgba(0, 0, 0, 0.10);
+        --accent: #2f66d8;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      padding: 0 20px calc(48px + env(safe-area-inset-bottom));
+    }
+    main { max-width: 640px; margin: 0 auto; }
+    .hero { padding: 64px 0 40px; text-align: center; }
+    .hero .tau {
+      display: inline-block;
+      width: 72px; height: 72px;
+      border-radius: 18px;
+      background: #0e0f13;
+      color: #e8e9ec;
+      font-size: 42px; line-height: 72px;
+      font-family: Georgia, "Times New Roman", serif;
+      border: 1px solid var(--border);
+    }
+    h1 { font-size: 28px; margin: 20px 0 8px; }
+    .tagline { color: var(--muted); margin: 0 0 28px; }
+    .cta {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      font-weight: 600;
+      padding: 14px 32px;
+      border-radius: 14px;
+    }
+    .cta:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+    .cta-sub { color: var(--muted); font-size: 13px; margin-top: 12px; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 22px;
+      margin: 16px 0;
+    }
+    h2 { font-size: 17px; margin: 0 0 10px; }
+    p, li { color: var(--text); font-size: 15px; }
+    section p, section li { color: var(--muted); }
+    ul { margin: 0; padding-left: 20px; }
+    li { margin: 6px 0; }
+    a { color: var(--accent); overflow-wrap: anywhere; }
+    footer {
+      max-width: 640px;
+      margin: 40px auto 0;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="hero">
+      <span class="tau" aria-hidden="true">τ</span>
+      <h1>时间尺</h1>
+      <p class="tagline">本地优先的时间记录 — 每天看清时间进了哪里</p>
+      <a class="cta" href="./app/">打开应用</a>
+      <p class="cta-sub">免费 · 无账号 · 数据只在你的设备上</p>
+    </div>
+
+    <section>
+      <h2>它是什么</h2>
+      <p>一个单页离线 PWA：按时间段记录一天做了什么，按「主线 / 维持 / 偏航 / 未记录」四桶统计时间去向，支持补录、区间编辑、跨日记录和计划。零运行时依赖、无构建、无后端——打开网页即用。</p>
+    </section>
+
+    <section>
+      <h2>数据边界</h2>
+      <ul>
+        <li>所有记录只存在浏览器本地（<code>localStorage</code>），不上传、不同步、无账号。</li>
+        <li>本站不加载任何统计、广告或第三方脚本。</li>
+        <li>完整备份可随时复制、下载或分享为 JSON；换设备或换浏览器用「导出 → 导入」迁移，导入是按记录逐条校验的安全合并。</li>
+        <li>清除浏览器站点数据会删除记录——请定期导出备份。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>安装到主屏幕（可选）</h2>
+      <ul>
+        <li>iPhone / iPad：在 Safari 打开 <a href="./app/">应用</a> → 分享 → 「添加到主屏幕」，即可离线全屏使用。</li>
+        <li>桌面 Chrome / Edge：地址栏右侧「安装」图标。</li>
+        <li>不安装也可以直接在浏览器里使用，功能相同。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>从旧地址迁移</h2>
+      <p>如果你此前在 <code>wowayou.github.io/time-logger/</code> 使用时间尺：浏览器数据按域名隔离，记录不会自动跟过来。在旧地址「···」菜单里「存储备份」导出完整 JSON，然后在<a href="./app/">新应用</a>「···」菜单里「导入」即可，导入前会逐条校验并预览冲突。</p>
+    </section>
+
+    <section>
+      <h2>开源</h2>
+      <p>源码以 AGPL-3.0-or-later 许可发布：<a href="https://github.com/wowayou/time-logger" rel="noopener">github.com/wowayou/time-logger</a>。本站页面由源码仓库自动发布，欢迎 issue 反馈。</p>
+    </section>
+  </main>
+  <footer>© 2026 wowayou · <a href="https://eigentime.org/" rel="noopener">eigentime.org</a></footer>
+</body>
+</html>

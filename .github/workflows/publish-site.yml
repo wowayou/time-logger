@@ -1,0 +1,44 @@
+# 时间尺部署镜像发布（D12）：vN tag push → build_site.py 组装 → 推 wowayou/time-logger-site。
+# 凭据：DEPLOY_TOKEN（fine-grained PAT，仅 time-logger-site 的 contents:read/write，一年期）。
+# PAT 失效 = 本 workflow 红灯（邮件可见）；兜底 = 本地跑同一脚本手动推（见 scripts/build_site.py 顶部说明）。
+name: publish-site
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          path: src
+
+      - name: Checkout deploy mirror
+        uses: actions/checkout@v4
+        with:
+          repository: wowayou/time-logger-site
+          token: ${{ secrets.DEPLOY_TOKEN }}
+          path: mirror
+
+      - name: Assemble site
+        run: python3 src/scripts/build_site.py --out mirror
+
+      - name: Commit and push mirror
+        working-directory: mirror
+        run: |
+          git config user.name "time-logger publish bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "mirror unchanged; nothing to publish"
+            exit 0
+          fi
+          git commit -m "publish: ${GITHUB_REF_NAME} from wowayou/time-logger@${GITHUB_SHA}"
+          git push
