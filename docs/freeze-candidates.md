@@ -200,10 +200,20 @@
 PWA 内完整备份 → 删除主屏图标 → Safari 打开站点 → 重新添加主屏（全新注册，直接拿最新版）→ 导入备份。v60 起备份带 `firstUsedDate`、v61 起里程碑由记录派生，数据零损失；启动诊断开关不进备份，重置后需手动重开。未验证的软路径：等待 24h+ 让 iOS 自行回收坏 worker，或重启系统。
 
 **出现次数**
-1（2026-07-17）。
+2（2026-07-17 v63→v64；2026-07-25 v71→v72 已定案，见下方追记）。
 
 **2026-07-18 跟进**
 未复发；同日 v66→v67、v67→v68 两次升级均送达（归因见 C1「判读修正」——自动 reload 可触发、端到端归因不明，完全退出仍是可靠路径）。**诊断 v2 已执行（v68，D10 批次二）并已在真机出数**（23:11 样本含 `SW态 a:activated · 首绘 73ms`）：样本增补 SW 注册三态早读——下次卡死可直接在两个假说（installing 卡住 / worker 已 redundant 只留缓存）之间定案。
+
+**2026-07-25 第二例与定案（v71→v72，新 origin 主屏 PWA，iOS 18.6.2）**
+形态：v72 横幅出现一次、用户未点击，此后横幅不再出现；完全退出、多次前台切换、**系统重启**全部无效。启动诊断实录（该字段等待的那一刻）：
+
+```
+00:00 · v71 · navigate · SW态 a:activated · 缓存 timelog-v72(21文件,共2套) · standalone
+00:02 · v71 · navigate · SW态 a:activated · 缓存 timelog-v72(21文件,共2套) · standalone
+```
+
+**定案：「worker 已 redundant 只留缓存」假说成立，「installing 卡住」假说否证**（无 `i:` 态且新版缓存 21 文件完整＝install 早已成功）。机制：waiting worker 被 iOS 丢弃后，注册记录仍记着「最新脚本＝v72」，`reg.update()` 字节比对恒判无变化、永不重装——死局只能靠重新注册打破。同机同 origin 的 Safari（独立注册）关闭全部标签重开即正常升 v72，服务端与网络健康（双 origin curl 核实 + Cloudflare DNS-only 无代理层）。处置：维护者走首例验证过的重装兜底（备份→删图标→重加→导入）；**对策规格已立 `docs/specs/SPEC-009-update-stuck-self-heal.md`**（检测「大版本缓存 + 无 installing/waiting ×2 启动」→ 用户点击 unregister+reload 自愈）。
 
 **14 天后是否仍然重要**
 待 2026-07-30 复盘回答。
