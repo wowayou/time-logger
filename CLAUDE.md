@@ -57,7 +57,7 @@
 
 ## 当前版本
 
-当前版本：`timelog-v71` / manifest `version: "71"`。
+当前版本：`timelog-v72` / manifest `version: "72"`。
 
 改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
 
@@ -213,6 +213,7 @@ git diff --check
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v72 | 2026-07-24 | SPEC-004：亮色主题整体回归冷白（维护者推翻 D11 折中，「亮色还是怪怪的」）——`styles.css` 两处亮色令牌块（`@media (prefers-color-scheme: light)` + `html[data-theme="light"]`）同步改 `--bg`（`#f6f6f5`→`#f7f7fa`）、`--input`（`#f1efe9`→`#eef0f4`）、`--track`（`#e4e1d9`→`#e2e5eb`）、`--border` 与 `--shadow-1/2/3`（`rgba(48,42,30,…)`→`rgba(28,32,44,…)`，各档 alpha 不变）；`--card`、三桶彩色本体/tint、`--text`/`--muted`/`--faint`、`--top-light` 不动。`src/app.js` 与 `index.html` 的 `#meta-theme-color` 亮色锚点、`site/index.html` 亮色 `--bg` 同步（manifest `theme_color` 是暗色值，不动）。WCAG 重校：新 bg 更亮，对比度只升不降（正文 11.70→11.83、muted 5.27→5.33、danger 3.98→4.03，muted 对新 input 5.00 ≥ 4.5 门槛；三桶彩色对新 bg/card 对比度均高于旧值，无需调整明度）。暗色主题一字不动，零布局/交互改动。 |
 | v71 | 2026-07-24 | SPEC-001（多模型协作协议首个执行批次）：旧 origin（`wowayou.github.io/time-logger/`）迁移横幅，host-gated——`src/app.js` 新增 `isLegacyOrigin()`（host + 带尾斜杠的 path 双条件，镜像预览路径 `time-logger-site/app/` 不误命中），新增 `#migration-notice`（渲染在 `.app` 之外、不进 v53 boot 快照范围，普通文档流、不与 fixed 的更新提示/FAB 竞争层级）；「知道了」写 `localStorage['timelog.migrationNotice.dismissed.v1']` 跨会话持久，「···」更多菜单新增仅旧 origin 可见的「迁移到新地址」cell 作为永久重开入口。新站与 localhost 零字节行为差异（门控之外的代码路径未改动）。零新运行时资产，`sw.js` FILES 不变。 |
 | v1 | 2026-06 | 初版：记录/编辑/删除、尺子、复制 JSON、离线 PWA |
 | v2 | 2026-06-28 | 亮色模式、日期滚轮选择器、下载/导入/分享、文档 |
