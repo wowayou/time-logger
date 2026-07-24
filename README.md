@@ -14,7 +14,9 @@
 >
 > Risks and failure modes: 忘记记录导致“未记录”偏高、长时间间隔被整体计为未记录、周/月/年视图诱发过度复盘、浏览器本地数据或运行缓存被系统清理。
 
-求职主线时间记录仪 — 每天看清时间进了哪里。
+**5 秒记下真实做了什么——本地、离线、可信的一天时间线**
+
+新地址（canonical）：**https://time.eigentime.org/app/**。旧地址 `wowayou.github.io/time-logger/` 迁移中，将转为只读。
 
 ![固定演示数据的移动端时间轴](docs/assets/demo-mobile-timeline.png)
 
