@@ -80,6 +80,15 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<!-- SPEC-001：旧 origin 迁移横幅，host-gated（src/app.js isLegacyOrigin）。渲染在
+     .app 之外，不进 v53 boot 快照范围；新 origin 上恒 hidden，静态文案零字节差异。 -->
+<div class="migration-notice" id="migration-notice" hidden>
+  <span>时间尺已迁至新地址 time.eigentime.org/app/。在旧地址「···」菜单存储备份，到新地址导入即可完成迁移；本旧地址今后将转为只读。</span>
+  <div class="migration-notice-actions">
+    <a class="migration-btn" href="https://time.eigentime.org/app/" target="_blank" rel="noopener" aria-label="打开新地址 time.eigentime.org">打开新地址</a>
+    <button class="migration-btn secondary" type="button" data-action="dismiss-migration-notice" aria-label="知道了，关闭迁移提示">知道了</button>
+  </div>
+</div>
 <div class="app">
   <div class="hdr">
     <div class="hdr-brand">

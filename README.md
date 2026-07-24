@@ -2,7 +2,7 @@
 
 > Status: active · 核心记录闭环可日常使用；2026-07-16 → 07-29 处于 14 天功能冻结
 >
-> Release: v70
+> Release: v71
 >
 > Updated: 2026-07-20
 >
