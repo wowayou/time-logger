@@ -500,7 +500,20 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
 
   await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.length)).toBe(2);
   // SPEC-006 B: import success now surfaces via #info-toast, not a native alert().
-  await expect(page.locator('#info-toast [data-role="info-message"]')).toContainText('导入完成');
+  // SPEC-012: toContainText matches hidden/occluded text too (v73's regression
+  // slipped through exactly this gap) — assert real visibility, and that the
+  // toast is genuinely the topmost element at its own position (it must render
+  // above the "更多" sheet that returnToMore reopens, see styles.css note).
+  const importToast = page.locator('#info-toast');
+  await expect(importToast).toBeVisible();
+  await expect(importToast.locator('[data-role="info-message"]')).toContainText('导入完成');
+  const importToastOnTop = await page.evaluate(() => {
+    const el = document.getElementById('info-toast');
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return top === el || el.contains(top);
+  });
+  expect(importToastOnTop).toBe(true);
   expect(dialogs.count).toBe(0);
   const stored = await page.evaluate(() => ({
     data: JSON.parse(localStorage.getItem('timelog.v1')),
@@ -523,6 +536,60 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
   expect(exported.config.mainline).toContain('导入主线');
   expect(exported.meta.sourceTimezoneOffsetMinutes).toBe(-480);
   expect(exported.meta.sourceTimeZone).toBeTruthy();
+});
+
+// SPEC-012: v73 regression — confirming an import showed nothing at all. Root
+// cause: confirmImportShift() lit #info-toast, then closeForm() immediately
+// followed. For import specifically, closeForm() hits the v41 returnToMore
+// breadcrumb (self-test item 7, kept intact — import is drilled into from
+// "更多", so confirming/cancelling returns there rather than fully closing the
+// sheet), which synchronously swaps #form-sheet's content back to "更多" — the
+// sheet never actually becomes hidden. So no fixed timing coordination with a
+// sheet-close animation can make the toast "appear after the sheet is gone";
+// what actually has to be true is that the toast renders on top of whatever
+// #form-sheet is showing when it fires (see the SPEC-012 z-index note in
+// styles.css). This test locks both halves of the fix: the toast stays hidden
+// through the SHEET_CLOSE_MS window (proving the delay is real, not a no-op),
+// and once it fires it is visible and unoccluded above the reopened "更多".
+test('import success toast is delayed past the close window and lands above the reopened 更多 sheet (SPEC-012)', async ({ page }) => {
+  await page.clock.install({ time: new Date(FIXED_NOW) });
+  await boot(page, 768, 'empty', false, '', null, -480);
+  const imported = {
+    version: 1,
+    entries: [{ id: 'solo', ts: '2026-06-28T20:00', what: '晚间导入', tags: ['导入主线'] }]
+  };
+  const dialogs = trackDialogs(page);
+
+  const chooserPromise = page.waitForEvent('filechooser');
+  await openBackupMenu(page);
+  await page.getByRole('button', { name: '导入 JSON 备份' }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    name: 'timelog-import.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(imported))
+  });
+  await expect(page.locator('#form-sheet-title')).toContainText('导入检查');
+  await page.getByRole('button', { name: '确认导入' }).click();
+
+  // The breadcrumb swap back to "更多" happens synchronously on click; the
+  // toast must not have surfaced yet.
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  await expect(page.locator('#info-toast')).toBeHidden();
+
+  await page.clock.runFor(400);
+
+  const toast = page.locator('#info-toast');
+  await expect(toast).toBeVisible();
+  await expect(toast.locator('[data-role="info-message"]')).toContainText('导入完成');
+  const onTop = await page.evaluate(() => {
+    const el = document.getElementById('info-toast');
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return top === el || el.contains(top);
+  });
+  expect(onTop).toBe(true);
+  expect(dialogs.count).toBe(0);
 });
 
 test('JSON import uses timezone metadata to suggest default shift', async ({ page }) => {

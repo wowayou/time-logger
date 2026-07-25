@@ -5,6 +5,17 @@
 import { formatPercent, sortedEntriesFrom } from './stats.js';
 import { fmtDateTime, fmtMins, fmtPlainMins, fmtTs, hhmm, p2 } from './time.js';
 
+// SPEC-012：sheet 关闭走 class 驱动的收起动画（sheet_controller.js
+// animateSheetClose），最长 320ms 兜底才真正 hidden。这里的值必须和那个兜底
+// 时长一致——这是时序协调，不是硬同步；将来 animateSheetClose 的动画时长若
+// 改变，这个常量需要跟着改。
+const SHEET_CLOSE_MS = 320;
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 export function createIoActions(deps) {
   let importShiftMinutes = 0;
   let pendingImport = null;
@@ -492,8 +503,13 @@ export function createIoActions(deps) {
     // 记录与 config 都已落库后才接起始日：它单调不减且纯展示，失败不需要回滚。
     deps.adoptImportedFirstUsedDate(imported.firstUsedDate);
     deps.render();
-    deps.showInfoToast(`导入完成：写入 ${plan.imported} 条，保留/跳过 ${plan.skipped} 条，处理冲突 ${plan.resolvedConflicts || 0} 条。`);
-    return true;
+    // SPEC-012：不在这里亮 toast——调用方（confirmImportShift）先关表单 sheet，
+    // 等关闭动画收尾之后再显示，避免正在滑出的 sheet（z-index 更高）盖住 toast。
+    return {
+      imported: plan.imported,
+      skipped: plan.skipped,
+      resolvedConflicts: plan.resolvedConflicts || 0
+    };
   }
 
   function confirmImportShift() {
@@ -501,10 +517,17 @@ export function createIoActions(deps) {
     importShiftMinutes = parseImportShiftHours(input ? input.value : '0');
     const imported = pendingImport;
     if (!imported) return;
-    if (!applyImportedData(imported, importShiftMinutes)) return;
+    const result = applyImportedData(imported, importShiftMinutes);
+    if (!result) return;
     pendingImport = null;
     importResolutions = {};
     deps.closeForm();
+    const message = `导入完成：写入 ${result.imported} 条，保留/跳过 ${result.skipped} 条，处理冲突 ${result.resolvedConflicts} 条。`;
+    // SPEC-012：sheet 关闭动画播完（或 reduced-motion 下没有动画）之后才亮 toast，
+    // 让它出现在一个干净的、没有 sheet 遮挡的屏幕上；而不是和 v73 一样在 sheet
+    // 还在滑出时就亮起、被半透明遮罩盖过去。
+    if (prefersReducedMotion()) deps.showInfoToast(message);
+    else setTimeout(() => deps.showInfoToast(message), SHEET_CLOSE_MS);
   }
 
   function handleImport(event) {
