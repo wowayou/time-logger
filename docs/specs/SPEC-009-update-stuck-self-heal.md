@@ -1,6 +1,6 @@
 # SPEC-009 · 更新卡死自愈（C6 定案对策：检测 redundant-with-cache 死局并提供一键修复）
 
-status: ready（D15 收敛为 **lite**——只做手动修复入口，见文末「D15 额度裁剪修订」；与 SPEC-012 / SPEC-011 合并为 v74 单批次）
+status: in-progress（分支 `spec/074-batch`，v74 合并批次第 3 项；**只实施文末「D15 额度裁剪修订」的 lite 范围**）
 owner: 执行方认领后填分支名
 验收人: Fable
 
