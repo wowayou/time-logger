@@ -2588,3 +2588,82 @@ test.describe('SPEC-001: legacy-origin migration banner', () => {
     await expect(page.locator('[data-action="reopen-migration-notice"]')).toHaveCount(0);
   });
 });
+
+// SPEC-011: standalone + apple-mobile-web-app-status-bar-style=black-translucent
+// + viewport-fit=cover lets scrolled content run under the system status bar and
+// visually collide with its clock/carrier glyphs (real-machine screenshot
+// evidence in the spec). Playwright cannot simulate a non-zero
+// env(safe-area-inset-top) — there is no notch/Dynamic Island in a headless or
+// desktop browser context — so this suite only covers what a browser context
+// *can* prove: the scrim exists, sits outside .app (not part of the v53 boot
+// snapshot), is fixed/non-interactive, resolves to zero height with zero
+// safe-area (so it has no effect on ordinary browsers/desktops), and its
+// z-index sits below the update banner and form sheet per the existing scale.
+// The actual "text no longer overlaps the status bar" claim is a real-device,
+// real-screenshot verification (aa/dark, standalone, scrolled) — that closes
+// the loop, not this suite (see SPEC-011's own P35 note: red-light proof for
+// the occlusion claim itself is infeasible headless, and the spec says so
+// explicitly rather than faking it).
+test.describe('SPEC-011: fixed status-bar scrim', () => {
+  test('scrim exists outside .app, fixed and non-interactive, z-index below the update banner and form sheet', async ({ page }) => {
+    await boot(page, 375, 'empty', false, FIXED_NOW);
+    const scrim = page.locator('.statusbar-scrim');
+    await expect(scrim).toHaveCount(1);
+    const info = await scrim.evaluate(el => {
+      const style = getComputedStyle(el);
+      return {
+        position: style.position,
+        pointerEvents: style.pointerEvents,
+        top: style.top,
+        left: style.left,
+        right: style.right,
+        zIndex: Number(style.zIndex),
+        height: el.getBoundingClientRect().height,
+        insideApp: Boolean(el.closest('.app')),
+        precedesApp: Boolean(el.compareDocumentPosition(document.querySelector('.app')) & Node.DOCUMENT_POSITION_FOLLOWING)
+      };
+    });
+    expect(info.position).toBe('fixed');
+    expect(info.pointerEvents).toBe('none');
+    expect(info.top).toBe('0px');
+    expect(info.left).toBe('0px');
+    expect(info.right).toBe('0px');
+    expect(info.insideApp).toBe(false);
+    expect(info.precedesApp).toBe(true);
+    // No real safe-area in a headless/desktop browser context: env() resolves
+    // to 0, so the scrim must have zero footprint there (real-device height —
+    // 20/47/59px depending on device — is out of headless's reach).
+    expect(info.height).toBe(0);
+
+    const updateBannerZ = await page.locator('#update-banner').evaluate(el => Number(getComputedStyle(el).zIndex));
+    const formSheetZ = await page.locator('#form-sheet').evaluate(el => Number(getComputedStyle(el).zIndex));
+    expect(info.zIndex).toBeGreaterThan(0);
+    expect(info.zIndex).toBeLessThan(updateBannerZ);
+    expect(info.zIndex).toBeLessThan(formSheetZ);
+  });
+
+  test('scrim never occludes an interactive element in a browser context', async ({ page }) => {
+    await boot(page, 375, 'empty', false, FIXED_NOW);
+    // This is a defensive invariant (must hold both before and after the fix,
+    // since a headless/desktop browser context always resolves the scrim to
+    // zero height) rather than a regression check — the P35 red-light proof
+    // for "the scrim exists at all" lives in the sibling test above.
+    const hitsScrim = await page.evaluate(() => {
+      const scrim = document.querySelector('.statusbar-scrim');
+      if (!scrim) return false;
+      const width = window.innerWidth;
+      for (let x = 0; x < width; x += 15) {
+        if (document.elementFromPoint(x, 0) === scrim) return true;
+      }
+      return false;
+    });
+    expect(hitsScrim).toBe(false);
+    const iconReachable = await page.evaluate(() => {
+      const icon = document.querySelector('.hdr-icon-link');
+      const r = icon.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, Math.max(0, r.top + 1));
+      return top === icon || icon.contains(top);
+    });
+    expect(iconReachable).toBe(true);
+  });
+});
