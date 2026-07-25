@@ -726,6 +726,57 @@ import {
     worker.postMessage({ type: 'SKIP_WAITING' });
   }
 
+  // SPEC-009-lite（D15 额度裁剪：只做「更多」里的常驻手动出口，不做检测/计数器/
+  // 横幅第三态——那部分登记为「出现外部用户后重启」，见 SPEC-009 文末）。
+  // 「修复更新通道」永远由用户点击触发，任何路径都不自动 unregister/reload：
+  // 点一次进入「再次点击确认」武装态（4 秒后自动收回，防误触发），同一个 DOM
+  // 节点上的第二次点击才真正执行——sheet 重渲染会换新节点，武装态天然失效，
+  // 不需要额外清理。在线前置检查 → sw.js 探活 → unregister → reload；
+  // localStorage 全程不被触碰。
+  let repairUpdateArmedBtn = null;
+  let repairUpdateArmTimer = null;
+  function repairUpdateResetLabel(btn) {
+    const label = btn && btn.querySelector('[data-role="cell-label"]');
+    if (label) label.textContent = '修复更新通道';
+  }
+  async function repairUpdateChannel(btn) {
+    if (!btn) return;
+    if (navigator.onLine === false) {
+      showInfoToast('需要联网才能修复更新通道，请连接网络后重试。');
+      return;
+    }
+    if (repairUpdateArmedBtn !== btn) {
+      repairUpdateArmedBtn = btn;
+      const label = btn.querySelector('[data-role="cell-label"]');
+      if (label) label.textContent = '再次点击确认修复（本机记录不受影响）';
+      clearTimeout(repairUpdateArmTimer);
+      repairUpdateArmTimer = setTimeout(() => {
+        repairUpdateArmedBtn = null;
+        repairUpdateResetLabel(btn);
+      }, 4000);
+      return;
+    }
+    clearTimeout(repairUpdateArmTimer);
+    repairUpdateArmedBtn = null;
+    const label = btn.querySelector('[data-role="cell-label"]');
+    if (label) label.textContent = '正在检查网络…';
+    try {
+      const res = await fetch('sw.js', { cache: 'no-store' });
+      if (!res || !res.ok) throw new Error('probe failed');
+    } catch {
+      showInfoToast('网络暂时不可用，请稍后再试。');
+      repairUpdateResetLabel(btn);
+      return;
+    }
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.unregister();
+      }
+    } catch {}
+    window.location.reload();
+  }
+
   // --- Actions ---
   function registerActions() {
     // 新发现：header「···」更多按钮此前是裸文本字形，换成 iconSvg 体系图标（一次性
@@ -793,6 +844,7 @@ import {
       if (action === 'send-backup') ioActions.shareJSON();
       if (action === 'toggle-boot-diag') toggleBootDiag();
       if (action === 'copy-boot-diag') ioActions.copyBootDiagnostics();
+      if (action === 'repair-update-channel') repairUpdateChannel(el);
       if (action === 'update-app') applyUpdate();
       if (action === 'dismiss-update-banner') {
         const banner = document.getElementById('update-banner');

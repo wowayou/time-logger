@@ -1830,6 +1830,87 @@ test('update click reloads when the waiting worker activates without controllerc
   await page.waitForFunction(() => document.body.classList.contains('app-ready'));
 });
 
+// SPEC-009-lite (D15 额度裁剪): a permanently-visible "修复更新通道" cell in the
+// "更多" sheet — no detection, no counter, no third banner state (that's the
+// full-scope regstration parked for "reinstate after external users appear").
+// Only two things this lite scope must prove: the online path really
+// unregisters and reloads (and only on a *second* click on the same button —
+// it must not fire on the first, arming click), and the offline path never
+// touches the registration or navigates at all.
+test('repair-update-channel cell unregisters and reloads on a confirmed click while online', async ({ page }) => {
+  await page.addInitScript(() => {
+    // window globals get wiped by the reload this test expects to happen, so the
+    // unregister-call proof has to survive navigation — sessionStorage does,
+    // window globals don't (addInitScript reruns on the reload's own navigation
+    // too, which is exactly why an earlier draft of this test read 0/null
+    // forever: it was either polling a window counter the reload had reset, or
+    // clearing sessionStorage again on that very reload before checking it).
+    // Playwright gives each test a fresh, isolated storage context, so there is
+    // no stale value to clear here — the reload is the only navigation that
+    // matters and it must not wipe what it just wrote.
+    const registration = new EventTarget();
+    registration.unregister = () => {
+      try {
+        const n = Number(sessionStorage.getItem('probe.unregisterCalls') || '0') + 1;
+        sessionStorage.setItem('probe.unregisterCalls', String(n));
+      } catch {}
+      return Promise.resolve(true);
+    };
+    const serviceWorker = new EventTarget();
+    serviceWorker.controller = {};
+    serviceWorker.register = () => Promise.resolve(registration);
+    serviceWorker.getRegistration = () => Promise.resolve(registration);
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: serviceWorker });
+  });
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  await openBackupMenu(page);
+  const btn = page.locator('#repair-update-btn');
+  await expect(btn).toBeVisible();
+
+  // First click only arms the confirmation — must not unregister or reload yet.
+  await btn.click();
+  await expect(btn.locator('[data-role="cell-label"]')).toContainText('再次点击确认');
+  expect(await page.evaluate(() => sessionStorage.getItem('probe.unregisterCalls'))).toBeNull();
+
+  await page.evaluate(() => { window.__preReloadSentinel = true; });
+  await btn.click();
+  // Sentinel disappearing (window state wiped) is the proof of a real reload,
+  // not just a promise resolving — same technique as the update-banner tests.
+  await page.waitForFunction(() => window.__preReloadSentinel === undefined);
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  expect(await page.evaluate(() => sessionStorage.getItem('probe.unregisterCalls'))).toBe('1');
+});
+
+test('repair-update-channel cell refuses to act while offline and never touches the registration', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__unregisterCalls = 0;
+    window.__online = false;
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => window.__online });
+    const registration = new EventTarget();
+    registration.unregister = () => { window.__unregisterCalls += 1; return Promise.resolve(true); };
+    const serviceWorker = new EventTarget();
+    serviceWorker.controller = {};
+    serviceWorker.register = () => Promise.resolve(registration);
+    serviceWorker.getRegistration = () => Promise.resolve(registration);
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: serviceWorker });
+  });
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  await openBackupMenu(page);
+  const btn = page.locator('#repair-update-btn');
+  await expect(btn).toBeVisible();
+
+  await page.evaluate(() => { window.__preReloadSentinel = true; });
+  await btn.click();
+
+  const toast = page.locator('#info-toast');
+  await expect(toast).toBeVisible();
+  await expect(toast.locator('[data-role="info-message"]')).toContainText('联网');
+  // Never armed (label unchanged), never unregistered, never navigated away.
+  await expect(btn.locator('[data-role="cell-label"]')).toHaveText('修复更新通道');
+  expect(await page.evaluate(() => window.__unregisterCalls)).toBe(0);
+  expect(await page.evaluate(() => window.__preReloadSentinel)).toBe(true);
+});
+
 test('v57 date entry matrix forces history/future modes and hides creation at +8', async ({ page }) => {
   await boot(page, 768, 'empty', false, FIXED_NOW, null, null, 'log');
   await expect(page.locator('#add-btn')).toContainText('记一条');
