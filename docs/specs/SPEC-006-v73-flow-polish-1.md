@@ -1,6 +1,6 @@
 # SPEC-006 · v73：流程优雅性批次一——离线时不打系统弹窗 + 原生 alert 清零
 
-status: in-progress
+status: done（PR #29 已合并，v73 已发布）
 owner: spec/006-flow-polish-1
 验收人: Fable
 

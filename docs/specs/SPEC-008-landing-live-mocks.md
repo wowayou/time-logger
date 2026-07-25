@@ -1,6 +1,6 @@
 # SPEC-008 · 着陆页活体特性演示（纯 HTML/CSS 组件替代/补充截图）
 
-status: ready（依赖 SPEC-005 已合并的 landing v2 作底；零运行时改动，无版本号）
+status: parked（D15 额度裁剪 2026-07-25：推到 07-30 阶段复盘重排。park ≠ 取消，规格正文全部有效）
 owner: 执行方认领后填分支名
 验收人: Fable
 

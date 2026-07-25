@@ -1,6 +1,6 @@
 # SPEC-001 · v71：旧 origin 迁移横幅（host-gated）
 
-status: in-progress
+status: done（PR #25 已合并，v71 已发布）
 owner: spec/001-migration-banner
 验收人: Fable
 

@@ -1,6 +1,6 @@
 # SPEC-003 · 上线文案包：README 定位、主页 tagline、首轮社区推广草稿
 
-status: in-progress
+status: done（PR #26 已合并）
 owner: spec/003-launch-copy
 验收人: Fable
 

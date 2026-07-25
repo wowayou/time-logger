@@ -2,7 +2,7 @@
 
 > 2026-07-24 改号二次说明：不再预占版本号（此前 v72→v73 已让位两次）；解锁时由 Fable 按当时版本序列指定 N，规格内「bump 73」按当时实际号执行。
 
-status: blocked（等 runbook Phase C/D：维护者完成权威设备迁移并浸泡数日后解锁；解锁由 Fable 把本状态改为 ready）
+status: blocked（等 runbook Phase C/D 浸泡后由 Fable 解锁；D15 追加：解锁后并入当时最近一次发版仪式，不单独发版）
 owner: —
 验收人: Fable
 

@@ -1,6 +1,6 @@
 # SPEC-004 · v72：亮色主题整体回归冷白（推翻 D11 折中）
 
-status: in-progress
+status: done（PR #27 已合并，v72 已发布）
 owner: spec/004-cold-light-theme
 验收人: Fable
 

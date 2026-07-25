@@ -1,6 +1,6 @@
 # SPEC-011 · 状态栏遮条：standalone 滚动内容不得与系统状态栏文字互叠
 
-status: ready（小改动；排在 SPEC-009 之后、SPEC-010 阶段一之前或并行）
+status: ready（D15：与 SPEC-012 / SPEC-009-lite 合并为 v74 单批次，共用一次版本仪式）
 owner: 执行方认领后填分支名
 验收人: Fable（真机截图终审：维护者）
 
