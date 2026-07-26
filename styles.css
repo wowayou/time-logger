@@ -1231,6 +1231,24 @@
       inset: -13px -8px;
     }
     .mini-btn:active { opacity: 0.75; }
+    /* SPEC-011: fixed scrim over the safe-area status bar strip. standalone +
+       black-translucent + viewport-fit=cover lets scrolled content run under the
+       system status bar and visually collide with its clock/carrier glyphs; this
+       purely decorative bar reclaims that strip. env() resolves to 0 in a normal
+       browser context or on a non-notched desktop, so it has zero footprint there.
+       z-index sits above ordinary scrolling content but below the update banner
+       (75) and .form-sheet (80) per the existing z scale — it must not compete
+       with either, and pointer-events:none keeps it from stealing any tap. */
+    .statusbar-scrim {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: env(safe-area-inset-top, 0px);
+      background: var(--bg);
+      z-index: 60;
+      pointer-events: none;
+    }
     /* SPEC-001: legacy-origin migration notice — normal document flow above the
        .app shell (not fixed), so it never competes with the fixed update banner
        or FAB for the same screen real estate. Host-gated in src/app.js. */
@@ -1372,6 +1390,29 @@
        避免两条 toast 视觉重叠。 */
     body:has(#undo-toast:not([hidden])) #info-toast {
       bottom: calc(148px + env(safe-area-inset-bottom));
+    }
+    /* SPEC-012：#info-toast 到达本身要可感知（v73 的「静默」教训之一是它出现得
+       太不起眼），加一个克制的淡入+上移入场，和 sheet 的 @starting-style 同一套
+       渐进增强写法；.undo-toast 基础规则不动，只有 #info-toast 加这层动效。
+       z-index 提到 .form-sheet（80）之上：导入确认走「更多」下钻返回（v41 既有的
+       returnToMore 导航栈，红线不能改——CLAUDE.md 自测清单 7）时，closeForm() 是
+       同步把 #form-sheet 内容换回「更多」而非真正 hidden，无论 showInfoToast 延迟
+       多久，届时 #form-sheet 仍在原 z-index 80 覆盖同一屏幕位置；只有 toast 的
+       z-index 高于 form-sheet，它才能在「更多」重新盖住屏幕之后仍然可见（无头探针
+       实测坐实：z:70 时 elementFromPoint 命中的是 .more-body 而不是 toast）。仍低于
+       z-index 90 的 .cross-tab-banner，不影响既有层级红线。 */
+    #info-toast {
+      z-index: 85;
+      transition: opacity 0.2s ease, transform 0.25s ease-out;
+    }
+    @starting-style {
+      #info-toast:not([hidden]) {
+        opacity: 0;
+        transform: translateX(-50%) translateY(8px);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #info-toast { transition: none; }
     }
     .undo-btn {
       min-width: 64px;

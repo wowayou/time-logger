@@ -293,7 +293,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '73';
+export const APP_VERSION = '74';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -366,6 +366,10 @@ function renderMoreSheet(opts = {}) {
         </div>
         <button class="cell-btn" type="button" data-action="open-help" aria-label="打开说明">说明${cellChevron}</button>
       </div>
+      <div class="cell-group">
+        <button class="cell-btn" id="repair-update-btn" type="button" data-action="repair-update-channel" aria-label="修复更新通道：应用更新一直卡住、点了更新应用或完全退出重开都没用时使用，会重新加载页面，本机记录不受影响"><span data-role="cell-label">修复更新通道</span>${cellChevron}</button>
+      </div>
+      <div class="form-hint">应用更新一直卡住时用；会重新加载页面，本机记录不受影响。</div>
       <div class="cell-group">
         <button class="cell-btn" type="button" data-action="toggle-boot-diag" aria-pressed="${bootDiag.enabled}" aria-label="启动诊断，当前${bootDiag.enabled ? '开启，点击关闭并清除样本' : '关闭，点击开启'}"><span data-role="cell-label">启动诊断：${bootDiag.enabled ? '开' : '关'}</span>${cellChevron}</button>
         ${bootDiag.enabled ? `<button class="cell-btn" id="boot-diag-copy-btn" type="button" data-action="copy-boot-diag" aria-label="复制启动诊断样本"><span data-role="cell-label">复制启动诊断</span>${cellChevron}</button>` : ''}

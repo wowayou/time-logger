@@ -500,7 +500,20 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
 
   await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.length)).toBe(2);
   // SPEC-006 B: import success now surfaces via #info-toast, not a native alert().
-  await expect(page.locator('#info-toast [data-role="info-message"]')).toContainText('导入完成');
+  // SPEC-012: toContainText matches hidden/occluded text too (v73's regression
+  // slipped through exactly this gap) — assert real visibility, and that the
+  // toast is genuinely the topmost element at its own position (it must render
+  // above the "更多" sheet that returnToMore reopens, see styles.css note).
+  const importToast = page.locator('#info-toast');
+  await expect(importToast).toBeVisible();
+  await expect(importToast.locator('[data-role="info-message"]')).toContainText('导入完成');
+  const importToastOnTop = await page.evaluate(() => {
+    const el = document.getElementById('info-toast');
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return top === el || el.contains(top);
+  });
+  expect(importToastOnTop).toBe(true);
   expect(dialogs.count).toBe(0);
   const stored = await page.evaluate(() => ({
     data: JSON.parse(localStorage.getItem('timelog.v1')),
@@ -523,6 +536,60 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
   expect(exported.config.mainline).toContain('导入主线');
   expect(exported.meta.sourceTimezoneOffsetMinutes).toBe(-480);
   expect(exported.meta.sourceTimeZone).toBeTruthy();
+});
+
+// SPEC-012: v73 regression — confirming an import showed nothing at all. Root
+// cause: confirmImportShift() lit #info-toast, then closeForm() immediately
+// followed. For import specifically, closeForm() hits the v41 returnToMore
+// breadcrumb (self-test item 7, kept intact — import is drilled into from
+// "更多", so confirming/cancelling returns there rather than fully closing the
+// sheet), which synchronously swaps #form-sheet's content back to "更多" — the
+// sheet never actually becomes hidden. So no fixed timing coordination with a
+// sheet-close animation can make the toast "appear after the sheet is gone";
+// what actually has to be true is that the toast renders on top of whatever
+// #form-sheet is showing when it fires (see the SPEC-012 z-index note in
+// styles.css). This test locks both halves of the fix: the toast stays hidden
+// through the SHEET_CLOSE_MS window (proving the delay is real, not a no-op),
+// and once it fires it is visible and unoccluded above the reopened "更多".
+test('import success toast is delayed past the close window and lands above the reopened 更多 sheet (SPEC-012)', async ({ page }) => {
+  await page.clock.install({ time: new Date(FIXED_NOW) });
+  await boot(page, 768, 'empty', false, '', null, -480);
+  const imported = {
+    version: 1,
+    entries: [{ id: 'solo', ts: '2026-06-28T20:00', what: '晚间导入', tags: ['导入主线'] }]
+  };
+  const dialogs = trackDialogs(page);
+
+  const chooserPromise = page.waitForEvent('filechooser');
+  await openBackupMenu(page);
+  await page.getByRole('button', { name: '导入 JSON 备份' }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    name: 'timelog-import.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(imported))
+  });
+  await expect(page.locator('#form-sheet-title')).toContainText('导入检查');
+  await page.getByRole('button', { name: '确认导入' }).click();
+
+  // The breadcrumb swap back to "更多" happens synchronously on click; the
+  // toast must not have surfaced yet.
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  await expect(page.locator('#info-toast')).toBeHidden();
+
+  await page.clock.runFor(400);
+
+  const toast = page.locator('#info-toast');
+  await expect(toast).toBeVisible();
+  await expect(toast.locator('[data-role="info-message"]')).toContainText('导入完成');
+  const onTop = await page.evaluate(() => {
+    const el = document.getElementById('info-toast');
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return top === el || el.contains(top);
+  });
+  expect(onTop).toBe(true);
+  expect(dialogs.count).toBe(0);
 });
 
 test('JSON import uses timezone metadata to suggest default shift', async ({ page }) => {
@@ -1763,6 +1830,124 @@ test('update click reloads when the waiting worker activates without controllerc
   await page.waitForFunction(() => document.body.classList.contains('app-ready'));
 });
 
+// SPEC-009-lite (D15 额度裁剪): a permanently-visible "修复更新通道" cell in the
+// "更多" sheet — no detection, no counter, no third banner state (that's the
+// full-scope regstration parked for "reinstate after external users appear").
+// Only two things this lite scope must prove: the online path really
+// unregisters and reloads (and only on a *second* click on the same button —
+// it must not fire on the first, arming click), and the offline path never
+// touches the registration or navigates at all.
+test('repair-update-channel cell unregisters and reloads on a confirmed click while online', async ({ page }) => {
+  await page.addInitScript(() => {
+    // window globals get wiped by the reload this test expects to happen, so the
+    // unregister-call proof has to survive navigation — sessionStorage does,
+    // window globals don't (addInitScript reruns on the reload's own navigation
+    // too, which is exactly why an earlier draft of this test read 0/null
+    // forever: it was either polling a window counter the reload had reset, or
+    // clearing sessionStorage again on that very reload before checking it).
+    // Playwright gives each test a fresh, isolated storage context, so there is
+    // no stale value to clear here — the reload is the only navigation that
+    // matters and it must not wipe what it just wrote.
+    const registration = new EventTarget();
+    registration.unregister = () => {
+      try {
+        const n = Number(sessionStorage.getItem('probe.unregisterCalls') || '0') + 1;
+        sessionStorage.setItem('probe.unregisterCalls', String(n));
+      } catch {}
+      return Promise.resolve(true);
+    };
+    const serviceWorker = new EventTarget();
+    serviceWorker.controller = {};
+    serviceWorker.register = () => Promise.resolve(registration);
+    serviceWorker.getRegistration = () => Promise.resolve(registration);
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: serviceWorker });
+  });
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  await openBackupMenu(page);
+  const btn = page.locator('#repair-update-btn');
+  await expect(btn).toBeVisible();
+
+  // First click only arms the confirmation — must not unregister or reload yet.
+  await btn.click();
+  await expect(btn.locator('[data-role="cell-label"]')).toContainText('再次点击确认');
+  expect(await page.evaluate(() => sessionStorage.getItem('probe.unregisterCalls'))).toBeNull();
+
+  await page.evaluate(() => { window.__preReloadSentinel = true; });
+  await btn.click();
+  // Sentinel disappearing (window state wiped) is the proof of a real reload,
+  // not just a promise resolving — same technique as the update-banner tests.
+  await page.waitForFunction(() => window.__preReloadSentinel === undefined);
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  expect(await page.evaluate(() => sessionStorage.getItem('probe.unregisterCalls'))).toBe('1');
+});
+
+test('repair-update-channel cell refuses to act while offline and never touches the registration', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__unregisterCalls = 0;
+    window.__online = false;
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => window.__online });
+    const registration = new EventTarget();
+    registration.unregister = () => { window.__unregisterCalls += 1; return Promise.resolve(true); };
+    const serviceWorker = new EventTarget();
+    serviceWorker.controller = {};
+    serviceWorker.register = () => Promise.resolve(registration);
+    serviceWorker.getRegistration = () => Promise.resolve(registration);
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: serviceWorker });
+  });
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  await openBackupMenu(page);
+  const btn = page.locator('#repair-update-btn');
+  await expect(btn).toBeVisible();
+
+  await page.evaluate(() => { window.__preReloadSentinel = true; });
+  await btn.click();
+
+  const toast = page.locator('#info-toast');
+  await expect(toast).toBeVisible();
+  await expect(toast.locator('[data-role="info-message"]')).toContainText('联网');
+  // Never armed (label unchanged), never unregistered, never navigated away.
+  await expect(btn.locator('[data-role="cell-label"]')).toHaveText('修复更新通道');
+  expect(await page.evaluate(() => window.__unregisterCalls)).toBe(0);
+  expect(await page.evaluate(() => window.__preReloadSentinel)).toBe(true);
+});
+
+// 验收补正（v64 判例：修复没生效就必须说出来，不得无声装死）。unregister 返回
+// false 时旧实现照样 reload，用户看到页面刷新、卡死照旧、零反馈——正是 v64 花了
+// 一个版本根治的那种「点了没反应」。这条锁住失败路径必须给出可执行出路且不刷新。
+test('repair-update-channel admits failure instead of silently reloading when unregister fails', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__unregisterCalls = 0;
+    const registration = new EventTarget();
+    // 真实死局的形态：注册记录还在，但 unregister 被系统拒绝（返回 false）。
+    registration.unregister = () => { window.__unregisterCalls += 1; return Promise.resolve(false); };
+    const serviceWorker = new EventTarget();
+    serviceWorker.controller = {};
+    serviceWorker.register = () => Promise.resolve(registration);
+    serviceWorker.getRegistration = () => Promise.resolve(registration);
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: serviceWorker });
+  });
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  await openBackupMenu(page);
+  const btn = page.locator('#repair-update-btn');
+  await expect(btn).toBeVisible();
+
+  await page.evaluate(() => { window.__preReloadSentinel = true; });
+  await btn.click();
+  await expect(btn.locator('[data-role="cell-label"]')).toContainText('再次点击确认');
+  // 武装态的可访问名必须跟着可见文字走，否则读屏用户停留在旧名称上。
+  await expect(btn).toHaveAttribute('aria-label', /再次点击确认/);
+  await btn.click();
+
+  const toast = page.locator('#info-toast');
+  await expect(toast).toBeVisible();
+  await expect(toast.locator('[data-role="info-message"]')).toContainText('完全退出应用');
+  expect(await page.evaluate(() => window.__unregisterCalls)).toBe(1);
+  // sentinel 还在＝没有 reload；标签与可访问名都复位，可以再试。
+  expect(await page.evaluate(() => window.__preReloadSentinel)).toBe(true);
+  await expect(btn.locator('[data-role="cell-label"]')).toHaveText('修复更新通道');
+  await expect(btn).toHaveAttribute('aria-label', /^修复更新通道：/);
+});
+
 test('v57 date entry matrix forces history/future modes and hides creation at +8', async ({ page }) => {
   await boot(page, 768, 'empty', false, FIXED_NOW, null, null, 'log');
   await expect(page.locator('#add-btn')).toContainText('记一条');
@@ -2519,5 +2704,84 @@ test.describe('SPEC-001: legacy-origin migration banner', () => {
     await expect(page.locator('#migration-notice')).toBeHidden();
     await openBackupMenu(page);
     await expect(page.locator('[data-action="reopen-migration-notice"]')).toHaveCount(0);
+  });
+});
+
+// SPEC-011: standalone + apple-mobile-web-app-status-bar-style=black-translucent
+// + viewport-fit=cover lets scrolled content run under the system status bar and
+// visually collide with its clock/carrier glyphs (real-machine screenshot
+// evidence in the spec). Playwright cannot simulate a non-zero
+// env(safe-area-inset-top) — there is no notch/Dynamic Island in a headless or
+// desktop browser context — so this suite only covers what a browser context
+// *can* prove: the scrim exists, sits outside .app (not part of the v53 boot
+// snapshot), is fixed/non-interactive, resolves to zero height with zero
+// safe-area (so it has no effect on ordinary browsers/desktops), and its
+// z-index sits below the update banner and form sheet per the existing scale.
+// The actual "text no longer overlaps the status bar" claim is a real-device,
+// real-screenshot verification (aa/dark, standalone, scrolled) — that closes
+// the loop, not this suite (see SPEC-011's own P35 note: red-light proof for
+// the occlusion claim itself is infeasible headless, and the spec says so
+// explicitly rather than faking it).
+test.describe('SPEC-011: fixed status-bar scrim', () => {
+  test('scrim exists outside .app, fixed and non-interactive, z-index below the update banner and form sheet', async ({ page }) => {
+    await boot(page, 375, 'empty', false, FIXED_NOW);
+    const scrim = page.locator('.statusbar-scrim');
+    await expect(scrim).toHaveCount(1);
+    const info = await scrim.evaluate(el => {
+      const style = getComputedStyle(el);
+      return {
+        position: style.position,
+        pointerEvents: style.pointerEvents,
+        top: style.top,
+        left: style.left,
+        right: style.right,
+        zIndex: Number(style.zIndex),
+        height: el.getBoundingClientRect().height,
+        insideApp: Boolean(el.closest('.app')),
+        precedesApp: Boolean(el.compareDocumentPosition(document.querySelector('.app')) & Node.DOCUMENT_POSITION_FOLLOWING)
+      };
+    });
+    expect(info.position).toBe('fixed');
+    expect(info.pointerEvents).toBe('none');
+    expect(info.top).toBe('0px');
+    expect(info.left).toBe('0px');
+    expect(info.right).toBe('0px');
+    expect(info.insideApp).toBe(false);
+    expect(info.precedesApp).toBe(true);
+    // No real safe-area in a headless/desktop browser context: env() resolves
+    // to 0, so the scrim must have zero footprint there (real-device height —
+    // 20/47/59px depending on device — is out of headless's reach).
+    expect(info.height).toBe(0);
+
+    const updateBannerZ = await page.locator('#update-banner').evaluate(el => Number(getComputedStyle(el).zIndex));
+    const formSheetZ = await page.locator('#form-sheet').evaluate(el => Number(getComputedStyle(el).zIndex));
+    expect(info.zIndex).toBeGreaterThan(0);
+    expect(info.zIndex).toBeLessThan(updateBannerZ);
+    expect(info.zIndex).toBeLessThan(formSheetZ);
+  });
+
+  test('scrim never occludes an interactive element in a browser context', async ({ page }) => {
+    await boot(page, 375, 'empty', false, FIXED_NOW);
+    // This is a defensive invariant (must hold both before and after the fix,
+    // since a headless/desktop browser context always resolves the scrim to
+    // zero height) rather than a regression check — the P35 red-light proof
+    // for "the scrim exists at all" lives in the sibling test above.
+    const hitsScrim = await page.evaluate(() => {
+      const scrim = document.querySelector('.statusbar-scrim');
+      if (!scrim) return false;
+      const width = window.innerWidth;
+      for (let x = 0; x < width; x += 15) {
+        if (document.elementFromPoint(x, 0) === scrim) return true;
+      }
+      return false;
+    });
+    expect(hitsScrim).toBe(false);
+    const iconReachable = await page.evaluate(() => {
+      const icon = document.querySelector('.hdr-icon-link');
+      const r = icon.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, Math.max(0, r.top + 1));
+      return top === icon || icon.contains(top);
+    });
+    expect(iconReachable).toBe(true);
   });
 });

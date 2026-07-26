@@ -1,6 +1,6 @@
 # SPEC-012 · v73 回归修复：导入确认后「什么都没弹」
 
-status: ready（D15：v74 合并批次的第一项，优先级最高）
+status: in-progress（分支 `spec/074-batch`，v74 合并批次第 1 项；执行＝本地 Sonnet 5 子代理，验收＝本地 Opus 5 会话）
 owner: 执行方认领后填分支名
 验收人: Fable
 优先级: 高（v73 刚引入的回归 + 维护者日常导入流程必经；插在 SPEC-009 之后、SPEC-011 之前）

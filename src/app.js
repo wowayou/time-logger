@@ -726,6 +726,72 @@ import {
     worker.postMessage({ type: 'SKIP_WAITING' });
   }
 
+  // SPEC-009-lite（D15 额度裁剪：只做「更多」里的常驻手动出口，不做检测/计数器/
+  // 横幅第三态——那部分登记为「出现外部用户后重启」，见 SPEC-009 文末）。
+  // 「修复更新通道」永远由用户点击触发，任何路径都不自动 unregister/reload：
+  // 点一次进入「再次点击确认」武装态（4 秒后自动收回，防误触发），同一个 DOM
+  // 节点上的第二次点击才真正执行——sheet 重渲染会换新节点，武装态天然失效，
+  // 不需要额外清理。在线前置检查 → sw.js 探活 → unregister → reload；
+  // localStorage 全程不被触碰。
+  let repairUpdateArmedBtn = null;
+  let repairUpdateArmTimer = null;
+  let repairUpdateRestAria = '';
+  function repairUpdateResetLabel(btn) {
+    const label = btn && btn.querySelector('[data-role="cell-label"]');
+    if (label) label.textContent = '修复更新通道';
+    // 验收补正：aria-label 会覆盖按钮内容，只改可见文字会把读屏用户留在旧的
+    // 可访问名上（可见标签与可访问名不一致）。两个状态都同步改。
+    if (btn && repairUpdateRestAria) btn.setAttribute('aria-label', repairUpdateRestAria);
+  }
+  async function repairUpdateChannel(btn) {
+    if (!btn) return;
+    if (navigator.onLine === false) {
+      showInfoToast('需要联网才能修复更新通道，请连接网络后重试。');
+      return;
+    }
+    if (repairUpdateArmedBtn !== btn) {
+      repairUpdateArmedBtn = btn;
+      repairUpdateRestAria = btn.getAttribute('aria-label') || repairUpdateRestAria;
+      const label = btn.querySelector('[data-role="cell-label"]');
+      if (label) label.textContent = '再次点击确认修复（本机记录不受影响）';
+      btn.setAttribute('aria-label', '再次点击确认修复更新通道；会重新加载页面，本机记录不受影响');
+      clearTimeout(repairUpdateArmTimer);
+      repairUpdateArmTimer = setTimeout(() => {
+        repairUpdateArmedBtn = null;
+        repairUpdateResetLabel(btn);
+      }, 4000);
+      return;
+    }
+    clearTimeout(repairUpdateArmTimer);
+    repairUpdateArmedBtn = null;
+    const label = btn.querySelector('[data-role="cell-label"]');
+    if (label) label.textContent = '正在检查网络…';
+    try {
+      const res = await fetch('sw.js', { cache: 'no-store' });
+      if (!res || !res.ok) throw new Error('probe failed');
+    } catch {
+      showInfoToast('网络暂时不可用，请稍后再试。');
+      repairUpdateResetLabel(btn);
+      return;
+    }
+    // 验收补正（v64 判例：修复没生效就必须说出来，不得无声装死）。没有注册＝
+    // 没什么可注销的，reload 后会全新注册、同样达到目的，算成功；只有真的
+    // 注销失败（返回 false 或抛错）才承认失败并给出可执行的出路。
+    let unregistered = true;
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) unregistered = (await reg.unregister()) !== false;
+      }
+    } catch { unregistered = false; }
+    if (!unregistered) {
+      showInfoToast('没能重置更新通道。请完全退出应用（Safari 关闭本站全部标签页）后重新打开。');
+      repairUpdateResetLabel(btn);
+      return;
+    }
+    window.location.reload();
+  }
+
   // --- Actions ---
   function registerActions() {
     // 新发现：header「···」更多按钮此前是裸文本字形，换成 iconSvg 体系图标（一次性
@@ -793,6 +859,7 @@ import {
       if (action === 'send-backup') ioActions.shareJSON();
       if (action === 'toggle-boot-diag') toggleBootDiag();
       if (action === 'copy-boot-diag') ioActions.copyBootDiagnostics();
+      if (action === 'repair-update-channel') repairUpdateChannel(el);
       if (action === 'update-app') applyUpdate();
       if (action === 'dismiss-update-banner') {
         const banner = document.getElementById('update-banner');

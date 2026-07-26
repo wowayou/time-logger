@@ -1,6 +1,6 @@
 # SPEC-011 · 状态栏遮条：standalone 滚动内容不得与系统状态栏文字互叠
 
-status: ready（D15：与 SPEC-012 / SPEC-009-lite 合并为 v74 单批次，共用一次版本仪式）
+status: in-progress（分支 `spec/074-batch`，v74 合并批次第 2 项；真机截图终审仍归维护者）
 owner: 执行方认领后填分支名
 验收人: Fable（真机截图终审：维护者）
 

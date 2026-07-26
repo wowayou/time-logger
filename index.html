@@ -80,6 +80,12 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<!-- SPEC-011：standalone 下 apple-mobile-web-app-status-bar-style=black-translucent
+     + viewport-fit=cover 让内容延伸进状态栏区域，页面一滚动应用文字就会跟系统状态栏
+     文字互叠。加一条纯装饰的固定遮条盖住该区域；高度=env(safe-area-inset-top)，
+     浏览器上下文/无刘海桌面为 0，零影响。渲染在 .app 之外、所有内容之前，
+     不进 v53 boot 快照范围（静态壳常驻元素）。 -->
+<div class="statusbar-scrim" aria-hidden="true"></div>
 <!-- SPEC-001：旧 origin 迁移横幅，host-gated（src/app.js isLegacyOrigin）。渲染在
      .app 之外，不进 v53 boot 快照范围；新 origin 上恒 hidden，静态文案零字节差异。 -->
 <div class="migration-notice" id="migration-notice" hidden>
