@@ -2634,64 +2634,40 @@ test('a motto truncated exactly on a space keeps no trailing blank', async ({ pa
   expect(stored.endsWith(' ')).toBe(false);
 });
 
-test.describe('SPEC-001: legacy-origin migration banner', () => {
+test.describe('SPEC-001/SPEC-002: legacy-origin permanent read-only banner', () => {
   const LEGACY_ORIGIN = 'https://wowayou.github.io';
   const LEGACY_PATH = '/time-logger/';
   const MIRROR_PATH = '/time-logger-site/app/';
 
-  test('legacy origin shows a dismissible banner with a permanent 更多 reopen entry', async ({ page }) => {
+  test('legacy origin shows a permanent, non-dismissable banner with only "打开新地址"', async ({ page }) => {
     await routeStaticOrigin(page, LEGACY_ORIGIN, LEGACY_PATH);
     await boot(page, 768, 'empty', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${LEGACY_PATH}`);
 
     const notice = page.locator('#migration-notice');
     await expect(notice).toBeVisible();
+    await expect(notice).toContainText('只读');
     await expect(notice).toContainText('time.eigentime.org/app/');
     const openNew = notice.locator('[href]');
     await expect(openNew).toHaveAttribute('href', 'https://time.eigentime.org/app/');
     await expect(openNew).toHaveAttribute('target', '_blank');
     await expect(openNew).toHaveAttribute('rel', 'noopener');
+    // SPEC-002: 常驻不可关闭——没有「知道了」，没有 dismissed 状态可持久化。
+    await expect(page.locator('[data-action="dismiss-migration-notice"]')).toHaveCount(0);
+    await expect(notice.getByRole('button')).toHaveCount(0);
 
-    // 「知道了」关闭横幅并写入跨会话持久标志。
-    await page.locator('[data-action="dismiss-migration-notice"]').click();
-    await expect(notice).toBeHidden();
-    await expect.poll(() =>
-      page.evaluate(() => localStorage.getItem('timelog.migrationNotice.dismissed.v1'))
-    ).toBe('1');
-
-    // P35 陷阱（v70 已记录同款）：boot() 的 addInitScript 在每次导航都会先
-    // localStorage.clear() 再重新播种，所以 page.reload() 本身证明不了持久化——
-    // 会把刚写的 dismissed 标志一起冲掉，变成「假绿」。这里改为在 boot() 之后
-    // 追加一个 initScript，在 boot 的清空+重播种之后再写回同一个标志，模拟
-    // 「用户上次会话已关闭过」的下一次真实到访，从而验证读取侧的持久化效果。
-    await page.addInitScript(() => {
-      localStorage.setItem('timelog.migrationNotice.dismissed.v1', '1');
-    });
+    // 切视图/切周期这类日常导航不应让横幅消失——它没有任何可关闭状态。
+    await page.getByRole('button', { name: '周视图' }).click();
+    await expect(notice).toBeVisible();
     await page.reload();
     await page.waitForFunction(() => document.body.classList.contains('app-ready'));
-    await expect(page.locator('#migration-notice')).toBeHidden();
+    await expect(notice).toBeVisible();
 
-    // 「···」更多菜单保留永久重开入口。
+    // 「···」更多菜单不再需要重开入口（横幅本身已是常驻的）。
     await openBackupMenu(page);
-    const reopenCell = page.locator('[data-action="reopen-migration-notice"]');
-    await expect(reopenCell).toBeVisible();
-    await expect(reopenCell).toContainText('迁移到新地址');
-    await reopenCell.click();
-    await expect(page.locator('#form-sheet')).toBeHidden();
-    await expect(page.locator('#migration-notice')).toBeVisible();
+    await expect(page.locator('[data-action="reopen-migration-notice"]')).toHaveCount(0);
   });
 
-  test('legacy origin banner sits in normal flow above the header and never overlaps the fixed FAB', async ({ page }) => {
-    await routeStaticOrigin(page, LEGACY_ORIGIN, LEGACY_PATH);
-    await boot(page, 768, 'empty', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${LEGACY_PATH}`);
-    const noticeBox = await page.locator('#migration-notice').boundingBox();
-    const fabBox = await page.locator('#add-btn').boundingBox();
-    expect(noticeBox).toBeTruthy();
-    expect(fabBox).toBeTruthy();
-    expect(noticeBox.y).toBeLessThan(fabBox.y);
-    expect(noticeBox.y + noticeBox.height).toBeLessThanOrEqual(fabBox.y);
-  });
-
-  test('new origin (localhost baseline) never renders the banner or its 更多 entry', async ({ page }) => {
+  test('new origin (localhost baseline) never renders the banner', async ({ page }) => {
     await boot(page, 768, 'empty', false, FIXED_NOW);
     await expect(page.locator('#migration-notice')).toBeHidden();
     await openBackupMenu(page);
@@ -2702,8 +2678,104 @@ test.describe('SPEC-001: legacy-origin migration banner', () => {
     await routeStaticOrigin(page, LEGACY_ORIGIN, MIRROR_PATH);
     await boot(page, 768, 'empty', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${MIRROR_PATH}`);
     await expect(page.locator('#migration-notice')).toBeHidden();
+    // 镜像预览路径行为与新 origin 完全一致：读写皆不受限。
+    await expect(page.locator('#add-btn')).not.toBeHidden();
+  });
+});
+
+// SPEC-002 (v76): the legacy origin's soak period is over — it becomes a
+// full read-only application. Every write-path entry point must be
+// unreachable (FAB/list-fade, row-click-to-edit, the swipe edit/delete
+// track, the 补一下/标记已发生/确认 action links, and the 更多 menu's 导入
+// cell), while every read/export capability (browsing, summary, copy,
+// storage backup, share backup, theme, help) keeps working exactly as on
+// the new origin. `readOnly` flows from the same isLegacyOrigin() gate
+// SPEC-001 introduced — see src/app.js render()/renderChrome() and
+// src/ui.js renderTimeline's readOnly branch.
+test.describe('SPEC-002: legacy-origin write paths are unreachable', () => {
+  const LEGACY_ORIGIN = 'https://wowayou.github.io';
+  const LEGACY_PATH = '/time-logger/';
+
+  test('FAB and its fade layer are hidden even on a day that would otherwise allow new entries', async ({ page }) => {
+    await routeStaticOrigin(page, LEGACY_ORIGIN, LEGACY_PATH);
+    await boot(page, 768, 'one-record', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${LEGACY_PATH}`);
+    await expect(page.locator('#add-btn')).toBeHidden();
+    await expect(page.locator('#list-fade')).toBeHidden();
+  });
+
+  test('a real record renders read-only: no data-action, no role=button, no swipe track, content still visible', async ({ page }) => {
+    await routeStaticOrigin(page, LEGACY_ORIGIN, LEGACY_PATH);
+    await boot(page, 768, 'one-record', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${LEGACY_PATH}`);
+    const entry = page.locator('.entry', { hasText: '响应式测试记录' });
+    await expect(entry).toBeVisible();
+    await expect(page.locator('.entry[data-action]')).toHaveCount(0);
+    await expect(page.locator('.entry[role="button"]')).toHaveCount(0);
+    await expect(page.locator('.swipe-row')).toHaveCount(0);
+    await expect(page.locator('.swipe-actions')).toHaveCount(0);
+    // Clicking the (non-interactive) card must not open the form sheet.
+    await entry.click();
+    await expect(page.locator('#form-sheet')).toBeHidden();
+  });
+
+  test('an unrecorded gap shows content without the 补一下 action or a click target', async ({ page }) => {
+    await routeStaticOrigin(page, LEGACY_ORIGIN, LEGACY_PATH);
+    // two-records leaves a real (>=15min) unrecorded gap before the first
+    // 09:00 entry, unlike one-record where the whole day is one ongoing span.
+    await boot(page, 768, 'two-records', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${LEGACY_PATH}`);
+    const gap = page.locator('.entry.gap');
+    await expect(gap.first()).toBeVisible();
+    await expect(page.locator('.entry.gap[data-action]')).toHaveCount(0);
+    await expect(page.locator('.e-cta', { hasText: '补一下' })).toHaveCount(0);
+  });
+
+  test('a planned entry shows content without 标记已发生 or an edit click target', async ({ page }) => {
+    await routeStaticOrigin(page, LEGACY_ORIGIN, LEGACY_PATH);
+    await boot(page, 768, 'planned-only', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${LEGACY_PATH}`);
+    const planned = page.locator('.entry.planned');
+    await expect(planned).toContainText('准备面试');
+    await expect(planned).not.toHaveAttribute('data-action', 'start-edit');
+    await expect(page.locator('[data-action="confirm-planned"]')).toHaveCount(0);
+    await planned.click();
+    await expect(page.locator('#form-sheet')).toBeHidden();
+  });
+
+  test('a pending-confirmation long segment shows content without the 确认 action link', async ({ page }) => {
+    await routeStaticOrigin(page, LEGACY_ORIGIN, LEGACY_PATH);
+    await boot(page, 768, 'pending-confirm-lunch', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${LEGACY_PATH}`);
+    await expect(page.locator('.entry', { hasText: '吃饭' })).toBeVisible();
+    await expect(page.locator('[data-action="confirm-segment"]')).toHaveCount(0);
+  });
+
+  test('更多 menu drops the 导入备份 cell but keeps copy/storage/share', async ({ page }) => {
+    await routeStaticOrigin(page, LEGACY_ORIGIN, LEGACY_PATH);
+    await boot(page, 768, 'one-record', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${LEGACY_PATH}`);
     await openBackupMenu(page);
-    await expect(page.locator('[data-action="reopen-migration-notice"]')).toHaveCount(0);
+    await expect(page.locator('[data-action="import-json"]')).toHaveCount(0);
+    await expect(page.locator('[data-action="copy-summary"]')).toBeVisible();
+    await expect(page.locator('[data-action="copy-json"]')).toBeVisible();
+    await expect(page.locator('[data-action="download-json"]')).toBeVisible();
+    await expect(page.locator('[data-action="send-backup"]')).toBeVisible();
+  });
+
+  test('read/export capabilities are fully intact: week/month/year browsing, summary copy, theme', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: () => Promise.resolve() }
+      });
+    });
+    await routeStaticOrigin(page, LEGACY_ORIGIN, LEGACY_PATH);
+    await boot(page, 768, 'one-record', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${LEGACY_PATH}`);
+    await page.getByRole('button', { name: '周视图' }).click();
+    await expect(page.locator('#period-label')).toHaveAttribute('aria-label', /周/);
+    await page.getByRole('button', { name: '月视图' }).click();
+    await expect(page.locator('#period-label')).toHaveAttribute('aria-label', /月/);
+    await page.getByRole('button', { name: '年视图' }).click();
+    await expect(page.locator('#period-label')).toHaveAttribute('aria-label', /年/);
+    await page.getByRole('button', { name: '天视图' }).click();
+    await openBackupMenu(page);
+    await page.locator('[data-action="copy-summary"]').click();
+    await expect(page.locator('#summary-btn')).toHaveClass(/copied/);
   });
 });
 
@@ -2722,6 +2794,16 @@ test.describe('SPEC-001: legacy-origin migration banner', () => {
 // the loop, not this suite (see SPEC-011's own P35 note: red-light proof for
 // the occlusion claim itself is infeasible headless, and the spec says so
 // explicitly rather than faking it).
+//
+// v76 retro: real-machine screenshots (after the scrim landed) showed a hard
+// bottom edge slicing through header glyphs mid-scroll. The spec pre-approved
+// an 8–12px --bg-to-transparent fade as the fallback; this adds a ::after on
+// the scrim with `height: min(10px, env(safe-area-inset-top, 0px))` so the
+// fade's own footprint collapses to 0 wherever the scrim itself does — same
+// headless limitation as above (no real safe-area to screenshot), so the
+// suite below can only prove the CSS shape (gradient present, zero height and
+// non-interactive in a browser context), not the real-device "no more seam"
+// claim.
 test.describe('SPEC-011: fixed status-bar scrim', () => {
   test('scrim exists outside .app, fixed and non-interactive, z-index below the update banner and form sheet', async ({ page }) => {
     await boot(page, 375, 'empty', false, FIXED_NOW);
@@ -2783,5 +2865,40 @@ test.describe('SPEC-011: fixed status-bar scrim', () => {
       return top === icon || icon.contains(top);
     });
     expect(iconReachable).toBe(true);
+  });
+
+  test('bottom-edge fade: gradient exists, non-interactive, and collapses to zero height with zero safe-area', async ({ page }) => {
+    await boot(page, 375, 'empty', false, FIXED_NOW);
+    const info = await page.evaluate(() => {
+      const scrim = document.querySelector('.statusbar-scrim');
+      const after = getComputedStyle(scrim, '::after');
+      return {
+        backgroundImage: after.backgroundImage,
+        pointerEvents: after.pointerEvents,
+        position: after.position,
+        height: after.height
+      };
+    });
+    // A real gradient, not the scrim's own flat --bg fill.
+    expect(info.backgroundImage).toMatch(/linear-gradient/);
+    expect(info.pointerEvents).toBe('none');
+    expect(info.position).toBe('absolute');
+    // No real safe-area in a headless/desktop browser context: min(10px, 0px)
+    // must resolve to 0 — the fade must not appear as a lingering band on
+    // ordinary browsers/desktops just because the scrim above it is gone.
+    expect(info.height).toBe('0px');
+
+    // The fade must not create a new hit-testable region either, even though
+    // it's zero-height here — reuse the same elementFromPoint sweep just
+    // below where the scrim would end.
+    const hitsFade = await page.evaluate(() => {
+      const width = window.innerWidth;
+      for (let x = 0; x < width; x += 15) {
+        const el = document.elementFromPoint(x, 0);
+        if (el && el.matches && el.matches('.statusbar-scrim')) return true;
+      }
+      return false;
+    });
+    expect(hitsFade).toBe(false);
   });
 });

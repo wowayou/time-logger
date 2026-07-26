@@ -30,6 +30,11 @@
       --bg: #0e0f13;
       --card: #16171e;
       --input: #1d1f29;
+      /* v76：控件表面分层修正——拆「井」（--input，凹陷输入态）与「壳」
+         （--chrome，view-tabs 未选中态/日期导航按钮的浮起底）。暗色本就
+         --input(#1d1f29) 亮于 --bg(#0e0f13)，没有倒挂问题，--chrome 直接
+         复用 --input 的暗色值，暗色主题零视觉变化。 */
+      --chrome: #1d1f29;
       --border: rgba(255,255,255,0.09);
       --track: #262838;
       --accent: #a99fff;
@@ -53,6 +58,10 @@
         --bg: #eceef3;
         --card: #ffffff;
         --input: #e2e5ea;
+        /* v76：亮色下 --input(#e2e5ea) 比 --bg(#eceef3) 更暗，若拿它当 view-tabs/
+           日期导航的底会让顶部控件带比纯白内容卡更「重」，层级倒挂。--chrome 专门
+           给这类壳表面，比 --bg 更亮（更浮），--input 本身留给真正凹陷的输入井。 */
+        --chrome: #f2f3f7;
         --border: rgba(28,32,44,0.08);
         --track: #e2e5eb;
         --accent: #5745c7;
@@ -76,6 +85,7 @@
       --bg: #eceef3;
       --card: #ffffff;
       --input: #e2e5ea;
+      --chrome: #f2f3f7;
       --border: rgba(28,32,44,0.08);
       --track: #e2e5eb;
       --accent: #5745c7;
@@ -97,6 +107,7 @@
       --bg: #0e0f13;
       --card: #16171e;
       --input: #1d1f29;
+      --chrome: #1d1f29;
       --border: rgba(255,255,255,0.09);
       --track: #262838;
       --accent: #a99fff;
@@ -423,6 +434,11 @@
       width: 100%;
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
+      /* v76：覆盖 .seg 共享的 --input 底——view-tabs 未选中态是「壳」不是「井」，
+         用 --chrome（暗色下与 --input 同值，零变化；亮色下比 --bg 更浮）。同优先级
+         单类选择器，源码顺序在 .seg 之后即生效，不改 .seg 本身（theme-seg/
+         bucket-seg/record-mode-seg 等其它复用者不受影响）。 */
+      background: var(--chrome);
     }
     .view-tabs button {
       min-width: 0;
@@ -455,7 +471,9 @@
     .nav-btn {
       min-width: 0;
       height: 44px;
-      background: var(--input);
+      /* v76：日期导航按钮（‹ › 回到今天）是壳表面，不是输入井——见 .view-tabs
+         同批注释。 */
+      background: var(--chrome);
       color: var(--text);
       border: 1px solid transparent;
       border-radius: var(--r-ctl);
@@ -474,7 +492,10 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--input);
+      /* v76：与相邻的 .nav-btn 同一条 .date-nav 行，必须同底色——否则三个元素
+         一深一浅比只做半条更显眼。period-label 本身不是按钮，但视觉上是同一条
+         「日期导航」壳的一部分。 */
+      background: var(--chrome);
       border: 1px solid transparent;
       border-radius: var(--r-ctl);
       color: var(--text);
@@ -1249,9 +1270,37 @@
       z-index: 60;
       pointer-events: none;
     }
-    /* SPEC-001: legacy-origin migration notice — normal document flow above the
-       .app shell (not fixed), so it never competes with the fixed update banner
-       or FAB for the same screen real estate. Host-gated in src/app.js. */
+    /* v76 (SPEC-011 retro): real-machine screenshots showed the scrim's hard
+       bottom edge slicing through header glyphs mid-scroll — reads as a
+       rendering seam rather than a clean cutoff. Add the 8–12px --bg-to-
+       transparent fade the spec pre-approved as the fallback. It's a ::after
+       of the scrim itself (no new DOM node, no separate z-index to manage —
+       it inherits the scrim's local stacking context and its "position:fixed,
+       painted at z-index:60" placement), positioned right at the scrim's own
+       bottom edge (`top: 100%`, relative to the scrim's fixed box). Height is
+       `min(10px, env(safe-area-inset-top, 0px))`: on a real notch/Dynamic
+       Island (20/47/59px) that clamps to a flat 10px fade; wherever
+       safe-area-inset-top resolves to 0 (any ordinary browser context, or a
+       non-notched desktop) it clamps to 0 too — same zero-footprint guarantee
+       as the scrim, extended rather than bypassed. `pointer-events: none` is
+       technically inherited from the parent already, but stated explicitly
+       since this is the property under test. */
+    .statusbar-scrim::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      height: min(10px, env(safe-area-inset-top, 0px));
+      background: linear-gradient(to bottom, var(--bg), transparent);
+      pointer-events: none;
+    }
+    /* SPEC-001/SPEC-002: legacy-origin migration notice — normal document flow
+       above the .app shell (not fixed), so it never competes with the fixed
+       update banner or FAB for the same screen real estate. Host-gated in
+       src/app.js. SPEC-002 (v76): permanent, no-dismiss — only one action
+       button remains ("打开新地址"), so .migration-notice-actions now holds a
+       single link. */
     .migration-notice {
       width: 100%;
       display: flex;
@@ -1292,10 +1341,6 @@
       text-decoration: none;
       cursor: pointer;
       white-space: nowrap;
-    }
-    .migration-btn.secondary {
-      background: var(--input);
-      color: var(--text);
     }
 
     /* Update prompt */
