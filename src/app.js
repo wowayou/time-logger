@@ -118,35 +118,24 @@ import {
   const HELP_SEEN_KEY = 'timelog.helpSeen.v16';
   const BOOT_SNAPSHOT_KEY = 'timelog.bootSnapshot.v1';
   const UNRECORDED_GAP_FLOOR_MIN = 15;
-  const MIGRATION_NOTICE_DISMISSED_KEY = 'timelog.migrationNotice.dismissed.v1';
 
   // SPEC-001：同一份代码同时部署在旧 origin（GitHub Pages）和新 origin
   // （time.eigentime.org），迁移横幅只在旧 origin 出现。带尾斜杠的
   // startsWith('/time-logger/') 特意排除镜像预览路径 /time-logger-site/app/
   // （该路径的下一个字符是 '-'，不是 '/'，不会误命中）。
+  // SPEC-002（v76）：旧 origin 浸泡期已确认足够，转为完整应用 + 只读——同一个
+  // isLegacyOrigin() 现在还驱动全部写路径入口的收敛（见 render()/renderChrome()/
+  // renderTimeline 的 readOnly 分支）。
   function isLegacyOrigin() {
     return location.hostname === 'wowayou.github.io' && location.pathname.startsWith('/time-logger/');
   }
 
+  // SPEC-002：横幅转为常驻不可关闭（去掉「知道了」/「重开」，只保留「打开新地址」），
+  // 不再有 dismissed 状态——旧 origin 上永远显示，新 origin 上永远隐藏。
   function updateMigrationNotice() {
     const notice = document.getElementById('migration-notice');
     if (!notice) return;
-    if (!isLegacyOrigin()) {
-      notice.hidden = true;
-      return;
-    }
-    notice.hidden = localStorage.getItem(MIGRATION_NOTICE_DISMISSED_KEY) === '1';
-  }
-
-  function dismissMigrationNotice() {
-    localStorage.setItem(MIGRATION_NOTICE_DISMISSED_KEY, '1');
-    updateMigrationNotice();
-  }
-
-  function reopenMigrationNotice() {
-    localStorage.removeItem(MIGRATION_NOTICE_DISMISSED_KEY);
-    sheetController.closeForm();
-    updateMigrationNotice();
+    notice.hidden = !isLegacyOrigin();
   }
 
   function defaultFormTs() {
@@ -314,7 +303,10 @@ import {
         sheetEditId,
         plannedItems: day.planned,
         isToday,
-        nowLabel: nowStr().slice(11, 16)
+        nowLabel: nowStr().slice(11, 16),
+        // SPEC-002：旧 origin 只读——行不可点开编辑、不渲染补一下/标记已发生/确认
+        // 等写入口，左滑轨道因缺少 data-action="start-edit" 锚点而自然不启用。
+        readOnly: isLegacyOrigin()
       });
       lastIntervalSignature = dataSignature();
       saveBootSnapshot();
@@ -388,7 +380,8 @@ import {
     const listFade = document.getElementById('list-fade');
     const isDay = state.view === 'day';
     const dateMode = entryModeForDate(state.selectedDate);
-    const canCreate = isDay && dateMode.canCreate;
+    // SPEC-002：旧 origin 只读——FAB 与配套渐隐层是唯一的新增入口，收敛掉。
+    const canCreate = isDay && dateMode.canCreate && !isLegacyOrigin();
     addBtn.hidden = !canCreate;
     if (listFade) listFade.hidden = !canCreate;
     if (canCreate) {
@@ -871,8 +864,6 @@ import {
         cancelUndoForConflict();
         render();
       }
-      if (action === 'dismiss-migration-notice') dismissMigrationNotice();
-      if (action === 'reopen-migration-notice') reopenMigrationNotice();
     });
     document.getElementById('import-file').addEventListener('change', ioActions.handleImport);
     document.addEventListener('input', e => {

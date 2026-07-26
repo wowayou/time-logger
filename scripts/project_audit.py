@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "75"
+EXPECTED_VERSION = "76"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -376,7 +376,10 @@ def audit_docs(errors: list[str]) -> None:
 
 WCAG_MIN_CONTRAST = 4.5
 WCAG_TEXT_TOKENS = ("--text", "--muted", "--faint", "--danger")
-WCAG_SURFACE_TOKENS = ("--bg", "--card", "--input")
+# v76: --chrome (view-tabs unselected state / date-nav buttons' shell surface,
+# SPEC "控件表面分层修正") joins the guarded surface set — it now carries real
+# text (button labels), so it must clear the same 4.5:1 bar as --bg/--card/--input.
+WCAG_SURFACE_TOKENS = ("--bg", "--card", "--input", "--chrome")
 
 
 def _srgb_to_linear(channel: float) -> float:
@@ -476,6 +479,32 @@ def audit_wcag_contrast(errors: list[str]) -> None:
                 fail(errors, f"WCAG contrast below {WCAG_MIN_CONTRAST}:1 in site/index.html light theme: {text_token} vs {surface_token} = {ratio:.2f}")
 
 
+def audit_chrome_surface_layering(errors: list[str]) -> None:
+    """Permanent guard (v76, control-surface layering fix): in the light theme,
+    --chrome (the view-tabs/date-nav "shell" surface) must be strictly brighter
+    than --bg (the page). That's the whole point of splitting --chrome out of
+    --input — the light theme's --input (#e2e5ea) was *darker* than --bg
+    (#eceef3), which made the top two control bands look heavier than the
+    white content cards below them. If a future token edit lets --chrome sink
+    back to --bg-or-darker, this must fail loudly rather than silently
+    reintroduce the inversion. Dark theme is exempt on purpose: --chrome
+    intentionally equals dark --input there (already brighter than dark --bg,
+    zero visual change requested), so there's nothing new to invert."""
+    css = read_text("styles.css")
+    tokens = _extract_theme_tokens(css, r'html\[data-theme="light"\]')
+    if "--chrome" not in tokens or "--bg" not in tokens:
+        fail(errors, "could not parse light --chrome/--bg for the chrome-surface layering audit")
+        return
+    chrome_lum = _relative_luminance(tokens["--chrome"])
+    bg_lum = _relative_luminance(tokens["--bg"])
+    if chrome_lum <= bg_lum:
+        fail(
+            errors,
+            f"light --chrome ({tokens['--chrome']}, luminance {chrome_lum:.4f}) is not brighter than "
+            f"--bg ({tokens['--bg']}, luminance {bg_lum:.4f}) — control-surface layering inverted again",
+        )
+
+
 def main() -> int:
     errors: list[str] = []
     audit_manifest(errors)
@@ -488,6 +517,7 @@ def main() -> int:
     audit_index(errors)
     audit_docs(errors)
     audit_wcag_contrast(errors)
+    audit_chrome_surface_layering(errors)
 
     if errors:
         print("project audit failed:")

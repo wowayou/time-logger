@@ -128,7 +128,7 @@ function confirmSegmentLabel(startTs, endTs) {
 
 
 export function renderTimeline(items, opts = {}) {
-  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '' } = opts;
+  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false } = opts;
   const el = document.getElementById('timeline');
   const planned = (plannedItems || []).map(e => ({
     e,
@@ -144,7 +144,9 @@ export function renderTimeline(items, opts = {}) {
   }));
   const allItems = [...items, ...planned];
   if (!allItems.length) {
-    el.innerHTML = '<div class="empty-tip">点右下角「＋ 记一条」开始记录，或切换日期查看历史。</div>';
+    el.innerHTML = readOnly
+      ? '<div class="empty-tip">这一天没有记录。切换日期查看历史。</div>'
+      : '<div class="empty-tip">点右下角「＋ 记一条」开始记录，或切换日期查看历史。</div>';
     return;
   }
   // R6（v47）：点整卡即编辑（删除在编辑 sheet 内）。卡片 div 带 data-action（click
@@ -152,6 +154,11 @@ export function renderTimeline(items, opts = {}) {
   // 各的）+ role/tabindex/aria-label（键盘 Enter/Space 激活，a11y 不回退）。
   // gap/占位行点整卡=补录/编辑；v56 起行是连续日志容器里的三列网格：时间｜内容｜时长，
   // data-b 驱动左侧通高桶色竖脊（实=已发生、虚线=计划、灰=未记录）。
+  // SPEC-002（v76）：readOnly（旧 origin 只读）时整条渲染路径退化——卡片不带
+  // data-action/role/tabindex（click 委托与键盘 Enter/Space 都找不到锚点，等价于
+  // 禁用点行编辑）、不渲染补一下/标记已发生/确认等 mini-btn，也不套 swipeWrap
+  // （左滑轨道靠 begin() 里 `.entry[data-action="start-edit"]` 判据自然失效，这里
+  // 干脆连不可用的按钮都不画）。浏览/摘要/导出等只读能力完全不受影响。
   const swipeWrap = (card, entry, kind) => `<div class="swipe-row" data-swipe-id="${esc(entry.id)}">
     <div class="swipe-actions" aria-hidden="true">
       <button class="swipe-action swipe-edit" type="button" data-action="start-edit" data-id="${esc(entry.id)}" tabindex="-1" aria-label="编辑${kind}">${iconSvg('edit')}<span>编辑</span></button>
@@ -162,29 +169,31 @@ export function renderTimeline(items, opts = {}) {
   const rows = [...allItems].reverse().map(({ e, start, end, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs, planned: isPlanned }) => {
     if (isPlanned) {
       const displayTag = (e.tags || [])[0] || '未知';
-      const card = `<div class="entry planned" data-b="${bucketForTag(displayTag)}" data-id="${esc(e.id)}" data-action="start-edit" role="button" tabindex="0" aria-label="编辑计划：${esc(e.what || '未填写')}">
+      const interactiveAttrs = readOnly ? '' : ` data-action="start-edit" role="button" tabindex="0" aria-label="编辑计划：${esc(e.what || '未填写')}"`;
+      const card = `<div class="entry planned" data-b="${bucketForTag(displayTag)}" data-id="${esc(e.id)}"${interactiveAttrs}>
         <div class="e-time">${hhmm(e.ts)}</div>
         <div class="e-body">
           <div class="e-what">${esc(e.what || '未填写')}</div>
           <div class="e-meta">
             <span class="e-tag">#${esc(displayTag)}</span>
-            <button class="mini-btn" type="button" data-action="confirm-planned" data-id="${esc(e.id)}" data-tip="把这条计划标记为已发生。" aria-label="标记计划为已发生">标记已发生</button>
+            ${readOnly ? '' : `<button class="mini-btn" type="button" data-action="confirm-planned" data-id="${esc(e.id)}" data-tip="把这条计划标记为已发生。" aria-label="标记计划为已发生">标记已发生</button>`}
           </div>
         </div>
         <div class="e-dur">计划</div>
       </div>`;
-      return swipeWrap(card, e, '计划');
+      return readOnly ? card : swipeWrap(card, e, '计划');
     }
     if (!e) {
       const gapTs = localDateTimeKey(start);
       const gapEnd = localDateTimeKey(end);
-      return `<div class="entry gap" data-b="unrecorded" data-gap-ts="${esc(gapTs)}" data-action="backfill-seg" data-kind="fill" data-ts="${esc(gapTs)}" data-end="${esc(gapEnd)}" role="button" tabindex="0" aria-label="补录 ${hhmm(start)} 起这段未记录时间">
+      const interactiveAttrs = readOnly ? '' : ` data-action="backfill-seg" data-kind="fill" data-ts="${esc(gapTs)}" data-end="${esc(gapEnd)}" role="button" tabindex="0" aria-label="补录 ${hhmm(start)} 起这段未记录时间"`;
+      return `<div class="entry gap" data-b="unrecorded" data-gap-ts="${esc(gapTs)}"${interactiveAttrs}>
         <div class="e-time">${hhmm(start)}</div>
         <div class="e-body">
           <div class="e-what">这一段还没记</div>
           <div class="e-meta">
             <span class="e-tag">#未记录</span>
-            <span class="e-cta">补一下</span>
+            ${readOnly ? '' : '<span class="e-cta">补一下</span>'}
           </div>
         </div>
         <div class="e-dur">${fmtMins(mins)}</div>
@@ -206,23 +215,24 @@ export function renderTimeline(items, opts = {}) {
     // 计划行保留「标记已发生」，超长段保留「确认」。已发生普通段的「切一刀」移入
     // 编辑 sheet（逐行常显的动作词＝换了位置的 card soup）。进行中的今日尾占位不放
     // 「补一下」——FAB「记一条·续 X 起」已是同一缺口的入口，三重冗余只留一个。
-    const fillBtn = (isPlaceholder || unrecorded) && segEndTs && !activePlaceholder
+    const fillBtn = !readOnly && (isPlaceholder || unrecorded) && segEndTs && !activePlaceholder
       ? `<button class="mini-btn" type="button" data-action="backfill-seg" data-kind="${isPlaceholder ? 'fill' : 'split'}" data-source-id="${esc(e.id)}" data-ts="${esc(segStartTs)}" data-end="${esc(segEndTs)}" data-tip="在冻结的原段边界内补录或切分。" aria-label="在这段里补录或切分">补一下</button>`
       : '';
     const cardLabel = isPlaceholder ? '编辑这段未记录时间' : `编辑：${esc(e.what)}`;
-    const card = `<div class="${entryClass}" data-b="${bucket}" data-id="${esc(e.id)}" data-action="start-edit" role="button" tabindex="0" aria-label="${cardLabel}">
+    const interactiveAttrs = readOnly ? '' : ` data-action="start-edit" role="button" tabindex="0" aria-label="${cardLabel}"`;
+    const card = `<div class="${entryClass}" data-b="${bucket}" data-id="${esc(e.id)}"${interactiveAttrs}>
       <div class="e-time">${startLabel}</div>
       <div class="e-body">
         <div class="e-what">${esc(isPlaceholder ? (activePlaceholder ? '还没记' : '未记录') : e.what)}</div>
         <div class="e-meta">
           ${displayTag ? `<span class="e-tag">#${esc(displayTag)}</span>` : ''}
-          ${confirmable ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" data-tip="确认后按这个标签统计；相邻时间变化会自动失效。" aria-label="${esc(confirmText)}">${esc(confirmText)}</button>` : ''}
+          ${!readOnly && confirmable ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" data-tip="确认后按这个标签统计；相邻时间变化会自动失效。" aria-label="${esc(confirmText)}">${esc(confirmText)}</button>` : ''}
           ${fillBtn}
         </div>
       </div>
       <div class="e-dur">${durStr}</div>
     </div>`;
-    return isPlaceholder ? card : swipeWrap(card, e, '记录');
+    return (readOnly || isPlaceholder) ? card : swipeWrap(card, e, '记录');
   });
   // v56「现在」一线：只在今天渲染——未来（计划）在上、现在一线、过去在下；倒序里
   // 计划块正好排最前，插在它之后。没有计划时它就是容器首行的时间锚。
@@ -293,7 +303,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '75';
+export const APP_VERSION = '76';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -335,25 +345,22 @@ function renderMoreSheet(opts = {}) {
   const bootDiag = readBootDiag();
   const themeBtn = (value, label) =>
     `<button type="button" data-action="theme" data-theme="${value}" class="${themePref === value ? 'active' : ''}" aria-pressed="${themePref === value}" aria-label="主题：${label}">${label}</button>`;
-  // SPEC-001：旧 origin 专属入口——给关掉迁移横幅的用户一个永久重开途径；
-  // 新 origin（isLegacyOrigin 为 false）下这个 cell-group 完全不渲染。
-  const migrationCell = opts.isLegacyOrigin
-    ? `<div class="cell-group">
-        <button class="cell-btn" type="button" data-action="reopen-migration-notice" aria-label="重新显示迁移到新地址的提示"><span data-role="cell-label">迁移到新地址</span>${cellChevron}</button>
-      </div>`
-    : '';
+  // SPEC-002（v76）：横幅已改常驻不可关闭（无 dismissed 状态），旧 origin 不再需要
+  // 「重开」入口；同一个 isLegacyOrigin 现在改用于收敛这个菜单里唯一的写路径入口——
+  // 「导入备份」——只读态完全不渲染这个 cell，其余三项（复制/存储/分享）都是导出/
+  // 读能力，照常保留。
+  const isLegacyOrigin = Boolean(opts.isLegacyOrigin);
   return `
     ${sheetHead({ title: '更多', cancelText: '关闭', cancelAction: 'close-form', cancelAria: '关闭更多菜单' })}
     <div class="form-sheet-body more-body">
-      ${migrationCell}
       <div class="cell-group">
         <button class="cell-btn" id="summary-btn" type="button" data-action="copy-summary" aria-label="复制当前视图摘要"><span data-role="cell-label">复制当前视图摘要</span>${cellChevron}</button>
       </div>
-      <div class="form-hint">摘要只含当前视图，可贴给 AI；下面四项均为完整 JSON 备份，全部在本机完成。</div>
+      <div class="form-hint">摘要只含当前视图，可贴给 AI；下面几项均为完整 JSON 备份，全部在本机完成。</div>
       <div class="cell-group">
         <button class="cell-btn" id="copy-btn" type="button" data-action="copy-json" aria-label="复制完整 JSON 备份"><span data-role="cell-label">复制 JSON 备份</span>${cellChevron}</button>
         <button class="cell-btn" id="backup-download-btn" type="button" data-action="download-json" aria-label="存储 JSON 备份"><span data-role="cell-label">存储备份</span>${cellChevron}</button>
-        <button class="cell-btn" type="button" data-action="import-json" aria-label="导入 JSON 备份"><span data-role="cell-label">导入备份</span>${cellChevron}</button>
+        ${isLegacyOrigin ? '' : `<button class="cell-btn" type="button" data-action="import-json" aria-label="导入 JSON 备份"><span data-role="cell-label">导入备份</span>${cellChevron}</button>`}
         <button class="cell-btn" id="backup-send-btn" type="button" data-action="send-backup" aria-label="分享 JSON 备份"><span data-role="cell-label">分享备份</span>${cellChevron}</button>
       </div>
       <div class="cell-group">
