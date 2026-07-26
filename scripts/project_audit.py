@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "74"
+EXPECTED_VERSION = "75"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -374,6 +374,88 @@ def audit_docs(errors: list[str]) -> None:
             fail(errors, f"CLAUDE.md must document maintenance command: {command}")
 
 
+WCAG_MIN_CONTRAST = 4.5
+WCAG_TEXT_TOKENS = ("--text", "--muted", "--faint", "--danger")
+WCAG_SURFACE_TOKENS = ("--bg", "--card", "--input")
+
+
+def _srgb_to_linear(channel: float) -> float:
+    c = channel / 255.0
+    if c <= 0.03928:
+        return c / 12.92
+    return ((c + 0.055) / 1.055) ** 2.4
+
+
+def _relative_luminance(hex_color: str) -> float:
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    rl, gl, bl = (_srgb_to_linear(v) for v in (r, g, b))
+    return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl
+
+
+def _contrast_ratio(hex_a: str, hex_b: str) -> float:
+    la, lb = _relative_luminance(hex_a), _relative_luminance(hex_b)
+    lighter, darker = max(la, lb), min(la, lb)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _extract_theme_tokens(css: str, selector_pattern: str) -> dict[str, str]:
+    """Pull hex-color custom properties out of one `html[data-theme=...]` block."""
+    block_match = re.search(selector_pattern + r"\s*\{(?P<body>.*?)\n\s*\}", css, re.DOTALL)
+    if not block_match:
+        return {}
+    body = block_match.group("body")
+    tokens: dict[str, str] = {}
+    for name in (*WCAG_TEXT_TOKENS, *WCAG_SURFACE_TOKENS):
+        token_match = re.search(re.escape(name) + r":\s*(#[0-9a-fA-F]{6})\s*;", body)
+        if token_match:
+            tokens[name] = token_match.group(1)
+    return tokens
+
+
+def compute_theme_contrast_report(css: str) -> dict[str, dict[str, float]]:
+    """Returns {theme: {"text_token vs surface_token": ratio}} for light and dark."""
+    report: dict[str, dict[str, float]] = {}
+    for theme, pattern in (
+        ("light", r'html\[data-theme="light"\]'),
+        ("dark", r'html\[data-theme="dark"\]'),
+    ):
+        tokens = _extract_theme_tokens(css, pattern)
+        pairs: dict[str, float] = {}
+        for text_token in WCAG_TEXT_TOKENS:
+            if text_token not in tokens:
+                continue
+            for surface_token in WCAG_SURFACE_TOKENS:
+                if surface_token not in tokens:
+                    continue
+                ratio = _contrast_ratio(tokens[text_token], tokens[surface_token])
+                pairs[f"{text_token} vs {surface_token}"] = ratio
+        report[theme] = pairs
+    return report
+
+
+def audit_wcag_contrast(errors: list[str]) -> None:
+    """Permanent guard (SPEC-010, v75): text tokens (--text/--muted/--faint/--danger)
+    must clear 4.5:1 contrast against every surface token (--bg/--card/--input), in
+    both themes. Both themes are gated because both currently pass every pair (see
+    docs/CHANGELOG.md v75 entry for the full number table, computed with the same
+    stdlib WCAG relative-luminance formula used here). If a future token change
+    regresses either theme below 4.5:1, this audit is meant to fail loudly — do not
+    raise WCAG_MIN_CONTRAST or silently drop a pair to make it pass again; fix the
+    token instead."""
+    css = read_text("styles.css")
+    report = compute_theme_contrast_report(css)
+
+    for theme in ("light", "dark"):
+        pairs = report.get(theme, {})
+        if not pairs:
+            fail(errors, f"could not parse {theme} theme tokens for WCAG contrast audit")
+            continue
+        for pair, ratio in pairs.items():
+            if ratio < WCAG_MIN_CONTRAST:
+                fail(errors, f"WCAG contrast below {WCAG_MIN_CONTRAST}:1 in {theme} theme: {pair} = {ratio:.2f}")
+
+
 def main() -> int:
     errors: list[str] = []
     audit_manifest(errors)
@@ -385,6 +467,7 @@ def main() -> int:
     audit_runtime_imports(errors)
     audit_index(errors)
     audit_docs(errors)
+    audit_wcag_contrast(errors)
 
     if errors:
         print("project audit failed:")
