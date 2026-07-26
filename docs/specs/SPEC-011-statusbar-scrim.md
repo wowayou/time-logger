@@ -1,6 +1,6 @@
 # SPEC-011 · 状态栏遮条：standalone 滚动内容不得与系统状态栏文字互叠
 
-status: in-progress（分支 `spec/074-batch`，v74 合并批次第 2 项；真机截图终审仍归维护者）
+status: done（代码随 PR #30 / v74 发布）— ⚠️ **真机截图验证环仍开着**，待维护者补（headless 关不上，见规格「版本仪式 / 测试」）
 owner: 执行方认领后填分支名
 验收人: Fable（真机截图终审：维护者）
 

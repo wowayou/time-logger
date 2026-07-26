@@ -1,6 +1,6 @@
 # SPEC-009 · 更新卡死自愈（C6 定案对策：检测 redundant-with-cache 死局并提供一键修复）
 
-status: in-progress（分支 `spec/074-batch`，v74 合并批次第 3 项；**只实施文末「D15 额度裁剪修订」的 lite 范围**）
+status: done（lite 部分随 PR #30 / v74 发布；自动检测部分仍登记「出现外部用户后重启」）
 owner: 执行方认领后填分支名
 验收人: Fable
 

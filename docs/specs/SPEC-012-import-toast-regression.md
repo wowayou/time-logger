@@ -1,6 +1,6 @@
 # SPEC-012 · v73 回归修复：导入确认后「什么都没弹」
 
-status: in-progress（分支 `spec/074-batch`，v74 合并批次第 1 项；执行＝本地 Sonnet 5 子代理，验收＝本地 Opus 5 会话）
+status: done（PR #30 已合并，v74 已发布）
 owner: 执行方认领后填分支名
 验收人: Fable
 优先级: 高（v73 刚引入的回归 + 维护者日常导入流程必经；插在 SPEC-009 之后、SPEC-011 之前）
@@ -52,3 +52,18 @@ SPEC-006 B 把导入完成的原生 `alert()` 换成了 `#info-toast`。维护�
 ## 备注：验收方法论的教训
 
 本 bug 暴露的不是执行方不认真——P35 流程被严格执行了，红灯证明也做了。暴露的是**「文本存在」被当成了「用户可见」的代理指标**。`toContainText` 与 `toBeVisible` 的区别在无头环境里很容易被忽略，因为无头下元素几乎总是「技术上可见」。今后凡是「给用户看的反馈」类断言，一律要求 `toBeVisible()` 而非 `toContainText()` 单独使用。此条建议吸收进 CLAUDE.md 的测试规范或 collab-protocol 的 PR 检查单（执行方或 Fable 择一落地）。
+
+---
+
+## 执行实测校正（2026-07-26，随 v74 落地）
+
+**上文「背景」里的根因描述不完整，以本节为准。**
+
+规格原以为遮挡只发生在 sheet 关闭动画的 ~320ms 窗口内。执行方用抛弃式探针实测：导入 sheet 是从「更多」**下钻**进入的，`closeForm()` 命中 v41 既有的 `returnToMore` 导航栈——它把 `#form-sheet` 的内容**换回「更多」，而不是真正 `hidden`**。因此那是**持续性遮挡**，不是一次性窗口：无论 `showInfoToast` 延迟多久，届时「更多」都已原地盖住同一屏幕位置（`elementFromPoint` 命中 `.more-body` 而非 toast）。
+
+**任何只调时序的补丁都修不好这个缺陷。** 落地的修法是两条同时成立：
+
+1. `showInfoToast` 延到 `SHEET_CLOSE_MS`（320ms，与 `animateSheetClose` 兜底同源）之后，`prefers-reduced-motion` 下立即显示——负责「出现在干净屏幕上」；
+2. `#info-toast` 的 z-index 提到 `.form-sheet`（80）之上（85，仍低于 `.cross-tab-banner` 的 90）——负责「即使 sheet 换成了『更多』仍然可见」。
+
+留档理由：`returnToMore` 是自测清单第 7 条锁定的红线行为，不能为了让 toast 可见去改导航栈；后来者若照原描述只调时序，会重现同一个静默。
