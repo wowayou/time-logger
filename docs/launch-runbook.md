@@ -21,7 +21,7 @@
    - Secret：粘贴 token
 5. 完成后，下一次 `vN` tag push 会自动发布镜像；在 Actions 页看 `publish-site` workflow 是否绿灯。
 
-- [ ] A1 完成
+- [x] A1 完成 —— AI 按可验证事实勾选（2026-07-26）：`publish-site` 连续两次绿灯（v74/v75），没有有效 `DEPLOY_TOKEN` 不可能成功
 
 ### A2. Cloudflare DNS（仅维护者）
 
@@ -33,7 +33,7 @@
    - TTL：Auto
 2. 保存即可。此时 `time.eigentime.org` 还不会有站点（GitHub 侧尚未绑定），正常。
 
-- [ ] A2 完成
+- [x] A2 完成 —— AI 按可验证事实勾选（2026-07-26）：`https://time.eigentime.org/` 已解析并返回 200
 
 ### A3.（推荐，防域名接管）GitHub 账号级域名验证（仅维护者）
 
@@ -41,7 +41,7 @@
 2. 按提示在 Cloudflare 加一条 TXT 记录（名称形如 `_github-pages-challenge-wowayou.eigentime.org`，值照抄）。
 3. 回到 GitHub 点 Verify。验证账号级 apex 后，所有子域（含 `time.`）受保护。
 
-- [ ] A3 完成
+- [ ] A3 完成 —— **AI 无法验证**（账号级域名验证在 GitHub 设置页内），仅维护者可确认
 
 ## Phase B · 绑定自定义域名（A1+A2 完成后；可自己做，也可告知 AI 用命令做）
 
@@ -60,7 +60,7 @@ gh api -X PUT repos/wowayou/time-logger-site/pages -F https_enforced=true
 
 **验收**：浏览器打开 `https://time.eigentime.org/`（主页）与 `https://time.eigentime.org/app/`（应用）均正常、挂锁无警告。
 
-- [ ] B 完成
+- [x] B 完成 —— AI 按可验证事实勾选（2026-07-26）：`/` 与 `/app/` 均 HTTP 200、TLS 握手正常。**Enforce HTTPS 是否勾选未验证**，请自查一次
 
 ## Phase C · v71 发布后的真机动作（SPEC-001 合并、tag v71 推送之后）
 
@@ -79,14 +79,14 @@ gh api -X PUT repos/wowayou/time-logger-site/pages -F https_enforced=true
 6. **暂时保留旧 PWA 图标**（浸泡期对照；v72 只读版落地后再删）。
 7. 开飞行模式，冷启动新 PWA 一次——离线必须照常可用（这一步同时补上 headless 无法验证的离线证据）。
 
-- [ ] C 完成（完成后告知 AI，SPEC-002 解锁）
+- [ ] C 完成（完成后告知 AI，SPEC-002 解锁）—— **AI 无法验证**（真机操作）。旁证：启动诊断显示权威设备已在新 origin 连续运行 v73→v75
 
 ## Phase D · 浸泡与旧站冻结
 
 1. 在新 origin 正常记录 2–3 天，无异常后告知 AI「解锁 SPEC-002」。
 2. v72 合并、tag 推送后，旧地址同 C1 方式更新并确认只读；此后可删旧 PWA 图标。
 
-- [ ] D 完成
+- [ ] D 完成 —— **AI 无法验证**（浸泡判断在你手上）
 
 ## Phase E · 首轮推广（SPEC-003 合并后）
 
@@ -95,7 +95,7 @@ gh api -X PUT repos/wowayou/time-logger-site/pages -F https_enforced=true
 3. 发帖纪律：不贴真实记录截图（只用 README 那两张 demo 图）；不声称市场验证；留 GitHub 与 `time.eigentime.org` 两个链接。
 4. 发完把各帖 URL 记到 `docs/promo/posted.md`（新建即可），便于后续跟进反馈。
 
-- [ ] E 完成
+- [ ] E 完成 —— 未开始（`docs/promo/` 三份草稿待你改写）
 
 ## 异常与回退
 
