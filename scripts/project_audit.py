@@ -455,6 +455,26 @@ def audit_wcag_contrast(errors: list[str]) -> None:
             if ratio < WCAG_MIN_CONTRAST:
                 fail(errors, f"WCAG contrast below {WCAG_MIN_CONTRAST}:1 in {theme} theme: {pair} = {ratio:.2f}")
 
+    # 着陆页维护着自己的一套内联令牌（site/index.html 单文件），与应用令牌无共享。
+    # v75 的验收恰好抓到这个盲区：应用侧 --bg 下沉后，site 只同步了 --bg 没同步
+    # --faint，13px 小字（.cta-sub/.usage-note/页脚）对比度落到 3.94。公开主页与
+    # 应用同等受这条护栏约束，否则同样的漂移会在下一次改亮色时重演。
+    site_tokens = _extract_theme_tokens(
+        read_text("site/index.html"),
+        r"@media \(prefers-color-scheme: light\)\s*\{\s*:root",
+    )
+    if not site_tokens:
+        fail(errors, "could not parse site/index.html light tokens for WCAG contrast audit")
+    for text_token in WCAG_TEXT_TOKENS:
+        if text_token not in site_tokens:
+            continue
+        for surface_token in WCAG_SURFACE_TOKENS:
+            if surface_token not in site_tokens:
+                continue
+            ratio = _contrast_ratio(site_tokens[text_token], site_tokens[surface_token])
+            if ratio < WCAG_MIN_CONTRAST:
+                fail(errors, f"WCAG contrast below {WCAG_MIN_CONTRAST}:1 in site/index.html light theme: {text_token} vs {surface_token} = {ratio:.2f}")
+
 
 def main() -> int:
     errors: list[str] = []
