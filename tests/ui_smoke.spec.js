@@ -1911,6 +1911,43 @@ test('repair-update-channel cell refuses to act while offline and never touches 
   expect(await page.evaluate(() => window.__preReloadSentinel)).toBe(true);
 });
 
+// 验收补正（v64 判例：修复没生效就必须说出来，不得无声装死）。unregister 返回
+// false 时旧实现照样 reload，用户看到页面刷新、卡死照旧、零反馈——正是 v64 花了
+// 一个版本根治的那种「点了没反应」。这条锁住失败路径必须给出可执行出路且不刷新。
+test('repair-update-channel admits failure instead of silently reloading when unregister fails', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__unregisterCalls = 0;
+    const registration = new EventTarget();
+    // 真实死局的形态：注册记录还在，但 unregister 被系统拒绝（返回 false）。
+    registration.unregister = () => { window.__unregisterCalls += 1; return Promise.resolve(false); };
+    const serviceWorker = new EventTarget();
+    serviceWorker.controller = {};
+    serviceWorker.register = () => Promise.resolve(registration);
+    serviceWorker.getRegistration = () => Promise.resolve(registration);
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: serviceWorker });
+  });
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  await openBackupMenu(page);
+  const btn = page.locator('#repair-update-btn');
+  await expect(btn).toBeVisible();
+
+  await page.evaluate(() => { window.__preReloadSentinel = true; });
+  await btn.click();
+  await expect(btn.locator('[data-role="cell-label"]')).toContainText('再次点击确认');
+  // 武装态的可访问名必须跟着可见文字走，否则读屏用户停留在旧名称上。
+  await expect(btn).toHaveAttribute('aria-label', /再次点击确认/);
+  await btn.click();
+
+  const toast = page.locator('#info-toast');
+  await expect(toast).toBeVisible();
+  await expect(toast.locator('[data-role="info-message"]')).toContainText('完全退出应用');
+  expect(await page.evaluate(() => window.__unregisterCalls)).toBe(1);
+  // sentinel 还在＝没有 reload；标签与可访问名都复位，可以再试。
+  expect(await page.evaluate(() => window.__preReloadSentinel)).toBe(true);
+  await expect(btn.locator('[data-role="cell-label"]')).toHaveText('修复更新通道');
+  await expect(btn).toHaveAttribute('aria-label', /^修复更新通道：/);
+});
+
 test('v57 date entry matrix forces history/future modes and hides creation at +8', async ({ page }) => {
   await boot(page, 768, 'empty', false, FIXED_NOW, null, null, 'log');
   await expect(page.locator('#add-btn')).toContainText('记一条');
