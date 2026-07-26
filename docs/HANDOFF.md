@@ -4,13 +4,13 @@
 > 维护纪律：每完成一个里程碑就更新本文件并提交，不要攒到最后写。
 > 权威文档分工：法律＝`CLAUDE.md`；决策史＝`docs/decisions.md`；协作流程＝`docs/collab-protocol.md`；人肉步骤＝`docs/launch-runbook.md`；规格＝`docs/specs/`。本文件只讲**此刻**。
 
-最后更新：2026-07-26 · 更新人：Claude Opus 5（本地会话）
+最后更新：2026-07-26（v75 已发布） · 更新人：Claude Opus 5（本地会话）
 
 ---
 
 ## 一句话现状
 
-**v74 已发布**（PR #30 合并 → tag `v74` → Release → 镜像 `publish: v74` 绿灯，`app/sw.js` 已是 `timelog-v74`）。当前**没有进行中的实现任务**；下一步是 SPEC-010 阶段一（只出变体 A 截图给维护者拍板）。
+**v75 已发布**（PR #31 合并 → tag `v75` → Release → 镜像 `publish: v75` 绿灯）。v74、v75 两批都已上线，**当前没有进行中的实现任务**，也没有 ready 状态的规格——队列空了。下一个决策点是 **2026-07-30 阶段复盘**（重排 park 的 SPEC-007 / SPEC-008，并复核 28 天 gate）。
 
 ## v74 交付了什么
 
@@ -26,12 +26,11 @@
 
 **SPEC-011 的真机截图**：Playwright 仿真不了 `env(safe-area-inset-top)`，自动化只断言了存在性/fixed/`pointer-events:none`/z 序/浏览器上下文零高度不遮挡。需要维护者在**主屏 PWA（standalone）滚动状态下，亮暗各截一张**确认状态栏区域不再互叠。这是本仓库首个凭真机截图关闭验证环的规格——**不要在任何文档里把它写成已闭环**。真机不对就 revert `21647fe`，另外两单不受影响。
 
-## 下一个任务：SPEC-010 阶段一（只出变体 A）
+## v75 交付了什么
 
-- 只做变体 A（`--bg` 下沉一档到 `#eceef3` 区间、`--card` 保持纯白、`--input` 约 `#e2e5ea`），B/C 按 D15 不做。
-- 产出：双主题截图（day 视图 / 更多 sheet / 标签设置，320px 与 390px）+ WCAG 关键比值速算，交维护者拍板。
-- **阶段一不合并任何代码、不 bump、不提交 PNG**（`docs/assets/` 是唯一 PNG 白名单目录且需登记进 audit，临时评审图不要往那儿放）。
-- 拍板通过后才进阶段二（全量令牌落 `styles.css` 两处亮色块 + theme-color 锚点 + `site/index.html`），并入当时最近一次仪式。
+亮色主题第三轮：底色下沉一档（`#f7f7fa` → `#eceef3`）修图底关系（分离度 1.069 → 1.161），`--faint` / `--danger` 两处**在 v74 就已不达标**的对比度一并修正，并新增 `project_audit.py` 的 WCAG 永久护栏（亮暗双主题 + 着陆页，低于 4.5:1 即 fail）。定稿截图在 scratchpad 的 `spec010-final/`（会话级，会丢）。
+
+**亮色令牌有两套真源**：`styles.css` 与 `site/index.html`（着陆页自带内联令牌）。v75 验收就抓到执行方只同步了后者的 `--bg`、漏了 `--faint`。护栏现在强制两处同时过。
 
 ## 角色（本轮与协议默认不同）
 
