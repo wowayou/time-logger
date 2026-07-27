@@ -148,6 +148,11 @@ export async function boot(page, width, state, share = false, now = '', selected
     if (state === 'yesterday-residual') {
       entries.push({ id: 'yesterday-1', ts: `${dateKey(yesterday)}T23:00`, what: '昨日残留记录', tags: ['杂'] });
     }
+    if (state === 'yesterday-full-tail') {
+      // v77 边界：昨天最后一条真实记录起于 23:59——它覆盖到 24:00，当天再无任何
+      // 合法的新增起点（+1min 会越过午夜写进今天）。FAB 必须整块隐藏。
+      entries.push({ id: 'yesterday-full', ts: `${dateKey(yesterday)}T23:59`, what: '压线记录', tags: ['杂'] });
+    }
     if (state === 'yesterday-placeholder') {
       entries.push({ id: 'yesterday-open', ts: `${dateKey(yesterday)}T23:00`, what: '', tags: [] });
     }

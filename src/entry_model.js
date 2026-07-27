@@ -36,7 +36,16 @@ export function defaultFormTimestamp(entries, dateKey) {
   if (placeholder) return placeholder.ts;
   const last = lastEntryOnDate(entries, dateKey);
   if (last && last.ongoing) return nowStr();
-  if (last) return last.ts;
+  if (last) {
+    // v77：走到这里说明尾点是一条**真实**记录（占位与进行中都已在上面返回）。
+    // 非今天的日子里，最后一条真实记录按定义一直覆盖到 24:00——那天没有「可续」
+    // 的尾巴，返回它自己的 ts 会让默认起点恒撞同刻冲突（点 FAB 进表单直接保存
+    // 必被拦，默认值从来不可用）。改取其后一分钟；若尾点已是 23:59，当天再无
+    // 空位，返回空串由调用方收敛入口（renderChrome 隐藏 FAB），**绝不越过午夜
+    // 把默认值写进第二天**——那会让「补记这一天」静默变成写另一天。
+    const next = addOneMinute(last.ts);
+    return next.slice(0, 10) === dateKey ? next : '';
+  }
   return `${dateKey}T00:00`;
 }
 
