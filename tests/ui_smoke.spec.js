@@ -230,9 +230,12 @@ test('past-day continuation settles at day end and restores selected date', asyn
 
   await expect(page.locator('#form-sheet-title')).toHaveText('补记 · 6月28日');
   await expect(page.locator('.form-sheet-what')).toHaveText('写下这一段做了什么');
-  await expect(page.locator('[data-role="start-time-label"]')).toHaveText('23:00');
+  // v77：起点由 23:00 改为 23:01。本用例的主张是「结算终点落在日末」，起点只是
+  // 顺带写死的——而写死的那个值正是本次判定为缺陷的旧默认（尾点 23:00 是真实
+  // 记录，返回它自身的 ts 会恒撞同刻冲突）。终点仍必须是 24:00，时长随之 ~59min。
+  await expect(page.locator('[data-role="start-time-label"]')).toHaveText('23:01');
   await expect(page.locator('[data-role="end-label"]')).toHaveText('24:00');
-  await expect(page.locator('[data-role="duration-label"]')).toHaveText('~1h');
+  await expect(page.locator('[data-role="duration-label"]')).toHaveText('~59min');
 });
 
 test('continuation save fills tail placeholder and opens unrecorded segment', async ({ page }) => {
@@ -1946,6 +1949,43 @@ test('repair-update-channel admits failure instead of silently reloading when un
   expect(await page.evaluate(() => window.__preReloadSentinel)).toBe(true);
   await expect(btn.locator('[data-role="cell-label"]')).toHaveText('修复更新通道');
   await expect(btn).toHaveAttribute('aria-label', /^修复更新通道：/);
+});
+
+// v77：历史日的默认续记起点。旧行为对「尾点是真实记录」的历史日返回该记录自身的
+// ts——而历史日的最后一条按定义覆盖到 24:00，那天没有可续的尾巴，于是默认值恒撞
+// 同刻冲突（点 FAB 进表单直接保存必被拦）。现在分两种形态：占位尾点仍是「续」，
+// 真实尾点改为「补记 + 1min」，压线到 23:59 则当天无位、整块隐藏 FAB。
+test('v77 historical day with a real tail defaults one minute later and says 补记, not 续', async ({ page }) => {
+  await boot(page, 375, 'yesterday-residual', false, FIXED_NOW, -1);
+  const sub = page.locator('#add-btn .fab-sub');
+  await expect(sub).toBeVisible();
+  await expect(sub).toHaveText('补记 23:01 起');
+
+  // 默认起点必须是可用的：点开表单直接填内容保存，不得出现同刻冲突提示。
+  await page.getByRole('button', { name: '记一条新的时间记录' }).click();
+  await expect(page.locator('#form-sheet-title')).toContainText('补记');
+  await page.locator('#form-what').fill('补一段');
+  // 刻意不选标签：本用例验的是「默认时间可用」，选桶/选标签是另一条路径的事，
+  // 而默认桶随尾点标签变化（v27），依赖它会让用例测到别的东西。
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  await expect(page.locator('#form-sheet')).toBeHidden();
+  await expect(page.locator('.entry', { hasText: '补一段' })).toBeVisible();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries
+    .filter(e => e.what === '补一段').map(e => e.ts));
+  expect(saved).toHaveLength(1);
+  expect(saved[0].slice(11)).toBe('23:01');
+});
+
+test('v77 historical day with a placeholder tail still says 续 (unchanged continuation)', async ({ page }) => {
+  await boot(page, 375, 'yesterday-placeholder', false, FIXED_NOW, -1);
+  await expect(page.locator('#add-btn .fab-sub')).toHaveText('续 23:00 起');
+});
+
+test('v77 historical day covered to 23:59 hides the FAB instead of offering a colliding default', async ({ page }) => {
+  await boot(page, 375, 'yesterday-full-tail', false, FIXED_NOW, -1);
+  await expect(page.locator('.entry', { hasText: '压线记录' })).toBeVisible();
+  await expect(page.locator('#add-btn')).toBeHidden();
+  await expect(page.locator('#list-fade')).toBeHidden();
 });
 
 test('v57 date entry matrix forces history/future modes and hides creation at +8', async ({ page }) => {

@@ -1614,7 +1614,12 @@
     }
     /* cell 分组（C 语法 × B 皮肤：inset 底 + 内分隔线，无描边） */
     .cell-group {
-      background: var(--input);
+      /* v77：cell 分组是「壳」表面，不是输入井——沿用 v76 的 --chrome（暗色下与
+         --input 同值，零变化；亮色下比 --card 面板略暗一档、比旧 --input 轻得多）。
+         v75 把 --input 压暗后，亮色下这些分组在白面板上变成沉甸甸的灰板，比它们
+         承载的文字还重；而暗色一直是对的（分组比面板亮＝浮起）。同一处倒挂，
+         v76 只修了 view-tabs/date-nav 两处，这里是补齐。 */
+      background: var(--chrome);
       border-radius: 14px;
       overflow: hidden;
       /* P21：块级流，不用 grid——iOS WebKit 对 grid auto 轨道内 <button> 的

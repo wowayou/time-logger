@@ -8,6 +8,7 @@ import {
   defaultFormTimestamp,
   findTimeConflict,
   normalizeEntries,
+  openPlaceholderForDate,
   planDeleteEntry,
   settlementEndFor as getSettlementEndFor
 } from './entry_model.js';
@@ -381,14 +382,18 @@ import {
     const isDay = state.view === 'day';
     const dateMode = entryModeForDate(state.selectedDate);
     // SPEC-002：旧 origin 只读——FAB 与配套渐隐层是唯一的新增入口，收敛掉。
-    const canCreate = isDay && dateMode.canCreate && !isLegacyOrigin();
+    // v77：defaultFormTimestamp 返回空串＝所看这天已被记录覆盖到最后一分钟
+    // （尾点是 23:59 的真实记录），当天没有任何合法的新增起点——与其给一个点
+    // 进去必然报冲突的按钮，不如按既有惯例隐藏 FAB（切一刀/编辑仍可从行进入）。
+    const fabStart = isDay ? defaultFormTs() : '';
+    const canCreate = isDay && dateMode.canCreate && !isLegacyOrigin() && fabStart !== '';
     addBtn.hidden = !canCreate;
     if (listFade) listFade.hidden = !canCreate;
     if (canCreate) {
       const preferPlan = localStorage.getItem(RECORD_MODE_KEY) === 'plan';
       const isPlan = dateMode.forcedMode === 'plan' || (dateMode.kind === 'today' && preferPlan);
       const mainLabel = isPlan ? '＋ 计划一条' : '＋ 记一条';
-      const sub = fabSubCopy();
+      const sub = fabSubCopy(fabStart);
       addBtn.innerHTML = `<span class="fab-main">${mainLabel}</span>${sub ? `<span class="fab-sub">${esc(sub)}</span>` : ''}`;
       // FAB 有可见文案，不需要 hover tooltip；且 `button[data-tip]` 会把 position 强制
       // 成 relative（tooltip 定位规则），破坏 fixed 悬浮——所以只设 aria-label，不设 data-tip。
@@ -424,14 +429,22 @@ import {
   }
 
   // R2+FAB 副文案：续记起点。今天有记录 → 「续 hh:mm 起 · 已 Ymin」；今天空 →
-  // 「今天还没记」；历史日有记录 → 「续 hh:mm 起」；历史空 → 「这天还没记」。
-  function fabSubCopy() {
+  // 「今天还没记」；历史空 → 「这天还没记」。
+  // v77：历史日再分两种——尾点是**未记录占位**才叫「续」（确实有一段空白可以接
+  // 着写）；尾点是**真实记录**时那天已被覆盖到 24:00，没有可续之物，默认起点是
+  // 其后一分钟，文案随之改为「补记」，与表单标题（非今天＝补记）同一套词汇。
+  function fabSubCopy(start) {
     const dateKey = state.selectedDate;
     const isToday = dateKey === todayStr();
-    const dayLogged = load().entries.filter(e => !e.planned && e.ts.slice(0, 10) === dateKey);
+    const entries = load().entries;
+    const dayLogged = entries.filter(e => !e.planned && e.ts.slice(0, 10) === dateKey);
     if (!dayLogged.length) return isToday ? '今天还没记' : '这天还没记';
-    const start = defaultFormTimestamp(load().entries, dateKey);
-    if (!isToday) return `续 ${hhmm(start)} 起`;
+    if (!start) return '';
+    if (!isToday) {
+      return openPlaceholderForDate(entries, dateKey)
+        ? `续 ${hhmm(start)} 起`
+        : `补记 ${hhmm(start)} 起`;
+    }
     const settlement = settlementEndFor(start, dateKey);
     const dur = settlement.endTs ? minsBetweenDates(new Date(start), new Date(settlement.endTs)) : 0;
     return `续 ${hhmm(start)} 起 · 已 ${fmtMins(dur)}`;
