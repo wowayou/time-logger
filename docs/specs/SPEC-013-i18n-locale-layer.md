@@ -1,6 +1,6 @@
 # SPEC-013 · i18n locale 层（纯重构，零可见变化，仍只有中文）
 
-status: in-progress（分支 `spec/013-i18n-layer`）
+status: done（PR #34 已合并，2026-07-31。首帧截图比对 main vs 分支逐字节相同，负对照见 PR 评论）
 owner: Opus 5（本仓库会话内执行）
 执行模型: **Opus 5**（D17 路由表：触及全部运行时模块 + 同步启动脚本 + v53 快照门，一处漏改即静默回退中文）
 验收人: Opus 5
