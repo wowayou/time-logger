@@ -19,6 +19,8 @@ REQUIRED_RUNTIME_ASSETS = [
     "manifest.webmanifest",
     "sw.js",
     "src/app.js",
+    "src/i18n.js",
+    "src/locales/zh.js",
     "src/entry_model.js",
     "src/io_actions.js",
     "src/sheet_controller.js",
@@ -271,6 +273,10 @@ def audit_index(errors: list[str]) -> None:
             continue
         if "timelog.bootSnapshot.v1" in body and "boot-restored" in body:
             continue
+        # SPEC-013：静态壳 i18n 引导。必须同步且早于 ES module——启动门闩不压
+        # header/视图切换，等模块再填会让非中文用户首访闪一帧中文。
+        if "__timelogLocale" in body and "data-i18n" in body:
+            continue
         if "serviceWorker" in body and "register('sw.js')" in body:
             continue
         fail(errors, "index.html may only contain the app module script and approved early boot scripts")
@@ -285,8 +291,8 @@ def audit_index(errors: list[str]) -> None:
         fail(errors, "runtime files must not use native alert/confirm/prompt dialogs (SPEC-006)")
     if "iconSvg('x')" in runtime or re.search(r"^\s*x\s*:", ui, re.MULTILINE):
         fail(errors, "runtime files must not define or use the x icon")
-    if re.search(r'data-action="start-edit"[^>]*>\s*改\s*</button>', runtime):
-        fail(errors, "timeline edit action must be icon-only, not text 改")
+    if re.search(r'data-action="start-edit"[^>]*>\s*(?:改|Edit)\s*</button>', runtime):
+        fail(errors, "timeline edit action must be icon-only, not a bare text button")
     if re.search(r'data-action="delete-entry"[^>]*>\s*(?:✕|×|x)\s*</button>', runtime, re.IGNORECASE):
         fail(errors, "delete action must not use x/×/✕")
     if re.search(r'data-action="cancel-edit"[^>]*>\s*(?:✕|×|x)\s*</button>', runtime, re.IGNORECASE):
@@ -300,7 +306,9 @@ def audit_index(errors: list[str]) -> None:
             fail(errors, f"icon button is missing data-tip near byte {match.start()}")
 
     # v48：日视图点卡编辑、触摸左滑揭示双操作轨道；计划确认与 FAB 入口仍须存在。
-    if 'aria-label="标记计划为已发生"' not in runtime:
+    # SPEC-013：断言改为**语言无关**——按 data-action 与 i18n key 判定，而不是按
+    # 中文字面量（后者会让「把界面翻成英文」这件事本身把护栏撞红）。
+    if 'data-action="confirm-planned"' not in runtime or "t('timeline.markDoneAria')" not in runtime:
         fail(errors, "planned card must keep the confirm-as-happened action")
     if 'id="add-btn"' not in html or 'data-action="open-form"' not in html:
         fail(errors, "day-view record entry (FAB #add-btn / open-form) must exist")
@@ -505,6 +513,148 @@ def audit_chrome_surface_layering(errors: list[str]) -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# SPEC-013 · i18n 三条永久护栏
+# ---------------------------------------------------------------------------
+
+CJK_RE = re.compile(r"[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]")
+
+# 运行时里**唯一**允许出现 CJK 字面量的地方：数据常量。它们是 `timelog.config`
+# 的键 / 默认种子，随完整备份导出、按名字参与导入合并——翻译它们＝改数据
+# （旧备份读不回、桶归类查不中），与 `leak` 桶键不改名同一条判据。
+# 显式逐行登记而不是整文件豁免：storage.js 里**其它**新增的中文字面量仍会被拦。
+DATA_CONSTANT_LINES = {
+    "src/storage.js": (
+        "LEGACY_ALIASES",      # 繁体历史别名 → 桶
+        "RESERVED_UNKNOWN_TAG",
+        "DEFAULT_CONFIG",
+        "mainline:",
+        "{ name: '",
+        "': { bucket: '",
+    ),
+}
+
+
+def _blank_comments(text: str, html: bool) -> str:
+    """把注释内容抹成空白但**保留行数与换行**，让报错行号仍指向真实位置。
+
+    只做到「够用且不误伤」：字符串里的 // 与 http:// 不能被当注释，否则护栏会
+    把 URL 常量误报成中文字面量；块注释与 HTML 注释按整体剔除。
+    """
+    def blank(match):
+        return re.sub(r"[^\n]", " ", match.group(0))
+
+    if html:
+        text = re.sub(r"<!--.*?-->", blank, text, flags=re.DOTALL)
+    text = re.sub(r"/\*.*?\*/", blank, text, flags=re.DOTALL)
+
+    out = []
+    for line in text.split("\n"):
+        quote = ""
+        cut = None
+        i = 0
+        while i < len(line):
+            ch = line[i]
+            if quote:
+                if ch == "\\":
+                    i += 2
+                    continue
+                if ch == quote:
+                    quote = ""
+            elif ch in "'\"`":
+                quote = ch
+            elif ch == "/" and i + 1 < len(line) and line[i + 1] == "/":
+                cut = i
+                break
+            i += 1
+        out.append(line if cut is None else line[:cut])
+    return "\n".join(out)
+
+
+def _code_lines(path: Path) -> list[tuple[int, str]]:
+    text = _blank_comments(path.read_text(encoding="utf-8"), html=path.suffix == ".html")
+    return [(no, line) for no, line in enumerate(text.split("\n"), 1) if line.strip()]
+
+
+def audit_no_hardcoded_cjk_in_runtime(errors: list[str]) -> None:
+    """运行时非注释行不得出现 CJK 字面量——文案一律走 src/locales/。"""
+    targets = [rel for rel in REQUIRED_RUNTIME_ASSETS
+               if rel.endswith(".js") and not rel.startswith("src/locales/")]
+    targets.append("index.html")
+    for rel in sorted(set(targets)):
+        path = ROOT / rel
+        if not path.exists():
+            continue
+        allowed = DATA_CONSTANT_LINES.get(rel, ())
+        for no, line in _code_lines(path):
+            if not CJK_RE.search(line):
+                continue
+            if any(token in line for token in allowed):
+                continue
+            # index.html 的静态壳内联字典是 data-i18n 的首帧兜底，由下一条护栏
+            # 逐条比对，不在这里重复判定。
+            if rel == "index.html" and ('"shell.' in line or '"period.' in line
+                                        or '"list.' in line or '"chrome.' in line
+                                        or '"toast.' in line or "data-i18n" in line
+                                        or "apple-mobile-web-app-title" in line):
+                continue
+            fail(errors, f"{rel}:{no} hardcoded CJK literal in runtime — move it to src/locales/")
+
+
+def _parse_flat_catalog(text: str) -> dict[str, str]:
+    out = {}
+    for match in re.finditer(r"^\s*'([\w.]+)':\s*'((?:[^'\\]|\\.)*)',?\s*$", text, re.M):
+        out[match.group(1)] = match.group(2)
+    return out
+
+
+def _parse_shell_dict(html: str) -> dict[str, str]:
+    block = re.search(r"const SHELL = \{\s*zh:\s*\{(.*?)\n      \}", html, re.DOTALL)
+    if not block:
+        return {}
+    out = {}
+    for match in re.finditer(r'"([\w.]+)":\s*"((?:[^"\\]|\\.)*)"', block.group(1)):
+        out[match.group(1)] = match.group(2)
+    return out
+
+
+def audit_shell_dict_matches_catalog(errors: list[str]) -> None:
+    """index.html 内联字典的每一条必须与 src/locales/zh.js 同 key 逐字相同。"""
+    catalog = _parse_flat_catalog((ROOT / "src/locales/zh.js").read_text(encoding="utf-8"))
+    shell = _parse_shell_dict((ROOT / "index.html").read_text(encoding="utf-8"))
+    if not shell:
+        fail(errors, "index.html shell i18n dictionary is missing or unparsable")
+        return
+    used = set(re.findall(r'data-i18n(?:-aria|-tip|-alt)?="([\w.]+)"',
+                          (ROOT / "index.html").read_text(encoding="utf-8")))
+    for key in sorted(used):
+        if key not in shell:
+            fail(errors, f"shell dict is missing key used by data-i18n: {key}")
+    for key, value in sorted(shell.items()):
+        if key not in catalog:
+            fail(errors, f"shell dict key not in zh catalog: {key}")
+        elif catalog[key] != value:
+            fail(errors, f"shell dict drifted from zh catalog for {key}")
+
+
+def audit_i18n_keys_referenced(errors: list[str]) -> None:
+    """catalog 里的每个 key 都必须被运行时引用——防止死词条堆积。"""
+    catalog = _parse_flat_catalog((ROOT / "src/locales/zh.js").read_text(encoding="utf-8"))
+    # 数组型词条（tList）不走同一正则，单独收集
+    catalog_keys = set(catalog) | set(re.findall(r"^\s*'([\w.]+)':\s*\[",
+                                                 (ROOT / "src/locales/zh.js").read_text(encoding="utf-8"), re.M))
+    blob = "\n".join((ROOT / rel).read_text(encoding="utf-8")
+                      for rel in REQUIRED_RUNTIME_ASSETS
+                      if rel.endswith(".js") and not rel.startswith("src/locales/"))
+    blob += (ROOT / "index.html").read_text(encoding="utf-8")
+    referenced = set(re.findall(r"t(?:List)?\('([\w.]+)'", blob))
+    referenced |= set(re.findall(r'data-i18n(?:-aria|-tip|-alt)?="([\w.]+)"', blob))
+    referenced |= set(re.findall(r"'bucket\.' \+ key", blob) and
+                      ["bucket.job", "bucket.maintain", "bucket.leak", "bucket.unrecorded"])
+    for key in sorted(catalog_keys - referenced):
+        fail(errors, f"dead i18n key (never referenced): {key}")
+
+
 def main() -> int:
     errors: list[str] = []
     audit_manifest(errors)
@@ -518,6 +668,9 @@ def main() -> int:
     audit_docs(errors)
     audit_wcag_contrast(errors)
     audit_chrome_surface_layering(errors)
+    audit_no_hardcoded_cjk_in_runtime(errors)
+    audit_shell_dict_matches_catalog(errors)
+    audit_i18n_keys_referenced(errors)
 
     if errors:
         print("project audit failed:")

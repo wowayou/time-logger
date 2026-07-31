@@ -33,8 +33,11 @@ import {
   save,
   saveConfig,
   uid,
-  validateImportData
+  validateImportData,
+  loadLocalePref,
+  refreshBucketLabels
 } from './storage.js';
+import { getLocale, resolveLocale, setLocale, t } from './i18n.js';
 import { createIoActions } from './io_actions.js';
 import { createSheetController } from './sheet_controller.js';
 import {
@@ -218,7 +221,7 @@ import {
     if (state.view === 'year') {
       return Array.from({ length: 12 }, (_, i) => {
         const d = new Date(start.getFullYear(), i, 1);
-        return { key: localDateKey(d), label: `${i + 1}月`, rangeStart: d, rangeEnd: addMonths(d, 1), targetView: 'month' };
+        return { key: localDateKey(d), label: t('chrome.monthCell', { n: i + 1 }), rangeStart: d, rangeEnd: addMonths(d, 1), targetView: 'month' };
       });
     }
     return [];
@@ -330,6 +333,8 @@ import {
         // v56：快照带版本戳——应用更新后（SKIP_WAITING reload）不得把旧版 DOM 形态
         // 交给新版 JS 还跳过首轮渲染；init() 里版本不符则按无快照走正常启动。
         appVersion: APP_VERSION,
+        // SPEC-013：语言也是快照的有效性条件（见 index.html 的 locale 门）。
+        locale: getLocale(),
         appHtml: app.innerHTML,
         addHtml: addBtn.innerHTML,
         addHidden: addBtn.hidden,
@@ -360,8 +365,8 @@ import {
       // 一条真实记录都没有时不编造里程碑，直接不显示。
       usageEl.hidden = recordedDays === 0;
       if (recordedDays > 0) {
-        usageEl.textContent = `记录历程第 ${journeyDay} 天 · 已记录 ${recordedDays} 天`;
-        usageEl.setAttribute('aria-label', `记录历程第 ${journeyDay} 天，其中有真实记录的有 ${recordedDays} 天`);
+        usageEl.textContent = t('chrome.milestone', { journey: journeyDay, recorded: recordedDays });
+        usageEl.setAttribute('aria-label', t('chrome.milestoneAria', { journey: journeyDay, recorded: recordedDays }));
       }
     }
     // R5：当前周期是否包含今天——驱动「回到今天」按钮的条件渲染 + 日期行内的
@@ -372,7 +377,7 @@ import {
     const periodEl = document.getElementById('period-label');
     const periodText = periodLabel({ short: state.view === 'week' });
     periodEl.innerHTML = inCurrentPeriod
-      ? `${periodText} <span class="period-today-badge">今天</span>`
+      ? `${periodText} <span class="period-today-badge">${esc(t('chrome.todayBadge'))}</span>`
       : periodText;
     periodEl.setAttribute('aria-label', periodFullLabel());
     // R2+FAB：悬浮「记一条」——只在日视图出现；主文案随计划/记录模式，副文案标注
@@ -392,12 +397,12 @@ import {
     if (canCreate) {
       const preferPlan = localStorage.getItem(RECORD_MODE_KEY) === 'plan';
       const isPlan = dateMode.forcedMode === 'plan' || (dateMode.kind === 'today' && preferPlan);
-      const mainLabel = isPlan ? '＋ 计划一条' : '＋ 记一条';
+      const mainLabel = isPlan ? t('chrome.fabPlan') : t('chrome.fabLog');
       const sub = fabSubCopy(fabStart);
       addBtn.innerHTML = `<span class="fab-main">${mainLabel}</span>${sub ? `<span class="fab-sub">${esc(sub)}</span>` : ''}`;
       // FAB 有可见文案，不需要 hover tooltip；且 `button[data-tip]` 会把 position 强制
       // 成 relative（tooltip 定位规则），破坏 fixed 悬浮——所以只设 aria-label，不设 data-tip。
-      addBtn.setAttribute('aria-label', isPlan ? '计划一条新的时间记录' : '记一条新的时间记录');
+      addBtn.setAttribute('aria-label', isPlan ? t('chrome.fabPlanAria') : t('chrome.fabLogAria'));
     }
     // 阶段格言（v69，C13）：只在日视图显示；textContent 填充（用户/导入文案不进
     // innerHTML）。'' ＝显式隐藏——此时唯一入口是「···」更多里的「阶段格言」。
@@ -408,12 +413,12 @@ import {
       mottoEl.hidden = !showMotto;
       if (showMotto) {
         mottoEl.textContent = motto;
-        mottoEl.setAttribute('aria-label', `阶段格言：${motto}。点击编辑`);
+        mottoEl.setAttribute('aria-label', t('chrome.mottoAria', { motto }));
       }
     }
-    const periodNames = { day: '天', week: '周', month: '月', year: '年' };
-    const todayLabels = { day: '回到今天', week: '回到本周', month: '回到本月', year: '回到今年' };
-    const todayTip = `回到包含今天的当前${periodNames[state.view]}。`;
+    const periodNames = { day: t('period.day'), week: t('period.week'), month: t('period.month'), year: t('period.year') };
+    const todayLabels = { day: t('period.backDay'), week: t('period.backWeek'), month: t('period.backMonth'), year: t('period.backYear') };
+    const todayTip = t('period.backTip', { period: periodNames[state.view] });
     const todayBtn = document.getElementById('today-btn');
     // R5：只在离开当前周期（已不含今天）后才出现，避免常驻占位。
     todayBtn.hidden = inCurrentPeriod;
@@ -421,10 +426,11 @@ import {
     setButtonTip(todayBtn, todayTip, todayLabels[state.view]);
     document.querySelectorAll('[data-action="shift-period"]').forEach(btn => {
       const isPrev = Number(btn.dataset.delta || 0) < 0;
-      const text = `切到${isPrev ? '上一' : '下一'}${periodNames[state.view]}。`;
-      setButtonTip(btn, text, `${isPrev ? '上一' : '下一'}${periodNames[state.view]}`);
+      const dir = isPrev ? t('period.prev') : t('period.next');
+      const text = t('period.shiftTip', { dir, period: periodNames[state.view] });
+      setButtonTip(btn, text, t('period.shiftAria', { dir, period: periodNames[state.view] }));
     });
-    const labels = { day: '当日时间轴', week: '本周每日汇总', month: '本月每日汇总', year: '全年每月汇总' };
+    const labels = { day: t('list.titleDay'), week: t('list.titleWeek'), month: t('list.titleMonth'), year: t('list.titleYear') };
     document.getElementById('list-label').textContent = labels[state.view];
   }
 
@@ -438,16 +444,16 @@ import {
     const isToday = dateKey === todayStr();
     const entries = load().entries;
     const dayLogged = entries.filter(e => !e.planned && e.ts.slice(0, 10) === dateKey);
-    if (!dayLogged.length) return isToday ? '今天还没记' : '这天还没记';
+    if (!dayLogged.length) return isToday ? t('fab.emptyToday') : t('fab.emptyOtherDay');
     if (!start) return '';
     if (!isToday) {
       return openPlaceholderForDate(entries, dateKey)
-        ? `续 ${hhmm(start)} 起`
-        : `补记 ${hhmm(start)} 起`;
+        ? t('fab.continueFrom', { time: hhmm(start) })
+        : t('fab.backfillFrom', { time: hhmm(start) });
     }
     const settlement = settlementEndFor(start, dateKey);
     const dur = settlement.endTs ? minsBetweenDates(new Date(start), new Date(settlement.endTs)) : 0;
-    return `续 ${hhmm(start)} 起 · 已 ${fmtMins(dur)}`;
+    return t('fab.ongoingFrom', { time: hhmm(start), dur: fmtMins(dur) });
   }
 
   function renderSummary() {
@@ -464,7 +470,7 @@ import {
     const result = confirmSegmentInData(d, id, endTs);
     if (!result.ok) {
       if (result.reason === 'stale') {
-        showInfoToast('这段时间已经变化，请重新查看后再确认。');
+        showInfoToast(t('toast.segmentChanged'));
       }
       render();
       return;
@@ -516,7 +522,7 @@ import {
     if (!toast) return;
     const message = toast.querySelector('[data-role="undo-message"]');
     const button = toast.querySelector('[data-action="undo-delete"]');
-    if (message) message.textContent = '已删除';
+    if (message) message.textContent = t('toast.deleted');
     if (button) button.hidden = false;
     toast.hidden = false;
     const timer = setTimeout(hideUndoToast, 8000);
@@ -530,7 +536,7 @@ import {
     const button = toast && toast.querySelector('[data-action="undo-delete"]');
     if (undoDeleteState.timer) clearTimeout(undoDeleteState.timer);
     undoDeleteState = null;
-    if (message) message.textContent = '数据已在别处更新，撤销已取消';
+    if (message) message.textContent = t('toast.undoCancelled');
     if (button) button.hidden = true;
     if (toast) {
       toast.hidden = false;
@@ -557,7 +563,7 @@ import {
     const entry = d.entries.find(item => item.id === id);
     const latest = planDeleteEntry(d.entries, id, { todayKey: todayStr(), nowTs: nowStr() });
     if (!entry || !latest.ok) {
-      deleteError(latest.message || '这条记录已经不存在。');
+      deleteError(latest.message || t('txn.missing'));
       return;
     }
     if (latest.resultSignature !== pendingDelete.plan.resultSignature) {
@@ -573,7 +579,7 @@ import {
     const beforeData = JSON.parse(JSON.stringify(d));
     d.entries = latest.resultEntries;
     if (!save(d)) {
-      deleteError('本机存储空间不足，删除没有执行；请先导出备份并清理空间。');
+      deleteError(t('toast.deleteQuota'));
       return;
     }
     pendingDelete = null;
@@ -744,7 +750,7 @@ import {
   let repairUpdateRestAria = '';
   function repairUpdateResetLabel(btn) {
     const label = btn && btn.querySelector('[data-role="cell-label"]');
-    if (label) label.textContent = '修复更新通道';
+    if (label) label.textContent = t('repair.label');
     // 验收补正：aria-label 会覆盖按钮内容，只改可见文字会把读屏用户留在旧的
     // 可访问名上（可见标签与可访问名不一致）。两个状态都同步改。
     if (btn && repairUpdateRestAria) btn.setAttribute('aria-label', repairUpdateRestAria);
@@ -752,15 +758,15 @@ import {
   async function repairUpdateChannel(btn) {
     if (!btn) return;
     if (navigator.onLine === false) {
-      showInfoToast('需要联网才能修复更新通道，请连接网络后重试。');
+      showInfoToast(t('repair.needOnline'));
       return;
     }
     if (repairUpdateArmedBtn !== btn) {
       repairUpdateArmedBtn = btn;
       repairUpdateRestAria = btn.getAttribute('aria-label') || repairUpdateRestAria;
       const label = btn.querySelector('[data-role="cell-label"]');
-      if (label) label.textContent = '再次点击确认修复（本机记录不受影响）';
-      btn.setAttribute('aria-label', '再次点击确认修复更新通道；会重新加载页面，本机记录不受影响');
+      if (label) label.textContent = t('repair.armed');
+      btn.setAttribute('aria-label', t('repair.armedAria'));
       clearTimeout(repairUpdateArmTimer);
       repairUpdateArmTimer = setTimeout(() => {
         repairUpdateArmedBtn = null;
@@ -771,12 +777,12 @@ import {
     clearTimeout(repairUpdateArmTimer);
     repairUpdateArmedBtn = null;
     const label = btn.querySelector('[data-role="cell-label"]');
-    if (label) label.textContent = '正在检查网络…';
+    if (label) label.textContent = t('repair.checking');
     try {
       const res = await fetch('sw.js', { cache: 'no-store' });
       if (!res || !res.ok) throw new Error('probe failed');
     } catch {
-      showInfoToast('网络暂时不可用，请稍后再试。');
+      showInfoToast(t('repair.offline'));
       repairUpdateResetLabel(btn);
       return;
     }
@@ -791,7 +797,7 @@ import {
       }
     } catch { unregistered = false; }
     if (!unregistered) {
-      showInfoToast('没能重置更新通道。请完全退出应用（Safari 关闭本站全部标签页）后重新打开。');
+      showInfoToast(t('repair.failed'));
       repairUpdateResetLabel(btn);
       return;
     }
@@ -1237,7 +1243,26 @@ import {
     sheetController.openMoreSheet();
   }
 
+  // SPEC-013：把完整 catalog 应用到静态壳的 data-i18n* 上。index.html 的内联字典
+  // 已经填过一遍（首帧不闪），这里是幂等的第二遍——内联字典只带壳用得到的键，
+  // 完整 catalog 才是权威。
+  function applyShellI18n() {
+    const put = (attr, apply) => {
+      document.querySelectorAll('[' + attr + ']').forEach(el => {
+        apply(el, t(el.getAttribute(attr)));
+      });
+    };
+    put('data-i18n', (el, v) => { el.textContent = v; });
+    put('data-i18n-aria', (el, v) => { el.setAttribute('aria-label', v); });
+    put('data-i18n-tip', (el, v) => { el.setAttribute('data-tip', v); });
+    put('data-i18n-alt', (el, v) => { el.setAttribute('alt', v); });
+  }
+
   function init() {
+    // locale 必须在任何渲染、任何 BUCKETS 读取之前定下来。
+    setLocale(resolveLocale(loadLocalePref(), navigator.languages));
+    refreshBucketLabels();
+    applyShellI18n();
     markBootTrace('init_start');
     updateMigrationNotice();
     const today = todayStr();
@@ -1262,6 +1287,9 @@ import {
         if (!snap || snap.appVersion !== APP_VERSION) {
           restoredBootFrame = false;
           setBootSnapshotState('rejected:version');
+        } else if ((snap.locale || 'zh') !== getLocale()) {
+          restoredBootFrame = false;
+          setBootSnapshotState('rejected:locale');
         }
       } catch {
         restoredBootFrame = false;
@@ -1302,7 +1330,7 @@ import {
     if (!bootTrace || document.getElementById('boottrace-hud')) return;
     const hud = document.createElement('div');
     hud.id = 'boottrace-hud';
-    hud.setAttribute('aria-label', '启动分段诊断');
+    hud.setAttribute('aria-label', t('diag.hudAria'));
     hud.style.cssText = 'position:fixed;left:4px;right:4px;bottom:max(4px,env(safe-area-inset-bottom));'
       + 'z-index:2147483646;pointer-events:none;max-height:48vh;overflow:auto;'
       + 'font:10px/1.45 ui-monospace,Menlo,monospace;color:#b8ffab;background:rgba(0,0,0,.82);'
@@ -1323,7 +1351,7 @@ import {
       `boottrace v${APP_VERSION} snapshot=${bootTrace.snapshotStates.join(' → ')}`,
       ...marks,
       `page total=${Math.round((bootTrace.marks[bootTrace.marks.length - 1]?.at || first) - first)}ms`,
-      '── Navigation Timing（从 navigation 起算，不含点击主屏图标到 WebKit 开始导航前的系统时间）',
+      t('diag.navTimingNote'),
       ...navLines
     ].join('\n');
     document.body.appendChild(hud);

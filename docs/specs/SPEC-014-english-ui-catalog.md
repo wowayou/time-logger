@@ -1,6 +1,6 @@
 # SPEC-014 · 英文 UI catalog + 语言开关
 
-status: blocked（**仅**等 SPEC-013 合并。英文 App 名已由维护者定为 **Eigentime**，2026-07-31，无待拍板项）
+status: blocked（**仅**等 SPEC-013 合并。英文 App 名＝**Eigentime**、默认标签种子＝**方案 B**，均由维护者 2026-07-31 拍板，无待拍板项）
 owner: 执行方认领后填分支名 `spec/014-en-catalog`
 执行模型: **Sonnet 5**（术语在本规格内已定死，执行是机械填表 + 一个 seg 控件）
 验收人: Opus 5（**逐条核术语表**，措辞偏离即打回）
@@ -57,6 +57,31 @@ owner: 执行方认领后填分支名 `spec/014-en-catalog`
 | 另一标签页已修改数据 | Another tab changed your data | |
 
 **语气规则**：句号只在完整句子后加（按钮文案不加）；不用感叹号；不用 "Oops"/"Sorry" 一类拟人化；错误文案说清事实与出路，不道歉。
+
+## 1.5 默认标签种子（**维护者拍板：方案 B**，2026-07-31）
+
+SPEC-013 执行时发现：`DEFAULT_CONFIG` 的默认 chips（睡觉/吃饭/洗漱/通勤/家务/运动健康/娱乐/刷手机/发呆）与 `mainline: ['求职推进']` 是**数据种子**，不是文案——它们会写进 `timelog.config`、附到记录的 `tags[]`、随完整备份导出、并按名字参与导入合并。因此**不能**在展示层翻译（翻了就查不中桶归类）。
+
+**拍板结果：按 locale 种子，但只在首次初始化。**
+
+| 规则 | 判据 |
+|---|---|
+| **只在首次初始化时按当前 locale 选种子** | `normalizeConfig(null)` / `timelog.config` 键缺失这条路径 |
+| **绝不迁移已有 config** | 已有用户切语言，标签**一个字都不变**——那是他们的数据，不是界面 |
+| **切换语言不重新种子** | 同上；语言开关只影响界面文案 |
+| **导入不改标签名** | 一份 zh 备份导进 en 设备后同时存在两套标签，这是**正确行为**（导入合并本就按名字保留双方），不做任何"智能"对齐 |
+
+英文种子（与术语表同源，非道德评判）：
+
+- mainline：`Job search`
+- maintain：`Sleep` / `Meals` / `Wash up` / `Commute` / `Chores` / `Exercise`
+- leak：`Entertainment` / `Phone` / `Zoning out`
+
+`longOk` 布尔与中文种子逐项一致（`Sleep` 为 `true`，其余 `false`）——这是行为，不随语言变。
+
+**实现约束**：种子选择必须发生在 `storage.js` 内部（config 的归属地），且**只读 locale、不写 locale**；`RESERVED_UNKNOWN_TAG` 与 `LEGACY_ALIASES` 保持中文原样不动（它们是存量数据的兼容层，与新装种子无关）。
+
+**必须有的测试**：① 全新 en 安装种出英文 chips；② 已有 zh config 的设备切到 en 后 chips **逐字不变**；③ zh 备份导入 en 设备后两套标签共存且各自桶归类正确。第 ② 条是本节的核心风险，**红灯证明必须做**（临时让切语言也重新种子 → 用例必须红）。
 
 ## 2. 语言开关
 

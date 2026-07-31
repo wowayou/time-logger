@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
 import { formatPercent, sortedEntriesFrom } from './stats.js';
+import { t } from './i18n.js';
 import { fmtDateTime, fmtMins, fmtPlainMins, fmtTs, hhmm, p2 } from './time.js';
 
 // SPEC-012：sheet 关闭走 class 驱动的收起动画（sheet_controller.js
@@ -22,7 +23,7 @@ export function createIoActions(deps) {
   let importResolutions = {};
 
   function viewName(view = deps.state.view) {
-    return ({ day: '天', week: '周', month: '月', year: '年' })[view] || view;
+    return ({ day: t('period.day'), week: t('period.week'), month: t('period.month'), year: t('period.year') })[view] || view;
   }
 
   function currentViewTotals() {
@@ -45,37 +46,37 @@ export function createIoActions(deps) {
 
   function dataDateRange() {
     const entries = sortedEntriesFrom(deps.load().entries);
-    if (!entries.length) return '无记录';
+    if (!entries.length) return t('io.noEntries');
     return `${fmtTs(entries[0].ts)} - ${fmtTs(entries[entries.length - 1].ts)}`;
   }
 
   function detailDurationLabel(mins, isOngoing, unrecorded, pendingConfirm) {
     const label = fmtPlainMins(mins);
     const notes = [];
-    if (pendingConfirm) notes.push('待确认');
-    else if (unrecorded) notes.push('未记录');
-    if (isOngoing) notes.push('进行中');
-    return notes.length ? `${label}（${notes.join('，')}）` : label;
+    if (pendingConfirm) notes.push(t('io.notePending'));
+    else if (unrecorded) notes.push(t('io.noteUnrecorded'));
+    if (isOngoing) notes.push(t('io.noteOngoing'));
+    return notes.length ? t('io.noteWrap', { label, notes: notes.join(t('io.noteJoin')) }) : label;
   }
 
   function currentViewDetailLines() {
     if (deps.state.view === 'day') {
       const day = deps.computeDay();
-      if (!day.timeline.length) return ['- 无已发生记录'];
+      if (!day.timeline.length) return [t('io.noLoggedRows')];
       return day.timeline.map(({ e, start, mins, isOngoing, unrecorded, pendingConfirm, tag }) => {
-        const safeWhat = mdInline(e.what) || '未填写';
-        const safeTag = mdInline(tag || '未知');
+        const safeWhat = mdInline(e.what) || t('io.emptyWhat');
+        const safeTag = mdInline(tag || t('tag.unknown'));
         return `- ${hhmm(start || e.ts)} | ${detailDurationLabel(mins, isOngoing, unrecorded, pendingConfirm)} | ${safeWhat} | #${safeTag}`;
       });
     }
     const rows = deps.summaryRows();
-    if (!rows.length) return ['- 无记录'];
+    if (!rows.length) return [t('io.noRows')];
     return rows.map(row => {
       const totals = deps.summarizeRange(row.rangeStart, row.rangeEnd);
       const { jp, mp, lp, up } = statsParts(totals);
-      const totalText = totals.total ? fmtMins(totals.total) : '无记录';
-      const pendingText = totals.pending ? ` / 待确认 ${fmtPlainMins(totals.pending)}` : '';
-      return `- ${row.label}: ${totalText}；主线 ${jp} / 维持 ${mp} / 偏航 ${lp} / 未记录 ${up}${pendingText}`;
+      const totalText = totals.total ? fmtMins(totals.total) : t('io.noEntries');
+      const pendingText = totals.pending ? t('io.rowPending', { dur: fmtPlainMins(totals.pending) }) : '';
+      return t('io.rollupRow', { label: row.label, total: totalText, jp, mp, lp, up, pending: pendingText });
     });
   }
 
@@ -83,9 +84,9 @@ export function createIoActions(deps) {
     if (deps.state.view !== 'day') return [];
     const day = deps.computeDay();
     return day.planned.map(entry => {
-      const safeWhat = mdInline(entry.what) || '未填写';
-      const safeTag = mdInline((entry.tags || [])[0] || '未知');
-      return `- ${hhmm(entry.ts)} | 计划 | ${safeWhat} | #${safeTag}`;
+      const safeWhat = mdInline(entry.what) || t('io.emptyWhat');
+      const safeTag = mdInline((entry.tags || [])[0] || t('tag.unknown'));
+      return t('io.planRow', { time: hhmm(entry.ts), what: safeWhat, tag: safeTag });
     });
   }
 
@@ -95,26 +96,26 @@ export function createIoActions(deps) {
     const totalEntries = deps.load().entries.length;
     const planLines = currentViewPlanLines();
     return [
-      '# 时间尺当前视图摘要',
+      t('io.summaryTitle'),
       '',
-      '## 元信息',
-      `- 生成时间：${fmtDateTime(new Date())}`,
-      `- 当前视图：${viewName()}`,
-      `- 当前周期：${deps.periodFullLabel()}`,
-      `- 数据起止日期：${dataDateRange()}`,
-      `- 总记录数：${totalEntries}`,
+      t('io.summaryMetaHead'),
+      t('io.summaryGeneratedAt', { value: fmtDateTime(new Date()) }),
+      t('io.summaryView', { value: viewName() }),
+      t('io.summaryPeriod', { value: deps.periodFullLabel() }),
+      t('io.summaryDataRange', { value: dataDateRange() }),
+      t('io.summaryTotalEntries', { value: totalEntries }),
       '',
-      '## 当前视图统计比例',
-      `- 总计：${fmtPlainMins(totals.total)}`,
-      `- 主线：${jp}（${fmtPlainMins(totals.job)}）`,
-      `- 维持：${mp}（${fmtPlainMins(totals.maintain)}）`,
-      `- 偏航：${lp}（${fmtPlainMins(totals.leak)}）`,
-      `- 未记录：${up}（${fmtPlainMins(totals.unrecorded)}）`,
-      `- 待确认：${fmtPlainMins(totals.pending || 0)}`,
+      t('io.summaryRatioHead'),
+      t('io.summaryTotal', { value: fmtPlainMins(totals.total) }),
+      t('io.summaryJob', { pct: jp, dur: fmtPlainMins(totals.job) }),
+      t('io.summaryMaintain', { pct: mp, dur: fmtPlainMins(totals.maintain) }),
+      t('io.summaryLeak', { pct: lp, dur: fmtPlainMins(totals.leak) }),
+      t('io.summaryUnrecorded', { pct: up, dur: fmtPlainMins(totals.unrecorded) }),
+      t('io.summaryPending', { value: fmtPlainMins(totals.pending || 0) }),
       '',
-      '## 当前视图明细',
+      t('io.summaryDetailHead'),
       ...currentViewDetailLines(),
-      ...(planLines.length ? ['', '## 计划', ...planLines] : []),
+      ...(planLines.length ? ['', t('io.summaryPlanHead'), ...planLines] : []),
       ''
     ].join('\n');
   }
@@ -122,7 +123,7 @@ export function createIoActions(deps) {
   function setCopyFeedback(btn, ok, label, fallbackLabel) {
     if (!btn) return;
     const labelEl = btn.querySelector('[data-role="cell-label"]') || btn;
-    labelEl.textContent = ok ? label : '复制失败';
+    labelEl.textContent = ok ? label : t('io.copyFailed');
     btn.classList.toggle('copied', ok);
     setTimeout(() => {
       labelEl.textContent = fallbackLabel;
@@ -188,11 +189,11 @@ export function createIoActions(deps) {
 
   function copyJSON() {
     const json = JSON.stringify(exportData(), null, 2);
-    copyText(json, document.getElementById('copy-btn'), '✓ 已复制', '复制 JSON 备份');
+    copyText(json, document.getElementById('copy-btn'), t('io.copied'), t('io.copyJsonLabel'));
   }
 
   function copyCurrentViewSummary() {
-    copyText(buildCurrentViewSummaryMarkdown(), document.getElementById('summary-btn'), '✓ 已复制', '复制当前视图摘要');
+    copyText(buildCurrentViewSummaryMarkdown(), document.getElementById('summary-btn'), t('io.copied'), t('io.copySummaryLabel'));
   }
 
   function bootDiagTime(epochMs) {
@@ -201,7 +202,7 @@ export function createIoActions(deps) {
   }
 
   function bootDiagGap(gapMin) {
-    if (!Number.isFinite(gapMin)) return '首条';
+    if (!Number.isFinite(gapMin)) return t('diag.first');
     if (gapMin < 60) return `${gapMin}min`;
     return `${Math.floor(gapMin / 60)}h${p2(gapMin % 60)}m`;
   }
@@ -213,26 +214,26 @@ export function createIoActions(deps) {
     const lines = samples.map(s => [
       bootDiagTime(s.at),
       `v${s.ver || '?'}`,
-      `间隔 ${bootDiagGap(s.gapMin)}`,
+      t('diag.gap', { value: bootDiagGap(s.gapMin) }),
       s.nav || 'navigate',
-      `SW接管 ${s.controlled ? '是' : '否'}`,
-      s.sw ? `SW态 ${s.sw}` : '',
-      `常驻存储 ${s.persisted === true ? '是' : s.persisted === false ? '否' : '未知'}`,
-      s.cache ? `缓存 ${s.cache}(${s.cacheFiles}文件${s.cacheCount > 1 ? `,共${s.cacheCount}套` : ''})` : '缓存 无',
+      t('diag.swControlled', { value: s.controlled ? t('diag.yes') : t('diag.no') }),
+      s.sw ? t('diag.swState', { value: s.sw }) : '',
+      t('diag.persisted', { value: s.persisted === true ? t('diag.yes') : s.persisted === false ? t('diag.no') : t('tag.unknown') }),
+      s.cache ? t('diag.cache', { name: s.cache, files: s.cacheFiles, sets: s.cacheCount > 1 ? t('diag.cacheSets', { n: s.cacheCount }) : '' }) : t('diag.cacheNone'),
       `html ${s.htmlMs}ms`,
-      `模块 ${s.moduleMs}ms`,
-      Number.isFinite(s.fcpMs) && s.fcpMs >= 0 ? `首绘 ${s.fcpMs}ms` : '',
-      `就绪 ${s.readyMs}ms`,
-      s.standalone ? 'standalone' : '浏览器',
-      s.snapshot ? '快照命中' : '快照未中'
+      t('diag.module', { ms: s.moduleMs }),
+      Number.isFinite(s.fcpMs) && s.fcpMs >= 0 ? t('diag.fcp', { ms: s.fcpMs }) : '',
+      t('diag.ready', { ms: s.readyMs }),
+      s.standalone ? 'standalone' : t('diag.browser'),
+      s.snapshot ? t('diag.snapshotHit') : t('diag.snapshotMiss')
     ].filter(Boolean).join(' · '));
     const text = [
-      `# 时间尺启动诊断（最近 ${samples.length} 次启动）`,
+      t('diag.title', { n: samples.length }),
       `- UA: ${navigator.userAgent}`,
       '',
       ...lines
     ].join('\n');
-    copyText(text, document.getElementById('boot-diag-copy-btn'), '✓ 已复制', '复制启动诊断');
+    copyText(text, document.getElementById('boot-diag-copy-btn'), t('io.copied'), t('io.copyBootDiagLabel'));
   }
 
   function backupArtifact() {
@@ -272,8 +273,8 @@ export function createIoActions(deps) {
     // 没有完成事件可核实。文件分享面板能让用户明确选择「存储到文件」及目标目录。
     if (prefersSystemFileSave() && canShareFile(artifact.file)) {
       try {
-        await navigator.share({ files: [artifact.file], title: `时间尺完整备份 ${artifact.fname}` });
-        setCopyFeedback(btn, true, '已完成存储', '存储备份');
+        await navigator.share({ files: [artifact.file], title: t('io.backupShareTitle', { name: artifact.fname }) });
+        setCopyFeedback(btn, true, t('io.saveDone'), t('io.saveLabel'));
         return;
       } catch (error) {
         // 用户取消代表明确不保存，不能偷偷回退成一个去向不明的浏览器下载。
@@ -281,7 +282,7 @@ export function createIoActions(deps) {
       }
     }
     directDownloadBackup(artifact);
-    setCopyFeedback(btn, true, '请在下载项确认', '存储备份');
+    setCopyFeedback(btn, true, t('io.saveCheckDownloads'), t('io.saveLabel'));
   }
 
   function parseImportShiftHours(raw) {
@@ -320,13 +321,13 @@ export function createIoActions(deps) {
   function importShiftHint(imported, suggestedMinutes) {
     const sourceOffset = sourceOffsetMinutes(imported);
     if (sourceOffset === null) {
-      return '这个备份没有时区元信息，默认不平移；需要对齐双设备壁钟时可手动填写。';
+      return t('io.shiftNoMeta');
     }
     const currentOffset = new Date().getTimezoneOffset();
     const sourceZone = imported.meta && imported.meta.sourceTimeZone ? ` ${imported.meta.sourceTimeZone}` : '';
-    const base = `源设备 ${timezoneOffsetLabel(sourceOffset)}${sourceZone}，当前设备 ${timezoneOffsetLabel(currentOffset)}。`;
-    if (!suggestedMinutes) return `${base} 默认不平移。`;
-    return `${base} 已建议 ${formatShiftHours(suggestedMinutes)} 小时，可按需要改为 0。`;
+    const base = t('io.shiftBase', { source: timezoneOffsetLabel(sourceOffset), zone: sourceZone, current: timezoneOffsetLabel(currentOffset) });
+    if (!suggestedMinutes) return t('io.shiftNone', { base });
+    return t('io.shiftSuggested', { base, hours: formatShiftHours(suggestedMinutes) });
   }
 
   function importJSON() {
@@ -355,11 +356,11 @@ export function createIoActions(deps) {
     role.textContent = label;
     const what = document.createElement('div');
     what.className = 'import-conflict-what';
-    what.textContent = entry && entry.what ? entry.what : '未填写内容';
-    const tag = entry && Array.isArray(entry.tags) && entry.tags[0] ? entry.tags[0] : '未记录';
+    what.textContent = entry && entry.what ? entry.what : t('io.emptyWhatFull');
+    const tag = entry && Array.isArray(entry.tags) && entry.tags[0] ? entry.tags[0] : t('io.noteUnrecorded');
     const meta = document.createElement('div');
     meta.className = 'import-conflict-meta';
-    meta.textContent = `${entry && entry.ts ? fmtTs(entry.ts) : '时间未知'} · #${tag}${entry && entry.planned ? ' · 计划' : ''}`;
+    meta.textContent = t('io.conflictMeta', { ts: entry && entry.ts ? fmtTs(entry.ts) : t('io.unknownTime'), tag, planned: entry && entry.planned ? t('io.plannedSuffix') : '' });
     side.append(role, what, meta);
     return side;
   }
@@ -379,8 +380,8 @@ export function createIoActions(deps) {
       summary.textContent = !plan
         ? ''
         : conflicts.length
-          ? `${conflicts.length} 条冲突 · 已处理 ${resolvedCount}/${conflicts.length}`
-          : `可导入 ${plan.imported || 0} 条 · 已存在跳过 ${plan.skipped || 0} 条`;
+          ? t('io.conflictProgress', { n: conflicts.length, done: resolvedCount })
+          : t('io.importablePlan', { imported: plan.imported || 0, skipped: plan.skipped || 0 });
     }
     if (confirm) {
       confirm.disabled = blocked;
@@ -394,7 +395,7 @@ export function createIoActions(deps) {
     }
     const intro = document.createElement('div');
     intro.className = 'import-conflict-intro';
-    intro.textContent = '逐条选择处理方式；也可以调整平移小时数重新检查。全部处理后才会一次性写入。';
+    intro.textContent = t('io.conflictIntro');
     const list = document.createElement('div');
     list.className = 'import-conflict-list';
     conflicts.forEach((conflict, index) => {
@@ -402,16 +403,16 @@ export function createIoActions(deps) {
       card.className = 'import-conflict-card';
       const title = document.createElement('div');
       title.className = 'import-conflict-title';
-      title.textContent = `${index + 1}. ${conflict.type === 'id' ? '同一记录的内容不同' : '同一时刻有两条记录'}`;
+      title.textContent = t('io.conflictTitle', { n: index + 1, kind: conflict.type === 'id' ? t('io.conflictTitleId') : t('io.conflictTitleTime') });
       const actions = document.createElement('div');
       actions.className = 'import-conflict-actions';
       actions.setAttribute('role', 'group');
-      actions.setAttribute('aria-label', `冲突 ${index + 1} 的处理方式`);
+      actions.setAttribute('aria-label', t('io.conflictActionsAria', { n: index + 1 }));
       const selected = importResolutions[conflict.key];
       [
-        ['local', '保留本机'],
-        ['incoming', '使用备份'],
-        ['merge', '合并文字']
+        ['local', t('io.keepLocal')],
+        ['incoming', t('io.useIncoming')],
+        ['merge', t('io.mergeText')]
       ].forEach(([action, label]) => {
         const button = document.createElement('button');
         button.type = 'button';
@@ -426,14 +427,14 @@ export function createIoActions(deps) {
       });
       card.append(
         title,
-        importConflictSide('备份中', conflict.incoming),
-        importConflictSide('本机中', conflict.local),
+        importConflictSide(t('io.sideIncoming'), conflict.incoming),
+        importConflictSide(t('io.sideLocal'), conflict.local),
         actions
       );
       if (selected && selected.signature === conflict.signature && selected.action === 'merge') {
         const note = document.createElement('div');
         note.className = 'import-conflict-merge-note';
-        note.textContent = '合并会保留本机时间、标签和状态，把两边不同的文字合成一条。';
+        note.textContent = t('io.mergeNote');
         card.appendChild(note);
       }
       list.appendChild(card);
@@ -484,7 +485,7 @@ export function createIoActions(deps) {
     if (!deps.save(plan.data)) {
       const error = document.querySelector('#form-sheet [data-role="import-error"]');
       if (error) {
-        error.textContent = '本机存储空间不足，导入没有执行；表单和原数据均已保留。';
+        error.textContent = t('io.importQuota');
         error.hidden = false;
       }
       return false;
@@ -495,7 +496,7 @@ export function createIoActions(deps) {
       deps.save(current);
       const error = document.querySelector('#form-sheet [data-role="import-error"]');
       if (error) {
-        error.textContent = '标签配置保存失败，记录导入已回滚。';
+        error.textContent = t('io.configSaveFailed');
         error.hidden = false;
       }
       return false;
@@ -522,7 +523,7 @@ export function createIoActions(deps) {
     pendingImport = null;
     importResolutions = {};
     deps.closeForm();
-    const message = `导入完成：写入 ${result.imported} 条，保留/跳过 ${result.skipped} 条，处理冲突 ${result.resolvedConflicts} 条。`;
+    const message = t('io.importDone', { imported: result.imported, skipped: result.skipped, conflicts: result.resolvedConflicts });
     // SPEC-012：sheet 关闭动画播完（或 reduced-motion 下没有动画）之后才亮 toast，
     // 让它出现在一个干净的、没有 sheet 遮挡的屏幕上；而不是和 v73 一样在 sheet
     // 还在滑出时就亮起、被半透明遮罩盖过去。
@@ -538,7 +539,7 @@ export function createIoActions(deps) {
       let imported;
       try { imported = JSON.parse(e.target.result); }
       catch {
-        deps.openFormSheet({ mode: 'import-shift', importEarlyError: '文件解析失败，请确认是有效的 JSON 文件。' });
+        deps.openFormSheet({ mode: 'import-shift', importEarlyError: t('io.parseFailed') });
         return;
       }
       const checked = deps.validateImportData(imported);
@@ -579,22 +580,22 @@ export function createIoActions(deps) {
     const btn = document.getElementById('backup-send-btn');
     if (canShareFile(artifact.file)) {
       try {
-        await navigator.share({ files: [artifact.file], title: `时间尺完整备份 ${artifact.fname}` });
-        setCopyFeedback(btn, true, '已分享备份', '分享备份');
+        await navigator.share({ files: [artifact.file], title: t('io.backupShareTitle', { name: artifact.fname }) });
+        setCopyFeedback(btn, true, t('io.shareDone'), t('io.shareLabel'));
         return;
       } catch (error) {
         if (isShareCancellation(error)) return;
       }
     }
     try {
-      await navigator.share({ title: `时间尺完整备份 ${artifact.fname}`, text: artifact.json });
-      setCopyFeedback(btn, true, '已分享备份', '分享备份');
+      await navigator.share({ title: t('io.backupShareTitle', { name: artifact.fname }), text: artifact.json });
+      setCopyFeedback(btn, true, t('io.shareDone'), t('io.shareLabel'));
       return;
     } catch (error) {
       if (isShareCancellation(error)) return;
     }
     directDownloadBackup(artifact);
-    setCopyFeedback(btn, true, '已下载备份', '分享备份');
+    setCopyFeedback(btn, true, t('io.downloadDone'), t('io.shareLabel'));
   }
 
   return {

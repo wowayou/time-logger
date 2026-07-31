@@ -10,6 +10,8 @@ const FILES = [
   './manifest.webmanifest',
   './sw.js',
   './src/app.js',
+  './src/i18n.js',
+  './src/locales/zh.js',
   './src/entry_model.js',
   './src/io_actions.js',
   './src/sheet_controller.js',

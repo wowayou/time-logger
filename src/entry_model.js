@@ -3,6 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
 import { GAP, isPlaceholderEntry, loggedEntriesFrom, primaryTag } from './stats.js';
+// SPEC-013：保留标签 id 是数据常量（不是文案），本模块仍不访问 DOM / localStorage。
+import { RESERVED_UNKNOWN_TAG } from './storage.js';
+import { t } from './i18n.js';
 import {
   addDays,
   hhmm,
@@ -200,8 +203,8 @@ function dayBounds(dateKey) {
 }
 
 function entryLabel(entry) {
-  if (!entry || isPlaceholderEntry(entry)) return '未记录';
-  return entry.what || primaryTag(entry) || '未记录';
+  if (!entry || isPlaceholderEntry(entry)) return t('entry.unrecordedLabel');
+  return entry.what || primaryTag(entry) || t('entry.unrecordedLabel');
 }
 
 function entryTagsEqual(a, b) {
@@ -261,7 +264,7 @@ function previewPart(role, entry, startTs, endTs, label) {
     role,
     id: entry && entry.id || '',
     label: label || entryLabel(entry),
-    tag: entry ? primaryTag(entry) : '未知',
+    tag: entry ? primaryTag(entry) : RESERVED_UNKNOWN_TAG,
     startTs,
     endTs
   };
@@ -272,13 +275,13 @@ export function overnightContinuationContext(entries, viewedDate, opts = {}) {
   const nowTs = normalizeTimestamp(opts.nowTs) || nowStr();
   const todayKey = opts.todayKey || nowTs.slice(0, 10) || todayStr();
   const today = parseDateKey(todayKey);
-  if (!today) return transactionError('invalid-date', '今天的日期无效。');
+  if (!today) return transactionError('invalid-date', t('txn.invalidToday'));
   const yesterdayKey = localDateKey(addDays(startOfDay(today), -1));
-  if (viewedDate !== yesterdayKey) return transactionError('not-yesterday', '只有昨天的尾部空白可过夜续记。');
+  if (viewedDate !== yesterdayKey) return transactionError('not-yesterday', t('txn.notYesterday'));
   const yesterdayEntries = loggedOnDay(entries, yesterdayKey);
   const source = yesterdayEntries[yesterdayEntries.length - 1] || null;
   if (!source || !isPlaceholderEntry(source)) {
-    return transactionError('no-placeholder', '昨天最后一点不是未记录占位。');
+    return transactionError('no-placeholder', t('txn.noPlaceholder'));
   }
   const midnightTs = localDateTimeKey(startOfDay(today));
   const realToday = (entries || [])
@@ -291,7 +294,7 @@ export function overnightContinuationContext(entries, viewedDate, opts = {}) {
   const hardEndEntry = realToday[0] || null;
   const hardEndTs = hardEndEntry ? hardEndEntry.ts : nowTs;
   if (hardEndTs <= midnightTs) {
-    return transactionError('no-today-span', '今天 00:00 已有真实记录，按普通历史续记到 24:00。');
+    return transactionError('no-today-span', t('txn.noTodaySpan'));
   }
   return {
     ok: true,
@@ -315,20 +318,20 @@ export function planOvernightContinuation(entries, request, opts = {}) {
   const context = overnightContinuationContext(entries, request && request.viewedDate, opts);
   if (!context.ok) return context;
   if (request && request.sourceId && request.sourceId !== context.sourceId) {
-    return transactionError('stale', '昨天的尾部空白已经变化，请重新打开表单。', { context });
+    return transactionError('stale', t('txn.staleOvernight'), { context });
   }
   const frozenStart = normalizeTimestamp(request && request.frozenStart) || context.startTs;
   const startTs = normalizeTimestamp(request && request.startTs);
-  if (!startTs) return transactionError('invalid-time', '请输入完整的开始时间。', { context });
+  if (!startTs) return transactionError('invalid-time', t('txn.needStart'), { context });
   const startMin = frozenStart > context.startTs ? frozenStart : context.startTs;
   if (startTs < startMin) {
-    return transactionError('before-min', `开始时间不能早于空白起点 ${hhmm(startMin)}。`, { context: { ...context, startMin } });
+    return transactionError('before-min', t('txn.beforeMin', { time: hhmm(startMin) }), { context: { ...context, startMin } });
   }
   if (startTs >= context.hardEndTs) {
-    return transactionError('after-max', `开始时间必须早于结束点 ${hhmm(context.hardEndTs)}。`, { context: { ...context, startMin } });
+    return transactionError('after-max', t('txn.afterMax', { time: hhmm(context.hardEndTs) }), { context: { ...context, startMin } });
   }
   if (startTs.slice(0, 10) !== context.yesterdayKey && startTs.slice(0, 10) !== context.todayKey) {
-    return transactionError('outside-source', '开始时间只能在昨晚空白到今天结束点之间选择。', { context: { ...context, startMin } });
+    return transactionError('outside-source', t('txn.outsideOvernight'), { context: { ...context, startMin } });
   }
 
   const what = String(request && request.what || '');
@@ -352,7 +355,7 @@ export function planOvernightContinuation(entries, request, opts = {}) {
   const claimPoint = (ts, pointWhat, pointTags) => {
     const existing = resultEntries.find(entry => entry.ts === ts);
     if (existing && !isPlaceholderEntry(existing)) {
-      return transactionError('conflict', `${hhmm(ts)} 已有记录或计划，不能覆盖。`, { context, conflict: existing });
+      return transactionError('conflict', t('txn.conflictAt', { time: hhmm(ts) }), { context, conflict: existing });
     }
     const point = existing || { id: createId(), ts, what: '', tags: [] };
     point.what = pointWhat;
@@ -388,7 +391,7 @@ export function planOvernightContinuation(entries, request, opts = {}) {
   if (midnightPoint) markConfirmed(midnightPoint.point, context.midnightTs, context.hardEndTs);
 
   const duplicate = duplicateTimestamp(resultEntries);
-  if (duplicate) return transactionError('conflict', '新的过夜边界与其它记录重合。', { context, conflict: duplicate.second });
+  if (duplicate) return transactionError('conflict', t('txn.conflictOvernight'), { context, conflict: duplicate.second });
   coalesceRedundant(resultEntries);
   const preview = crossMidnight
     ? [
@@ -407,15 +410,15 @@ export function planOvernightContinuation(entries, request, opts = {}) {
 /** @returns {TxOk | TxError} */
 export function intervalEditContext(entries, id, opts = {}) {
   const entry = (entries || []).find(item => item.id === id);
-  if (!entry) return transactionError('missing', '这条记录已经不存在。');
-  if (entry.planned) return transactionError('planned', '计划记录只编辑计划时刻。');
-  if (isPlaceholderEntry(entry)) return transactionError('placeholder', '未记录占位不能按普通记录编辑。');
+  if (!entry) return transactionError('missing', t('txn.missing'));
+  if (entry.planned) return transactionError('planned', t('txn.plannedOnly'));
+  if (isPlaceholderEntry(entry)) return transactionError('placeholder', t('txn.placeholderEdit'));
   const dateKey = entry.ts.slice(0, 10);
   const bounds = dayBounds(dateKey);
-  if (!bounds) return transactionError('invalid-date', '记录日期无效。');
+  if (!bounds) return transactionError('invalid-date', t('txn.invalidDate'));
   const onDay = loggedOnDay(entries, dateKey);
   const index = onDay.findIndex(item => item.id === id);
-  if (index < 0) return transactionError('missing', '这条记录已经不存在。');
+  if (index < 0) return transactionError('missing', t('txn.missing'));
   const previous = onDay[index - 1] || null;
   const next = onDay[index + 1] || null;
   const afterNext = onDay[index + 2] || null;
@@ -453,11 +456,11 @@ export function intervalEditContext(entries, id, opts = {}) {
     tailPlaceholder,
     canUseNow: isTail && dateKey === todayKey,
     startReason: previous
-      ? `不能早于上一段「${entryLabel(previous)}」之后`
-      : '不能跨过当天 00:00',
+      ? t('txn.startAfterPrev', { label: entryLabel(previous) })
+      : t('txn.startAfterMidnight'),
     endReason: isTail
-      ? (dateKey === todayKey ? '不能晚于当前时间' : '不能跨过当天 24:00')
-      : `不能越过下一段「${entryLabel(next)}」`
+      ? (dateKey === todayKey ? t('txn.endBeforeNow') : t('txn.endBeforeMidnight'))
+      : t('txn.endBeforeNext', { label: entryLabel(next) })
   };
 }
 
@@ -468,13 +471,13 @@ export function planIntervalEdit(entries, request, opts = {}) {
   const requestedEnd = normalizeTimestamp(request && request.endTs);
   const endMode = request && request.endMode === 'now' ? 'now' : 'fixed';
   const endTs = endMode === 'now' ? context.limitTs : requestedEnd;
-  if (!startTs || !endTs) return transactionError('invalid-time', '请输入完整的开始和结束时间。', { context });
+  if (!startTs || !endTs) return transactionError('invalid-time', t('txn.needStartEnd'), { context });
   if (startTs.slice(0, 10) !== context.dateKey
     || (endTs.slice(0, 10) !== context.dateKey && endTs !== context.dayEndTs)) {
-    return transactionError('cross-day', '开始和结束不能跨自然日。', { context });
+    return transactionError('cross-day', t('txn.crossDay'), { context });
   }
   if (endMode === 'now' && !context.canUseNow) {
-    return transactionError('not-tail', '只有今天的尾段可以选择“至今”。', { context });
+    return transactionError('not-tail', t('txn.notTail'), { context });
   }
   if (startTs < context.startMin) {
     return transactionError('before-min', context.startReason, { context });
@@ -483,7 +486,7 @@ export function planIntervalEdit(entries, request, opts = {}) {
     return transactionError('after-max', context.endReason, { context });
   }
   if (endTs <= startTs) {
-    return transactionError('zero-duration', '结束时间必须晚于开始时间，记录不能为零时长。', { context });
+    return transactionError('zero-duration', t('txn.zeroDuration'), { context });
   }
   const dynamicContext = {
     ...context,
@@ -526,7 +529,7 @@ export function planIntervalEdit(entries, request, opts = {}) {
   }
 
   const duplicate = duplicateTimestamp(resultEntries);
-  if (duplicate) return transactionError('conflict', '新的边界时间与其它记录重合。', { context, conflict: duplicate.second });
+  if (duplicate) return transactionError('conflict', t('txn.conflictBoundary'), { context, conflict: duplicate.second });
   coalesceRedundant(resultEntries);
 
   const nextEnd = context.afterNext ? context.afterNext.ts : context.limitTs;
@@ -552,27 +555,27 @@ export function planSegmentSplit(entries, request, opts = {}) {
   const startTs = normalizeTimestamp(request && request.startTs);
   const endTs = normalizeTimestamp(request && request.endTs);
   if (!frozenStart || !frozenEnd || frozenEnd <= frozenStart) {
-    return transactionError('stale', '原段边界已经失效，请重新打开“切一刀”。');
+    return transactionError('stale', t('txn.splitStaleFrozen'));
   }
-  if (!startTs || !endTs) return transactionError('invalid-time', '请输入完整的开始和结束时间。');
+  if (!startTs || !endTs) return transactionError('invalid-time', t('txn.needStartEnd'));
   const frozenDay = dayBounds(frozenStart.slice(0, 10));
   if (startTs.slice(0, 10) !== frozenStart.slice(0, 10)
     || (endTs.slice(0, 10) !== frozenStart.slice(0, 10) && (!frozenDay || endTs !== frozenDay.endTs))) {
-    return transactionError('cross-day', '切分不能跨自然日。');
+    return transactionError('cross-day', t('txn.splitCrossDay'));
   }
   if (startTs < frozenStart || endTs > frozenEnd) {
-    return transactionError('outside-source', '两端只能在打开时冻结的原段内部选择。');
+    return transactionError('outside-source', t('txn.splitOutside'));
   }
-  if (endTs <= startTs) return transactionError('zero-duration', '结束时间必须晚于开始时间。');
+  if (endTs <= startTs) return transactionError('zero-duration', t('txn.splitZeroDuration'));
 
   const source = request && request.sourceId
     ? (entries || []).find(item => item.id === request.sourceId && !item.planned)
     : null;
   if (request && request.sourceId && !source) {
-    return transactionError('stale', '原段已经变化，请重新打开“切一刀”。');
+    return transactionError('stale', t('txn.splitStaleSource'));
   }
   const internal = loggedEntriesFrom(entries).find(item => item.ts > frozenStart && item.ts < frozenEnd);
-  if (internal) return transactionError('stale', '原段中已经出现其它记录，请重新打开“切一刀”。');
+  if (internal) return transactionError('stale', t('txn.splitInternal'));
   const sourceWhat = source ? source.what : '';
   const sourceTags = source && Array.isArray(source.tags) ? source.tags.slice() : [];
   const resultEntries = cloneEntries(entries);
@@ -604,7 +607,7 @@ export function planSegmentSplit(entries, request, opts = {}) {
     });
   }
   const duplicate = duplicateTimestamp(resultEntries);
-  if (duplicate) return transactionError('conflict', '新的切分边界与其它记录重合。', { conflict: duplicate.second });
+  if (duplicate) return transactionError('conflict', t('txn.splitConflict'), { conflict: duplicate.second });
   coalesceRedundant(resultEntries);
   const preview = [
     previewPart('before', source, frozenStart, startTs),
@@ -624,8 +627,8 @@ export function planSegmentSplit(entries, request, opts = {}) {
       startMax: shiftedMinute(frozenEnd, -1),
       endMin: shiftedMinute(frozenStart, 1),
       endMax: frozenEnd,
-      startReason: `不能早于原段起点 ${frozenStart.slice(11)}`,
-      endReason: `不能晚于原段终点 ${frozenEnd.slice(11)}`
+      startReason: t('txn.splitStartReason', { time: frozenStart.slice(11) }),
+      endReason: t('txn.splitEndReason', { time: frozenEnd.slice(11) })
     },
     preview
   });
@@ -633,9 +636,9 @@ export function planSegmentSplit(entries, request, opts = {}) {
 
 export function planDeleteEntry(entries, id, opts = {}) {
   const entry = (entries || []).find(item => item.id === id);
-  if (!entry) return transactionError('missing', '这条记录已经不存在。');
+  if (!entry) return transactionError('missing', t('txn.missing'));
   if (!entry.planned && isPlaceholderEntry(entry)) {
-    return transactionError('placeholder', '未记录占位不需要删除。');
+    return transactionError('placeholder', t('txn.placeholderDelete'));
   }
   const resultEntries = cloneEntries(entries);
   if (entry.planned) {
@@ -645,7 +648,7 @@ export function planDeleteEntry(entries, id, opts = {}) {
       kind: 'delete',
       outcome: 'remove-plan',
       affectedIds: [id],
-      message: `计划“${entry.what || '未填写'}”将直接移除。`
+      message: t('txn.deletePlanned', { what: entry.what || t('txn.deleteEmptyWhat') })
     });
   }
 
@@ -676,7 +679,7 @@ export function planDeleteEntry(entries, id, opts = {}) {
       next,
       startTs: entry.ts,
       endTs,
-      message: `前后都是“${previous.what || primaryTag(previous)}”，删除后将接回一段。`
+      message: t('txn.deleteRejoin', { what: previous.what || primaryTag(previous) })
     });
   }
   stored.what = '';
@@ -693,6 +696,6 @@ export function planDeleteEntry(entries, id, opts = {}) {
     next,
     startTs: entry.ts,
     endTs,
-    message: '这段将原区间保留为“未记录”，不会拉长相邻记录。'
+    message: t('txn.deleteToUnrecorded')
   });
 }

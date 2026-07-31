@@ -2,6 +2,8 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
+import { t, tList } from './i18n.js';
+
 export function p2(n) {
   return String(n).padStart(2, '0');
 }
@@ -118,8 +120,8 @@ export function normalizeTimestamp(raw) {
 
 export function validateTs(raw) {
   const ts = normalizeTimestamp(raw);
-  if (!ts) return { ok: false, msg: '请输入完整日期和时间，例如 2026-06-28 09:05。' };
-  if (new Date(ts) > new Date(Date.now() + 5 * 60000)) return { ok: false, msg: '不能记录明显未来的时间。' };
+  if (!ts) return { ok: false, msg: t('validate.needFullDateTime') };
+  if (new Date(ts) > new Date(Date.now() + 5 * 60000)) return { ok: false, msg: t('validate.noFarFuture') };
   return { ok: true, ts };
 }
 
@@ -162,13 +164,13 @@ export function defaultPlannedTimestamp(dateKey, now = new Date()) {
 
 function validatePlannedTs(raw, opts = {}) {
   const ts = normalizeTimestamp(raw);
-  if (!ts) return { ok: false, msg: '请输入完整日期和时间，例如 2026-06-28 09:05。' };
+  if (!ts) return { ok: false, msg: t('validate.needFullDateTime') };
   const when = new Date(ts);
   const window = planningWindow(opts.now);
   if (when <= window.minExclusive) {
-    return { ok: false, msg: '计划时间必须严格晚于现在 5 分钟。' };
+    return { ok: false, msg: t('validate.planTooSoon') };
   }
-  if (when >= window.maxExclusive) return { ok: false, msg: '计划时间最远可到第 7 天 23:59。' };
+  if (when >= window.maxExclusive) return { ok: false, msg: t('validate.planTooFar') };
   return { ok: true, ts };
 }
 
@@ -182,12 +184,18 @@ export function fmtTs(ts) {
   return value ? value.replace('T', ' ') : String(ts || '');
 }
 
+function weekdayNarrow(d) {
+  return tList('date.weekdayNarrow')[d.getDay()] || '';
+}
+
 function dateLabel(d) {
-  return `${d.getFullYear()}/${p2(d.getMonth() + 1)}/${p2(d.getDate())} 周${'日一二三四五六'[d.getDay()]}`;
+  return t('date.full', {
+    y: d.getFullYear(), m: p2(d.getMonth() + 1), d: p2(d.getDate()), wd: weekdayNarrow(d)
+  });
 }
 
 export function shortDateLabel(d) {
-  return `${d.getMonth() + 1}/${d.getDate()} 周${'日一二三四五六'[d.getDay()]}`;
+  return t('date.short', { m: d.getMonth() + 1, d: d.getDate(), wd: weekdayNarrow(d) });
 }
 
 function shortRangeLabel(start, end) {
@@ -218,6 +226,6 @@ export function periodLabel(view, dateKey, opts = {}) {
   const last = addDays(end, -1);
   if (view === 'day') return dateLabel(start);
   if (view === 'week') return opts.short ? shortRangeLabel(start, end) : `${dateLabel(start)} - ${p2(last.getMonth() + 1)}/${p2(last.getDate())}`;
-  if (view === 'month') return `${start.getFullYear()}年${start.getMonth() + 1}月`;
-  return `${start.getFullYear()}年`;
+  if (view === 'month') return t('date.monthLabel', { y: start.getFullYear(), m: start.getMonth() + 1 });
+  return t('date.yearLabel', { y: start.getFullYear() });
 }

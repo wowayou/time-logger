@@ -2,6 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
+import { t, tList } from './i18n.js';
 import { normalizeTimestamp, nowStr, p2, parseDateKey, todayStr } from './time.js';
 import { setButtonTip } from './ui.js';
 
@@ -32,8 +33,8 @@ export function setTimeInputError(scope, msg) {
 
 function dateItemFor(d) {
   const y = d.getFullYear(), mo = d.getMonth() + 1, da = d.getDate();
-  const dow = '日一二三四五六'[d.getDay()];
-  return { val: `${y}-${p2(mo)}-${p2(da)}`, label: `${mo}月${da}日 周${dow}` };
+  const dow = tList('date.weekdayNarrow')[d.getDay()] || '';
+  return { val: `${y}-${p2(mo)}-${p2(da)}`, label: t('picker.wheelDayLabel', { m: mo, d: da, wd: dow }) };
 }
 
 // ⑤ The wheel only lists a finite date window (default ±90/+7). If the value the
@@ -171,13 +172,13 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
   const picker = document.createElement('div');
   picker.className = 'wheel-picker';
   picker.setAttribute('role', 'group');
-  picker.setAttribute('aria-label', '日期和时间滚轮');
+  picker.setAttribute('aria-label', t('picker.wheelAria'));
 
-  const dateCol = makeCol(dateItems, initDateIdx, idx => { selDate = idx; emit(); }, 'wheel-col-date', '日期');
+  const dateCol = makeCol(dateItems, initDateIdx, idx => { selDate = idx; emit(); }, 'wheel-col-date', t('picker.colDate'));
   const div1 = document.createElement('div'); div1.className = 'wheel-divider'; div1.setAttribute('aria-hidden', 'true');
-  const hCol = makeCol(hourItems, initH, idx => { selH = idx; emit(); }, '', '小时');
+  const hCol = makeCol(hourItems, initH, idx => { selH = idx; emit(); }, '', t('picker.colHour'));
   const div2 = document.createElement('div'); div2.className = 'wheel-divider'; div2.setAttribute('aria-hidden', 'true');
-  const mCol = makeCol(minItems, initM, idx => { selM = idx; emit(); }, '', '分钟');
+  const mCol = makeCol(minItems, initM, idx => { selM = idx; emit(); }, '', t('picker.colMinute'));
 
   const highlight = document.createElement('div');
   highlight.className = 'wheel-highlight';
@@ -190,8 +191,8 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
   const nowBtn = document.createElement('button');
   nowBtn.className = 'wheel-now-btn';
   nowBtn.type = 'button';
-  nowBtn.textContent = '现在';
-  setButtonTip(nowBtn, '把时间选择器重置为当前时间。', '重置为当前时间');
+  nowBtn.textContent = t('picker.now');
+  setButtonTip(nowBtn, t('picker.nowTip'), t('picker.nowAria'));
   nowBtn.addEventListener('click', () => {
     const n = new Date();
     const ds = `${n.getFullYear()}-${p2(n.getMonth()+1)}-${p2(n.getDate())}`;
@@ -224,7 +225,7 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
   triggerBtn.type = 'button';
   triggerBtn.className = 'dt-trigger';
   triggerBtn.dataset.act = 'toggle';
-  triggerBtn.setAttribute('aria-label', '选择日期和时间');
+  triggerBtn.setAttribute('aria-label', t('picker.triggerAria'));
   triggerBtn.innerHTML =
     '<span class="dt-trigger-text"></span>' +
     '<svg class="dt-cal-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
@@ -239,7 +240,7 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
   const popEl = document.createElement('div');
   popEl.className = 'dt-pop';
   popEl.setAttribute('role', 'dialog');
-  popEl.setAttribute('aria-label', '日期时间选择器');
+  popEl.setAttribute('aria-label', t('picker.popAria'));
   popEl.hidden = true;
   wrap.appendChild(popEl);
 
@@ -248,7 +249,7 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
   preciseDiv.className = 'dt-precise';
   const preciseLabel = document.createElement('span');
   preciseLabel.className = 'dt-precise-label';
-  preciseLabel.textContent = '精确输入';
+  preciseLabel.textContent = t('picker.preciseLabel');
   preciseDiv.appendChild(preciseLabel);
   const textEl = document.createElement('input');
   textEl.type = 'text';
@@ -256,7 +257,7 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
   textEl.dataset.role = 'text';
   textEl.setAttribute('inputmode', 'numeric');
   textEl.placeholder = 'YYYY-MM-DD HH:mm';
-  textEl.setAttribute('aria-label', '精确时间文本');
+  textEl.setAttribute('aria-label', t('picker.preciseAria'));
   preciseDiv.appendChild(textEl);
   wrap.appendChild(preciseDiv);
 
@@ -276,13 +277,13 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
     head.className = 'dt-cal-head';
     const prevBtn = document.createElement('button');
     prevBtn.type = 'button'; prevBtn.className = 'dt-nav';
-    prevBtn.setAttribute('aria-label', '上一月'); prevBtn.dataset.act = 'prev-month';
+    prevBtn.setAttribute('aria-label', t('picker.prevMonth')); prevBtn.dataset.act = 'prev-month';
     prevBtn.textContent = '‹';
     const monthLabel = document.createElement('span');
-    monthLabel.textContent = viewY + ' 年 ' + (viewM0 + 1) + ' 月';
+    monthLabel.textContent = t('picker.calendarMonth', { y: viewY, m: viewM0 + 1 });
     const nextBtn = document.createElement('button');
     nextBtn.type = 'button'; nextBtn.className = 'dt-nav';
-    nextBtn.setAttribute('aria-label', '下一月'); nextBtn.dataset.act = 'next-month';
+    nextBtn.setAttribute('aria-label', t('picker.nextMonth')); nextBtn.dataset.act = 'next-month';
     nextBtn.textContent = '›';
     head.appendChild(prevBtn); head.appendChild(monthLabel); head.appendChild(nextBtn);
     popEl.appendChild(head);
@@ -290,7 +291,7 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
     // Day-of-week header
     const dow = document.createElement('div');
     dow.className = 'dt-cal-dow';
-    ['日','一','二','三','四','五','六'].forEach(d => {
+    tList('date.weekdayNarrow').forEach(d => {
       const s = document.createElement('span'); s.textContent = d; dow.appendChild(s);
     });
     popEl.appendChild(dow);
@@ -317,7 +318,7 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
       const btn = document.createElement('button');
       btn.type = 'button'; btn.className = 'dt-day';
       btn.dataset.act = 'pick-day'; btn.dataset.day = String(d);
-      btn.setAttribute('aria-label', viewY + '年' + (viewM0 + 1) + '月' + d + '日');
+      btn.setAttribute('aria-label', t('picker.dayAria', { y: viewY, m: viewM0 + 1, d }));
       btn.textContent = String(d);
       if (viewY === todayY && viewM0 === todayM0 && d === todayDate) btn.classList.add('is-today');
       if (viewY === selY && viewM0 === selM0 && d === selDate) btn.classList.add('is-sel');
@@ -351,17 +352,17 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
 
     const curH = parseInt(value.slice(11, 13));
     const curM = parseInt(value.slice(14, 16));
-    const hParts = makeStep('hour-inp', '时', 'hour-up', 'hour-down', curH, 23);
-    const mParts = makeStep('min-inp',  '分', 'min-up',  'min-down',  curM, 59);
+    const hParts = makeStep('hour-inp', t('picker.stepHour'), 'hour-up', 'hour-down', curH, 23);
+    const mParts = makeStep('min-inp',  t('picker.stepMinute'), 'min-up',  'min-down',  curM, 59);
 
     const colon = document.createElement('span');
     colon.className = 'dt-colon'; colon.textContent = ':';
 
     const nowBtn = document.createElement('button');
     nowBtn.type = 'button'; nowBtn.className = 'dt-now';
-    nowBtn.dataset.act = 'now'; nowBtn.dataset.tip = '重置为当前时间';
-    nowBtn.setAttribute('aria-label', '重置为当前时间');
-    nowBtn.textContent = '现在';
+    nowBtn.dataset.act = 'now'; nowBtn.dataset.tip = t('picker.nowAria');
+    nowBtn.setAttribute('aria-label', t('picker.nowAria'));
+    nowBtn.textContent = t('picker.now');
 
     timeDiv.appendChild(hParts.step); timeDiv.appendChild(colon);
     timeDiv.appendChild(mParts.step); timeDiv.appendChild(nowBtn);
@@ -486,7 +487,7 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
     const ts = normalizeTimestamp(textEl.value);
     if (!ts) {
       onChangeCb(textEl.value);
-      setTimeInputError(wrap, '请输入完整日期和时间，例如 2026-06-28 09:05。');
+      setTimeInputError(wrap, t('validate.needFullDateTime'));
       return;
     }
     value = ts;
@@ -501,7 +502,7 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
         value = ts;
         sync();
       } else {
-        setTimeInputError(wrap, '请输入完整日期和时间，例如 2026-06-28 09:05。');
+        setTimeInputError(wrap, t('validate.needFullDateTime'));
       }
     }
   });

@@ -934,6 +934,29 @@ test('Safari-style reload restores the last rendered frame before app.js arrives
   await expect(page.locator('body')).not.toHaveClass(/boot-restored/);
 });
 
+test('SPEC-013: a snapshot written under another locale is rejected instead of restored', async ({ page }) => {
+  await boot(page, 375, 'one-record', false, FIXED_NOW);
+  await expect(page.locator('#timeline')).toContainText('响应式测试记录');
+
+  // 打上 sentinel 并把快照的 locale 篡改成 'en'：数据/日期/视图/记录模式全部没变，
+  // 除 locale 外的每一道门都会放行——只有 locale 门能拦住它。
+  await page.evaluate(() => {
+    document.querySelector('.entry').dataset.localeSentinel = 'stale';
+    const snapshot = JSON.parse(sessionStorage.getItem('timelog.bootSnapshot.v1'));
+    snapshot.appHtml = document.querySelector('.app').innerHTML;
+    snapshot.locale = 'en';
+    sessionStorage.setItem('timelog.bootSnapshot.v1', JSON.stringify(snapshot));
+  });
+
+  await page.reload();
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+
+  // 被拒＝没有恢复上一语言的整块 DOM：sentinel 节点不复用，页面按 zh 正常重建。
+  await expect(page.locator('.entry[data-locale-sentinel="stale"]')).toHaveCount(0);
+  await expect(page.locator('#timeline')).toContainText('响应式测试记录');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh');
+});
+
 test('editing an existing record persists content and tag (① commitEdit single load)', async ({ page }) => {
   await boot(page, 768, 'one-record', false, FIXED_NOW);
 
