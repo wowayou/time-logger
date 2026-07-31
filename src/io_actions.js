@@ -56,7 +56,7 @@ export function createIoActions(deps) {
     if (pendingConfirm) notes.push(t('io.notePending'));
     else if (unrecorded) notes.push(t('io.noteUnrecorded'));
     if (isOngoing) notes.push(t('io.noteOngoing'));
-    return notes.length ? `${label}（${notes.join('，')}）` : label;
+    return notes.length ? t('io.noteWrap', { label, notes: notes.join(t('io.noteJoin')) }) : label;
   }
 
   function currentViewDetailLines() {

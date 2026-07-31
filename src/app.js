@@ -33,9 +33,11 @@ import {
   save,
   saveConfig,
   uid,
-  validateImportData
+  validateImportData,
+  loadLocalePref,
+  refreshBucketLabels
 } from './storage.js';
-import { t } from './i18n.js';
+import { getLocale, resolveLocale, setLocale, t } from './i18n.js';
 import { createIoActions } from './io_actions.js';
 import { createSheetController } from './sheet_controller.js';
 import {
@@ -331,6 +333,8 @@ import {
         // v56：快照带版本戳——应用更新后（SKIP_WAITING reload）不得把旧版 DOM 形态
         // 交给新版 JS 还跳过首轮渲染；init() 里版本不符则按无快照走正常启动。
         appVersion: APP_VERSION,
+        // SPEC-013：语言也是快照的有效性条件（见 index.html 的 locale 门）。
+        locale: getLocale(),
         appHtml: app.innerHTML,
         addHtml: addBtn.innerHTML,
         addHidden: addBtn.hidden,
@@ -1239,7 +1243,26 @@ import {
     sheetController.openMoreSheet();
   }
 
+  // SPEC-013：把完整 catalog 应用到静态壳的 data-i18n* 上。index.html 的内联字典
+  // 已经填过一遍（首帧不闪），这里是幂等的第二遍——内联字典只带壳用得到的键，
+  // 完整 catalog 才是权威。
+  function applyShellI18n() {
+    const put = (attr, apply) => {
+      document.querySelectorAll('[' + attr + ']').forEach(el => {
+        apply(el, t(el.getAttribute(attr)));
+      });
+    };
+    put('data-i18n', (el, v) => { el.textContent = v; });
+    put('data-i18n-aria', (el, v) => { el.setAttribute('aria-label', v); });
+    put('data-i18n-tip', (el, v) => { el.setAttribute('data-tip', v); });
+    put('data-i18n-alt', (el, v) => { el.setAttribute('alt', v); });
+  }
+
   function init() {
+    // locale 必须在任何渲染、任何 BUCKETS 读取之前定下来。
+    setLocale(resolveLocale(loadLocalePref(), navigator.languages));
+    refreshBucketLabels();
+    applyShellI18n();
     markBootTrace('init_start');
     updateMigrationNotice();
     const today = todayStr();
@@ -1264,6 +1287,9 @@ import {
         if (!snap || snap.appVersion !== APP_VERSION) {
           restoredBootFrame = false;
           setBootSnapshotState('rejected:version');
+        } else if ((snap.locale || 'zh') !== getLocale()) {
+          restoredBootFrame = false;
+          setBootSnapshotState('rejected:locale');
         }
       } catch {
         restoredBootFrame = false;

@@ -67,7 +67,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <title>时间尺</title>
+  <title data-i18n="shell.title">时间尺</title>
   <link rel="modulepreload" href="src/time.js">
   <link rel="modulepreload" href="src/stats.js">
   <link rel="modulepreload" href="src/storage.js">
@@ -91,39 +91,39 @@
      SPEC-002（v76）起旧 origin 转只读，横幅改为常驻不可关闭——去掉「知道了」，只留
      「打开新地址」，不再有 dismissed/reopen 状态。 -->
 <div class="migration-notice" id="migration-notice" hidden>
-  <span>此旧地址已转为只读。请在新地址 time.eigentime.org/app/ 继续记录；历史数据可随时在此导出。</span>
+  <span data-i18n="shell.legacyNotice">此旧地址已转为只读。请在新地址 time.eigentime.org/app/ 继续记录；历史数据可随时在此导出。</span>
   <div class="migration-notice-actions">
-    <a class="migration-btn" href="https://time.eigentime.org/app/" target="_blank" rel="noopener" aria-label="打开新地址 time.eigentime.org">打开新地址</a>
+    <a class="migration-btn" href="https://time.eigentime.org/app/" target="_blank" rel="noopener" data-i18n-aria="shell.openNewAria" aria-label="打开新地址 time.eigentime.org" data-i18n="shell.openNew">打开新地址</a>
   </div>
 </div>
 <div class="app">
   <div class="hdr">
     <div class="hdr-brand">
-      <a href="https://github.com/wowayou/time-logger" target="_blank" rel="noopener" class="hdr-icon-link" aria-label="时间尺 GitHub 仓库">
-        <img src="icon.svg" alt="时间尺" class="hdr-icon" width="32" height="32">
+      <a href="https://github.com/wowayou/time-logger" target="_blank" rel="noopener" class="hdr-icon-link" data-i18n-aria="shell.repoAria" aria-label="时间尺 GitHub 仓库">
+        <img src="icon.svg" alt="时间尺" data-i18n-alt="shell.brand" class="hdr-icon" width="32" height="32">
       </a>
       <div class="hdr-brand-copy">
-        <h1 class="hdr-title">时间尺</h1>
+        <h1 class="hdr-title" data-i18n="shell.brand">时间尺</h1>
         <span class="usage-day" id="usage-day" hidden></span>
       </div>
     </div>
     <div class="hdr-actions">
-      <button class="hdr-action-btn" type="button" data-action="open-more" data-tip="更多：摘要、备份、标签设置、主题、说明。" data-tip-pos="bottom" aria-label="打开更多菜单">···</button>
+      <button class="hdr-action-btn" type="button" data-action="open-more" data-i18n-tip="shell.moreTip" data-tip="更多：摘要、备份、标签设置、主题、说明。" data-tip-pos="bottom" data-i18n-aria="shell.moreAria" aria-label="打开更多菜单">···</button>
     </div>
   </div>
 
   <div class="view-box">
-    <div class="seg view-tabs" id="view-tabs" role="group" aria-label="视图">
-      <button type="button" data-action="view" data-view="day" data-tip="查看单日时间轴，可编辑记录。" data-tip-pos="bottom" aria-label="天视图">天</button>
-      <button type="button" data-action="view" data-view="week" data-tip="查看本周每日汇总，可下钻到某天。" data-tip-pos="bottom" aria-label="周视图">周</button>
-      <button type="button" data-action="view" data-view="month" data-tip="查看本月每日汇总，可下钻到某天。" data-tip-pos="bottom" aria-label="月视图">月</button>
-      <button type="button" data-action="view" data-view="year" data-tip="查看全年每月汇总，可下钻到某月。" data-tip-pos="bottom" aria-label="年视图">年</button>
+    <div class="seg view-tabs" id="view-tabs" role="group" data-i18n-aria="shell.viewsAria" aria-label="视图">
+      <button type="button" data-action="view" data-view="day" data-i18n-tip="shell.viewDayTip" data-tip="查看单日时间轴，可编辑记录。" data-tip-pos="bottom" data-i18n-aria="shell.viewDayAria" aria-label="天视图" data-i18n="period.day">天</button>
+      <button type="button" data-action="view" data-view="week" data-i18n-tip="shell.viewWeekTip" data-tip="查看本周每日汇总，可下钻到某天。" data-tip-pos="bottom" data-i18n-aria="shell.viewWeekAria" aria-label="周视图" data-i18n="period.week">周</button>
+      <button type="button" data-action="view" data-view="month" data-i18n-tip="shell.viewMonthTip" data-tip="查看本月每日汇总，可下钻到某天。" data-tip-pos="bottom" data-i18n-aria="shell.viewMonthAria" aria-label="月视图" data-i18n="period.month">月</button>
+      <button type="button" data-action="view" data-view="year" data-i18n-tip="shell.viewYearTip" data-tip="查看全年每月汇总，可下钻到某月。" data-tip-pos="bottom" data-i18n-aria="shell.viewYearAria" aria-label="年视图" data-i18n="period.year">年</button>
     </div>
     <div class="date-nav">
-      <button class="nav-btn" type="button" data-action="shift-period" data-delta="-1" aria-label="上一段" data-tip="切到上一段。">‹</button>
+      <button class="nav-btn" type="button" data-action="shift-period" data-delta="-1" data-i18n-aria="shell.prevAria" aria-label="上一段" data-i18n-tip="shell.prevTip" data-tip="切到上一段。">‹</button>
       <div class="period-label" id="period-label"></div>
-      <button class="nav-btn" type="button" data-action="shift-period" data-delta="1" aria-label="下一段" data-tip="切到下一段。">›</button>
-      <button class="nav-btn" id="today-btn" type="button" data-action="today" data-tip="回到包含今天的当前周期。" aria-label="回到今天">回到今天</button>
+      <button class="nav-btn" type="button" data-action="shift-period" data-delta="1" data-i18n-aria="shell.nextAria" aria-label="下一段" data-i18n-tip="shell.nextTip" data-tip="切到下一段。">›</button>
+      <button class="nav-btn" id="today-btn" type="button" data-action="today" data-i18n-tip="shell.todayTip" data-tip="回到包含今天的当前周期。" data-i18n-aria="period.backDay" aria-label="回到今天" data-i18n="period.backDay">回到今天</button>
     </div>
   </div>
 
@@ -137,7 +137,7 @@
 
   <div>
     <div class="tl-head">
-      <div class="tl-label" id="list-label">当日时间轴</div>
+      <div class="tl-label" id="list-label" data-i18n="list.titleDay">当日时间轴</div>
     </div>
     <div id="timeline"></div>
   </div>
@@ -145,11 +145,92 @@
 
 <!-- R2+FAB（v47）：入口合并为右下角悬浮「记一条」（原嵌入横条 + 切换活动）。保留
      id=add-btn（启动门闩/测试引用）。副文案由 renderChrome 按续记起点动态填。 -->
-<button class="fab" id="add-btn" type="button" data-action="open-form" hidden aria-label="记一条新的时间记录">
-  <span class="fab-main">＋ 记一条</span>
+<button class="fab" id="add-btn" type="button" data-action="open-form" hidden data-i18n-aria="chrome.fabLogAria" aria-label="记一条新的时间记录">
+  <span class="fab-main" data-i18n="chrome.fabLog">＋ 记一条</span>
   <span class="fab-sub" data-role="fab-sub"></span>
 </button>
 <div class="list-fade" id="list-fade" aria-hidden="true" hidden></div>
+
+<script>
+  (() => {
+    // SPEC-013：静态壳 i18n 引导。**必须同步、必须在 ES module 之前**——启动门闩只压
+    // #add-btn/.ruler/.tl-head/#timeline/.usage-day，header 站点名与「天/周/月/年」在
+    // 模块到达前就已可见，等模块再填会让非中文用户首访闪一帧中文。
+    // 这份字典与 src/locales/zh.js 重复，漂移由 project_audit.py 的
+    // audit_shell_dict_matches_catalog 逐条比对拦住，不靠人记得同步。
+    const SUPPORTED = ['zh'];
+    const SHELL = {
+      zh: {
+        "chrome.fabLog": "＋ 记一条",
+        "chrome.fabLogAria": "记一条新的时间记录",
+        "list.titleDay": "当日时间轴",
+        "period.backDay": "回到今天",
+        "period.day": "天",
+        "period.month": "月",
+        "period.week": "周",
+        "period.year": "年",
+        "shell.brand": "时间尺",
+        "shell.crossTab": "另一标签页已修改数据，关闭当前表单后将自动同步。",
+        "shell.crossTabAria": "关闭跨标签提示",
+        "shell.crossTabBtn": "已知晓",
+        "shell.gotIt": "知道了",
+        "shell.gotItAria": "知道了，稍后完全退出后重开",
+        "shell.legacyNotice": "此旧地址已转为只读。请在新地址 time.eigentime.org/app/ 继续记录；历史数据可随时在此导出。",
+        "shell.moreAria": "打开更多菜单",
+        "shell.moreTip": "更多：摘要、备份、标签设置、主题、说明。",
+        "shell.nextAria": "下一段",
+        "shell.nextTip": "切到下一段。",
+        "shell.openNew": "打开新地址",
+        "shell.openNewAria": "打开新地址 time.eigentime.org",
+        "shell.prevAria": "上一段",
+        "shell.prevTip": "切到上一段。",
+        "shell.repoAria": "时间尺 GitHub 仓库",
+        "shell.title": "时间尺",
+        "shell.todayTip": "回到包含今天的当前周期。",
+        "shell.undo": "撤销",
+        "shell.updateBtn": "更新应用",
+        "shell.updateFound": "发现新版。当前数据仍保存在本机。",
+        "shell.updateStuck": "没生效？完全退出应用（Safari 关闭本站全部标签页）后重新打开即可完成更新，数据不受影响。",
+        "shell.updateTip": "刷新并加载新版应用。",
+        "shell.viewDayAria": "天视图",
+        "shell.viewDayTip": "查看单日时间轴，可编辑记录。",
+        "shell.viewMonthAria": "月视图",
+        "shell.viewMonthTip": "查看本月每日汇总，可下钻到某天。",
+        "shell.viewWeekAria": "周视图",
+        "shell.viewWeekTip": "查看本周每日汇总，可下钻到某天。",
+        "shell.viewYearAria": "年视图",
+        "shell.viewYearTip": "查看全年每月汇总，可下钻到某月。",
+        "shell.viewsAria": "视图",
+        "toast.deleted": "已删除"
+      }
+    };
+    const resolve = (stored, langs) => {
+      const pref = String(stored || '').trim();
+      if (SUPPORTED.indexOf(pref) >= 0) return pref;
+      for (const raw of (langs || [])) {
+        const tag = String(raw || '').toLowerCase();
+        const hit = SUPPORTED.find(code => tag === code || tag.indexOf(code + '-') === 0);
+        if (hit) return hit;
+      }
+      return 'zh';
+    };
+    let locale = 'zh';
+    try { locale = resolve(localStorage.getItem('timelog.locale'), navigator.languages); } catch {}
+    window.__timelogLocale = locale;
+    document.documentElement.lang = locale;
+    const dict = SHELL[locale] || SHELL.zh;
+    const put = (attr, apply) => {
+      document.querySelectorAll('[' + attr + ']').forEach(el => {
+        const value = dict[el.getAttribute(attr)];
+        if (typeof value === 'string') apply(el, value);
+      });
+    };
+    put('data-i18n', (el, v) => { el.textContent = v; });
+    put('data-i18n-aria', (el, v) => { el.setAttribute('aria-label', v); });
+    put('data-i18n-tip', (el, v) => { el.setAttribute('data-tip', v); });
+    put('data-i18n-alt', (el, v) => { el.setAttribute('alt', v); });
+  })();
+</script>
 
 <script>
   (() => {
@@ -177,6 +258,12 @@
       }
       if (snapshot.today !== today) {
         setSnapshotState('rejected:date');
+        return;
+      }
+      // SPEC-013：locale 门。没有它，切语言后刷新会把上一语言的整块 DOM 接回来
+      // （数据/日期/视图都没变，其它门全部放行），肉眼看到的是「切了但没切」。
+      if ((snapshot.locale || 'zh') !== (window.__timelogLocale || 'zh')) {
+        setSnapshotState('rejected:locale');
         return;
       }
       if (snapshot.view !== localStorage.getItem('timelog.view')
@@ -207,20 +294,20 @@
 </script>
 
 <div class="update-banner" id="update-banner" hidden>
-  <span data-role="update-prompt">发现新版。当前数据仍保存在本机。</span>
-  <button class="update-btn" type="button" data-action="update-app" data-tip="刷新并加载新版应用。" aria-label="更新应用">更新应用</button>
-  <span data-role="update-stuck" hidden>没生效？完全退出应用（Safari 关闭本站全部标签页）后重新打开即可完成更新，数据不受影响。</span>
-  <button class="update-btn" type="button" data-action="dismiss-update-banner" hidden aria-label="知道了，稍后完全退出后重开">知道了</button>
+  <span data-role="update-prompt" data-i18n="shell.updateFound">发现新版。当前数据仍保存在本机。</span>
+  <button class="update-btn" type="button" data-action="update-app" data-i18n-tip="shell.updateTip" data-tip="刷新并加载新版应用。" data-i18n-aria="shell.updateBtn" aria-label="更新应用" data-i18n="shell.updateBtn">更新应用</button>
+  <span data-role="update-stuck" hidden data-i18n="shell.updateStuck">没生效？完全退出应用（Safari 关闭本站全部标签页）后重新打开即可完成更新，数据不受影响。</span>
+  <button class="update-btn" type="button" data-action="dismiss-update-banner" hidden data-i18n-aria="shell.gotItAria" aria-label="知道了，稍后完全退出后重开" data-i18n="shell.gotIt">知道了</button>
 </div>
 
 <div class="cross-tab-banner" id="cross-tab-banner" hidden>
-  <span>另一标签页已修改数据，关闭当前表单后将自动同步。</span>
-  <button class="update-btn" type="button" data-action="dismiss-cross-tab-banner" aria-label="关闭跨标签提示">已知晓</button>
+  <span data-i18n="shell.crossTab">另一标签页已修改数据，关闭当前表单后将自动同步。</span>
+  <button class="update-btn" type="button" data-action="dismiss-cross-tab-banner" data-i18n-aria="shell.crossTabAria" aria-label="关闭跨标签提示" data-i18n="shell.crossTabBtn">已知晓</button>
 </div>
 
 <div class="undo-toast" id="undo-toast" role="status" aria-live="polite" hidden>
-  <span data-role="undo-message">已删除</span>
-  <button class="undo-btn" type="button" data-action="undo-delete">撤销</button>
+  <span data-role="undo-message" data-i18n="toast.deleted">已删除</span>
+  <button class="undo-btn" type="button" data-action="undo-delete" data-i18n="shell.undo">撤销</button>
 </div>
 
 <!-- SPEC-006 B：非阻塞提示（导入完成摘要、区间确认签名过期），无动作按钮，

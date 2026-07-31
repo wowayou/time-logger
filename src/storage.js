@@ -12,6 +12,28 @@ export const VIEW_KEY = 'timelog.view';
 export const SELECTED_DATE_KEY = 'timelog.selectedDate';
 export const OPEN_DATE_KEY = 'timelog.openDate';
 export const RECORD_MODE_KEY = 'timelog.recordMode';
+// SPEC-013：语言偏好。'' / 键缺失＝跟随系统。是**设备偏好不是用户数据**——
+// 不进备份、导入不得改语言（与 timelog.theme 同类）。
+export const LOCALE_KEY = 'timelog.locale';
+
+/** @returns {string} 存储的语言偏好（'' ＝ 跟随系统） */
+export function loadLocalePref() {
+  try {
+    return localStorage.getItem(LOCALE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+/** @param {string} code 空串＝跟随系统 */
+export function saveLocalePref(code) {
+  try {
+    if (code) localStorage.setItem(LOCALE_KEY, code);
+    else localStorage.removeItem(LOCALE_KEY);
+  } catch {
+    /* 存不下不影响本次会话内的语言 */
+  }
+}
 const FIRST_USED_DATE_KEY = 'timelog.firstUsedDate';
 // v69（D11 追加）：第三桶显示名 漏损→偏航。**内部键 `leak` 不变**——所有存量
 // config、备份 JSON 和 CSS 令牌（--leak/.chip-leak）都按键走，改键会要求数据迁移
@@ -398,7 +420,7 @@ export function validateImportData(imported) {
       ok: false,
       errors,
       msg: t('import.errSummary', {
-        details: errors.slice(0, 4).join('；'),
+        details: errors.slice(0, 4).join(t('import.errJoin')),
         more: errors.length > 4 ? t('import.errMore', { n: errors.length - 4 }) : ''
       })
     };
