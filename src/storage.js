@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
 import { normalizeTimestamp, parseDateKey } from './time.js';
+import { t, tAll } from './i18n.js';
 
 const KEY = 'timelog.v1';
 export const CONFIG_KEY = 'timelog.config';
@@ -16,13 +17,18 @@ const FIRST_USED_DATE_KEY = 'timelog.firstUsedDate';
 // config、备份 JSON 和 CSS 令牌（--leak/.chip-leak）都按键走，改键会要求数据迁移
 // 且让旧备份读不回来。语义也随之调整：偏航＝偏离当前主线的时间，不是道德意义上
 // 的浪费（维护者原话：适时地放空是必要的）。
-export const BUCKETS = {
-  job: '主线',
-  maintain: '维持',
-  leak: '偏航',
-  unrecorded: '未记录'
-};
+// SPEC-013：保持**对象**形态而不是改成函数——测试直接 `import { BUCKETS }` 后读
+// `BUCKETS.leak`，改形态会要求改既有断言（规格禁止）。值由 refreshBucketLabels()
+// 按当前 locale 就地刷新（const 绑定不可变，内容可变）。
+export const BUCKETS = { job: '', maintain: '', leak: '', unrecorded: '' };
 export const BUCKET_ORDER = ['job', 'maintain', 'leak', 'unrecorded'];
+
+/** 按当前 locale 刷新桶显示名。app.js 在 setLocale 之后调用。 */
+export function refreshBucketLabels() {
+  BUCKET_ORDER.forEach(key => { BUCKETS[key] = t('bucket.' + key); });
+  return BUCKETS;
+}
+refreshBucketLabels();
 const LEGACY_ALIASES = {
   '研究·学工具·逃避': { bucket: 'leak', longOk: false },
   '小說': { bucket: 'leak', longOk: false },
@@ -34,10 +40,17 @@ const LEGACY_ALIASES = {
   '求职推进': { bucket: 'job', longOk: false },
   '未知': { bucket: 'unrecorded', longOk: false }
 };
+// SPEC-013：保留标签 id。这是**数据**不是文案——它是 `timelog.config` 的键、
+// 随完整备份导出、并按名字参与导入合并。翻译它＝改数据（旧备份读不回、
+// 桶归类查不中），与 `leak` 桶键不改名同一条判据。显示名走 i18n 的
+// `tag.unknown`，运行时其它文件一律 import 本常量、不再写字面量。
+export const RESERVED_UNKNOWN_TAG = '未知';
 // 阶段格言（v69，C13）三态：config 键缺失＝未设置（跟随默认）；空串＝显式隐藏；
 // 非空＝自定义。恰等于默认文案时归一化回「未设置」，让没改过主意的用户在未来
 // 默认文案更新时继续跟随，而不是被钉在旧句子上。
-export const DEFAULT_MOTTO = '记录是手段，推进主线才是目的。';
+export function defaultMotto() {
+  return t('motto.default');
+}
 const MOTTO_MAX_LEN = 60;
 
 function normalizeMotto(raw) {
@@ -45,12 +58,14 @@ function normalizeMotto(raw) {
   // 末尾再 trim 一次：截断点恰好落在空格上时（第 60 个字符是空格）会留下尾空格，
   // 渲染成「…… 」。v70 修。
   const clean = raw.replace(/\s+/g, ' ').trim().slice(0, MOTTO_MAX_LEN).trim();
-  return clean === DEFAULT_MOTTO ? undefined : clean;
+  // 对**所有** locale 的默认句都归一化回「未设置」：否则切一次语言，原本
+  // 「跟随默认」的用户会被钉成「自定义」。
+  return tAll('motto.default').includes(clean) ? undefined : clean;
 }
 
 // 展示层唯一入口：返回要显示的文案，'' 表示隐藏。
 export function resolveMotto(config = loadConfig()) {
-  return config.motto === undefined ? DEFAULT_MOTTO : config.motto;
+  return config.motto === undefined ? defaultMotto() : config.motto;
 }
 
 const DEFAULT_CONFIG = {
@@ -87,7 +102,7 @@ function uniqueNames(names) {
 
 function normalizeChip(chip) {
   const name = cleanName(chip && chip.name);
-  const bucket = chip && BUCKETS[chip.bucket] && chip.bucket !== 'job' ? chip.bucket : '';
+  const bucket = chip && BUCKET_ORDER.includes(chip.bucket) && chip.bucket !== 'job' ? chip.bucket : '';
   if (!name || !bucket) return null;
   return { name, bucket, longOk: Boolean(chip.longOk) };
 }
@@ -133,7 +148,7 @@ export function saveConfig(config) {
 
 function addMainlineTag(tag) {
   const name = cleanName(tag);
-  if (!name || name === '未知') return loadConfig();
+  if (!name || name === RESERVED_UNKNOWN_TAG) return loadConfig();
   const config = loadConfig();
   if (!config.mainline.includes(name) && !config.chips.some(chip => chip.name === name)) {
     config.mainline.unshift(name);
@@ -144,7 +159,7 @@ function addMainlineTag(tag) {
 
 function addChipTag(tag, bucket) {
   const name = cleanName(tag);
-  if (!name || name === '未知' || bucket === 'job' || bucket === 'unrecorded') return loadConfig();
+  if (!name || name === RESERVED_UNKNOWN_TAG || bucket === 'job' || bucket === 'unrecorded') return loadConfig();
   const config = loadConfig();
   const existing = config.chips.find(chip => chip.name === name);
   if (existing) {
@@ -194,7 +209,7 @@ export function chipGroups(config = loadConfig()) {
 
 export function bucketForTag(tag, config = loadConfig()) {
   const name = cleanName(tag);
-  if (!name || name === '未知') return 'unrecorded';
+  if (!name || name === RESERVED_UNKNOWN_TAG) return 'unrecorded';
   if (config.mainline.includes(name)) return 'job';
   const chip = config.chips.find(item => item.name === name);
   if (chip) return chip.bucket;
@@ -305,7 +320,7 @@ export function save(d) {
     return true;
   } catch (e) {
     if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-      console.error('[timelog] 存储已满，本次保存失败。请导出备份后删除旧数据。');
+      console.error(t('storage.quotaExceeded'));
       return false;
     }
     throw e;
@@ -318,71 +333,74 @@ export function uid() {
 
 export function validateImportData(imported) {
   if (!imported || !Array.isArray(imported.entries)) {
-    return { ok: false, msg: '文件格式不对：缺少 entries 数组。' };
+    return { ok: false, msg: t('import.errNoEntries') };
   }
   const errors = [];
   imported.entries.forEach((entry, index) => {
-    const at = `第 ${index + 1} 条`;
+    const at = t('import.itemAt', { n: index + 1 });
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-      errors.push(`${at}不是记录对象`);
+      errors.push(t('import.errNotObject', { at }));
       return;
     }
-    if (typeof entry.id !== 'string' || !entry.id.trim()) errors.push(`${at}的 id 必须是非空字符串`);
-    if (typeof entry.ts !== 'string' || !normalizeTimestamp(entry.ts)) errors.push(`${at}的时间无效`);
-    if (typeof entry.what !== 'string') errors.push(`${at}的内容必须是字符串`);
+    if (typeof entry.id !== 'string' || !entry.id.trim()) errors.push(t('import.errId', { at }));
+    if (typeof entry.ts !== 'string' || !normalizeTimestamp(entry.ts)) errors.push(t('import.errTs', { at }));
+    if (typeof entry.what !== 'string') errors.push(t('import.errWhat', { at }));
     if (!Array.isArray(entry.tags) || entry.tags.some(tag => typeof tag !== 'string')) {
-      errors.push(`${at}的 tags 必须是字符串数组`);
+      errors.push(t('import.errTags', { at }));
     }
-    if ('planned' in entry && typeof entry.planned !== 'boolean') errors.push(`${at}的 planned 必须是布尔值`);
-    if ('ongoing' in entry && typeof entry.ongoing !== 'boolean') errors.push(`${at}的 ongoing 必须是布尔值`);
+    if ('planned' in entry && typeof entry.planned !== 'boolean') errors.push(t('import.errPlanned', { at }));
+    if ('ongoing' in entry && typeof entry.ongoing !== 'boolean') errors.push(t('import.errOngoing', { at }));
     if ('longConfirm' in entry) {
       const mark = entry.longConfirm;
       if (!mark || typeof mark !== 'object'
         || typeof mark.startTs !== 'string' || !normalizeTimestamp(mark.startTs)
         || typeof mark.endTs !== 'string' || !normalizeTimestamp(mark.endTs)) {
-        errors.push(`${at}的 longConfirm 无效`);
+        errors.push(t('import.errLongConfirm', { at }));
       }
     }
   });
   if (imported.config !== undefined && (!imported.config || typeof imported.config !== 'object' || Array.isArray(imported.config))) {
-    errors.push('config 必须是对象');
+    errors.push(t('import.errConfigObject'));
   } else if (imported.config) {
     if (imported.config.mainline !== undefined
       && (!Array.isArray(imported.config.mainline) || imported.config.mainline.some(name => typeof name !== 'string'))) {
-      errors.push('config.mainline 必须是字符串数组');
+      errors.push(t('import.errConfigMainline'));
     }
     if (imported.config.chips !== undefined) {
-      if (!Array.isArray(imported.config.chips)) errors.push('config.chips 必须是数组');
+      if (!Array.isArray(imported.config.chips)) errors.push(t('import.errConfigChips'));
       else imported.config.chips.forEach((chip, index) => {
         if (!chip || typeof chip !== 'object'
           || typeof chip.name !== 'string'
           || !['maintain', 'leak'].includes(chip.bucket)
           || typeof chip.longOk !== 'boolean') {
-          errors.push(`config.chips 第 ${index + 1} 项无效`);
+          errors.push(t('import.errConfigChipAt', { n: index + 1 }));
         }
       });
     }
     if (imported.config.motto !== undefined && typeof imported.config.motto !== 'string') {
-      errors.push('config.motto 必须是字符串');
+      errors.push(t('import.errConfigMotto'));
     }
   }
   if (imported.meta !== undefined && (!imported.meta || typeof imported.meta !== 'object' || Array.isArray(imported.meta))) {
-    errors.push('meta 必须是对象');
+    errors.push(t('import.errMetaObject'));
   } else if (imported.meta) {
     const offset = imported.meta.sourceTimezoneOffsetMinutes;
-    if (offset !== undefined && !Number.isFinite(Number(offset))) errors.push('meta.sourceTimezoneOffsetMinutes 必须是数字');
-    if (imported.meta.sourceTimeZone !== undefined && typeof imported.meta.sourceTimeZone !== 'string') errors.push('meta.sourceTimeZone 必须是字符串');
-    if (imported.meta.exportedAt !== undefined && typeof imported.meta.exportedAt !== 'string') errors.push('meta.exportedAt 必须是字符串');
+    if (offset !== undefined && !Number.isFinite(Number(offset))) errors.push(t('import.errMetaOffset'));
+    if (imported.meta.sourceTimeZone !== undefined && typeof imported.meta.sourceTimeZone !== 'string') errors.push(t('import.errMetaTimeZone'));
+    if (imported.meta.exportedAt !== undefined && typeof imported.meta.exportedAt !== 'string') errors.push(t('import.errMetaExportedAt'));
   }
   if (imported.firstUsedDate !== undefined
     && (typeof imported.firstUsedDate !== 'string' || !parseDateKey(imported.firstUsedDate))) {
-    errors.push('firstUsedDate 必须是 YYYY-MM-DD 本地日期');
+    errors.push(t('import.errFirstUsedDate'));
   }
   if (errors.length) {
     return {
       ok: false,
       errors,
-      msg: `文件格式不对：${errors.slice(0, 4).join('；')}${errors.length > 4 ? `；另有 ${errors.length - 4} 项` : ''}。`
+      msg: t('import.errSummary', {
+        details: errors.slice(0, 4).join('；'),
+        more: errors.length > 4 ? t('import.errMore', { n: errors.length - 4 }) : ''
+      })
     };
   }
   return { ok: true };
@@ -452,7 +470,7 @@ function preflightImportedEntries(current, importedEntries, opts = {}) {
         incoming: shiftedEntry(entry, 0),
         local: shiftedEntry(sameId, 0),
         signature: `${comparableImportEntry(entry)}|${comparableImportEntry(sameId)}`,
-        message: `ID ${entry.id} 的内容不同`
+        message: t('import.conflictSameId', { id: entry.id })
       });
       continue;
     }
@@ -467,7 +485,7 @@ function preflightImportedEntries(current, importedEntries, opts = {}) {
         incoming: shiftedEntry(entry, 0),
         local: shiftedEntry(sameTime, 0),
         signature: `${comparableImportEntry(entry)}|${comparableImportEntry(sameTime)}`,
-        message: `${entry.ts.replace('T', ' ')} 的导入记录 ${entry.id} 与本机记录 ${sameTime.id} 冲突`
+        message: t('import.conflictSameTime', { ts: entry.ts.replace('T', ' '), id: entry.id, localId: sameTime.id })
       });
       continue;
     }
@@ -527,7 +545,7 @@ function applyImportedResolutions(current, importedEntries, opts, basePlan) {
     if (conflict) {
       const resolution = resolutions[conflict.key];
       if (!resolution || resolution.signature !== conflict.signature) {
-        return { ...basePlan, stale: Boolean(resolution), resolutionError: resolution ? '本机数据或平移结果已变化，请重新选择冲突处理方式。' : '' };
+        return { ...basePlan, stale: Boolean(resolution), resolutionError: resolution ? t('import.staleResolution') : '' };
       }
       if (resolution.action === 'local') {
         skipped += 1;
@@ -538,7 +556,7 @@ function applyImportedResolutions(current, importedEntries, opts, basePlan) {
         ? { ...conflict.local, what: mergedImportText(conflict.local.what, conflict.incoming.what) }
         : incoming;
       if (!addEntry(candidate)) {
-        return { ...basePlan, resolutionError: '所选结果又产生了同 ID 或同时刻冲突，请改选“保留本机”或调整平移小时数。' };
+        return { ...basePlan, resolutionError: t('import.resolutionConflict') };
       }
       imported += 1;
       continue;
@@ -550,7 +568,7 @@ function applyImportedResolutions(current, importedEntries, opts, basePlan) {
       continue;
     }
     if (!addEntry(incoming)) {
-      return { ...basePlan, resolutionError: '导入结果在重新计算时出现新的同 ID 或同时刻冲突。' };
+      return { ...basePlan, resolutionError: t('import.recomputeConflict') };
     }
     imported += 1;
   }

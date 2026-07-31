@@ -18,7 +18,8 @@ import {
 import { isPlaceholderEntry } from './stats.js';
 import {
   BUCKETS,
-  DEFAULT_MOTTO,
+  defaultMotto,
+  RESERVED_UNKNOWN_TAG,
   bucketForTag,
   countEntriesWithTag,
   migrateEntryTags,
@@ -200,11 +201,11 @@ export function createSheetController(deps) {
     return () => formPlanIds[index++] || formPlanIds[formPlanIds.length - 1];
   }
 
-  function selectedTag(panel, prefix, fallback = '未知') {
+  function selectedTag(panel, prefix, fallback = RESERVED_UNKNOWN_TAG) {
     const custom = panel && panel.querySelector(prefix === 'edit' ? '[data-role="edit-custom-tag"]' : '#form-ctag');
     const root = panel && panel.querySelector(prefix === 'edit' ? '[data-role="edit-chips"]' : '#form-chips');
     const selected = root && root.querySelector('.chip.sel');
-    return (custom && custom.value.trim()) || (selected && selected.dataset.tag) || (root ? '未知' : fallback) || '未知';
+    return (custom && custom.value.trim()) || (selected && selected.dataset.tag) || (root ? RESERVED_UNKNOWN_TAG : fallback) || RESERVED_UNKNOWN_TAG;
   }
 
   function paintTransactionPreview(panel, plan) {
@@ -1215,7 +1216,7 @@ export function createSheetController(deps) {
     if (!what) { if (whatEl) whatEl.focus(); return; }
     const ctagEl = panel.querySelector('#form-ctag');
     const ctag = ctagEl ? ctagEl.value.trim() : '';
-    const tag = ctag || formTag || '未知';
+    const tag = ctag || formTag || RESERVED_UNKNOWN_TAG;
     const expected = buildOvernightPlan(panel, formBaseEntries);
     if (!expected || !expected.ok) {
       showInlineError(panel, expected && expected.message || '这段过夜续记无法保存。');
@@ -1265,7 +1266,7 @@ export function createSheetController(deps) {
     const what = document.getElementById('form-what').value.trim();
     if (!what) { document.getElementById('form-what').focus(); return; }
     const ctag = document.getElementById('form-ctag').value.trim();
-    const tag = ctag || formTag || '未知';
+    const tag = ctag || formTag || RESERVED_UNKNOWN_TAG;
     const d = deps.load();
     let placeholder = openPlaceholderForDate(d.entries, checked.ts.slice(0, 10));
     const conflict = findTimeConflict(d.entries, checked.ts, placeholder ? placeholder.id : '');
@@ -1326,7 +1327,7 @@ export function createSheetController(deps) {
     const what = document.getElementById('form-what').value.trim();
     if (!what) { document.getElementById('form-what').focus(); return; }
     const ctag = document.getElementById('form-ctag').value.trim();
-    const tag = ctag || formTag || '未知';
+    const tag = ctag || formTag || RESERVED_UNKNOWN_TAG;
     const expected = buildSplitPlan(panel, formBaseEntries);
     if (!expected || !expected.ok) {
       showInlineError(panel, expected && expected.message || '这段时间无法补录，请检查起止时间。');
@@ -1402,7 +1403,7 @@ export function createSheetController(deps) {
     if (!what) { if (whatEl) whatEl.focus(); return; }
     const sel = chipBox ? chipBox.querySelector('.chip.sel') : null;
     const ctag = customEl ? customEl.value.trim() : '';
-    const tag = ctag || (sel ? sel.dataset.tag : '未知');
+    const tag = ctag || (sel ? sel.dataset.tag : RESERVED_UNKNOWN_TAG);
     const conflict = findTimeConflict(d.entries, checked.ts, id);
     if (conflict) {
       showConflictError(box, conflict, checked.ts, 'use-conflict-plus-edit');
@@ -1617,7 +1618,7 @@ export function createSheetController(deps) {
   function resetMottoInput() {
     const input = document.querySelector('#form-sheet [data-role="motto-input"]');
     if (!input) return;
-    input.value = DEFAULT_MOTTO;
+    input.value = defaultMotto();
     input.focus();
   }
 

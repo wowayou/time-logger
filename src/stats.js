@@ -10,6 +10,9 @@ import {
   normalizeTimestamp,
   startOfDay
 } from './time.js';
+// SPEC-013：保留标签 id 是数据（config 的键、随备份走），不是文案；显示名在 ui/io 层
+// 映射成 i18n 的 `tag.unknown`。本模块仍不访问 DOM / navigator / localStorage。
+import { RESERVED_UNKNOWN_TAG } from './storage.js';
 import { bucketForTag, longOkForTag, tagKnownForConfirmation } from './storage.js';
 
 export const GAP = 180;
@@ -63,7 +66,7 @@ function emptyTotals() {
 }
 
 export function primaryTag(entry) {
-  return ((entry && entry.tags || [])[0] || '未知') || '未知';
+  return ((entry && entry.tags || [])[0] || RESERVED_UNKNOWN_TAG) || RESERVED_UNKNOWN_TAG;
 }
 
 export function isKnownTag(tag) {
@@ -119,7 +122,7 @@ function pushUnknownSegment(segments, start, end) {
     endTs: '',
     isLast: false,
     isOngoing: false,
-    tag: '未知',
+    tag: RESERVED_UNKNOWN_TAG,
     unrecorded: true,
     pendingConfirm: false,
     confirmable: false

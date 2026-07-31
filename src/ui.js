@@ -7,7 +7,7 @@ import { formatPercent } from './stats.js';
 import {
   BUCKETS,
   BUCKET_ORDER,
-  DEFAULT_MOTTO,
+  defaultMotto,
   THEME_KEY,
   bucketForTag,
   chipGroups,
@@ -390,7 +390,7 @@ function renderMoreSheet(opts = {}) {
 // 「恢复默认」回填默认句（保存时 storage 会把恰等于默认的值归一化回「未设置」）。
 function renderMottoSheet(opts = {}) {
   const config = opts.config || loadConfig();
-  const value = config.motto === undefined ? DEFAULT_MOTTO : config.motto;
+  const value = config.motto === undefined ? defaultMotto() : config.motto;
   return `
     ${sheetHead({ title: '阶段格言', cancelText: '取消', cancelAction: 'close-form', cancelAria: '取消编辑阶段格言', doneText: '完成', doneAction: 'save-motto', doneAria: '保存阶段格言' })}
     <div class="form-sheet-body motto-body">
