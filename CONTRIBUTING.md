@@ -94,4 +94,6 @@ WSL2 端口默认只在 Windows 本机可达，手机访问 WSL IP 会超时。�
 
 ## 许可证
 
-本项目以 **AGPL-3.0-or-later** 授权（见 [`LICENSE`](LICENSE)）。提交贡献即表示你同意你的贡献以同一许可证授权。作者保留以其它条款（含商业）另行授权本项目的权利；如需商业授权，通过 <https://github.com/wowayou/time-logger> 联系。
+本项目以 **AGPL-3.0-or-later** 授权（见 [`LICENSE`](LICENSE)）。完整的许可立场、双许可保留与贡献者授权条款见 [`LICENSING.md`](LICENSING.md)——**提交贡献前请读它**。
+
+一句话版：提交贡献即表示 ① 你是作者或有权提交；② 贡献以 AGPL-3.0-or-later 向公众授权；③ 你另行授予著作权人「以其它条款（含商业）再许可你的贡献」的永久非独占权利（这条是应用商店分发的前提，理由见 `LICENSING.md` §3）。不接受第 ③ 条也没关系，在 PR 里说明即可。如需商业授权，通过 <https://github.com/wowayou/time-logger> 联系。

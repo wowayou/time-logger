@@ -502,3 +502,69 @@ SPEC-009 的卡死实录是「v71 · 缓存 timelog-v72」。v71 是迁移横幅
 ### 下一个复盘的触发条件
 
 首轮推广发生后收到第一批外部反馈，或出现第一个非维护者用户。**不再按日历排期**——时间不是这个项目的瓶颈变量。
+
+---
+
+## D17 · 英文化与 App Store 上架路径（分层裁决：Web 英文化放行，原生载体维持 gated，2026-07-31）
+
+### 触发
+
+维护者提出「计划上架苹果美区或日区应用商店，需要英文界面与英文宣传页」，并问在此之前还需要做什么。
+
+### 核对结论（本条依据的事实，全部当日复核）
+
+**Apple 侧（官方文本，2026-07-31 取自 developer.apple.com）**
+
+1. **Guideline 4.2**：「Your app should include features, content, and UI that elevate it beyond a repackaged website.」4.2.2 进一步排除「web clippings, content aggregators, or a collection of links」。**纯 WKWebView 套壳是被拒第一大类**，与本项目当前形态直接冲突。
+2. **Guideline 2.5.2**：「Apps should be self-contained in their bundles… nor may they download, install, or execute code which introduces or changes features or functionality of the app」。⇒ 原生壳**不得远程加载** `time.eigentime.org/app/`，运行时文件必须随包分发。这与 D8 路径 B 对「运行文件属于安装产物」的定义一致。
+3. **Guideline 5.1.1(i)**：「All apps must include a link to their privacy policy in the App Store Connect metadata field **and within the app**」。⇒ 隐私政策不仅要有公开 URL，还必须在应用内可达。本仓库目前两者都没有（`site/index.html` 的 `#privacy` 是一段「数据边界」说明，不是隐私政策）。
+4. **账号**：Apple Developer Program **99 USD/年**，一个账号即向 175 个国家/地区分发——**不存在「美区账号」「日区账号」之分**，美区/日区只是 Availability 勾选 + 本地化 + 税务表差异；个人（非公司）主体的**法定姓名会作为 Seller Name 公开显示**，公司名需 D-U-N-S。维护者原始设想里的「美区或日区」是一个不成立的前提，已在此更正。
+
+**许可侧**
+
+5. AGPL × App Store 的冲突有先例：App Store Usage Rules（设备数限制等）被 FSF 认定为对 GPL 的「附加限制」，GNU Go 与 VLC 的 iOS 移植均因此被下架。出口仍是 v31 保留的**唯一著作权人商业双许可**。当日核实：全部提交作者仅维护者两个身份（`cg`/`cgx`/`xcg`/`wowayou`，同一人），全部已合并 PR 的 author 均为 `wowayou`（AI 执行方的 PR 也在此账号下）——**双许可窗口目前仍开着**，在接受第一个外部代码贡献后关闭。
+
+**本仓库侧（`grep` 实测，修正了初判）**
+
+6. 「约 800 行含中文」是**高估**：含中文行里相当比例是注释（`ui.js` 196 行中 42 行是纯注释行）。真实翻译面是**非注释行里的 433 条唯一中文字面量**（`src/*.js` + `index.html`）。
+7. **真正的成本大头是测试**：`tests/ui_smoke.spec.js` 有 606 行含中文定位符/断言。若直接把 UI 改成英文，等于重写整套回归。⇒ 本决策要求 **zh 保持默认、Playwright 固定 zh locale**，现有 272 条断言一字不改照常绿，英文另加薄 smoke。
+8. `scripts/project_audit.py` **硬编码了两条运行时中文断言**（`aria-label="标记计划为已发生"`、`>改</button>` 的反向断言），i18n 重构必须同步改，否则 audit 会红。
+9. 静态壳在 `app-ready` 之前**是可见的**：启动门闩只压 `#add-btn/.ruler/.tl-head/#timeline/.usage-day`，header 站点名与 天/周/月/年 视图切换在模块到达前就画出来了。⇒ 英文用户首访会看到一帧中文 chrome，除非 locale 在**同步内联脚本**里就解析完。这是 SPEC-013 的一个硬性设计约束，不是可选项。
+10. `site/` 不进 SW 缓存（CLAUDE.md 明载）⇒ **英文 landing 与隐私政策页不需要版本仪式**；只有「应用内隐私政策入口」是运行时改动，需并入一次 bump。
+
+### 裁决
+
+**分三层，第二层是 gate，不是排期。**
+
+**第一层（放行，AI 侧现在可执行）· Web 英文化**
+`time.eigentime.org` 上的 PWA 加英文，与 App Store 完全解耦：零 $99、零原生壳、零许可冲突、零审核。规格 SPEC-013/014/015。这一层的产出在第三层里 100% 复用（原生壳装的就是同一套 Web 运行时），因此**不存在「先做英文是浪费」的分支**。
+
+**第二层（gate，不是待办）· 触发条件**
+以下**全部**成立前，不开原生载体项目：
+
+- 首轮推广（runbook Phase E）已发生，且英文渠道已投；
+- 出现**非维护者的真实留存用户**，且其中出现对 **Widget / 锁屏或灵动岛快捷记录 / Shortcuts** 这类 Web 做不到的能力的**反复请求**——这是 D8/ADR 0001 早已写死的触发门槛，D14 第 1 条重申「仅为上架收费不构成触发」；
+- 商业双许可已自签（见下）。
+
+D16 的判断在此完全适用且更强：**瓶颈是人肉推广步骤，不是 AI 产能**。当前外部用户 ≈ 0 时启动原生壳，是把最贵的动作排在最不确定的前提之前。
+
+**第三层（gated）· 原生载体**
+一旦触发：**必须另立独立仓库**（本仓库铁律：单页静态 / 无构建 / 无运行时依赖）。届时的形态底线由 4.2 决定——**不是「套壳 + 上架」，而是「原生能力 + 内嵌运行时」**：运行文件随包（2.5.2），并至少提供一项真实的系统集成（Widget / Live Activity / Shortcuts / 分享扩展）。前置项见 `docs/launch-runbook.md` Phase F。
+
+### 随本条一并落定的边界
+
+- **数据迁移断点必须写进上架文案**：WKWebView 的 `localStorage` 与网页 origin 是两个容器，现有用户（含维护者权威设备）的记录**不会自动进 App**，必须走「导出备份 → App 内导入」。不写清楚，第一个用户就丢数据。
+- **App Privacy 标签是本项目最强的一张牌**：零采集、零网络、零账号——这是可核实事实，允许作为卖点；但 D3 纪律不变，英文文案同样**不得**出现 "trusted by" / "loved by" 一类未被验证的社会证明。
+- **英文 App 名＝ Eigentime**（维护者当日拍板）：与已有域名 `eigentime.org` 同源、可检索、无明显撞名。catalog 里是单个 key `app.name`。**上架前仍需自行做 App Store 重名与商标检索**（这一步 AI 做不了，已登记进 runbook Phase F4）。
+- **商业双许可当日自签**：`LICENSING.md` 随本决策落地——记录唯一著作权人事实、明确保留以其它条款另行授权的权利、并把贡献者入站授权补齐到「可再许可」（`CONTRIBUTING.md` 许可证节同步指向）。这关掉了 runbook F1 的时效项：此后接受的外部贡献自带第 ③ 条授权，不必事后追人。
+- **v2 锁死条款不被本条推翻**：英文化是**同一产品的语言层**，不是功能扩张；SPEC-013/014/015 不得夹带任何新功能、新图表、新分类法。
+
+### 模型路由（D15 成本治理的延续）
+
+| 单 | 复杂度判据 | 执行 | 验收 |
+|---|---|---|---|
+| SPEC-013 i18n 层 | 触及全部 9 个运行时模块 + 静态壳同步脚本 + v53 快照 locale 门 + 新增 audit 护栏；一处漏改即静默回退中文 | **Opus 5** | Opus 5 |
+| SPEC-014 英文 catalog | 术语表已在规格内定死，执行是机械填表 + 语言开关 UI | **Sonnet 5** | Opus 5（逐条核术语） |
+| SPEC-015 英文对外页面包 | 纯静态页翻译 + 隐私政策成文，文案底稿在规格里 | **Sonnet 5** | Opus 5 |
+
+**成本控制三条**：① 013 + 014 + 015 的应用内隐私入口**合并为一次版本仪式（v78）**（D15 已证明合并发版是最大杠杆）；② 015 的 `site/` 部分不进 SW 缓存，**零版本仪式**；③ zh 保持默认使既有 272 条回归**零改动照常绿**，避免整套测试重写。
