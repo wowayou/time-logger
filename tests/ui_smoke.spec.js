@@ -2965,3 +2965,17 @@ test.describe('SPEC-011: fixed status-bar scrim', () => {
     expect(hitsFade).toBe(false);
   });
 });
+
+// SPEC-014 §1.6 (handed off from SPEC-015 §4): the More sheet's help group
+// gains a Privacy Policy link. This covers the zh side (default locale);
+// the en side is covered in tests/ui_smoke_en.spec.js. Purely additive test
+// appended at the end of the file — no existing assertion is touched.
+test('more sheet exposes the Chinese privacy policy link (SPEC-014 §1.6)', async ({ page }) => {
+  await boot(page, 768, 'empty');
+  await openBackupMenu(page);
+  const privacyLink = page.locator('a[href$="/privacy/"]');
+  await expect(privacyLink).toContainText('隐私政策');
+  await expect(privacyLink).toHaveAttribute('href', 'https://time.eigentime.org/privacy/');
+  await expect(privacyLink).toHaveAttribute('target', '_blank');
+  await expect(privacyLink).toHaveAttribute('rel', 'noopener');
+});
