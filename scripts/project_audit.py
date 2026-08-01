@@ -485,23 +485,29 @@ def audit_wcag_contrast(errors: list[str]) -> None:
     # 主页与应用同等受这条护栏约束，否则同样的漂移会在下一次改亮色时重演。
     # SPEC-015：英文主页与两份隐私政策页加入同一份 site/ 内联令牌页面清单，
     # 覆盖面从单页扩到四页——任何一页漏同步都会在这里红。
+    # 对外页面两套主题都要查。此前只查亮色，暗色（页面的裸 `:root` 块）是盲区——
+    # 与 styles.css 亮暗都查不对称。v75 的教训正是「site 有自己一套令牌、被漏掉」，
+    # 那次漏的是亮色 --faint；同一个盲区换个主题就会重演。
+    site_theme_blocks = (
+        ("light", r"@media \(prefers-color-scheme: light\)\s*\{\s*:root"),
+        ("dark", r":root"),
+    )
     for site_page in SITE_PAGES:
-        site_tokens = _extract_theme_tokens(
-            read_text(site_page),
-            r"@media \(prefers-color-scheme: light\)\s*\{\s*:root",
-        )
-        if not site_tokens:
-            fail(errors, f"could not parse {site_page} light tokens for WCAG contrast audit")
-            continue
-        for text_token in WCAG_TEXT_TOKENS:
-            if text_token not in site_tokens:
+        page_text = read_text(site_page)
+        for theme_name, pattern in site_theme_blocks:
+            site_tokens = _extract_theme_tokens(page_text, pattern)
+            if not site_tokens:
+                fail(errors, f"could not parse {site_page} {theme_name} tokens for WCAG contrast audit")
                 continue
-            for surface_token in WCAG_SURFACE_TOKENS:
-                if surface_token not in site_tokens:
+            for text_token in WCAG_TEXT_TOKENS:
+                if text_token not in site_tokens:
                     continue
-                ratio = _contrast_ratio(site_tokens[text_token], site_tokens[surface_token])
-                if ratio < WCAG_MIN_CONTRAST:
-                    fail(errors, f"WCAG contrast below {WCAG_MIN_CONTRAST}:1 in {site_page} light theme: {text_token} vs {surface_token} = {ratio:.2f}")
+                for surface_token in WCAG_SURFACE_TOKENS:
+                    if surface_token not in site_tokens:
+                        continue
+                    ratio = _contrast_ratio(site_tokens[text_token], site_tokens[surface_token])
+                    if ratio < WCAG_MIN_CONTRAST:
+                        fail(errors, f"WCAG contrast below {WCAG_MIN_CONTRAST}:1 in {site_page} {theme_name} theme: {text_token} vs {surface_token} = {ratio:.2f}")
 
 
 def audit_chrome_surface_layering(errors: list[str]) -> None:
