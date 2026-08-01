@@ -34,6 +34,37 @@ export function saveLocalePref(code) {
     /* 存不下不影响本次会话内的语言 */
   }
 }
+
+// SPEC-014 修复（维护者拍板方案 A，2026-08-01）：v78 之前 SUPPORTED_LOCALES 只有
+// 'zh'，resolveLocale() 里按 navigator.languages 探测英文的分支从未真正生效过；
+// 'en' 成为受支持语言后，任何**从未显式选过语言**（＝全部存量用户，这个开关
+// 今天才出现）且**浏览器偏好英文**的设备，升级到 v78 后会被静默切成英文界面——
+// 这不是他们的选择。一次性把这类用户钉在中文（持久化写入，而不是每次都在
+// 内存里探测）；全新安装（timelog.v1 与 timelog.config 都不存在）不受影响，
+// 继续走 navigator 探测，首次打开英文浏览器的新用户仍是英文。
+const LOCALE_MIGRATED_KEY = 'timelog.localeMigrated.v1';
+
+/**
+ * 用独立的一次性标记键，而不是靠 `timelog.locale` 是否为空判断「是否已处理
+ * 过」：用户后续可能显式选择「跟随系统」（语言开关三态之一），那个动作同样会
+ * 清空 `timelog.locale`——如果复用同一个键当「已处理」标记，会把用户明确的
+ * 「跟随系统」选择误判成「从未处理」，下次启动又被强行按回中文。
+ *
+ * 形态参照 `ensureFirstUsedDate`（老用户以最早本机记录日期迁移）：一次性、只
+ * 读判定用的现有键，不改 `timelog.v1` 的任何内容；语言仍不进备份（SPEC-013
+ * 已定）。**必须在 app.js 的 `init()` 里 `resolveLocale()` 之前调用**。
+ */
+export function ensureLegacyLocalePinned() {
+  try {
+    if (localStorage.getItem(LOCALE_MIGRATED_KEY)) return;
+    localStorage.setItem(LOCALE_MIGRATED_KEY, '1');
+    if (localStorage.getItem(LOCALE_KEY)) return;
+    const hasData = Boolean(localStorage.getItem(KEY) || localStorage.getItem(CONFIG_KEY));
+    if (hasData) localStorage.setItem(LOCALE_KEY, 'zh');
+  } catch {
+    /* 存不下就照常走 navigator 探测，不阻塞启动 */
+  }
+}
 const FIRST_USED_DATE_KEY = 'timelog.firstUsedDate';
 // v69（D11 追加）：第三桶显示名 漏损→偏航。**内部键 `leak` 不变**——所有存量
 // config、备份 JSON 和 CSS 令牌（--leak/.chip-leak）都按键走，改键会要求数据迁移

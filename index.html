@@ -258,7 +258,20 @@
       return 'zh';
     };
     let locale = 'zh';
-    try { locale = resolve(localStorage.getItem('timelog.locale'), navigator.languages); } catch {}
+    try {
+      const stored = localStorage.getItem('timelog.locale');
+      // 与 storage.js 的 ensureLegacyLocalePinned() **同一条判据**：存量设备
+      // （已有数据、从未显式选过语言、尚未迁移）在 v78 首启动时钉中文。壳只
+      // 读不写——标记键由模块负责落库。少了这一段，模块虽然最终会把 locale
+      // 纠正回 zh，但首帧仍会按 navigator 猜出的英文渲染一次再改回来（就是
+      // SPEC-013 建这份内联字典要消灭的那种闪烁）。
+      // 必须一并看标记键：用户之后可能显式选「跟随系统」，那同样会清空
+      // timelog.locale——只看「locale 为空 + 有数据」会把这个明确选择误判成
+      // 未迁移，每次启动都强行按回中文。
+      const migrated = localStorage.getItem('timelog.localeMigrated.v1');
+      const hasData = localStorage.getItem('timelog.v1') || localStorage.getItem('timelog.config');
+      locale = (!migrated && !stored && hasData) ? 'zh' : resolve(stored, navigator.languages);
+    } catch {}
     window.__timelogLocale = locale;
     document.documentElement.lang = locale;
     const dict = SHELL[locale] || SHELL.zh;

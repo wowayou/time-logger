@@ -120,7 +120,11 @@ export default {
   'txn.deleteToUnrecorded': 'This span will become "Unlogged" and will not lengthen the neighboring entries.',
 
   // ---- Chrome & navigation (app.js) ----
-  'chrome.monthCell': 'Month {n}',
+  // Short names for the 12 drill-down month cells in the year view, indexed
+  // by month (0 = January). Verification (Opus 5) flagged the earlier
+  // 'chrome.monthCell': 'Month {n}' interpolation, which read as "Month 1"
+  // ... "Month 12" in English — not how English names months.
+  'date.monthShort': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
   // SPEC-014: the "N days logged" half needs a plural form English lacks in
   // Chinese — recordedDayOne/Other are combined via i18n.js's plural() helper
   // before being dropped into {recorded}. See the matching zh.js comment for

@@ -20,6 +20,7 @@ import {
   VIEW_KEY,
   appendBootDiagSample,
   ensureFirstUsedDate,
+  ensureLegacyLocalePinned,
   load,
   loadConfig,
   mergeImportedConfig,
@@ -38,7 +39,7 @@ import {
   saveLocalePref,
   refreshBucketLabels
 } from './storage.js';
-import { getLocale, plural, resolveLocale, setLocale, t } from './i18n.js';
+import { getLocale, plural, resolveLocale, setLocale, t, tList } from './i18n.js';
 import { createIoActions } from './io_actions.js';
 import { createSheetController } from './sheet_controller.js';
 import {
@@ -234,9 +235,12 @@ import {
       return rows;
     }
     if (state.view === 'year') {
+      // 验收指出旧的 t('chrome.monthCell', {n}) 插值在英文侧读成 "Month 1"…
+      // "Month 12"；改用真正的月份短名数组（zh 一侧逐字节与旧模板输出相同）。
+      const monthShort = tList('date.monthShort');
       return Array.from({ length: 12 }, (_, i) => {
         const d = new Date(start.getFullYear(), i, 1);
-        return { key: localDateKey(d), label: t('chrome.monthCell', { n: i + 1 }), rangeStart: d, rangeEnd: addMonths(d, 1), targetView: 'month' };
+        return { key: localDateKey(d), label: monthShort[i] || String(i + 1), rangeStart: d, rangeEnd: addMonths(d, 1), targetView: 'month' };
       });
     }
     return [];
@@ -1281,10 +1285,17 @@ import {
   }
 
   function init() {
+    // SPEC-014 修复（方案 A）：存量用户迁移守卫必须先于 resolveLocale() 运行，
+    // 否则「从未显式选过语言 + 浏览器偏好英文 + 本机已有数据」的存量用户会被
+    // navigator 探测分支（v78 才第一次真正生效）静默切成英文。
     // locale 必须在任何渲染、任何 BUCKETS 读取之前定下来。
+    ensureLegacyLocalePinned();
     setLocale(resolveLocale(loadLocalePref(), navigator.languages));
     refreshBucketLabels();
     applyShellI18n();
+    // 静态壳的同步脚本比这里更早跑，它自己的判定与这里应当一致；这里是权威
+    // 结果，覆盖回去以防两者因任何原因不一致。
+    document.documentElement.lang = getLocale();
     markBootTrace('init_start');
     updateMigrationNotice();
     const today = todayStr();

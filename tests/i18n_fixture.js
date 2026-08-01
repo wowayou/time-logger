@@ -23,6 +23,12 @@ export const YESTERDAY_KEY = '2026-06-28';
  * @param {object|null} [opts.config]
  * @param {string} [opts.selectedDate] local date key, defaults to today
  * @param {string} [opts.path]
+ * @param {boolean} [opts.freshDevice] true = write nothing but the fixed
+ *   clock and (if given) the explicit locale pref — simulates a genuinely
+ *   brand-new device with no timelog.v1/timelog.config/view/selectedDate
+ *   keys at all. Used by tests/locale_legacy_migration.spec.js's control
+ *   case: the migration guard must only fire when timelog.v1 or
+ *   timelog.config already exists, never on a true fresh install.
  */
 export async function bootLocale(page, opts = {}) {
   const {
@@ -33,10 +39,11 @@ export async function bootLocale(page, opts = {}) {
     entries = [],
     config = null,
     selectedDate = TODAY_KEY,
-    path = '/'
+    path = '/',
+    freshDevice = false
   } = opts;
   await page.setViewportSize({ width, height });
-  await page.addInitScript(({ locale, now, entries, config, selectedDate, todayKey }) => {
+  await page.addInitScript(({ locale, now, entries, config, selectedDate, todayKey, freshDevice }) => {
     if (now) {
       const RealDate = Date;
       let fixedNow = new RealDate(now).getTime();
@@ -52,12 +59,14 @@ export async function bootLocale(page, opts = {}) {
     }
     localStorage.clear();
     if (locale) localStorage.setItem('timelog.locale', locale);
-    localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
-    if (config) localStorage.setItem('timelog.config', JSON.stringify(config));
-    localStorage.setItem('timelog.view', 'day');
-    localStorage.setItem('timelog.selectedDate', selectedDate);
-    localStorage.setItem('timelog.openDate', todayKey);
-  }, { locale, now, entries, config, selectedDate, todayKey: TODAY_KEY });
+    if (!freshDevice) {
+      localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
+      if (config) localStorage.setItem('timelog.config', JSON.stringify(config));
+      localStorage.setItem('timelog.view', 'day');
+      localStorage.setItem('timelog.selectedDate', selectedDate);
+      localStorage.setItem('timelog.openDate', todayKey);
+    }
+  }, { locale, now, entries, config, selectedDate, todayKey: TODAY_KEY, freshDevice });
   await page.goto(path);
   await page.waitForFunction(() => document.body.classList.contains('app-ready'));
 }
