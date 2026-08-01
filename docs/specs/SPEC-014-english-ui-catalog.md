@@ -1,6 +1,6 @@
 # SPEC-014 · 英文 UI catalog + 语言开关
 
-status: in-progress（分支 `spec/014-en-catalog`）
+status: done（PR #36 已合并，2026-08-01，随 v78 发布。含验收轮追加的存量用户 locale 迁移守卫与年视图英文月份）
 owner: `spec/014-en-catalog`
 执行模型: **Sonnet 5**（术语在本规格内已定死，执行是机械填表 + 一个 seg 控件）
 验收人: Opus 5（**逐条核术语表**，措辞偏离即打回）
