@@ -619,6 +619,30 @@ if (entry) { entry.ts = …; entry.what = …; entry.tags = [tag]; deps.save(d);
 
 **经验**：① 被动重渲染（timer、后台恢复）不得移动视口——用户没操作时视口是用户的；② 回归测试落地前先证明「没修会红」，否则只是绿色装饰；③ 引擎差异（scroll anchoring 有无）会让「本地 Chromium 看不出问题」成为常态，涉及滚动/布局的断言必须双引擎跑；④ 测试环境教训：`playwright.config` 的 `reuseExistingServer: true` 会把 4173 端口上**任何**陈旧 server 当被测应用——本轮它正服务着另一个项目的静态站，228 用例每条烧满 30s 超时再重试，共 4.5 小时全部假失败；跑套件前先确认 4173 是时间尺或为空（`curl 127.0.0.1:4173` 一眼即知）。
 
+## P36 · 同源第二个 PWA：activate 清理删掉了邻居的缓存（v81）
+
+**现象**：两个应用都静默失去离线能力。联网时一切正常，缓存没命中就走网络——**从表象几乎无法回溯到成因**。
+
+**根因**：`CacheStorage` 按 **origin** 分区，不按 Service Worker scope。`wowayou.github.io` 上同时住着本项目的旧只读站（`/time-logger/`）和另一个 PWA（`/six-pm-sprint/`），所以 `caches.keys()` 会列出**对方的**缓存。而两边的 activate 清理都写成「删掉所有不等于自己的」：
+
+```js
+keys.filter(k => k !== CACHE)   // 把邻居的离线缓存一并删掉
+```
+
+于是任意一个 worker 激活，就清空另一个的离线缓存。
+
+**为什么读自己的代码发现不了**：这段代码孤立看是对的（「清理旧版本缓存」是标准写法，各处教程都这么写）。缺陷只在「同源存在第二个 PWA」时才成立，而那个前提**不在本仓库里**——它由部署拓扑决定。本项目是被同源另一个项目的维护侧报过来才知道的。
+
+**修复**：清理按前缀限定在自己拥有的缓存上（`CACHE_PREFIX = 'timelog-'`）。`CACHE` 保持 `'timelog-vN'` 字面量形态不变——`bump_version.py` 与 audit 都逐字匹配它，改成模板字符串会打断六锚点联动。
+
+**护栏**：① `project_audit.py` 断言 activate 清理必须按 `CACHE_PREFIX` 过滤，且前缀与 `CACHE` 一致；② `tests/sw_cache_scope.spec.js` **真的注册 Service Worker**（全局配置里 SW 是 block 的，该文件显式放开），种一个邻居缓存 + 一个自己的旧缓存，断言前者留存、后者被删。断言源码文本只能证明「代码长这样」，证明不了「activate 之后缓存还在」。
+
+**写这条用例时踩的坑（值得单独记）**：第一版用 `unregister()` + `register()` 催发第二次 activate，用例红了——我差点当成修复没生效。用一个「activate 时写缓存」的临时标记确证后发现：**`unregister()` 在页面仍被该 worker 控制时是延迟生效的**，紧接着的 `register()` 只是取消那次待删除、拿回同一个注册，不产生新的 install，更不会触发 activate。正确做法是注销后 `reload()`，让客户端先卸载。**用例红了先证明它红在哪，别默认是被测代码的错。**
+
+**推广边界**：任何「同一 origin 下部署多个 PWA」的仓库都适用；单 origin 单应用时这段代码看不出问题，但把清理限定在自己的前缀上本来就是更正确的不变量——**一个 Service Worker 只应删除它自己拥有的缓存**。
+
+---
+
 ---
 
 ## 协作约束补记（v28）

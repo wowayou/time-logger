@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "80"
+EXPECTED_VERSION = "81"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -126,6 +126,21 @@ def audit_service_worker(errors: list[str]) -> None:
     for src in ["./" + src for src in [*REQUIRED_RUNTIME_ASSETS, *REQUIRED_ICON_SIZES]]:
         if src not in sw:
             fail(errors, f"sw.js FILES must cache runtime asset {src}")
+
+    # SPEC/v81：CacheStorage 按 **origin** 分区、不按 SW scope——同源下别的项目的
+    # 缓存也会出现在 caches.keys() 里（`wowayou.github.io` 上就同时住着本项目的
+    # 旧只读站与另一个 PWA）。activate 的清理必须按前缀限定在自己拥有的缓存上，
+    # 否则会静默删掉邻居的离线缓存：两边都失去离线，而联网时表现完全正常，
+    # 从表象几乎无法回溯到成因。
+    prefix_match = re.search(r"const\s+CACHE_PREFIX\s*=\s*['\"]([^'\"]+)['\"]", sw)
+    if not prefix_match:
+        fail(errors, "sw.js must declare CACHE_PREFIX for origin-scoped cache cleanup")
+    else:
+        prefix = prefix_match.group(1)
+        if not f"timelog-v{EXPECTED_VERSION}".startswith(prefix):
+            fail(errors, f"sw.js CACHE_PREFIX {prefix!r} does not match CACHE 'timelog-v{EXPECTED_VERSION}'")
+        if "k.startsWith(CACHE_PREFIX)" not in sw:
+            fail(errors, "sw.js activate cleanup must filter by CACHE_PREFIX — deleting every non-own cache wipes other PWAs on the same origin")
 
     required_reliability_guards = {
         "c.addAll(FILES)": "install must reject when precaching fails",
