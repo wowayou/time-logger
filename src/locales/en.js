@@ -62,6 +62,7 @@ export default {
   'import.errConfigMainline': 'config.mainline must be an array of strings',
   'import.errConfigChips': 'config.chips must be an array',
   'import.errConfigChipAt': 'config.chips item {n} is invalid',
+  'import.errConfigMainlineLongOk': 'config.mainlineLongOk must be an array of strings',
   'import.errConfigMotto': 'config.motto must be a string',
   'import.errMetaObject': 'meta must be an object',
   'import.errMetaOffset': 'meta.sourceTimezoneOffsetMinutes must be a number',

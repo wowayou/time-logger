@@ -50,6 +50,7 @@ export default {
   'import.errConfigMainline': 'config.mainline 必须是字符串数组',
   'import.errConfigChips': 'config.chips 必须是数组',
   'import.errConfigChipAt': 'config.chips 第 {n} 项无效',
+  'import.errConfigMainlineLongOk': 'config.mainlineLongOk 必须是字符串数组',
   'import.errConfigMotto': 'config.motto 必须是字符串',
   'import.errMetaObject': 'meta 必须是对象',
   'import.errMetaOffset': 'meta.sourceTimezoneOffsetMinutes 必须是数字',

@@ -191,6 +191,7 @@ export function normalizeConfig(raw) {
     return {
       version: 1,
       mainline: seed.mainline.slice(),
+      mainlineLongOk: [],
       chips: seed.chips.map(chip => ({ ...chip })),
       motto: undefined
     };
@@ -207,9 +208,17 @@ export function normalizeConfig(raw) {
     seen.add(clean.name);
     chips.push(clean);
   });
+  // SPEC-007：主线的 longOk 存成**独立名字数组**而不是把 mainline 改成对象数组。
+  // 理由是爆炸半径：`mainline` 是 string[] 这件事被 addMainlineTag / bucketForTag /
+  // mergeImportedConfig / uniqueNames 等多处按值使用，改形态要动一大片并强制迁移
+  // 存量 config；追加一个字段则「老备份没有它＝空集」天然成立，零迁移。
+  // 只保留仍在 mainline 里的名字——改名/移除后残留的条目会在这里被自然清掉。
+  const mainlineSet = new Set(mainline);
+  const mainlineLongOk = uniqueNames(Array.isArray(raw.mainlineLongOk) ? raw.mainlineLongOk : [])
+    .filter(name => mainlineSet.has(name));
   // motto: undefined 会被 JSON.stringify 丢掉——「未设置」在 localStorage 里
   // 就是没有这个键，与三态模型一致。
-  return { version: 1, mainline, chips, motto: normalizeMotto(raw.motto) };
+  return { version: 1, mainline, mainlineLongOk, chips, motto: normalizeMotto(raw.motto) };
 }
 
 export function loadConfig() {
@@ -280,6 +289,91 @@ export function migrateEntryTags(entries, from, to) {
   return entries;
 }
 
+/**
+ * 主线改名：替换 `mainline` 里的名字并带走它的 longOk 归属。
+ * **只返回新 config，不碰 entries**——历史迁移由调用方在同一次 load() 的对象图上
+ * 用 migrateEntryTags 完成（CLAUDE.md 写路径红线：禁止改一张图、保存另一张图）。
+ * @param {object} config
+ * @param {string} from
+ * @param {string} to
+ * @returns {object} 新 config（未落库）
+ */
+export function renameMainlineTag(config, from, to) {
+  const source = cleanName(from);
+  const dest = cleanName(to);
+  const next = normalizeConfig(config);
+  if (!source || !dest || source === dest || !next.mainline.includes(source)) return next;
+  next.mainline = next.mainline.map(name => (name === source ? dest : name));
+  next.mainlineLongOk = (next.mainlineLongOk || []).map(name => (name === source ? dest : name));
+  return normalizeConfig(next);
+}
+
+/**
+ * 把某个主线历史名移到 `mainline[0]`。`mainline` 本就是 unshift 语义的历史数组
+ * （录入时 addMainlineTag 就是 unshift），本函数只是把这个既有语义放上台面。
+ * 不产生任何记录变化。
+ * @param {object} config
+ * @param {string} name
+ * @returns {object} 新 config（未落库）
+ */
+export function setCurrentMainline(config, name) {
+  const target = cleanName(name);
+  const next = normalizeConfig(config);
+  if (!target || !next.mainline.includes(target)) return next;
+  next.mainline = [target, ...next.mainline.filter(item => item !== target)];
+  return normalizeConfig(next);
+}
+
+/**
+ * 设置某个主线名的超长段免确认。
+ * @param {object} config
+ * @param {string} name
+ * @param {boolean} longOk
+ * @returns {object} 新 config（未落库）
+ */
+export function setMainlineLongOk(config, name, longOk) {
+  const target = cleanName(name);
+  const next = normalizeConfig(config);
+  if (!target || !next.mainline.includes(target)) return next;
+  const current = new Set(next.mainlineLongOk || []);
+  if (longOk) current.add(target); else current.delete(target);
+  next.mainlineLongOk = [...current];
+  return normalizeConfig(next);
+}
+
+/**
+ * D18 新增范围：给存量 config 一个拿到**本语言默认标签**的出口。
+ * SPEC-014 §1.5 定的「只在首次初始化种子、切语言不动数据」不变——这是**显式动作**，
+ * 且只追加：不删除、不改名、不覆盖同名（同名一律跳过，绝不静默改桶）。
+ * @param {object} [config]
+ * @returns {{ additions: {name: string, bucket: string, longOk: boolean}[], skipped: string[] }}
+ *   additions＝将要新增的；skipped＝因同名已存在而跳过的。调用方先预览再落库。
+ */
+export function previewLocaleDefaultTags(config = loadConfig()) {
+  const current = normalizeConfig(config);
+  const occupied = new Set([...current.mainline, ...current.chips.map(chip => chip.name)]);
+  const seed = defaultSeed();
+  const additions = [];
+  const skipped = [];
+  seed.chips.forEach(chip => {
+    if (occupied.has(chip.name)) skipped.push(chip.name);
+    else additions.push({ ...chip });
+  });
+  return { additions, skipped };
+}
+
+/**
+ * 把 previewLocaleDefaultTags 的结果落成新 config（仍不落库）。
+ * @param {object} [config]
+ * @returns {object}
+ */
+export function appendLocaleDefaultTags(config = loadConfig()) {
+  const current = normalizeConfig(config);
+  const { additions } = previewLocaleDefaultTags(current);
+  if (!additions.length) return current;
+  return normalizeConfig({ ...current, chips: [...current.chips, ...additions] });
+}
+
 export function chipGroups(config = loadConfig()) {
   return {
     maintain: config.chips.filter(chip => chip.bucket === 'maintain'),
@@ -299,6 +393,9 @@ export function bucketForTag(tag, config = loadConfig()) {
 export function longOkForTag(tag, config = loadConfig()) {
   const name = cleanName(tag);
   if (!name) return false;
+  // SPEC-007：主线段 >3h 是常态（写代码、面试准备），此前每段都要手动确认是真实
+  // 摩擦。主线名的豁免存在 mainlineLongOk 里，与 chip 的 per-tag longOk 并列。
+  if ((config.mainlineLongOk || []).includes(name)) return true;
   const chip = config.chips.find(item => item.name === name);
   if (chip) return Boolean(chip.longOk);
   return Boolean(LEGACY_ALIASES[name] && LEGACY_ALIASES[name].longOk);
@@ -456,6 +553,11 @@ export function validateImportData(imported) {
           errors.push(t('import.errConfigChipAt', { n: index + 1 }));
         }
       });
+    }
+    if (imported.config.mainlineLongOk !== undefined
+      && (!Array.isArray(imported.config.mainlineLongOk)
+        || imported.config.mainlineLongOk.some(name => typeof name !== 'string'))) {
+      errors.push(t('import.errConfigMainlineLongOk'));
     }
     if (imported.config.motto !== undefined && typeof imported.config.motto !== 'string') {
       errors.push(t('import.errConfigMotto'));
@@ -698,6 +800,9 @@ export function mergeImportedConfig(localConfig, importedConfig) {
   });
   // 格言合并与标签同一精神——本机优先：本机的显式值（含显式隐藏 ''）保留，
   // 只有本机从未设置过时才采用备份里的值。
+  // 主线 longOk 与标签同一精神：并集，但只对最终仍在 mainline 里的名字生效
+  // （normalizeConfig 会再过滤一次）。本机已有的条目不会被备份删掉。
+  const mainlineLongOk = [...new Set([...(local.mainlineLongOk || []), ...(imported.mainlineLongOk || [])])];
   const motto = local.motto !== undefined ? local.motto : imported.motto;
-  return normalizeConfig({ version: 1, mainline, chips, motto });
+  return normalizeConfig({ version: 1, mainline, mainlineLongOk, chips, motto });
 }
