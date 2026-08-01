@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
 import { normalizeTimestamp, parseDateKey } from './time.js';
-import { t, tAll } from './i18n.js';
+import { getLocale, t, tAll } from './i18n.js';
 
 const KEY = 'timelog.v1';
 export const CONFIG_KEY = 'timelog.config';
@@ -90,21 +90,46 @@ export function resolveMotto(config = loadConfig()) {
   return config.motto === undefined ? defaultMotto() : config.motto;
 }
 
-const DEFAULT_CONFIG = {
-  version: 1,
-  mainline: ['求职推进'],
-  chips: [
-    { name: '睡觉', bucket: 'maintain', longOk: true },
-    { name: '吃饭', bucket: 'maintain', longOk: false },
-    { name: '洗漱', bucket: 'maintain', longOk: false },
-    { name: '通勤', bucket: 'maintain', longOk: false },
-    { name: '家务', bucket: 'maintain', longOk: false },
-    { name: '运动健康', bucket: 'maintain', longOk: false },
-    { name: '娱乐', bucket: 'leak', longOk: false },
-    { name: '刷手机', bucket: 'leak', longOk: false },
-    { name: '发呆', bucket: 'leak', longOk: false }
-  ]
+// SPEC-014 §1.5（维护者拍板方案 B，2026-07-31）：默认标签种子按当前 locale 分流，
+// 但**只在首次初始化**生效——见下面 normalizeConfig 的 `!raw` 分支，那是唯一
+// 读这张表的地方。已有 config 的用户切换语言**不会**触发重新种子：这里只
+// `getLocale()` 读一次当前语言，不写 locale、不订阅语言变化、也不在
+// mainlineSource/chipsSource 的「已有 raw 但字段缺失」兜底分支之外被使用。
+// 英文种子与中文种子一一对应（睡觉→Sleep、吃饭→Meals……），`longOk` 逐项一致。
+const DEFAULT_SEED_BY_LOCALE = {
+  zh: {
+    mainline: ['求职推进'],
+    chips: [
+      { name: '睡觉', bucket: 'maintain', longOk: true },
+      { name: '吃饭', bucket: 'maintain', longOk: false },
+      { name: '洗漱', bucket: 'maintain', longOk: false },
+      { name: '通勤', bucket: 'maintain', longOk: false },
+      { name: '家务', bucket: 'maintain', longOk: false },
+      { name: '运动健康', bucket: 'maintain', longOk: false },
+      { name: '娱乐', bucket: 'leak', longOk: false },
+      { name: '刷手机', bucket: 'leak', longOk: false },
+      { name: '发呆', bucket: 'leak', longOk: false }
+    ]
+  },
+  en: {
+    mainline: ['Job search'],
+    chips: [
+      { name: 'Sleep', bucket: 'maintain', longOk: true },
+      { name: 'Meals', bucket: 'maintain', longOk: false },
+      { name: 'Wash up', bucket: 'maintain', longOk: false },
+      { name: 'Commute', bucket: 'maintain', longOk: false },
+      { name: 'Chores', bucket: 'maintain', longOk: false },
+      { name: 'Exercise', bucket: 'maintain', longOk: false },
+      { name: 'Entertainment', bucket: 'leak', longOk: false },
+      { name: 'Phone', bucket: 'leak', longOk: false },
+      { name: 'Zoning out', bucket: 'leak', longOk: false }
+    ]
+  }
 };
+
+function defaultSeed() {
+  return DEFAULT_SEED_BY_LOCALE[getLocale()] || DEFAULT_SEED_BY_LOCALE.zh;
+}
 
 function cleanName(name) {
   return String(name || '').trim();
@@ -131,15 +156,17 @@ function normalizeChip(chip) {
 
 export function normalizeConfig(raw) {
   if (!raw || typeof raw !== 'object') {
+    const seed = defaultSeed();
     return {
       version: 1,
-      mainline: DEFAULT_CONFIG.mainline.slice(),
-      chips: DEFAULT_CONFIG.chips.map(chip => ({ ...chip })),
+      mainline: seed.mainline.slice(),
+      chips: seed.chips.map(chip => ({ ...chip })),
       motto: undefined
     };
   }
-  const mainlineSource = Array.isArray(raw.mainline) ? raw.mainline : DEFAULT_CONFIG.mainline;
-  const chipsSource = Array.isArray(raw.chips) ? raw.chips : DEFAULT_CONFIG.chips;
+  const seed = defaultSeed();
+  const mainlineSource = Array.isArray(raw.mainline) ? raw.mainline : seed.mainline;
+  const chipsSource = Array.isArray(raw.chips) ? raw.chips : seed.chips;
   const mainline = uniqueNames(mainlineSource);
   const chips = [];
   const seen = new Set(mainline);

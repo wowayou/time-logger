@@ -109,8 +109,15 @@ export default {
 
   // ---- 外壳与导航（app.js）----
   'chrome.monthCell': '{n}月',
-  'chrome.milestone': '记录历程第 {journey} 天 · 已记录 {recorded} 天',
-  'chrome.milestoneAria': '记录历程第 {journey} 天，其中有真实记录的有 {recorded} 天',
+  // SPEC-014：「已记录 N 天」的「N 天」部分改由 chrome.recordedDayOne/Other 组
+  // 合出来再塞进 {recorded}——纯中文不需要复数形态，两个 key 值相同，但把它
+  // 独立出来是为了让英文可以在这里插入 day/days 的单复数（i18n.js 的 plural()
+  // helper）。模板去掉末尾的「天」后由 {recorded} 自带，最终拼出的字节与改动前
+  // 逐字相同（已用 ui_smoke.spec.js 既有断言核对，见 v77→v78 变更记录）。
+  'chrome.milestone': '记录历程第 {journey} 天 · 已记录 {recorded}',
+  'chrome.milestoneAria': '记录历程第 {journey} 天，其中有真实记录的有 {recorded}',
+  'chrome.recordedDayOne': '{n} 天',
+  'chrome.recordedDayOther': '{n} 天',
   'chrome.todayBadge': '今天',
   'chrome.fabPlan': '＋ 计划一条',
   'chrome.fabLog': '＋ 记一条',
@@ -405,6 +412,18 @@ export default {
   'more.bootDiagCopy': '复制启动诊断',
   'more.bootDiagHint': '每次启动记录耗时与缓存状态（不含任何记录内容），最近 30 条；关闭即清除。',
   'more.appVersion': '时间尺 v{version}',
+  // SPEC-014 §1.6（从 SPEC-015 §4 接手）：应用内隐私政策入口，链接到已上线的
+  // site/privacy/ 静态页；只是外链文案，不改变隐私红线本身。
+  'more.privacy': '隐私政策',
+  'more.privacyAria': '打开隐私政策',
+  // SPEC-014 §2：语言开关，紧邻「主题」；'' 对应「跟随系统」。
+  'more.language': '语言',
+  'more.languageAria': '语言',
+  'more.languageAuto': '跟随系统',
+  // 语言名本身不跟随当前界面语言翻译——「中文」在英文界面下仍显示「中文」，
+  // 这是语言选择器的通用惯例（也让这两个 key 在 zh/en 两份 catalog 里取值相同）。
+  'lang.zh': '中文',
+  'lang.en': 'English',
   'motto.title': '阶段格言',
   'motto.cancel': '取消',
   'motto.cancelAria': '取消编辑阶段格言',

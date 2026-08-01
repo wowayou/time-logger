@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "77"
+EXPECTED_VERSION = "78"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -21,6 +21,7 @@ REQUIRED_RUNTIME_ASSETS = [
     "src/app.js",
     "src/i18n.js",
     "src/locales/zh.js",
+    "src/locales/en.js",
     "src/entry_model.js",
     "src/io_actions.js",
     "src/sheet_controller.js",
@@ -619,7 +620,7 @@ DATA_CONSTANT_LINES = {
     "src/storage.js": (
         "LEGACY_ALIASES",      # 繁体历史别名 → 桶
         "RESERVED_UNKNOWN_TAG",
-        "DEFAULT_CONFIG",
+        "DEFAULT_SEED_BY_LOCALE",  # SPEC-014 §1.5：按 locale 分流的默认标签种子
         "mainline:",
         "{ name: '",
         "': { bucket: '",
@@ -700,8 +701,8 @@ def _parse_flat_catalog(text: str) -> dict[str, str]:
     return out
 
 
-def _parse_shell_dict(html: str) -> dict[str, str]:
-    block = re.search(r"const SHELL = \{\s*zh:\s*\{(.*?)\n      \}", html, re.DOTALL)
+def _parse_shell_dict(html: str, locale: str) -> dict[str, str]:
+    block = re.search(re.escape(locale) + r":\s*\{(.*?)\n      \}", html, re.DOTALL)
     if not block:
         return {}
     out = {}
@@ -710,23 +711,73 @@ def _parse_shell_dict(html: str) -> dict[str, str]:
     return out
 
 
+# SPEC-014: the shell inline dictionary now carries one block per supported
+# locale (zh + en); each block must match its own catalog file exactly, and
+# every data-i18n key used in the markup must be present in every block —
+# a locale-neutral requirement so a fresh en visitor never silently falls
+# back to a half-filled dictionary.
+SHELL_CATALOG_FILES = {"zh": "src/locales/zh.js", "en": "src/locales/en.js"}
+
+
 def audit_shell_dict_matches_catalog(errors: list[str]) -> None:
-    """index.html 内联字典的每一条必须与 src/locales/zh.js 同 key 逐字相同。"""
-    catalog = _parse_flat_catalog((ROOT / "src/locales/zh.js").read_text(encoding="utf-8"))
-    shell = _parse_shell_dict((ROOT / "index.html").read_text(encoding="utf-8"))
-    if not shell:
-        fail(errors, "index.html shell i18n dictionary is missing or unparsable")
-        return
-    used = set(re.findall(r'data-i18n(?:-aria|-tip|-alt)?="([\w.]+)"',
-                          (ROOT / "index.html").read_text(encoding="utf-8")))
-    for key in sorted(used):
-        if key not in shell:
-            fail(errors, f"shell dict is missing key used by data-i18n: {key}")
-    for key, value in sorted(shell.items()):
-        if key not in catalog:
-            fail(errors, f"shell dict key not in zh catalog: {key}")
-        elif catalog[key] != value:
-            fail(errors, f"shell dict drifted from zh catalog for {key}")
+    """index.html 内联字典的每一条必须与对应 locale 的 src/locales/*.js 同 key 逐字相同。"""
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    used = set(re.findall(r'data-i18n(?:-aria|-tip|-alt)?="([\w.]+)"', html))
+    for locale, catalog_file in SHELL_CATALOG_FILES.items():
+        catalog = _parse_flat_catalog((ROOT / catalog_file).read_text(encoding="utf-8"))
+        shell = _parse_shell_dict(html, locale)
+        if not shell:
+            fail(errors, f"index.html shell i18n dictionary for {locale!r} is missing or unparsable")
+            continue
+        for key in sorted(used):
+            if key not in shell:
+                fail(errors, f"shell dict for {locale!r} is missing key used by data-i18n: {key}")
+        for key, value in sorted(shell.items()):
+            if key not in catalog:
+                fail(errors, f"shell dict key not in {locale!r} catalog: {key}")
+            elif catalog[key] != value:
+                fail(errors, f"shell dict drifted from {locale!r} catalog for {key}")
+
+
+def _parse_catalog_keys(text: str) -> set[str]:
+    """全部顶层 key（字符串值或数组值皆可），不含具体取值。"""
+    return set(re.findall(r"^\s*'([\w.]+)':", text, re.M))
+
+
+def audit_i18n_catalog_parity(errors: list[str]) -> None:
+    """SPEC-014：zh.js 与 en.js 的 key 集合必须完全相同——少一个是死路（英文界面
+    掉词），多一个是死 key（另一条护栏也会抓，但这里给出更直接的诊断）。"""
+    zh_keys = _parse_catalog_keys((ROOT / "src/locales/zh.js").read_text(encoding="utf-8"))
+    en_keys = _parse_catalog_keys((ROOT / "src/locales/en.js").read_text(encoding="utf-8"))
+    missing_in_en = sorted(zh_keys - en_keys)
+    missing_in_zh = sorted(en_keys - zh_keys)
+    for key in missing_in_en:
+        fail(errors, f"src/locales/en.js is missing a key present in zh.js: {key}")
+    for key in missing_in_zh:
+        fail(errors, f"src/locales/zh.js is missing a key present in en.js: {key}")
+
+
+# SPEC-014: same judgment as SPEC-015's site/en terminology guard, applied to
+# the runtime English catalog — "Wasted" is added here because it is the one
+# extra term SPEC-014's acceptance list names that SPEC-015's site guard does
+# not (the two lists are related but not identical; kept as separate tuples
+# rather than merged so each guard's docstring can cite its own spec).
+FORBIDDEN_CATALOG_BUCKET_TERMS = ("Leak", "Waste", "Distraction", "Unproductive", "Wasted")
+
+
+def audit_i18n_en_terminology_guard(errors: list[str]) -> None:
+    """SPEC-014 永久护栏：src/locales/en.js 的**取词结果**（catalog 值，不含 key）
+    不得出现 Leak/Waste/Distraction/Unproductive/Wasted（大小写不敏感、按独立
+    单词）——CLAUDE.md 明载第三桶「不含道德评判」，`leak` 只是内部数据键。
+    只查值不查 key 是必须的：catalog key 名本身（如 `bucket.leak`）与 zh.js
+    逐一对齐、且就是那个不改名的内部键，若连 key 一起扫，这条护栏对任何一份
+    英文 catalog 都会恒为假阳性。"""
+    path = ROOT / "src/locales/en.js"
+    catalog = _parse_flat_catalog(path.read_text(encoding="utf-8"))
+    for key, value in catalog.items():
+        for term in FORBIDDEN_CATALOG_BUCKET_TERMS:
+            if re.search(r"\b" + re.escape(term) + r"\b", value, re.IGNORECASE):
+                fail(errors, f"src/locales/en.js key {key!r} uses forbidden bucket term: {term!r}")
 
 
 def audit_i18n_keys_referenced(errors: list[str]) -> None:
@@ -766,6 +817,8 @@ def main() -> int:
     audit_no_hardcoded_cjk_in_runtime(errors)
     audit_shell_dict_matches_catalog(errors)
     audit_i18n_keys_referenced(errors)
+    audit_i18n_catalog_parity(errors)
+    audit_i18n_en_terminology_guard(errors)
 
     if errors:
         print("project audit failed:")

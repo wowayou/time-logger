@@ -4,7 +4,7 @@
 // Commercial licensing available on request; contact via the repository above.
 import { fmtMins, hhmm, localDateTimeKey, minsBetweenDates, normalizeTimestamp } from './time.js';
 import { formatPercent } from './stats.js';
-import { t } from './i18n.js';
+import { getLocale, t } from './i18n.js';
 import {
   BUCKETS,
   BUCKET_ORDER,
@@ -14,8 +14,16 @@ import {
   chipGroups,
   countEntriesWithTag,
   loadConfig,
+  loadLocalePref,
   readBootDiag
 } from './storage.js';
+
+// SPEC-014 §1.6：隐私政策外链，按当前 locale 分流；绝对 URL——本页可能同时跑在
+// 新旧两个 origin 上，站点静态页只发布在 time.eigentime.org 根下。
+const PRIVACY_URL = {
+  zh: 'https://time.eigentime.org/privacy/',
+  en: 'https://time.eigentime.org/en/privacy/'
+};
 
 export function esc(s) {
   return String(s)
@@ -304,7 +312,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '77';
+export const APP_VERSION = '78';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -346,11 +354,19 @@ function renderMoreSheet(opts = {}) {
   const bootDiag = readBootDiag();
   const themeBtn = (value, label) =>
     `<button type="button" data-action="theme" data-theme="${value}" class="${themePref === value ? 'active' : ''}" aria-pressed="${themePref === value}" aria-label="${t('theme.aria', { label })}">${label}</button>`;
+  // SPEC-014 §2：语言开关，紧邻主题，同款三选一 seg；'' ＝跟随系统。active 态
+  // 按**存储的偏好**（loadLocalePref，'' 也算一种偏好）判定，不是按当前生效
+  // locale——与主题的 themePref 判定同一逻辑。
+  let localePref = '';
+  try { localePref = loadLocalePref(); } catch {}
+  const langBtn = (value, label) =>
+    `<button type="button" data-action="set-locale" data-locale="${value}" class="${localePref === value ? 'active' : ''}" aria-pressed="${localePref === value}">${esc(label)}</button>`;
   // SPEC-002（v76）：横幅已改常驻不可关闭（无 dismissed 状态），旧 origin 不再需要
   // 「重开」入口；同一个 isLegacyOrigin 现在改用于收敛这个菜单里唯一的写路径入口——
   // 「导入备份」——只读态完全不渲染这个 cell，其余三项（复制/存储/分享）都是导出/
   // 读能力，照常保留。
   const isLegacyOrigin = Boolean(opts.isLegacyOrigin);
+  const privacyHref = PRIVACY_URL[getLocale()] || PRIVACY_URL.zh;
   return `
     ${sheetHead({ title: t('more.title'), cancelText: t('more.close'), cancelAction: 'close-form', cancelAria: t('more.closeAria') })}
     <div class="form-sheet-body more-body">
@@ -372,7 +388,13 @@ function renderMoreSheet(opts = {}) {
             ${themeBtn('auto', t('theme.auto'))}${themeBtn('light', t('theme.light'))}${themeBtn('dark', t('theme.dark'))}
           </div>
         </div>
+        <div class="cell-row"><span>${t('more.language')}</span>
+          <div class="seg theme-seg" id="language-seg" role="group" aria-label="${t('more.languageAria')}">
+            ${langBtn('', t('more.languageAuto'))}${langBtn('zh', t('lang.zh'))}${langBtn('en', t('lang.en'))}
+          </div>
+        </div>
         <button class="cell-btn" type="button" data-action="open-help" aria-label="${t('more.helpAria')}">${t('more.help')}${cellChevron}</button>
+        <a class="cell-btn" href="${privacyHref}" target="_blank" rel="noopener" aria-label="${t('more.privacyAria')}">${t('more.privacy')}${cellChevron}</a>
       </div>
       <div class="cell-group">
         <button class="cell-btn" id="repair-update-btn" type="button" data-action="repair-update-channel" aria-label="${t('more.repairAria')}"><span data-role="cell-label">${t('more.repair')}</span>${cellChevron}</button>

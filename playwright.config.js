@@ -40,6 +40,20 @@ export default defineConfig({
     // UI cases must not leak a real persistent worker/cache into later tests;
     // the dedicated update-flow case injects a deterministic registration stub.
     serviceWorkers: 'block',
+    // SPEC-014: this sandbox's browsers report navigator.languages as
+    // ["en-US"] by default. Before src/locales/en.js existed that was
+    // harmless (SUPPORTED_LOCALES only had 'zh', so resolveLocale() always
+    // fell through to the DEFAULT_LOCALE fallback regardless of navLangs).
+    // Now that 'en' is a real supported locale, an unpinned en-US context
+    // would make resolveLocale('', ['en-US']) match 'en' via the
+    // startsWith('en-') branch — i.e. every one of the 272 existing zh
+    // assertions would silently render in English with zero code changes on
+    // their part. Pinning the context locale to zh-CN keeps
+    // navigator.languages = ['zh-CN'] so the existing suite keeps resolving
+    // 'zh' exactly as before; the new en-locale specs are unaffected because
+    // they explicitly set localStorage['timelog.locale'] = 'en' before
+    // navigation, and the stored preference always wins over navLangs.
+    locale: 'zh-CN',
     ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {})
   },
   webServer: {

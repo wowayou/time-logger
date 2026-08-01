@@ -8,11 +8,12 @@
 // 由 app.js 在启动时读出来喂给 setLocale()；这样 storage.js 可以自由 import
 // 本模块取校验文案而不形成循环依赖。
 import zh from './locales/zh.js';
+import en from './locales/en.js';
 
 export const DEFAULT_LOCALE = 'zh';
-export const SUPPORTED_LOCALES = ['zh']; // SPEC-014 追加 'en'
+export const SUPPORTED_LOCALES = ['zh', 'en'];
 
-const CATALOGS = { zh };
+const CATALOGS = { zh, en };
 
 let current = DEFAULT_LOCALE;
 
@@ -103,4 +104,16 @@ export function tAll(key) {
     if (typeof value === 'string' && !out.includes(value)) out.push(value);
   }
   return out;
+}
+
+/**
+ * SPEC-014 §3：最小两形复数 helper（英文 one/other 两形足够，不为一个用途引入
+ * `Intl.PluralRules`）。只用于「已记录 N 天」这类需要按数量换词尾的少数场景——
+ * 调用方先把 one/other 两种取词结果都算出来，这里只挑一个。
+ * @param {number} n
+ * @param {{ one: string, other: string }} forms
+ * @returns {string}
+ */
+export function plural(n, forms) {
+  return n === 1 ? forms.one : forms.other;
 }

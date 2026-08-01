@@ -158,7 +158,7 @@
     // 模块到达前就已可见，等模块再填会让非中文用户首访闪一帧中文。
     // 这份字典与 src/locales/zh.js 重复，漂移由 project_audit.py 的
     // audit_shell_dict_matches_catalog 逐条比对拦住，不靠人记得同步。
-    const SUPPORTED = ['zh'];
+    const SUPPORTED = ['zh', 'en'];
     const SHELL = {
       zh: {
         "chrome.fabLog": "＋ 记一条",
@@ -202,6 +202,49 @@
         "shell.viewYearTip": "查看全年每月汇总，可下钻到某月。",
         "shell.viewsAria": "视图",
         "toast.deleted": "已删除"
+      },
+      en: {
+        "chrome.fabLog": "＋ Log it",
+        "chrome.fabLogAria": "Log a new time entry",
+        "list.titleDay": "Timeline",
+        "period.backDay": "Today",
+        "period.day": "Day",
+        "period.month": "Month",
+        "period.week": "Week",
+        "period.year": "Year",
+        "shell.brand": "Eigentime",
+        "shell.crossTab": "Another tab changed your data; closing the current form will sync automatically.",
+        "shell.crossTabAria": "Dismiss the cross-tab notice",
+        "shell.crossTabBtn": "Got it",
+        "shell.gotIt": "Got it",
+        "shell.gotItAria": "Got it, will fully quit and reopen later",
+        "shell.legacyNotice": "This old address is now read-only. Continue logging at the new address time.eigentime.org/app/; your history can still be exported here at any time.",
+        "shell.moreAria": "Open the more menu",
+        "shell.moreTip": "More: summary, backup, tag settings, theme, help.",
+        "shell.nextAria": "Next",
+        "shell.nextTip": "Go to the next period.",
+        "shell.openNew": "Open new address",
+        "shell.openNewAria": "Open new address time.eigentime.org",
+        "shell.prevAria": "Previous",
+        "shell.prevTip": "Go to the previous period.",
+        "shell.repoAria": "Eigentime GitHub repository",
+        "shell.title": "Eigentime",
+        "shell.todayTip": "Go back to the current period that includes today.",
+        "shell.undo": "Undo",
+        "shell.updateBtn": "Update",
+        "shell.updateFound": "A new version is available. Your data stays on this device.",
+        "shell.updateStuck": "Did not take effect? Fully quit the app (in Safari, close every tab for this site) and reopen it to finish updating; your data is not affected.",
+        "shell.updateTip": "Refresh and load the new version.",
+        "shell.viewDayAria": "Day view",
+        "shell.viewDayTip": "View the single-day timeline; entries are editable.",
+        "shell.viewMonthAria": "Month view",
+        "shell.viewMonthTip": "View the daily summary for this month; drill into any day.",
+        "shell.viewWeekAria": "Week view",
+        "shell.viewWeekTip": "View the daily summary for this week; drill into any day.",
+        "shell.viewYearAria": "Year view",
+        "shell.viewYearTip": "View the monthly summary for this year; drill into any month.",
+        "shell.viewsAria": "View",
+        "toast.deleted": "Deleted"
       }
     };
     const resolve = (stored, langs) => {
