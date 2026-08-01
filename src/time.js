@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-import { t, tList } from './i18n.js';
+import { getLocale, t, tList } from './i18n.js';
 
 export function p2(n) {
   return String(n).padStart(2, '0');
@@ -88,7 +88,19 @@ export function minsBetweenDates(a, b) {
   return Math.max(0, (b - a) / 60000);
 }
 
+// SPEC-014 §3: the zh path below is byte-for-byte the pre-existing behavior
+// (never touched) — the en branch is a separate early return, so switching
+// locales cannot change a single byte of zh output.
+function fmtMinsEn(m) {
+  if (m < 1) return '<1m';
+  if (m < 60) return `${Math.round(m)}m`;
+  const h = Math.floor(m / 60);
+  const rem = Math.round(m % 60);
+  return rem ? `${h}h ${rem}m` : `${h}h`;
+}
+
 export function fmtMins(m) {
+  if (getLocale() === 'en') return fmtMinsEn(m);
   if (m < 1) return '<1min';
   if (m < 60) return `~${Math.round(m)}min`;
   const h = Math.floor(m / 60);
@@ -97,6 +109,7 @@ export function fmtMins(m) {
 }
 
 export function fmtPlainMins(m) {
+  if (getLocale() === 'en') return m > 0 ? fmtMinsEn(m) : '0m';
   return m > 0 ? fmtMins(m) : '0min';
 }
 
@@ -188,19 +201,34 @@ function weekdayNarrow(d) {
   return tList('date.weekdayNarrow')[d.getDay()] || '';
 }
 
+// SPEC-014 §3: the only locale-branching date formatting in the app. The zh
+// path is the pre-existing hand-written format, untouched byte-for-byte; en
+// uses Intl.DateTimeFormat('en-US', …) with no `timeZone` option — the Date
+// objects here are already local-wall-clock values, and passing a timeZone
+// would introduce the timezone conversion CLAUDE.md forbids.
 function dateLabel(d) {
+  if (getLocale() === 'en') {
+    return new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(d);
+  }
   return t('date.full', {
     y: d.getFullYear(), m: p2(d.getMonth() + 1), d: p2(d.getDate()), wd: weekdayNarrow(d)
   });
 }
 
 export function shortDateLabel(d) {
+  if (getLocale() === 'en') {
+    return new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }).format(d);
+  }
   return t('date.short', { m: d.getMonth() + 1, d: d.getDate(), wd: weekdayNarrow(d) });
 }
 
 function shortRangeLabel(start, end) {
   const last = addDays(end, -1);
   return `${p2(start.getMonth() + 1)}/${p2(start.getDate())}-${p2(last.getMonth() + 1)}/${p2(last.getDate())}`;
+}
+
+function enMonthDay(d) {
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(d);
 }
 
 export function periodRange(view, dateKey) {
@@ -224,8 +252,17 @@ export function periodRange(view, dateKey) {
 export function periodLabel(view, dateKey, opts = {}) {
   const { start, end } = periodRange(view, dateKey);
   const last = addDays(end, -1);
+  const isEn = getLocale() === 'en';
   if (view === 'day') return dateLabel(start);
-  if (view === 'week') return opts.short ? shortRangeLabel(start, end) : `${dateLabel(start)} - ${p2(last.getMonth() + 1)}/${p2(last.getDate())}`;
-  if (view === 'month') return t('date.monthLabel', { y: start.getFullYear(), m: start.getMonth() + 1 });
+  if (view === 'week') {
+    if (opts.short) return shortRangeLabel(start, end);
+    if (isEn) return `${enMonthDay(start)} – ${enMonthDay(last)}`;
+    return `${dateLabel(start)} - ${p2(last.getMonth() + 1)}/${p2(last.getDate())}`;
+  }
+  if (view === 'month') {
+    if (isEn) return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(start);
+    return t('date.monthLabel', { y: start.getFullYear(), m: start.getMonth() + 1 });
+  }
+  if (isEn) return String(start.getFullYear());
   return t('date.yearLabel', { y: start.getFullYear() });
 }

@@ -1,7 +1,7 @@
 # SPEC-014 · 英文 UI catalog + 语言开关
 
-status: ready（SPEC-013 已于 PR #34 合并，阻塞解除。英文 App 名＝**Eigentime**、默认标签种子＝**方案 B**，均由维护者 2026-07-31 拍板，无待拍板项）
-owner: 执行方认领后填分支名 `spec/014-en-catalog`
+status: in-progress（分支 `spec/014-en-catalog`）
+owner: `spec/014-en-catalog`
 执行模型: **Sonnet 5**（术语在本规格内已定死，执行是机械填表 + 一个 seg 控件）
 验收人: Opus 5（**逐条核术语表**，措辞偏离即打回）
 

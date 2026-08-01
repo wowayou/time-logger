@@ -20,6 +20,7 @@ import {
   VIEW_KEY,
   appendBootDiagSample,
   ensureFirstUsedDate,
+  ensureLegacyLocalePinned,
   load,
   loadConfig,
   mergeImportedConfig,
@@ -35,9 +36,10 @@ import {
   uid,
   validateImportData,
   loadLocalePref,
+  saveLocalePref,
   refreshBucketLabels
 } from './storage.js';
-import { getLocale, resolveLocale, setLocale, t } from './i18n.js';
+import { getLocale, plural, resolveLocale, setLocale, t, tList } from './i18n.js';
 import { createIoActions } from './io_actions.js';
 import { createSheetController } from './sheet_controller.js';
 import {
@@ -187,6 +189,20 @@ import {
     applyTheme(pref);
   }
 
+  // SPEC-014 §2：语言开关只出现在「更多」sheet 里，切换时该 sheet本身没有任何
+  // 未保存的输入控件（没有 textarea/input 承载草稿），因此不需要禁用切换或强制
+  // 先关闭其它 sheet——采用与 toggleBootDiag 相同的「原地重渲染当前更多 sheet +
+  // 刷新主内容 render()」模式：不刷新页面、不丢输入（本来就没有输入）。
+  function setLocalePref(code) {
+    saveLocalePref(code);
+    setLocale(resolveLocale(code, navigator.languages));
+    refreshBucketLabels();
+    applyShellI18n();
+    document.documentElement.lang = getLocale();
+    render();
+    sheetController.openMoreSheet();
+  }
+
   // --- Compute entries and summaries ---
   function settlementEndFor(startTs, dateKey) {
     return getSettlementEndFor(load().entries, startTs, dateKey);
@@ -219,9 +235,12 @@ import {
       return rows;
     }
     if (state.view === 'year') {
+      // 验收指出旧的 t('chrome.monthCell', {n}) 插值在英文侧读成 "Month 1"…
+      // "Month 12"；改用真正的月份短名数组（zh 一侧逐字节与旧模板输出相同）。
+      const monthShort = tList('date.monthShort');
       return Array.from({ length: 12 }, (_, i) => {
         const d = new Date(start.getFullYear(), i, 1);
-        return { key: localDateKey(d), label: t('chrome.monthCell', { n: i + 1 }), rangeStart: d, rangeEnd: addMonths(d, 1), targetView: 'month' };
+        return { key: localDateKey(d), label: monthShort[i] || String(i + 1), rangeStart: d, rangeEnd: addMonths(d, 1), targetView: 'month' };
       });
     }
     return [];
@@ -365,8 +384,14 @@ import {
       // 一条真实记录都没有时不编造里程碑，直接不显示。
       usageEl.hidden = recordedDays === 0;
       if (recordedDays > 0) {
-        usageEl.textContent = t('chrome.milestone', { journey: journeyDay, recorded: recordedDays });
-        usageEl.setAttribute('aria-label', t('chrome.milestoneAria', { journey: journeyDay, recorded: recordedDays }));
+        // SPEC-014 §3：「N 天/days」的单复数用 i18n.js 的 plural() 现算，再整体
+        // 塞进 {recorded}——中文两形取值相同，字节不变；英文 N=1 时读 "1 day"。
+        const recordedLabel = plural(recordedDays, {
+          one: t('chrome.recordedDayOne', { n: recordedDays }),
+          other: t('chrome.recordedDayOther', { n: recordedDays })
+        });
+        usageEl.textContent = t('chrome.milestone', { journey: journeyDay, recorded: recordedLabel });
+        usageEl.setAttribute('aria-label', t('chrome.milestoneAria', { journey: journeyDay, recorded: recordedLabel }));
       }
     }
     // R5：当前周期是否包含今天——驱动「回到今天」按钮的条件渲染 + 日期行内的
@@ -815,6 +840,7 @@ import {
       if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
       const action = el.dataset.action;
       if (action === 'theme') setThemePref(el.dataset.theme);
+      if (action === 'set-locale') setLocalePref(el.dataset.locale || '');
       if (action === 'view') setView(el.dataset.view);
       if (action === 'shift-period') shiftPeriod(Number(el.dataset.delta || 0));
       if (action === 'today') goToday();
@@ -1259,10 +1285,17 @@ import {
   }
 
   function init() {
+    // SPEC-014 修复（方案 A）：存量用户迁移守卫必须先于 resolveLocale() 运行，
+    // 否则「从未显式选过语言 + 浏览器偏好英文 + 本机已有数据」的存量用户会被
+    // navigator 探测分支（v78 才第一次真正生效）静默切成英文。
     // locale 必须在任何渲染、任何 BUCKETS 读取之前定下来。
+    ensureLegacyLocalePinned();
     setLocale(resolveLocale(loadLocalePref(), navigator.languages));
     refreshBucketLabels();
     applyShellI18n();
+    // 静态壳的同步脚本比这里更早跑，它自己的判定与这里应当一致；这里是权威
+    // 结果，覆盖回去以防两者因任何原因不一致。
+    document.documentElement.lang = getLocale();
     markBootTrace('init_start');
     updateMigrationNotice();
     const today = todayStr();

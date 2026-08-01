@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
 import { normalizeTimestamp, parseDateKey } from './time.js';
-import { t, tAll } from './i18n.js';
+import { getLocale, t, tAll } from './i18n.js';
 
 const KEY = 'timelog.v1';
 export const CONFIG_KEY = 'timelog.config';
@@ -32,6 +32,37 @@ export function saveLocalePref(code) {
     else localStorage.removeItem(LOCALE_KEY);
   } catch {
     /* 存不下不影响本次会话内的语言 */
+  }
+}
+
+// SPEC-014 修复（维护者拍板方案 A，2026-08-01）：v78 之前 SUPPORTED_LOCALES 只有
+// 'zh'，resolveLocale() 里按 navigator.languages 探测英文的分支从未真正生效过；
+// 'en' 成为受支持语言后，任何**从未显式选过语言**（＝全部存量用户，这个开关
+// 今天才出现）且**浏览器偏好英文**的设备，升级到 v78 后会被静默切成英文界面——
+// 这不是他们的选择。一次性把这类用户钉在中文（持久化写入，而不是每次都在
+// 内存里探测）；全新安装（timelog.v1 与 timelog.config 都不存在）不受影响，
+// 继续走 navigator 探测，首次打开英文浏览器的新用户仍是英文。
+const LOCALE_MIGRATED_KEY = 'timelog.localeMigrated.v1';
+
+/**
+ * 用独立的一次性标记键，而不是靠 `timelog.locale` 是否为空判断「是否已处理
+ * 过」：用户后续可能显式选择「跟随系统」（语言开关三态之一），那个动作同样会
+ * 清空 `timelog.locale`——如果复用同一个键当「已处理」标记，会把用户明确的
+ * 「跟随系统」选择误判成「从未处理」，下次启动又被强行按回中文。
+ *
+ * 形态参照 `ensureFirstUsedDate`（老用户以最早本机记录日期迁移）：一次性、只
+ * 读判定用的现有键，不改 `timelog.v1` 的任何内容；语言仍不进备份（SPEC-013
+ * 已定）。**必须在 app.js 的 `init()` 里 `resolveLocale()` 之前调用**。
+ */
+export function ensureLegacyLocalePinned() {
+  try {
+    if (localStorage.getItem(LOCALE_MIGRATED_KEY)) return;
+    localStorage.setItem(LOCALE_MIGRATED_KEY, '1');
+    if (localStorage.getItem(LOCALE_KEY)) return;
+    const hasData = Boolean(localStorage.getItem(KEY) || localStorage.getItem(CONFIG_KEY));
+    if (hasData) localStorage.setItem(LOCALE_KEY, 'zh');
+  } catch {
+    /* 存不下就照常走 navigator 探测，不阻塞启动 */
   }
 }
 const FIRST_USED_DATE_KEY = 'timelog.firstUsedDate';
@@ -90,21 +121,46 @@ export function resolveMotto(config = loadConfig()) {
   return config.motto === undefined ? defaultMotto() : config.motto;
 }
 
-const DEFAULT_CONFIG = {
-  version: 1,
-  mainline: ['求职推进'],
-  chips: [
-    { name: '睡觉', bucket: 'maintain', longOk: true },
-    { name: '吃饭', bucket: 'maintain', longOk: false },
-    { name: '洗漱', bucket: 'maintain', longOk: false },
-    { name: '通勤', bucket: 'maintain', longOk: false },
-    { name: '家务', bucket: 'maintain', longOk: false },
-    { name: '运动健康', bucket: 'maintain', longOk: false },
-    { name: '娱乐', bucket: 'leak', longOk: false },
-    { name: '刷手机', bucket: 'leak', longOk: false },
-    { name: '发呆', bucket: 'leak', longOk: false }
-  ]
+// SPEC-014 §1.5（维护者拍板方案 B，2026-07-31）：默认标签种子按当前 locale 分流，
+// 但**只在首次初始化**生效——见下面 normalizeConfig 的 `!raw` 分支，那是唯一
+// 读这张表的地方。已有 config 的用户切换语言**不会**触发重新种子：这里只
+// `getLocale()` 读一次当前语言，不写 locale、不订阅语言变化、也不在
+// mainlineSource/chipsSource 的「已有 raw 但字段缺失」兜底分支之外被使用。
+// 英文种子与中文种子一一对应（睡觉→Sleep、吃饭→Meals……），`longOk` 逐项一致。
+const DEFAULT_SEED_BY_LOCALE = {
+  zh: {
+    mainline: ['求职推进'],
+    chips: [
+      { name: '睡觉', bucket: 'maintain', longOk: true },
+      { name: '吃饭', bucket: 'maintain', longOk: false },
+      { name: '洗漱', bucket: 'maintain', longOk: false },
+      { name: '通勤', bucket: 'maintain', longOk: false },
+      { name: '家务', bucket: 'maintain', longOk: false },
+      { name: '运动健康', bucket: 'maintain', longOk: false },
+      { name: '娱乐', bucket: 'leak', longOk: false },
+      { name: '刷手机', bucket: 'leak', longOk: false },
+      { name: '发呆', bucket: 'leak', longOk: false }
+    ]
+  },
+  en: {
+    mainline: ['Job search'],
+    chips: [
+      { name: 'Sleep', bucket: 'maintain', longOk: true },
+      { name: 'Meals', bucket: 'maintain', longOk: false },
+      { name: 'Wash up', bucket: 'maintain', longOk: false },
+      { name: 'Commute', bucket: 'maintain', longOk: false },
+      { name: 'Chores', bucket: 'maintain', longOk: false },
+      { name: 'Exercise', bucket: 'maintain', longOk: false },
+      { name: 'Entertainment', bucket: 'leak', longOk: false },
+      { name: 'Phone', bucket: 'leak', longOk: false },
+      { name: 'Zoning out', bucket: 'leak', longOk: false }
+    ]
+  }
 };
+
+function defaultSeed() {
+  return DEFAULT_SEED_BY_LOCALE[getLocale()] || DEFAULT_SEED_BY_LOCALE.zh;
+}
 
 function cleanName(name) {
   return String(name || '').trim();
@@ -131,15 +187,17 @@ function normalizeChip(chip) {
 
 export function normalizeConfig(raw) {
   if (!raw || typeof raw !== 'object') {
+    const seed = defaultSeed();
     return {
       version: 1,
-      mainline: DEFAULT_CONFIG.mainline.slice(),
-      chips: DEFAULT_CONFIG.chips.map(chip => ({ ...chip })),
+      mainline: seed.mainline.slice(),
+      chips: seed.chips.map(chip => ({ ...chip })),
       motto: undefined
     };
   }
-  const mainlineSource = Array.isArray(raw.mainline) ? raw.mainline : DEFAULT_CONFIG.mainline;
-  const chipsSource = Array.isArray(raw.chips) ? raw.chips : DEFAULT_CONFIG.chips;
+  const seed = defaultSeed();
+  const mainlineSource = Array.isArray(raw.mainline) ? raw.mainline : seed.mainline;
+  const chipsSource = Array.isArray(raw.chips) ? raw.chips : seed.chips;
   const mainline = uniqueNames(mainlineSource);
   const chips = [];
   const seen = new Set(mainline);
