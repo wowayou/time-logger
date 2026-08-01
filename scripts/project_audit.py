@@ -382,6 +382,18 @@ def audit_docs(errors: list[str]) -> None:
             fail(errors, f"CLAUDE.md must document maintenance command: {command}")
 
 
+# SPEC-015: the four public site/ pages (zh + en landing, zh + en privacy
+# policy), each a self-contained single-file page with its own inline token
+# block. Kept as an explicit list (not a glob) so a new page under site/
+# must be registered here deliberately, same judgment call as
+# ALLOWED_DOC_ASSETS above.
+SITE_PAGES = [
+    "site/index.html",
+    "site/en/index.html",
+    "site/privacy/index.html",
+    "site/en/privacy/index.html",
+]
+
 WCAG_MIN_CONTRAST = 4.5
 WCAG_TEXT_TOKENS = ("--text", "--muted", "--faint", "--danger")
 # v76: --chrome (view-tabs unselected state / date-nav buttons' shell surface,
@@ -466,25 +478,29 @@ def audit_wcag_contrast(errors: list[str]) -> None:
             if ratio < WCAG_MIN_CONTRAST:
                 fail(errors, f"WCAG contrast below {WCAG_MIN_CONTRAST}:1 in {theme} theme: {pair} = {ratio:.2f}")
 
-    # 着陆页维护着自己的一套内联令牌（site/index.html 单文件），与应用令牌无共享。
-    # v75 的验收恰好抓到这个盲区：应用侧 --bg 下沉后，site 只同步了 --bg 没同步
-    # --faint，13px 小字（.cta-sub/.usage-note/页脚）对比度落到 3.94。公开主页与
-    # 应用同等受这条护栏约束，否则同样的漂移会在下一次改亮色时重演。
-    site_tokens = _extract_theme_tokens(
-        read_text("site/index.html"),
-        r"@media \(prefers-color-scheme: light\)\s*\{\s*:root",
-    )
-    if not site_tokens:
-        fail(errors, "could not parse site/index.html light tokens for WCAG contrast audit")
-    for text_token in WCAG_TEXT_TOKENS:
-        if text_token not in site_tokens:
+    # 着陆页维护着自己的一套内联令牌（site/ 下每个页面单文件自包含），与应用令牌
+    # 无共享。v75 的验收恰好抓到这个盲区：应用侧 --bg 下沉后，site 只同步了 --bg
+    # 没同步 --faint，13px 小字（.cta-sub/.usage-note/页脚）对比度落到 3.94。公开
+    # 主页与应用同等受这条护栏约束，否则同样的漂移会在下一次改亮色时重演。
+    # SPEC-015：英文主页与两份隐私政策页加入同一份 site/ 内联令牌页面清单，
+    # 覆盖面从单页扩到四页——任何一页漏同步都会在这里红。
+    for site_page in SITE_PAGES:
+        site_tokens = _extract_theme_tokens(
+            read_text(site_page),
+            r"@media \(prefers-color-scheme: light\)\s*\{\s*:root",
+        )
+        if not site_tokens:
+            fail(errors, f"could not parse {site_page} light tokens for WCAG contrast audit")
             continue
-        for surface_token in WCAG_SURFACE_TOKENS:
-            if surface_token not in site_tokens:
+        for text_token in WCAG_TEXT_TOKENS:
+            if text_token not in site_tokens:
                 continue
-            ratio = _contrast_ratio(site_tokens[text_token], site_tokens[surface_token])
-            if ratio < WCAG_MIN_CONTRAST:
-                fail(errors, f"WCAG contrast below {WCAG_MIN_CONTRAST}:1 in site/index.html light theme: {text_token} vs {surface_token} = {ratio:.2f}")
+            for surface_token in WCAG_SURFACE_TOKENS:
+                if surface_token not in site_tokens:
+                    continue
+                ratio = _contrast_ratio(site_tokens[text_token], site_tokens[surface_token])
+                if ratio < WCAG_MIN_CONTRAST:
+                    fail(errors, f"WCAG contrast below {WCAG_MIN_CONTRAST}:1 in {site_page} light theme: {text_token} vs {surface_token} = {ratio:.2f}")
 
 
 def audit_chrome_surface_layering(errors: list[str]) -> None:
@@ -511,6 +527,82 @@ def audit_chrome_surface_layering(errors: list[str]) -> None:
             f"light --chrome ({tokens['--chrome']}, luminance {chrome_lum:.4f}) is not brighter than "
             f"--bg ({tokens['--bg']}, luminance {bg_lum:.4f}) — control-surface layering inverted again",
         )
+
+
+# ---------------------------------------------------------------------------
+# SPEC-015 · 英文对外页面包三条永久护栏
+# ---------------------------------------------------------------------------
+
+FORBIDDEN_SOCIAL_PROOF_PHRASES = (
+    "trusted by",
+    "loved by",
+    "users love",
+    "market-validated",
+)
+
+
+def audit_site_honesty_guard(errors: list[str]) -> None:
+    """Permanent guard (SPEC-015): none of the public site/ pages may claim
+    unverified social proof or validated market demand — CLAUDE.md's D3
+    discipline ("禁止对外声称市场需求已被验证") extends to every page under
+    site/, not just the Chinese homepage that already had the honest closing
+    statement. Case-insensitive substring match; the phrase list mirrors the
+    spec's explicit ban list verbatim."""
+    for path in sorted((ROOT / "site").rglob("*.html")):
+        text = path.read_text(encoding="utf-8").lower()
+        for phrase in FORBIDDEN_SOCIAL_PROOF_PHRASES:
+            if phrase in text:
+                fail(errors, f"{path.relative_to(ROOT)} contains forbidden social-proof phrase: {phrase!r}")
+
+
+FORBIDDEN_BUCKET_TERMS = ("Leak", "Waste", "Distraction", "Unproductive")
+
+
+def audit_site_en_terminology_guard(errors: list[str]) -> None:
+    """Permanent guard (SPEC-015, shared judgment with SPEC-014 §validation):
+    the English public pages must use the SPEC-014 bucket terminology (Focus /
+    Upkeep / Drift / Unlogged) and must never reintroduce the internal `leak`
+    key or a moralizing synonym as a visible bucket name — CLAUDE.md is
+    explicit that the third bucket "不含道德评判". Whole-word, case-insensitive
+    match so this doesn't false-positive on unrelated substrings."""
+    en_root = ROOT / "site" / "en"
+    if not en_root.is_dir():
+        fail(errors, "site/en/ is missing — cannot run the terminology guard")
+        return
+    for path in sorted(en_root.rglob("*.html")):
+        text = path.read_text(encoding="utf-8")
+        for term in FORBIDDEN_BUCKET_TERMS:
+            if re.search(r"\b" + re.escape(term) + r"\b", text, re.IGNORECASE):
+                fail(errors, f"{path.relative_to(ROOT)} uses forbidden bucket term: {term!r}")
+
+
+def audit_site_hreflang(errors: list[str]) -> None:
+    """Permanent guard (SPEC-015): the four public pages must declare a
+    complete hreflang alternate set (zh-Hans / en / x-default) pointing at
+    each other's absolute time.eigentime.org URL, matched to the page's own
+    section (landing pages point at the two landing URLs, privacy pages at
+    the two privacy URLs)."""
+    expected = {
+        "site/index.html": ("https://time.eigentime.org/", "https://time.eigentime.org/en/"),
+        "site/en/index.html": ("https://time.eigentime.org/", "https://time.eigentime.org/en/"),
+        "site/privacy/index.html": ("https://time.eigentime.org/privacy/", "https://time.eigentime.org/en/privacy/"),
+        "site/en/privacy/index.html": ("https://time.eigentime.org/privacy/", "https://time.eigentime.org/en/privacy/"),
+    }
+    for rel, (zh_url, en_url) in expected.items():
+        path = ROOT / rel
+        if not path.exists():
+            fail(errors, f"{rel} is missing — required for hreflang structure")
+            continue
+        html = path.read_text(encoding="utf-8")
+        zh_default = zh_url  # x-default mirrors the Chinese URL for every page
+        checks = {
+            f'hreflang="zh-Hans" href="{zh_url}"': zh_url,
+            f'hreflang="en" href="{en_url}"': en_url,
+            f'hreflang="x-default" href="{zh_default}"': zh_default,
+        }
+        for needle in checks:
+            if needle not in html:
+                fail(errors, f"{rel} is missing hreflang alternate link: {needle}")
 
 
 # ---------------------------------------------------------------------------
@@ -668,6 +760,9 @@ def main() -> int:
     audit_docs(errors)
     audit_wcag_contrast(errors)
     audit_chrome_surface_layering(errors)
+    audit_site_honesty_guard(errors)
+    audit_site_en_terminology_guard(errors)
+    audit_site_hreflang(errors)
     audit_no_hardcoded_cjk_in_runtime(errors)
     audit_shell_dict_matches_catalog(errors)
     audit_i18n_keys_referenced(errors)

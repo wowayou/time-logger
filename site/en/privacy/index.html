@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<!--
+  Time Logger (时间尺) — Privacy Policy (time.eigentime.org/en/privacy/)
+  Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
+  SPDX-License-Identifier: AGPL-3.0-or-later
+
+  Non-runtime static page: not cached by the service worker, zero
+  third-party scripts, zero tracking, zero JS.
+  SPEC-015 §3: the privacy policy URL required by App Store Guideline
+  5.1.1(i). Honest boundaries over brevity — item 3 (GitHub Pages access
+  logs) must not be omitted; the two-language versions carry the same
+  seven items.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0e0f13">
+  <meta name="description" content="Time Logger privacy policy: the app collects, uploads, and syncs nothing. No account, no backend, no analytics, no third-party scripts.">
+  <title>Privacy Policy — Time Logger</title>
+  <link rel="alternate" hreflang="zh-Hans" href="https://time.eigentime.org/privacy/">
+  <link rel="alternate" hreflang="en" href="https://time.eigentime.org/en/privacy/">
+  <link rel="alternate" hreflang="x-default" href="https://time.eigentime.org/privacy/">
+  <style>
+    :root {
+      color-scheme: dark light;
+      --bg: #0e0f13;
+      --card: #16171e;
+      --text: #e8e9f1;
+      --muted: #9fa1b8;
+      --faint: #898ba2;
+      --border: rgba(255, 255, 255, 0.09);
+      --accent: #a99fff;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #eceef3;
+        --card: #ffffff;
+        --text: #33323b;
+        --muted: #686570;
+        --faint: #66646d;
+        --border: rgba(28, 32, 44, 0.10);
+        --accent: #5745c7;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      overflow-x: hidden;
+    }
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 0 clamp(18px, 5vw, 28px) calc(64px + env(safe-area-inset-bottom));
+    }
+    a { color: var(--accent); }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+      gap: 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+    .brand img { width: 28px; height: 28px; border-radius: 7px; display: block; }
+    .brand span { font-size: 15px; font-weight: 650; }
+    .lang-bar a { color: var(--muted); font-size: 13px; text-decoration: none; }
+    .lang-bar a:hover, .lang-bar a:focus-visible { color: var(--text); }
+
+    header.doc-head { padding: 24px 0 8px; }
+    header.doc-head h1 { font-size: clamp(26px, 5vw, 32px); font-weight: 700; margin: 0 0 8px; letter-spacing: -0.01em; }
+    header.doc-head .updated { color: var(--faint); font-size: 13px; margin: 0; }
+
+    article {
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      padding: 32px 0 8px;
+    }
+    article section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 22px;
+    }
+    article h2 { font-size: 16px; font-weight: 650; margin: 0 0 8px; }
+    article p { color: var(--muted); font-size: 14px; line-height: 1.65; margin: 0; }
+    article code { font-size: 13px; }
+
+    footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: space-between;
+      align-items: center;
+    }
+    footer nav { display: flex; gap: 16px; flex-wrap: wrap; }
+    footer a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    footer a:hover, footer a:focus-visible { color: var(--text); }
+    footer .copyright { color: var(--faint); font-size: 12px; width: 100%; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="top-bar">
+      <a class="brand" href="../">
+        <img src="../../app/icon.svg" alt="Time Logger">
+        <span>Time Logger</span>
+      </a>
+      <div class="lang-bar">
+        <a href="../../privacy/">中文</a>
+      </div>
+    </div>
+
+    <header class="doc-head">
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last updated: 2026-07-31</p>
+    </header>
+
+    <article>
+      <section>
+        <h2>1. What we collect: nothing.</h2>
+        <p>The app does not collect, upload, or sync any data. No account, no backend, no analytics, no ads, no third-party scripts, no cookies.</p>
+      </section>
+      <section>
+        <h2>2. Where your data lives.</h2>
+        <p>All records live only in your browser's <code>localStorage</code> (keys such as <code>timelog.v1</code>, <code>timelog.config</code>, and <code>timelog.locale</code>), on this one device only. Clearing your browser's site data or uninstalling the PWA deletes your records — export a backup regularly.</p>
+      </section>
+      <section>
+        <h2>3. Hosting.</h2>
+        <p>This site is statically hosted on GitHub Pages. Like any web host, GitHub Pages routinely logs incoming requests (IP address, user agent, and other transport-layer metadata) while serving pages. This project does not access, retain, or analyze that data, and it injects no identifiers of its own into it.</p>
+      </section>
+      <section>
+        <h2>4. Your data is portable.</h2>
+        <p>A full backup can be copied, downloaded, or shared as JSON at any time — free, with no account and no network required.</p>
+      </section>
+      <section>
+        <h2>5. Children.</h2>
+        <p>The app does not knowingly collect information from children — because it does not collect information from anyone.</p>
+      </section>
+      <section>
+        <h2>6. Changes.</h2>
+        <p>Any change to this policy updates the "Last updated" date at the top of this page; the change history is publicly verifiable in the project's Git history.</p>
+      </section>
+      <section>
+        <h2>7. Contact.</h2>
+        <p>GitHub issues: <a href="https://github.com/wowayou/time-logger/issues" rel="noopener">github.com/wowayou/time-logger/issues</a> · homepage: <a href="https://eigentime.org/" rel="noopener">eigentime.org</a></p>
+      </section>
+    </article>
+
+    <footer>
+      <nav>
+        <a href="../">Back to homepage</a>
+        <a href="../../app/">Open the app</a>
+        <a href="https://github.com/wowayou/time-logger" rel="noopener">GitHub repo</a>
+      </nav>
+      <p class="copyright">© 2026 wowayou · Source released under AGPL-3.0-or-later.</p>
+    </footer>
+  </main>
+</body>
+</html>

@@ -1,7 +1,7 @@
 # SPEC-015 · 英文对外页面包：英文 landing + 隐私政策页（中/英）+ 应用内入口
 
-status: ready（不依赖 SPEC-013/014，可并行；仅 §4 的应用内 cell 需与 013 的 catalog 对齐，故 §4 排在 014 之后）
-owner: 执行方认领后填分支名 `spec/015-en-public-pages`
+status: in-progress（分支 `spec/015-en-public-pages`；本单只做 §1–§3，§4 拆给 SPEC-014 批次，见规格正文与 PR 说明）
+owner: `spec/015-en-public-pages`
 执行模型: **Sonnet 5**（文案底稿在本规格内，执行是静态页面）
 验收人: Opus 5
 

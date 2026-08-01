@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<!--
+  时间尺 (time-logger) — 隐私政策（time.eigentime.org/privacy/）
+  Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
+  SPDX-License-Identifier: AGPL-3.0-or-later
+
+  非运行时静态页：不进 SW 缓存、零第三方脚本、零追踪、零 JS。
+  SPEC-015 §3：App Store Guideline 5.1.1(i) 要求的隐私政策 URL。
+  诚实边界高于简洁——第 3 条（GitHub Pages 访问日志）不得省略。
+-->
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0e0f13">
+  <meta name="description" content="时间尺隐私政策：应用不采集、不上传、不同步任何数据；无账号、无后端、无分析、无第三方脚本。">
+  <title>隐私政策 — 时间尺</title>
+  <link rel="alternate" hreflang="zh-Hans" href="https://time.eigentime.org/privacy/">
+  <link rel="alternate" hreflang="en" href="https://time.eigentime.org/en/privacy/">
+  <link rel="alternate" hreflang="x-default" href="https://time.eigentime.org/privacy/">
+  <style>
+    :root {
+      color-scheme: dark light;
+      --bg: #0e0f13;
+      --card: #16171e;
+      --text: #e8e9f1;
+      --muted: #9fa1b8;
+      --faint: #898ba2;
+      --border: rgba(255, 255, 255, 0.09);
+      --accent: #a99fff;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #eceef3;
+        --card: #ffffff;
+        --text: #33323b;
+        --muted: #686570;
+        --faint: #66646d;
+        --border: rgba(28, 32, 44, 0.10);
+        --accent: #5745c7;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      overflow-x: hidden;
+    }
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 0 clamp(18px, 5vw, 28px) calc(64px + env(safe-area-inset-bottom));
+    }
+    a { color: var(--accent); }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+      gap: 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+    .brand img { width: 28px; height: 28px; border-radius: 7px; display: block; }
+    .brand span { font-size: 15px; font-weight: 650; }
+    .lang-bar a { color: var(--muted); font-size: 13px; text-decoration: none; }
+    .lang-bar a:hover, .lang-bar a:focus-visible { color: var(--text); }
+
+    header.doc-head { padding: 24px 0 8px; }
+    header.doc-head h1 { font-size: clamp(26px, 5vw, 32px); font-weight: 700; margin: 0 0 8px; letter-spacing: -0.01em; }
+    header.doc-head .updated { color: var(--faint); font-size: 13px; margin: 0; }
+
+    article {
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      padding: 32px 0 8px;
+    }
+    article section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 22px;
+    }
+    article h2 { font-size: 16px; font-weight: 650; margin: 0 0 8px; }
+    article p { color: var(--muted); font-size: 14px; line-height: 1.65; margin: 0; }
+    article code { font-size: 13px; }
+
+    footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: space-between;
+      align-items: center;
+    }
+    footer nav { display: flex; gap: 16px; flex-wrap: wrap; }
+    footer a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    footer a:hover, footer a:focus-visible { color: var(--text); }
+    footer .copyright { color: var(--faint); font-size: 12px; width: 100%; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="top-bar">
+      <a class="brand" href="../">
+        <img src="../app/icon.svg" alt="时间尺">
+        <span>时间尺</span>
+      </a>
+      <div class="lang-bar">
+        <a href="../en/privacy/">English</a>
+      </div>
+    </div>
+
+    <header class="doc-head">
+      <h1>隐私政策</h1>
+      <p class="updated">最后更新：2026-07-31</p>
+    </header>
+
+    <article>
+      <section>
+        <h2>1. 我们收集什么：什么都不收集。</h2>
+        <p>应用不采集、不上传、不同步任何数据；无账号、无后端、无分析、无广告、无第三方脚本、无 Cookie。</p>
+      </section>
+      <section>
+        <h2>2. 你的数据存在哪里。</h2>
+        <p>全部记录只存在你浏览器的 <code>localStorage</code>（键 <code>timelog.v1</code>、<code>timelog.config</code>、<code>timelog.locale</code> 等），只在你这台设备上。清除站点数据或卸载 PWA 会删除记录——请定期导出备份。</p>
+      </section>
+      <section>
+        <h2>3. 托管。</h2>
+        <p>本站由 GitHub Pages 静态托管。任何网站的托管方在提供页面时都会按常规记录访问请求（IP 地址、User-Agent 等传输层日志）；本项目不接触、不留存、不分析这些数据，也不向其中注入任何标识符。</p>
+      </section>
+      <section>
+        <h2>4. 数据可携带。</h2>
+        <p>完整备份可随时复制、下载或分享为 JSON，免费、不需要账号、不需要网络。</p>
+      </section>
+      <section>
+        <h2>5. 儿童。</h2>
+        <p>应用不面向儿童定向收集任何信息——因为不收集任何信息。</p>
+      </section>
+      <section>
+        <h2>6. 变更。</h2>
+        <p>政策变更会更新本页顶部的「最后更新」日期；变更历史可在公开仓库的 Git 历史中查证。</p>
+      </section>
+      <section>
+        <h2>7. 联系方式。</h2>
+        <p>GitHub issues：<a href="https://github.com/wowayou/time-logger/issues" rel="noopener">github.com/wowayou/time-logger/issues</a> · 主页：<a href="https://eigentime.org/" rel="noopener">eigentime.org</a></p>
+      </section>
+    </article>
+
+    <footer>
+      <nav>
+        <a href="../">返回主页</a>
+        <a href="../app/">打开应用</a>
+        <a href="https://github.com/wowayou/time-logger" rel="noopener">GitHub 仓库</a>
+      </nav>
+      <p class="copyright">© 2026 wowayou · 源码以 AGPL-3.0-or-later 许可发布。</p>
+    </footer>
+  </main>
+</body>
+</html>
