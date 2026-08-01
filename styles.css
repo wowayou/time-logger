@@ -1644,7 +1644,10 @@
       text-align: left;
       min-width: 0;
     }
-    .cell-btn { cursor: pointer; justify-content: space-between; }
+    /* v79：`.cell-btn` 此前只用在 <button> 上（UA 默认无下划线），v78 的隐私政策
+       cell 第一次把它用在 <a> 上，UA 的链接下划线随即露出来——连右侧 › 箭头
+       一起被划上，同组里只有那一行长得不一样。外观归 class 管，不归标签管。 */
+    .cell-btn { cursor: pointer; justify-content: space-between; text-decoration: none; }
     .cell-btn:active { background: var(--card); }
     .cell-btn.copied { color: var(--accent); }
     .cell-btn[hidden] { display: none; }

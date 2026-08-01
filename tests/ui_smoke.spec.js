@@ -934,6 +934,22 @@ test('Safari-style reload restores the last rendered frame before app.js arrives
   await expect(page.locator('body')).not.toHaveClass(/boot-restored/);
 });
 
+test('v79: the privacy-policy cell is an <a> but must not look different from its sibling cells', async ({ page }) => {
+  // v78 的隐私政策 cell 是本仓库第一个用 .cell-btn 的 <a>。UA 给链接的默认下划线
+  // 随即露出来（真机截图：文字与右侧 › 一起被划上），同组里只有那一行长得不一样。
+  await boot(page, 390, 'one-record', false, FIXED_NOW);
+  await page.locator('[data-action="open-more"]').click();
+  const privacy = page.locator('.cell-btn[href*="privacy"]');
+  await expect(privacy).toBeVisible();
+  const help = page.locator('.cell-btn[data-action="open-help"]');
+  const deco = el => el.evaluate(node => getComputedStyle(node).textDecorationLine);
+  expect(await deco(privacy)).toBe('none');
+  // 与同组的兄弟 cell 逐项一致，而不是只断言「没有下划线」——外观归 class 管。
+  expect(await deco(privacy)).toBe(await deco(help));
+  const box = el => el.evaluate(node => { const r = node.getBoundingClientRect(); return { x: Math.round(r.x), w: Math.round(r.width) }; });
+  expect(await box(privacy)).toEqual(await box(help));
+});
+
 test('SPEC-013: a snapshot written under another locale is rejected instead of restored', async ({ page }) => {
   await boot(page, 375, 'one-record', false, FIXED_NOW);
   await expect(page.locator('#timeline')).toContainText('响应式测试记录');
