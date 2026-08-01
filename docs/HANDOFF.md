@@ -80,7 +80,8 @@ git diff --check && git status --short
 
 ## 不要碰（已 park，D15）
 
-- SPEC-007（标签设置重设计 + 主线可编辑）、SPEC-008（landing 活体 mock）：推到 2026-07-30 阶段复盘重排。park ≠ 取消。
+- ~~SPEC-007（标签设置重设计 + 主线可编辑）~~ **已于 2026-08-01 解 park，状态 ready**（见 `docs/decisions.md` D18）——推翻理由的是维护者真机截图：主线历史已累积 9 个标签且无任何改名/清理入口，正是 D7 要求的「真实使用证据」。
+- SPEC-008（landing 活体 mock）：**维持 park**。它服务「落地页的说服力」，而落地页访客仍未知。解 park 一个不等于解 park 全部。
 - SPEC-002：仍 blocked，等 runbook Phase C/D 浸泡后由 Fable 解锁；解锁后并入当时最近一次仪式，不单独发版。
 
 ## 维护者手上的信号（AI 侧在等）
