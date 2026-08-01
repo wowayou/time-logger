@@ -185,6 +185,24 @@ function normalizeChip(chip) {
   return { name, bucket, longOk: Boolean(chip.longOk) };
 }
 
+/**
+ * 标签配置的形状。`mainlineLongOk` 与 `motto` 都是**可选键**——空集/未设置时
+ * 根本不写进 localStorage（见 normalizeConfig 里的说明），所以类型上必须是
+ * optional 而不是必填。不显式声明的话，tsc 会把 normalizeConfig 的两个 return
+ * 分支推成一个联合类型，其中早退分支不含该键，任何 `config.mainlineLongOk`
+ * 的读取都会报 TS2339。
+ * @typedef {object} TagConfig
+ * @property {number} version
+ * @property {string[]} mainline
+ * @property {string[]} [mainlineLongOk]
+ * @property {{ name: string, bucket: string, longOk: boolean }[]} chips
+ * @property {string} [motto]
+ */
+
+/**
+ * @param {any} raw
+ * @returns {TagConfig}
+ */
 export function normalizeConfig(raw) {
   if (!raw || typeof raw !== 'object') {
     const seed = defaultSeed();
