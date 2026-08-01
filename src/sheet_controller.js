@@ -23,6 +23,11 @@ import {
   RESERVED_UNKNOWN_TAG,
   bucketForTag,
   countEntriesWithTag,
+  appendLocaleDefaultTags,
+  previewLocaleDefaultTags,
+  renameMainlineTag,
+  setCurrentMainline as storageSetCurrentMainline,
+  setMainlineLongOk,
   migrateEntryTags,
   RECORD_MODE_KEY
 } from './storage.js';
@@ -65,6 +70,7 @@ export function createSheetController(deps) {
   let lastPreviewSignature = '';
   let editEndMode = 'fixed';
   let configSnapshot = null;
+  let configDefaultsPreview = null;
   // 导航栈：config/help/import-shift 若从「更多」下钻进入，取消/保存回「更多」而非整层关闭。
   let returnToMore = false;
   // R1：sheet 关闭走 class 驱动过渡；未收尾前的清理函数存这里，供重入保护调用。
@@ -615,6 +621,9 @@ export function createSheetController(deps) {
       deps.render();
     } else if (mode === 'config') {
       configSnapshot = JSON.parse(JSON.stringify(deps.loadConfig()));
+      // SPEC-007/D18：默认标签预览是一次性的——每次重开 config sheet 都清掉，
+      // 只有显式点「添加本语言的默认标签」那一次才带着它重开。
+      configDefaultsPreview = (opts && opts.defaultsPreview) || null;
     }
     const sheet = document.getElementById('form-sheet');
     const panel = sheet.querySelector('.form-sheet-panel');
@@ -665,7 +674,8 @@ export function createSheetController(deps) {
       editEndMode,
       deletePlan: opts && opts.deletePlan,
       deleteEntry: opts && opts.deleteEntry,
-      deleteStale: Boolean(opts && opts.deleteStale)
+      deleteStale: Boolean(opts && opts.deleteStale),
+      defaultsPreview: configDefaultsPreview
     });
     // v43: 面板几何恒定，开合键盘不再改 sheet 尺寸；lockBodyForSheet 锁滚动 + 起初
     // 写一次 --kb 供正文 scroll-padding。
@@ -1559,40 +1569,58 @@ export function createSheetController(deps) {
     if (panel.dataset.mode === 'new' && formOvernightContext) refreshOvernightPreview(panel);
   }
 
+  // SPEC-007：三组行（主线 / 维持 / 偏航）在同一个 saveTagConfig 里一起提交。
+  // 主线行只有名称与 longOk（改桶/删除明确不做）；chip 行的桶来自分段控件的
+  // .active 按钮而不是原生 <select>。历史迁移与 config 写入必须在**同一次
+  // load()** 的对象图上完成（CLAUDE.md 写路径红线）。
+  function readConfigRows(panel, kind) {
+    return Array.from(panel.querySelectorAll(`.cfg-row[data-kind="${kind}"]`)).map(row => {
+      const seg = row.querySelector('.cfg-bucket-seg button.active');
+      return {
+        originalName: row.dataset.originalName || '',
+        name: row.querySelector('.cfg-name').value.trim(),
+        bucket: seg ? seg.dataset.bucket : '',
+        longOk: row.querySelector('.cfg-long-ok').checked
+      };
+    });
+  }
+
   function saveTagConfig() {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
-    const rows = Array.from(panel.querySelectorAll('.cfg-row'));
-    const rowStates = rows.map(row => ({
-      originalName: row.dataset.originalName || row.querySelector('.cfg-name').value.trim(),
-      name: row.querySelector('.cfg-name').value.trim(),
-      bucket: row.querySelector('.cfg-bucket').value,
-      longOk: row.querySelector('.cfg-long-ok').checked
-    })).filter(chip => chip.name && (chip.bucket === 'maintain' || chip.bucket === 'leak'));
-    if (!rowStates.length) {
+    const mainlineRows = readConfigRows(panel, 'mainline').filter(row => row.name);
+    const chipRows = readConfigRows(panel, 'chip')
+      .filter(row => row.name && (row.bucket === 'maintain' || row.bucket === 'leak'));
+    if (!chipRows.length) {
       showInlineError(panel, t('config.keepOneChip'), 'config-error');
       return;
     }
-    const duplicate = rowStates.find((chip, index) => rowStates.findIndex(item => item.name === chip.name) !== index);
+    // 重名判定跨三组一起做——主线与 chip 之间同名同样是冲突。
+    const all = [...mainlineRows, ...chipRows];
+    const duplicate = all.find((row, index) => all.findIndex(item => item.name === row.name) !== index);
     if (duplicate) {
       showInlineError(panel, t('config.duplicateName', { name: duplicate.name }), 'config-error');
       return;
     }
-    const snapshot = configSnapshot || deps.loadConfig();
-    const mainlineCollision = rowStates.find(chip => snapshot.mainline.includes(chip.name));
-    if (mainlineCollision) {
-      showInlineError(panel, t('config.mainlineCollision', { name: mainlineCollision.name }), 'config-error');
-      return;
-    }
     const d = deps.load();
-    for (const chip of rowStates) {
+    let nextConfig = deps.loadConfig();
+    // 主线改名：先算 config 变换，再在**同一张** entries 图上迁移历史。
+    for (const row of mainlineRows) {
+      if (row.originalName && row.originalName !== row.name) {
+        nextConfig = renameMainlineTag(nextConfig, row.originalName, row.name);
+        if (countEntriesWithTag(d.entries, row.originalName)) {
+          migrateEntryTags(d.entries, row.originalName, row.name);
+        }
+      }
+      nextConfig = setMainlineLongOk(nextConfig, row.name, row.longOk);
+    }
+    for (const chip of chipRows) {
       if (chip.originalName && chip.originalName !== chip.name && countEntriesWithTag(d.entries, chip.originalName)) {
         migrateEntryTags(d.entries, chip.originalName, chip.name);
       }
     }
-    const nextConfig = {
-      ...deps.loadConfig(),
-      mainline: snapshot.mainline,
-      chips: rowStates.map(chip => ({ name: chip.name, bucket: chip.bucket, longOk: chip.longOk }))
+    nextConfig = {
+      ...nextConfig,
+      chips: chipRows.map(chip => ({ name: chip.name, bucket: chip.bucket, longOk: chip.longOk }))
     };
     if (!deps.save(d)) {
       showInlineError(panel, t('config.quota'), 'config-error');
@@ -1601,6 +1629,43 @@ export function createSheetController(deps) {
     deps.saveConfig(nextConfig);
     closeForm();
     deps.render();
+  }
+
+  // 「设为当前」立即落库并重开 sheet——它不产生记录变化，也不该被「保存」按钮
+  // 的成败牵连；重开是为了让置顶顺序与徽章即时反映新状态。
+  function setCurrentMainline(name) {
+    deps.saveConfig(storageSetCurrentMainline(deps.loadConfig(), name));
+    openFormSheet({ mode: 'config' });
+    deps.render();
+  }
+
+  function pickConfigBucket(btn) {
+    const row = btn.closest('.cfg-row');
+    const seg = btn.closest('.cfg-bucket-seg');
+    if (!row || !seg) return;
+    seg.querySelectorAll('button').forEach(item => {
+      const on = item === btn;
+      item.classList.toggle('active', on);
+      item.setAttribute('aria-pressed', String(on));
+    });
+    // 竖脊即时跟随：结构与控件说同一件事。
+    row.dataset.b = btn.dataset.bucket;
+  }
+
+  // D18 新增范围：给存量 config 一个拿到本语言默认标签的出口。只追加、同名跳过、
+  // 先预览再落库；绝不做成自动行为或切语言时的弹窗（那会违反 SPEC-014 §1.5）。
+  function previewLocaleDefaults() {
+    openFormSheet({ mode: 'config', defaultsPreview: previewLocaleDefaultTags(deps.loadConfig()) });
+  }
+
+  function applyLocaleDefaults() {
+    deps.saveConfig(appendLocaleDefaultTags(deps.loadConfig()));
+    openFormSheet({ mode: 'config' });
+    deps.render();
+  }
+
+  function cancelLocaleDefaults() {
+    openFormSheet({ mode: 'config' });
   }
 
   // 阶段格言（v69，C13）：三态归一化在 storage.normalizeConfig 里做（trim/60 字上限/
@@ -1653,6 +1718,11 @@ export function createSheetController(deps) {
     pickEditEndMode,
     handleFormInput,
     saveTagConfig,
+    setCurrentMainline,
+    pickConfigBucket,
+    previewLocaleDefaults,
+    applyLocaleDefaults,
+    cancelLocaleDefaults,
     saveMotto,
     resetMottoInput,
     handleResponsiveResize

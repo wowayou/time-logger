@@ -762,7 +762,10 @@ test('config rename migrates existing tags and removes replacement UI', async ({
   await expect(page.locator('#form-sheet-title')).toHaveText('标签高级设置');
   await expect(page.locator('.config-body')).not.toContainText('替换');
   await expect(page.locator('.cfg-migrate')).toHaveCount(0);
-  await page.locator('.cfg-name').filter({ hasText: /^$/ }).first().fill('活动拉伸');
+  // SPEC-007 起 sheet 里多了主线分组且排在最前，`.first()` 会命中主线行而不是
+  // 目标 chip。按行的 data-original-name 显式定位——本仓库已经被 `.first()`
+  // 掩盖真实定位坑过一次（v73）。
+  await page.locator('.cfg-row[data-original-name="拉伸"] .cfg-name').fill('活动拉伸');
   await page.getByRole('button', { name: '保存标签配置' }).click();
 
   const stored = await page.evaluate(() => ({
@@ -1581,11 +1584,15 @@ test('renamed defaults stay renamed and mainline/chip duplicates are rejected sa
   await boot(page, 768, 'renamed-default', false, FIXED_NOW);
   await openBackupMenu(page);
   await page.getByRole('button', { name: '配置标签' }).click();
-  await expect(page.locator('.cfg-name')).toHaveValue('休息');
+  // SPEC-007：sheet 里现在还有主线分组，.cfg-name 不再唯一——按行显式定位。
+  const chipName = page.locator('.cfg-row[data-kind="chip"] .cfg-name');
+  await expect(chipName).toHaveValue('休息');
   await expect(page.locator('.config-body')).not.toContainText('睡觉');
-  await page.locator('.cfg-name').fill('求职推进');
+  await chipName.fill('求职推进');
   await page.getByRole('button', { name: '保存标签配置' }).click();
-  await expect(page.locator('[data-role="config-error"]')).toContainText('已经是主线标签');
+  // 主线现在可见可编辑，「已经是主线标签」这条专用错误退化为普通重名——重名
+  // 检查跨主线/维持/偏航三组统一做，拦下的行为不变。
+  await expect(page.locator('[data-role="config-error"]')).toContainText('重复');
   const config = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.config')));
   expect(config.chips).toEqual([expect.objectContaining({ name: '休息' })]);
 });
