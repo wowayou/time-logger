@@ -38,36 +38,58 @@ function generateEntries(count) {
 }
 
 // ─── A 类：数据规模压测 ────────────────────────────────────────────────────────
-// Pass/fail thresholds are single-run wall-clock from page.goto() to app-ready,
-// measured on a warmed-up page (one throwaway navigation first) — not a true P90.
-// The warm-up avoids cold-start flakes: first-ever chromium navigation in a run
-// can pay 400ms+ of process/cache setup that has nothing to do with app code.
-// Measured on localhost so network is negligible; the cost is parse + render.
+// 判据从**绝对壁钟阈值**改为**相对空数据基线的倍率**（HANDOFF 登记的方向）。
+//
+// 为什么必须改：绝对阈值测的是这台机器有多忙，不是代码有多快。实测（同一次
+// 运行、同一台机器）：空数据启动 webkit 383ms / chromium 327ms，而 500 条是
+// 0.97×/0.98×——**500 条数据本身几乎不产生任何开销**。原来 450ms 的阈值因此
+// 完全由「空载启动成本」决定：机器闲时 ~250ms 通过，机器忙时 ~390ms+ 假红。
+// 它长期在双引擎上飘，每次都要用未改动代码做对照才能排除，成本比它的价值高。
+//
+// 现在每个用例先在同一 page 上量一次**空数据**基线（中位数），再量目标数据量，
+// 断言倍率。这才对应用例名字里的「数据规模」：机器速度被基线约掉，剩下的就是
+// 数据带来的增量。倍率上限按实测留足头寸，同时仍能抓住真回归——例如把统计写成
+// O(n²)，5000 条会远远冲破 2.5×。
+const BOOT_SAMPLES = 3;
 const SCALE_CASES = [
-  // The smallest case also carries the per-engine startup floor during the
-  // Chromium+WebKit run; larger cases retain tighter scaling expectations.
-  { count: 500,  label: '小压 500 条  (~1 个月)',  thresholdMs: 450  },
-  { count: 2000, label: '中压 2000 条 (~4 个月)',  thresholdMs: 800  },
-  { count: 5000, label: '极压 5000 条 (~11 个月)', thresholdMs: 2000 }
+  // 实测倍率（本机、取最小值口径）：见下方 console 输出；上限留足头寸，同时
+  // 仍能抓住真回归——把统计写成 O(n²) 的话 5000 条会远远冲破 2.5×。
+  { count: 500,  label: '小压 500 条  (~1 个月)',  maxRatio: 1.6 },
+  { count: 2000, label: '中压 2000 条 (~4 个月)',  maxRatio: 1.9 },
+  { count: 5000, label: '极压 5000 条 (~11 个月)', maxRatio: 2.5 }
 ];
 
+/**
+ * 同一 page 上量启动耗时，取 N 次里的**最小值**。
+ * 取最小而非中位：干扰只会让测量变慢、不会让它变快，所以最小值＝最少被干扰的
+ * 那一次，是噪声机器上做基准的标准做法。中位数在实测里仍会被基线抖动带偏
+ * （基线样本见过 431/315/336 的跨度），留给 500 条的头寸只剩 14%，等于把刚修掉
+ * 的飘又请回来。entries 为空即基线。
+ */
+async function medianBoot(page, entries) {
+  await page.addInitScript(({ seed }) => {
+    localStorage.clear();
+    localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries: seed }));
+  }, { seed: entries });
+  // 预热一次，吸收一次性的进程/缓存成本。
+  await page.goto('/');
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  const samples = [];
+  for (let i = 0; i < BOOT_SAMPLES; i += 1) {
+    const t0 = Date.now();
+    await page.goto('/');
+    await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+    samples.push(Date.now() - t0);
+  }
+  return { best: Math.min(...samples), samples };
+}
+
 test.describe('A 类：数据规模', () => {
-  for (const { count, label, thresholdMs } of SCALE_CASES) {
+  for (const { count, label, maxRatio } of SCALE_CASES) {
     test(label, async ({ page }) => {
-      const entries = generateEntries(count);
-      await page.addInitScript(({ entries }) => {
-        localStorage.clear();
-        localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
-      }, { entries });
-
-      // Warm-up navigation: absorb one-time browser/process costs before timing.
-      await page.goto('/');
-      await page.waitForFunction(() => document.body.classList.contains('app-ready'));
-
-      const t0 = Date.now();
-      await page.goto('/');
-      await page.waitForFunction(() => document.body.classList.contains('app-ready'));
-      const elapsed = Date.now() - t0;
+      const baseline = await medianBoot(page, []);
+      const loadedBoot = await medianBoot(page, generateEntries(count));
+      const ratio = loadedBoot.best / baseline.best;
 
       // Also measure stats recompute via timeline render
       const renderMs = await page.evaluate(() => {
@@ -77,8 +99,11 @@ test.describe('A 类：数据规模', () => {
         return performance.now() - t;
       });
 
-      console.log(`[A] ${label}: boot=${elapsed}ms, render-flush=${renderMs.toFixed(1)}ms`);
-      expect(elapsed, `boot time < ${thresholdMs}ms`).toBeLessThan(thresholdMs);
+      console.log(`[A] ${label}: baseline=${baseline.best}ms [${baseline.samples.join(', ')}] `
+        + `loaded=${loadedBoot.best}ms [${loadedBoot.samples.join(', ')}] ratio=${ratio.toFixed(2)}x `
+        + `render-flush=${renderMs.toFixed(1)}ms`);
+      expect(ratio, `boot ratio vs empty-dataset baseline < ${maxRatio}x `
+        + `(baseline ${baseline.best}ms, loaded ${loadedBoot.best}ms)`).toBeLessThan(maxRatio);
 
       // Verify data integrity after load
       const loaded = await page.evaluate(() => {

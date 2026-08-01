@@ -66,7 +66,11 @@ test('mobile more sheet follows the grabber: short pulls rebound and long pulls 
   await boot(page, 375, 'one-record', false, FIXED_NOW);
   await openBackupMenu(page);
   const grabberBox = await page.locator('.sh-grab').boundingBox();
-  expect(grabberBox.height).toBeGreaterThanOrEqual(44);
+  // CSS 写的是 height:44px，但 boundingBox() 会随视口宽度产生亚像素浮动——实测
+  // 375px→44.000003814、390px→44、412px→43.999998092，最后一个就会让原来的
+  // `>= 44` 假红（本仓库两次全量里都飘过）。取整后比较：44px 可点区红线一字
+  // 不放宽（真的 43px 取整仍是 43、照样红），被吸收的只有浮点噪声。
+  expect(Math.round(grabberBox.height)).toBeGreaterThanOrEqual(44);
   const dragGrabber = async distance => {
     await page.evaluate(({ box, dy }) => {
       const grabber = document.elementFromPoint(box.x + box.width / 2, box.y + box.height - 6);
