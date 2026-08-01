@@ -312,7 +312,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '79';
+export const APP_VERSION = '80';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -709,43 +709,71 @@ function renderImportShiftDialog(opts = {}) {
 
 function renderConfigSheet(config = loadConfig(), opts = {}) {
   const entries = opts.entries || [];
-  // 每个 chip 一个两行式 cell：第一行名称输入 + 桶 select，第二行 longOk 勾选
-  // 与记录条数说明。cell-group 供 inset 底和 hairline 分隔（与更多菜单同语法）。
-  const row = chip => {
-    const count = countEntriesWithTag(entries, chip.name);
-    return `<div class="cfg-row" data-original-name="${esc(chip.name)}">
+  // SPEC-007：签名手法是把日视图的桶色竖脊带进设置行——结构即信息，不用读控件
+  // 就知道这行属于哪个桶。data-b 与时间轴同源（styles.css 按它上色）。
+  const countLine = name => {
+    const count = countEntriesWithTag(entries, name);
+    return count ? `<span class="cfg-count">${t('cfg.count', { n: count })}</span>` : '';
+  };
+  const longOkBox = (checked, name) => `<label class="cfg-long">
+    <input type="checkbox" class="cfg-long-ok"${checked ? ' checked' : ''} aria-label="${esc(t('cfg.longOk'))}">
+    <span>${t('cfg.longOk')}</span>
+  </label>`;
+
+  // 主线：当前主线置顶（实色脊），历史名脊淡化；行尾「设为当前」。无删除。
+  const mainlineRow = (name, index) => {
+    const isCurrent = index === 0;
+    return `<div class="cfg-row${isCurrent ? ' is-current' : ' is-history'}" data-b="job" data-kind="mainline" data-original-name="${esc(name)}">
       <div class="cfg-line">
-        <input class="inp cfg-name" type="text" value="${esc(chip.name)}" aria-label="${t('cfg.nameAria')}">
-        <select class="inp cfg-bucket" aria-label="${t('cfg.bucketAria')}">
-          <option value="maintain"${chip.bucket === 'maintain' ? ' selected' : ''}>${t('cfg.maintain')}</option>
-          <option value="leak"${chip.bucket === 'leak' ? ' selected' : ''}>${t('cfg.leak')}</option>
-        </select>
+        <input class="inp cfg-name" type="text" value="${esc(name)}" aria-label="${esc(t('cfg.nameAria'))}">
+        ${isCurrent ? `<span class="cfg-badge">${t('cfg.currentBadge')}</span>`
+          : `<button class="mini-btn cfg-set-current" type="button" data-action="set-current-mainline" data-name="${esc(name)}" aria-label="${esc(t('cfg.setCurrentAria', { name }))}">${t('cfg.setCurrent')}</button>`}
       </div>
-      <div class="cfg-sub">
-        <label class="cfg-long"><input type="checkbox" class="cfg-long-ok"${chip.longOk ? ' checked' : ''}> ${t('cfg.longOk')}</label>
-        ${count ? `<span class="cfg-count">${t('cfg.count', { n: count })}</span>` : ''}
-      </div>
+      <div class="cfg-sub">${longOkBox((config.mainlineLongOk || []).includes(name), name)}${countLine(name)}</div>
     </div>`;
   };
-  const section = (bucket, title) => {
-    const chips = config.chips.filter(chip => chip.bucket === bucket);
-    return `<section class="cfg-section">
-      <div class="chip-group-label">${title}</div>
-      <div class="cfg-list cell-group" data-role="config-chips">${chips.map(row).join('')}</div>
-    </section>`;
-  };
-  const mainlineHint = config.mainline.length
-    ? `<div class="form-hint">${t('cfg.mainlineHistory', { list: config.mainline.map(name => {
-      const count = countEntriesWithTag(entries, name);
-      return count ? t('cfg.mainlineCount', { name: esc(name), n: count }) : esc(name);
-    }).join(t('cfg.mainlineJoin')) })}</div>` : '';
+
+  // 维持/偏航：两段式分段控件替换原生 <select>——只有两个选项，segmented control
+  // 比弹出式 select 更直接，且消灭 iOS 原生弹层的语言断裂（v78 之后尤其要紧：
+  // 原生弹层不跟随应用语言，英文界面下会弹中文选项）。
+  const chipRow = chip => `<div class="cfg-row" data-b="${chip.bucket}" data-kind="chip" data-original-name="${esc(chip.name)}">
+    <div class="cfg-line">
+      <input class="inp cfg-name" type="text" value="${esc(chip.name)}" aria-label="${esc(t('cfg.nameAria'))}">
+      <div class="seg cfg-bucket-seg" role="group" aria-label="${esc(t('cfg.bucketAria'))}">
+        <button type="button" data-action="cfg-pick-bucket" data-bucket="maintain" class="${chip.bucket === 'maintain' ? 'active' : ''}" aria-pressed="${chip.bucket === 'maintain'}">${t('cfg.maintain')}</button>
+        <button type="button" data-action="cfg-pick-bucket" data-bucket="leak" class="${chip.bucket === 'leak' ? 'active' : ''}" aria-pressed="${chip.bucket === 'leak'}">${t('cfg.leak')}</button>
+      </div>
+    </div>
+    <div class="cfg-sub">${longOkBox(chip.longOk, chip.name)}${countLine(chip.name)}</div>
+  </div>`;
+
+  const section = (title, rowsHtml, hint) => `<section class="cfg-section">
+    <div class="chip-group-label">${title}</div>
+    <div class="cfg-list cell-group">${rowsHtml}</div>
+    ${hint ? `<div class="form-hint">${hint}</div>` : ''}
+  </section>`;
+
+  const chipsOf = bucket => config.chips.filter(chip => chip.bucket === bucket).map(chipRow).join('');
+  const preview = opts.defaultsPreview;
+
   return `
     ${sheetHead({ title: t('cfg.title'), cancelText: t('cfg.cancel'), cancelAction: 'close-form', cancelAria: t('cfg.cancelAria'), doneText: t('cfg.done'), doneAction: 'save-tag-config', doneAria: t('cfg.doneAria') })}
     <div class="form-sheet-body config-body">
-      <div class="form-hint">${t('cfg.hint')}</div>
-      ${mainlineHint}
-      ${section('maintain', t('cfg.sectionMaintain'))}
-      ${section('leak', t('cfg.sectionLeak'))}
+      <div class="form-hint">${t('cfg.renameHint')}</div>
+      ${section(t('cfg.sectionMainline'), config.mainline.map(mainlineRow).join(''), t('cfg.mainlineHint'))}
+      ${section(t('cfg.sectionMaintain'), chipsOf('maintain'))}
+      ${section(t('cfg.sectionLeak'), chipsOf('leak'))}
+      <div class="cell-group">
+        <button class="cell-btn" type="button" data-action="preview-locale-defaults" aria-label="${esc(t('cfg.addDefaultsAria'))}"><span data-role="cell-label">${t('cfg.addDefaults')}</span>${cellChevron}</button>
+      </div>
+      ${preview ? `<div class="cfg-defaults-preview" data-role="defaults-preview">
+        ${preview.additions.length ? `<div class="form-hint" data-role="defaults-additions">${t('cfg.addDefaultsPreview', { n: preview.additions.length, list: preview.additions.map(chip => esc(chip.name)).join(t('cfg.listJoin')) })}</div>` : `<div class="form-hint" data-role="defaults-none">${t('cfg.addDefaultsNone')}</div>`}
+        ${preview.skipped.length ? `<div class="form-hint" data-role="defaults-skipped">${t('cfg.addDefaultsSkipped', { n: preview.skipped.length, list: preview.skipped.map(esc).join(t('cfg.listJoin')) })}</div>` : ''}
+        ${preview.additions.length ? `<div class="cfg-defaults-actions">
+          <button class="cell-action" type="button" data-action="apply-locale-defaults">${t('cfg.addDefaultsApply')}</button>
+          <button class="cell-action" type="button" data-action="cancel-locale-defaults">${t('cfg.addDefaultsCancel')}</button>
+        </div>` : ''}
+      </div>` : ''}
       <div class="form-inline-error" data-role="config-error" hidden></div>
     </div>`;
 }

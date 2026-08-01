@@ -880,6 +880,11 @@ import {
       if (action === 'commit-edit') sheetController.commitEdit(el.dataset.id || sheetEditId);
       if (action === 'cancel-edit') sheetController.cancelEdit();
       if (action === 'save-tag-config') sheetController.saveTagConfig();
+      if (action === 'set-current-mainline') sheetController.setCurrentMainline(el.dataset.name || '');
+      if (action === 'cfg-pick-bucket') sheetController.pickConfigBucket(el);
+      if (action === 'preview-locale-defaults') sheetController.previewLocaleDefaults();
+      if (action === 'apply-locale-defaults') sheetController.applyLocaleDefaults();
+      if (action === 'cancel-locale-defaults') sheetController.cancelLocaleDefaults();
       if (action === 'confirm-planned') confirmPlanned(el.dataset.id);
       if (action === 'confirm-segment') confirmSegment(el.dataset.id, el.dataset.end);
       if (action === 'request-delete') requestDelete(el.dataset.id);

@@ -17,7 +17,9 @@ async function openTagSettings(page) {
 }
 
 async function chipNames(page) {
-  return page.$$eval('.cfg-name', els => els.map(el => el.value));
+  // SPEC-007 起标签设置里还有主线分组；本文件测的是 **chip** 种子，按 chip 行
+  // 限定，否则主线名会混进来。意图不变，只是定位收紧。
+  return page.$$eval('.cfg-row[data-kind="chip"] .cfg-name', els => els.map(el => el.value));
 }
 
 const EN_DEFAULT_CHIPS = ['Sleep', 'Meals', 'Wash up', 'Commute', 'Chores', 'Exercise', 'Entertainment', 'Phone', 'Zoning out'];

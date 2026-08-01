@@ -191,7 +191,6 @@ export function normalizeConfig(raw) {
     return {
       version: 1,
       mainline: seed.mainline.slice(),
-      mainlineLongOk: [],
       chips: seed.chips.map(chip => ({ ...chip })),
       motto: undefined
     };
@@ -218,7 +217,16 @@ export function normalizeConfig(raw) {
     .filter(name => mainlineSet.has(name));
   // motto: undefined 会被 JSON.stringify 丢掉——「未设置」在 localStorage 里
   // 就是没有这个键，与三态模型一致。
-  return { version: 1, mainline, mainlineLongOk, chips, motto: normalizeMotto(raw.motto) };
+  // 与 motto 的 undefined 同一处理：空集就**不写这个键**。否则每个从未用过主线
+  // longOk 的用户，config 与完整备份里都会凭空多出一个 `"mainlineLongOk": []`，
+  // 白白改变所有人的存量数据形态。读侧一律用 `config.mainlineLongOk || []`。
+  return {
+    version: 1,
+    mainline,
+    ...(mainlineLongOk.length ? { mainlineLongOk } : {}),
+    chips,
+    motto: normalizeMotto(raw.motto)
+  };
 }
 
 export function loadConfig() {
