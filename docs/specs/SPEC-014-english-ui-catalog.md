@@ -83,6 +83,17 @@ SPEC-013 执行时发现：`DEFAULT_CONFIG` 的默认 chips（睡觉/吃饭/洗�
 
 **必须有的测试**：① 全新 en 安装种出英文 chips；② 已有 zh config 的设备切到 en 后 chips **逐字不变**；③ zh 备份导入 en 设备后两套标签共存且各自桶归类正确。第 ② 条是本节的核心风险，**红灯证明必须做**（临时让切语言也重新种子 → 用例必须红）。
 
+## 1.6 从 SPEC-015 接手的 §4：应用内隐私政策入口（**本单必做**）
+
+SPEC-015 只做了 `site/` 静态页（零版本仪式），把它的 §4 留给了本单——因为那是运行时改动、必须走 v78 版本仪式。原文照搬：
+
+「···」更多 sheet 的**说明所在分组**新增一个 cell：`隐私政策` / `Privacy Policy`，外链到 `/privacy/`（en locale 下指向 `/en/privacy/`），`target="_blank" rel="noopener"`。
+
+- 走 SPEC-013 的 catalog 取词（key：`more.privacy`），zh/en 两版都要有。
+- **满足 App Store Guideline 5.1.1(i) 的「within the app」**——Apple 要求的是**链接**，不是内嵌全文；内嵌会产生两份文本漂移，明确不做。
+- 页面已经上线（PR #35），链接目标真实存在，不是占位。
+- `FILES` 不变（无新增运行时资产）。
+
 ## 2. 语言开关
 
 放「···」更多 sheet 里、**紧邻「主题」**，同款 `.seg` 三选一：`跟随系统 / 中文 / English`（自身按当前语言显示）。写 `localStorage['timelog.locale']`（`''`＝跟随系统）。切换后立即整页重渲染，**不刷新页面**、不丢未保存输入（有 sheet 打开时禁用切换或先关 sheet——执行方选一种并在 PR 说明）。
@@ -117,6 +128,7 @@ SPEC-013 执行时发现：`DEFAULT_CONFIG` 的默认 chips（睡觉/吃饭/洗�
 - [ ] **术语反向断言**（永久护栏）：audit 断言 `en.js` 全文不含 `Leak`/`Waste`/`Distraction`/`Unproductive`/`Wasted`（大小写不敏感，作为独立单词）。红灯证明：临时把 `Drift` 改成 `Leak` → fail
 - [ ] `project_audit.py` / `confirm_logic_smoke.py` / `typecheck` / `git diff --check` 全绿；双引擎复跑
 - [ ] 人工：375×667 en 下 header 第一行不横向溢出、视图 seg 四项不折行、FAB 双行文案不溢出（英文比中文长，**这是本单最可能翻车的地方**）
+- [ ] §1.6：更多 sheet 里隐私政策 cell 可见可点、外链正确（zh → `/privacy/`，en → `/en/privacy/`），zh/en 各一次
 
 ## 明确不做
 
