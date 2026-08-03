@@ -2024,6 +2024,14 @@
     .cfg-row[data-pending-delete="1"] .cfg-name { text-decoration: line-through; }
     .cfg-row[data-pending-delete="1"] .cfg-delete { color: var(--accent); }
     .cfg-empty { margin-top: 0; }
+    /* v83：组内最后一行是「＋ 新建标签」。左内距对齐 .cfg-row（竖脊占掉的 4px 之后），
+       accent 文字表明它是动作而不是又一条标签；分隔线由 .cell-group 通用规则给。 */
+    .cfg-add {
+      justify-content: flex-start;
+      padding-left: 18px;
+      color: var(--accent);
+      font-weight: 600;
+    }
     @media (min-width: 720px) {
       .form-sheet {
         align-items: center;
