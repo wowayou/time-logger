@@ -312,7 +312,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '82';
+export const APP_VERSION = '83';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -707,6 +707,42 @@ function renderImportShiftDialog(opts = {}) {
     </div>`;
 }
 
+// v83：行内两个零件被草稿行（新建）与已有行共用，故提到模块层——草稿行由
+// renderConfigRowDraft 生成并由 sheet_controller 插进 DOM，两条路径必须逐字同构，
+// 否则保存时的 querySelector 会在其中一条上落空。
+function cfgLongOkBox(checked) {
+  return `<label class="cfg-long">
+    <input type="checkbox" class="cfg-long-ok"${checked ? ' checked' : ''} aria-label="${esc(t('cfg.longOk'))}">
+    <span>${t('cfg.longOk')}</span>
+  </label>`;
+}
+
+function cfgBucketSeg(bucket) {
+  return `<div class="seg cfg-bucket-seg" role="group" aria-label="${esc(t('cfg.bucketAria'))}">
+      <button type="button" data-action="cfg-pick-bucket" data-bucket="maintain" class="${bucket === 'maintain' ? 'active' : ''}" aria-pressed="${bucket === 'maintain'}">${t('cfg.maintain')}</button>
+      <button type="button" data-action="cfg-pick-bucket" data-bucket="leak" class="${bucket === 'leak' ? 'active' : ''}" aria-pressed="${bucket === 'leak'}">${t('cfg.leak')}</button>
+    </div>`;
+}
+
+/**
+ * v83：一行「待新建」的标签。没有 data-original-name（＝还不存在于 config），
+ * 因此保存时空名直接当作没建过，而不是像已有行那样报错。右槽是「移除」而不是
+ * v82 的待删除态——从未落库的东西没有「撤销」可言，直接把行拿掉即可。
+ * @param {string} kind 'mainline' | 'chip'
+ * @param {string} bucket 'job' | 'maintain' | 'leak'
+ */
+export function renderConfigRowDraft(kind, bucket) {
+  const isMainline = kind === 'mainline';
+  const chipBucket = bucket === 'leak' ? 'leak' : 'maintain';
+  return `<div class="cfg-row is-new" data-b="${isMainline ? 'job' : chipBucket}" data-kind="${isMainline ? 'mainline' : 'chip'}" data-new="1">
+    <div class="cfg-line">
+      <input class="inp cfg-name" type="text" value="" placeholder="${esc(t('cfg.newNamePlaceholder'))}" aria-label="${esc(t('cfg.nameAria'))}">
+      ${isMainline ? '' : cfgBucketSeg(chipBucket)}
+    </div>
+    <div class="cfg-sub">${cfgLongOkBox(false)}<button class="mini-btn cfg-delete" type="button" data-action="cfg-remove-draft" aria-label="${esc(t('cfg.removeDraftAria'))}">${t('cfg.removeDraft')}</button></div>
+  </div>`;
+}
+
 function renderConfigSheet(config = loadConfig(), opts = {}) {
   const entries = opts.entries || [];
   // SPEC-007：签名手法是把日视图的桶色竖脊带进设置行——结构即信息，不用读控件
@@ -715,10 +751,6 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
     const count = countEntriesWithTag(entries, name);
     return count ? `<span class="cfg-count">${t('cfg.count', { n: count })}</span>` : '';
   };
-  const longOkBox = (checked, name) => `<label class="cfg-long">
-    <input type="checkbox" class="cfg-long-ok"${checked ? ' checked' : ''} aria-label="${esc(t('cfg.longOk'))}">
-    <span>${t('cfg.longOk')}</span>
-  </label>`;
   // v82：删除只对**零记录**的标签开放——SPEC-007 当初不做删除的理由是「历史记录
   // 会变成孤儿标签」，这个理由在没有任何记录引用它时并不成立（试错建出来的标签
   // 就卡在这里，永远删不掉）。所以右槽二选一：有记录→显示条数（不可删）；
@@ -739,7 +771,7 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
         ${isCurrent ? `<span class="cfg-badge">${t('cfg.currentBadge')}</span>`
           : `<button class="mini-btn cfg-set-current" type="button" data-action="set-current-mainline" data-name="${esc(name)}" aria-label="${esc(t('cfg.setCurrentAria', { name }))}">${t('cfg.setCurrent')}</button>`}
       </div>
-      <div class="cfg-sub">${longOkBox((config.mainlineLongOk || []).includes(name), name)}${countOrDelete(name)}</div>
+      <div class="cfg-sub">${cfgLongOkBox((config.mainlineLongOk || []).includes(name))}${countOrDelete(name)}</div>
     </div>`;
   };
 
@@ -749,19 +781,19 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
   const chipRow = chip => `<div class="cfg-row" data-b="${chip.bucket}" data-kind="chip" data-original-name="${esc(chip.name)}">
     <div class="cfg-line">
       <input class="inp cfg-name" type="text" value="${esc(chip.name)}" aria-label="${esc(t('cfg.nameAria'))}">
-      <div class="seg cfg-bucket-seg" role="group" aria-label="${esc(t('cfg.bucketAria'))}">
-        <button type="button" data-action="cfg-pick-bucket" data-bucket="maintain" class="${chip.bucket === 'maintain' ? 'active' : ''}" aria-pressed="${chip.bucket === 'maintain'}">${t('cfg.maintain')}</button>
-        <button type="button" data-action="cfg-pick-bucket" data-bucket="leak" class="${chip.bucket === 'leak' ? 'active' : ''}" aria-pressed="${chip.bucket === 'leak'}">${t('cfg.leak')}</button>
-      </div>
+      ${cfgBucketSeg(chip.bucket)}
     </div>
-    <div class="cfg-sub">${longOkBox(chip.longOk, chip.name)}${countOrDelete(chip.name)}</div>
+    <div class="cfg-sub">${cfgLongOkBox(chip.longOk)}${countOrDelete(chip.name)}</div>
   </div>`;
 
-  // 删空一组后不留空的圆角灰盒：没有行就换成一句空态提示（录入时输入自定义标签
-  // 就能重新长出来，不需要在这里提供「新增」按钮）。
-  const section = (title, rowsHtml, hint) => `<section class="cfg-section">
+  // v83：每组底部一个「新建标签」，与 v82 的删除配成对——此前这张 sheet 能改名、
+  // 改桶、设当前、删除，唯独不能建，而建是唯一还只能靠「先去记一条」的动作。
+  // 空组仍留那句空态提示（说明标签也会在记录时自动长出来），但组本身不再是空盒。
+  const addBtn = (kind, bucket, title) => `<button class="cell-btn cfg-add" type="button" data-action="cfg-add-row" data-kind="${kind}" data-bucket="${bucket}" aria-label="${esc(t('cfg.addTagAria', { group: title }))}"><span data-role="cell-label">${t('cfg.addTag')}</span></button>`;
+  const section = (title, rowsHtml, kind, bucket, hint) => `<section class="cfg-section">
     <div class="chip-group-label">${title}</div>
-    ${rowsHtml ? `<div class="cfg-list cell-group">${rowsHtml}</div>` : `<div class="form-hint cfg-empty">${t('cfg.emptySection')}</div>`}
+    <div class="cfg-list cell-group">${rowsHtml}${addBtn(kind, bucket, title)}</div>
+    ${rowsHtml ? '' : `<div class="form-hint cfg-empty">${t('cfg.emptySection')}</div>`}
     ${hint ? `<div class="form-hint">${hint}</div>` : ''}
   </section>`;
 
@@ -772,9 +804,9 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
     ${sheetHead({ title: t('cfg.title'), cancelText: t('cfg.cancel'), cancelAction: 'close-form', cancelAria: t('cfg.cancelAria'), doneText: t('cfg.done'), doneAction: 'save-tag-config', doneAria: t('cfg.doneAria') })}
     <div class="form-sheet-body config-body">
       <div class="form-hint">${t('cfg.renameHint')}</div>
-      ${section(t('cfg.sectionMainline'), config.mainline.map(mainlineRow).join(''), t('cfg.mainlineHint'))}
-      ${section(t('cfg.sectionMaintain'), chipsOf('maintain'))}
-      ${section(t('cfg.sectionLeak'), chipsOf('leak'))}
+      ${section(t('cfg.sectionMainline'), config.mainline.map(mainlineRow).join(''), 'mainline', 'job', t('cfg.mainlineHint'))}
+      ${section(t('cfg.sectionMaintain'), chipsOf('maintain'), 'chip', 'maintain')}
+      ${section(t('cfg.sectionLeak'), chipsOf('leak'), 'chip', 'leak')}
       <div class="cell-group">
         <button class="cell-btn" type="button" data-action="preview-locale-defaults" aria-label="${esc(t('cfg.addDefaultsAria'))}"><span data-role="cell-label">${t('cfg.addDefaults')}</span>${cellChevron}</button>
       </div>

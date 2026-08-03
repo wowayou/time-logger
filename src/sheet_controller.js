@@ -43,7 +43,7 @@ import {
   validateTs,
   validateTsForMode
 } from './time.js';
-import { bucketHint, renderFormSheet, renderTagPicker } from './ui.js';
+import { bucketHint, renderConfigRowDraft, renderFormSheet, renderTagPicker } from './ui.js';
 
 export function createSheetController(deps) {
   let sheetScrollY = 0;
@@ -69,7 +69,6 @@ export function createSheetController(deps) {
   let formPlanIds = [];
   let lastPreviewSignature = '';
   let editEndMode = 'fixed';
-  let configSnapshot = null;
   let configDefaultsPreview = null;
   // 导航栈：config/help/import-shift 若从「更多」下钻进入，取消/保存回「更多」而非整层关闭。
   let returnToMore = false;
@@ -620,7 +619,6 @@ export function createSheetController(deps) {
       editEndMode = context.ok && context.canUseNow && (!context.next || entry.ongoing) ? 'now' : 'fixed';
       deps.render();
     } else if (mode === 'config') {
-      configSnapshot = JSON.parse(JSON.stringify(deps.loadConfig()));
       // SPEC-007/D18：默认标签预览是一次性的——每次重开 config sheet 都清掉，
       // 只有显式点「添加本语言的默认标签」那一次才带着它重开。
       configDefaultsPreview = (opts && opts.defaultsPreview) || null;
@@ -808,7 +806,6 @@ export function createSheetController(deps) {
     formPlanIds = [];
     lastPreviewSignature = '';
     editEndMode = 'fixed';
-    configSnapshot = null;
     if (restoreFocus && sheetLastFocus && document.contains(sheetLastFocus)) {
       sheetLastFocus.focus();
     }
@@ -1580,6 +1577,8 @@ export function createSheetController(deps) {
       const seg = row.querySelector('.cfg-bucket-seg button.active');
       return {
         originalName: row.dataset.originalName || '',
+        // v83：草稿行（还没落库过）没有 originalName，空名时的处置与已有行相反。
+        isNew: row.dataset.new === '1',
         name: row.querySelector('.cfg-name').value.trim(),
         bucket: seg ? seg.dataset.bucket : '',
         longOk: row.querySelector('.cfg-long-ok').checked
@@ -1589,8 +1588,11 @@ export function createSheetController(deps) {
 
   function saveTagConfig() {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
-    const mainlineRows = readConfigRows(panel, 'mainline');
+    // v83：点了「新建标签」又没写名字的草稿行等于没建过，直接忽略；已有行的空名
+    // 仍是错误（见下）。两者判据不同是有意的：前者从未落库，后者一旦丢掉就是删除。
+    const mainlineRows = readConfigRows(panel, 'mainline').filter(row => row.name || !row.isNew);
     const chipRows = readConfigRows(panel, 'chip')
+      .filter(row => row.name || !row.isNew)
       .filter(row => row.bucket === 'maintain' || row.bucket === 'leak');
     // v82：名称清空不再等于「悄悄删掉这一行」。那个隐式手势既不可发现，又会在
     // chip 有记录时静默把历史打成孤儿标签（统计当场变化）；删除现在只有一个显式
@@ -1599,6 +1601,13 @@ export function createSheetController(deps) {
     const blank = all.find(row => !row.name);
     if (blank) {
       showInlineError(panel, t('config.emptyName'), 'config-error');
+      return;
+    }
+    // 「未知」是 unrecorded 桶的保留名（`bucketForTag` 直接判它未记录）：叫这个名字
+    // 的标签会显示在某个桶的分组里、却按未记录统计。新建与改名同一处拦下。
+    const reserved = all.find(row => row.name === RESERVED_UNKNOWN_TAG);
+    if (reserved) {
+      showInlineError(panel, t('config.reservedName', { name: RESERVED_UNKNOWN_TAG }), 'config-error');
       return;
     }
     // 重名判定跨三组一起做——主线与 chip 之间同名同样是冲突。
@@ -1627,22 +1636,24 @@ export function createSheetController(deps) {
           migrateEntryTags(d.entries, row.originalName, row.name);
         }
       }
-      nextConfig = setMainlineLongOk(nextConfig, row.name, row.longOk);
     }
     for (const chip of chipRows) {
       if (chip.originalName && chip.originalName !== chip.name && countEntriesWithTag(d.entries, chip.originalName)) {
         migrateEntryTags(d.entries, chip.originalName, chip.name);
       }
     }
-    // 主线的删除在这里生效：留下的名字集合是**改名后**的名字，被标记删除的行不在
-    // 其中，自然被滤掉；残留的 mainlineLongOk 由 normalizeConfig 清掉。chips 本就
-    // 按行整体重建，删除行不出现在 chipRows 里即等于被移除。
-    const keptMainline = new Set(mainlineRows.map(row => row.name));
+    // v83：主线数组直接按行重建——行序即 config.mainline 序，所以改名（行内新名）、
+    // 删除（行不在）、新建（行在末尾）三件事一次落齐，新建的主线名因此排在历史末尾
+    // 而**不会**顶掉当前主线（要当前得显式点「设为当前」）。残留的 mainlineLongOk
+    // 由 normalizeConfig 清掉；chips 本就按行整体重建。
     nextConfig = {
       ...nextConfig,
-      mainline: nextConfig.mainline.filter(name => keptMainline.has(name)),
+      mainline: mainlineRows.map(row => row.name),
       chips: chipRows.map(chip => ({ name: chip.name, bucket: chip.bucket, longOk: chip.longOk }))
     };
+    // longOk 必须在主线数组定稿之后再写：setMainlineLongOk 只认已在 mainline 里的名字，
+    // 新建行在上一步之前还不在其中。
+    for (const row of mainlineRows) nextConfig = setMainlineLongOk(nextConfig, row.name, row.longOk);
     if (!deps.save(d)) {
       showInlineError(panel, t('config.quota'), 'config-error');
       return;
@@ -1680,6 +1691,26 @@ export function createSheetController(deps) {
     // 待删除行的输入全部禁用：既是视觉状态，也让 Tab 跳过一行已经不算数的控件。
     row.querySelectorAll('input, .cfg-bucket-seg button, .cfg-set-current')
       .forEach(el => { el.disabled = !wasPending; });
+  }
+
+  // v83：新建一行草稿标签。整张 sheet 不重渲染——重渲染会丢掉用户在别的行里
+  // 还没保存的改名/勾选（同 v82 的待删除态，全部改动一起在「保存」落库）。
+  function addConfigRow(btn) {
+    const group = btn.closest('.cell-group');
+    if (!group) return;
+    btn.insertAdjacentHTML('beforebegin', renderConfigRowDraft(btn.dataset.kind || 'chip', btn.dataset.bucket || 'maintain'));
+    const input = btn.previousElementSibling && btn.previousElementSibling.querySelector('.cfg-name');
+    if (input) {
+      input.focus();
+      if (typeof input.scrollIntoView === 'function') input.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  // 草稿行从未落库，所以「移除」就是把行拿掉——没有可撤销的东西，不必走 v82 的
+  // 待删除态。
+  function removeConfigDraftRow(btn) {
+    const row = btn.closest('.cfg-row[data-new="1"]');
+    if (row) row.remove();
   }
 
   function pickConfigBucket(btn) {
@@ -1764,6 +1795,8 @@ export function createSheetController(deps) {
     setCurrentMainline,
     pickConfigBucket,
     toggleConfigRowDelete,
+    addConfigRow,
+    removeConfigDraftRow,
     previewLocaleDefaults,
     applyLocaleDefaults,
     cancelLocaleDefaults,
