@@ -69,7 +69,6 @@ export function createSheetController(deps) {
   let formPlanIds = [];
   let lastPreviewSignature = '';
   let editEndMode = 'fixed';
-  let configSnapshot = null;
   let configDefaultsPreview = null;
   // 导航栈：config/help/import-shift 若从「更多」下钻进入，取消/保存回「更多」而非整层关闭。
   let returnToMore = false;
@@ -620,7 +619,6 @@ export function createSheetController(deps) {
       editEndMode = context.ok && context.canUseNow && (!context.next || entry.ongoing) ? 'now' : 'fixed';
       deps.render();
     } else if (mode === 'config') {
-      configSnapshot = JSON.parse(JSON.stringify(deps.loadConfig()));
       // SPEC-007/D18：默认标签预览是一次性的——每次重开 config sheet 都清掉，
       // 只有显式点「添加本语言的默认标签」那一次才带着它重开。
       configDefaultsPreview = (opts && opts.defaultsPreview) || null;
@@ -808,7 +806,6 @@ export function createSheetController(deps) {
     formPlanIds = [];
     lastPreviewSignature = '';
     editEndMode = 'fixed';
-    configSnapshot = null;
     if (restoreFocus && sheetLastFocus && document.contains(sheetLastFocus)) {
       sheetLastFocus.focus();
     }
