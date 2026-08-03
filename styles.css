@@ -2012,6 +2012,18 @@
       font-variant-numeric: tabular-nums;
       flex: 0 0 auto;
     }
+    /* v82：删除只出现在零记录的行上，占的正是「N 条记录」那个右槽——两者互斥，
+       所以行高不变。danger 色是 mini-btn 的唯一例外（其余都是 accent 文字链）。 */
+    .cfg-delete {
+      flex: 0 0 auto;
+      color: var(--danger);
+    }
+    /* 待删除是**可撤销的中间态**，不是已经消失：行留在原地变灰，按钮翻成「撤销」，
+       真正生效要按 sheet 头部的「保存」。 */
+    .cfg-row[data-pending-delete="1"] { opacity: 0.5; }
+    .cfg-row[data-pending-delete="1"] .cfg-name { text-decoration: line-through; }
+    .cfg-row[data-pending-delete="1"] .cfg-delete { color: var(--accent); }
+    .cfg-empty { margin-top: 0; }
     @media (min-width: 720px) {
       .form-sheet {
         align-items: center;
