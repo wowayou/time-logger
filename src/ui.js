@@ -312,7 +312,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '81';
+export const APP_VERSION = '82';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -719,8 +719,18 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
     <input type="checkbox" class="cfg-long-ok"${checked ? ' checked' : ''} aria-label="${esc(t('cfg.longOk'))}">
     <span>${t('cfg.longOk')}</span>
   </label>`;
+  // v82：删除只对**零记录**的标签开放——SPEC-007 当初不做删除的理由是「历史记录
+  // 会变成孤儿标签」，这个理由在没有任何记录引用它时并不成立（试错建出来的标签
+  // 就卡在这里，永远删不掉）。所以右槽二选一：有记录→显示条数（不可删）；
+  // 零记录→显示「删除」。判据同一个 countEntriesWithTag，保存时还会按最新
+  // load() 复算一次，跨标签页新增的记录能把删除拦下。
+  const countOrDelete = name => {
+    const count = countEntriesWithTag(entries, name);
+    if (count) return countLine(name);
+    return `<button class="mini-btn cfg-delete" type="button" data-action="cfg-toggle-delete" aria-label="${esc(t('cfg.deleteAria', { name }))}">${t('cfg.delete')}</button>`;
+  };
 
-  // 主线：当前主线置顶（实色脊），历史名脊淡化；行尾「设为当前」。无删除。
+  // 主线：当前主线置顶（实色脊），历史名脊淡化；行尾「设为当前」。
   const mainlineRow = (name, index) => {
     const isCurrent = index === 0;
     return `<div class="cfg-row${isCurrent ? ' is-current' : ' is-history'}" data-b="job" data-kind="mainline" data-original-name="${esc(name)}">
@@ -729,7 +739,7 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
         ${isCurrent ? `<span class="cfg-badge">${t('cfg.currentBadge')}</span>`
           : `<button class="mini-btn cfg-set-current" type="button" data-action="set-current-mainline" data-name="${esc(name)}" aria-label="${esc(t('cfg.setCurrentAria', { name }))}">${t('cfg.setCurrent')}</button>`}
       </div>
-      <div class="cfg-sub">${longOkBox((config.mainlineLongOk || []).includes(name), name)}${countLine(name)}</div>
+      <div class="cfg-sub">${longOkBox((config.mainlineLongOk || []).includes(name), name)}${countOrDelete(name)}</div>
     </div>`;
   };
 
@@ -744,12 +754,14 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
         <button type="button" data-action="cfg-pick-bucket" data-bucket="leak" class="${chip.bucket === 'leak' ? 'active' : ''}" aria-pressed="${chip.bucket === 'leak'}">${t('cfg.leak')}</button>
       </div>
     </div>
-    <div class="cfg-sub">${longOkBox(chip.longOk, chip.name)}${countLine(chip.name)}</div>
+    <div class="cfg-sub">${longOkBox(chip.longOk, chip.name)}${countOrDelete(chip.name)}</div>
   </div>`;
 
+  // 删空一组后不留空的圆角灰盒：没有行就换成一句空态提示（录入时输入自定义标签
+  // 就能重新长出来，不需要在这里提供「新增」按钮）。
   const section = (title, rowsHtml, hint) => `<section class="cfg-section">
     <div class="chip-group-label">${title}</div>
-    <div class="cfg-list cell-group">${rowsHtml}</div>
+    ${rowsHtml ? `<div class="cfg-list cell-group">${rowsHtml}</div>` : `<div class="form-hint cfg-empty">${t('cfg.emptySection')}</div>`}
     ${hint ? `<div class="form-hint">${hint}</div>` : ''}
   </section>`;
 

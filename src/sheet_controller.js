@@ -1574,7 +1574,9 @@ export function createSheetController(deps) {
   // .active 按钮而不是原生 <select>。历史迁移与 config 写入必须在**同一次
   // load()** 的对象图上完成（CLAUDE.md 写路径红线）。
   function readConfigRows(panel, kind) {
-    return Array.from(panel.querySelectorAll(`.cfg-row[data-kind="${kind}"]`)).map(row => {
+    // v82：待删除的行不参与改名/重名/桶判定——它保留在 DOM 里只是为了「撤销」，
+    // 语义上已经不在这份配置里了。
+    return Array.from(panel.querySelectorAll(`.cfg-row[data-kind="${kind}"]:not([data-pending-delete="1"])`)).map(row => {
       const seg = row.querySelector('.cfg-bucket-seg button.active');
       return {
         originalName: row.dataset.originalName || '',
@@ -1587,21 +1589,35 @@ export function createSheetController(deps) {
 
   function saveTagConfig() {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
-    const mainlineRows = readConfigRows(panel, 'mainline').filter(row => row.name);
+    const mainlineRows = readConfigRows(panel, 'mainline');
     const chipRows = readConfigRows(panel, 'chip')
-      .filter(row => row.name && (row.bucket === 'maintain' || row.bucket === 'leak'));
-    if (!chipRows.length) {
-      showInlineError(panel, t('config.keepOneChip'), 'config-error');
+      .filter(row => row.bucket === 'maintain' || row.bucket === 'leak');
+    // v82：名称清空不再等于「悄悄删掉这一行」。那个隐式手势既不可发现，又会在
+    // chip 有记录时静默把历史打成孤儿标签（统计当场变化）；删除现在只有一个显式
+    // 入口，且只对零记录标签开放，所以空名一律当输入错误拦下。
+    const all = [...mainlineRows, ...chipRows];
+    const blank = all.find(row => !row.name);
+    if (blank) {
+      showInlineError(panel, t('config.emptyName'), 'config-error');
       return;
     }
     // 重名判定跨三组一起做——主线与 chip 之间同名同样是冲突。
-    const all = [...mainlineRows, ...chipRows];
     const duplicate = all.find((row, index) => all.findIndex(item => item.name === row.name) !== index);
     if (duplicate) {
       showInlineError(panel, t('config.duplicateName', { name: duplicate.name }), 'config-error');
       return;
     }
     const d = deps.load();
+    // 删除的最终判据按**最新** load() 复算：sheet 打开期间另一个标签页给这个标签
+    // 记了一条，删除就必须被拦下（渲染时的零记录判据已经过期）。
+    const removedNames = Array.from(panel.querySelectorAll('.cfg-row[data-pending-delete="1"]'))
+      .map(row => row.dataset.originalName || '')
+      .filter(Boolean);
+    const stillUsed = removedNames.find(name => countEntriesWithTag(d.entries, name));
+    if (stillUsed) {
+      showInlineError(panel, t('config.deleteHasEntries', { name: stillUsed }), 'config-error');
+      return;
+    }
     let nextConfig = deps.loadConfig();
     // 主线改名：先算 config 变换，再在**同一张** entries 图上迁移历史。
     for (const row of mainlineRows) {
@@ -1618,8 +1634,13 @@ export function createSheetController(deps) {
         migrateEntryTags(d.entries, chip.originalName, chip.name);
       }
     }
+    // 主线的删除在这里生效：留下的名字集合是**改名后**的名字，被标记删除的行不在
+    // 其中，自然被滤掉；残留的 mainlineLongOk 由 normalizeConfig 清掉。chips 本就
+    // 按行整体重建，删除行不出现在 chipRows 里即等于被移除。
+    const keptMainline = new Set(mainlineRows.map(row => row.name));
     nextConfig = {
       ...nextConfig,
+      mainline: nextConfig.mainline.filter(name => keptMainline.has(name)),
       chips: chipRows.map(chip => ({ name: chip.name, bucket: chip.bucket, longOk: chip.longOk }))
     };
     if (!deps.save(d)) {
@@ -1627,6 +1648,9 @@ export function createSheetController(deps) {
       return;
     }
     deps.saveConfig(nextConfig);
+    // 删除生效后，还挂着的「撤销删除记录」会把引用这个标签的记录放回来——那条记录
+    // 会当场变成孤儿标签（统计掉进未记录）。与跨标签页修改同一处理：撤销失效。
+    if (removedNames.length && deps.cancelPendingUndo) deps.cancelPendingUndo();
     closeForm();
     deps.render();
   }
@@ -1637,6 +1661,25 @@ export function createSheetController(deps) {
     deps.saveConfig(storageSetCurrentMainline(deps.loadConfig(), name));
     openFormSheet({ mode: 'config' });
     deps.render();
+  }
+
+  // v82：删除是**待生效**状态而不是立刻抹掉那一行——行留在原地、变灰、按钮翻成
+  // 「撤销」，所以这一步永远可逆，也不需要额外的确认弹层：真正的确认是 sheet 头部
+  // 的「保存」，「取消」则整单作废。
+  function toggleConfigRowDelete(btn) {
+    const row = btn.closest('.cfg-row');
+    if (!row) return;
+    const wasPending = row.dataset.pendingDelete === '1';
+    const name = row.dataset.originalName || '';
+    if (wasPending) delete row.dataset.pendingDelete;
+    else row.dataset.pendingDelete = '1';
+    btn.textContent = wasPending ? t('cfg.delete') : t('cfg.undoDelete');
+    btn.setAttribute('aria-label', wasPending
+      ? t('cfg.deleteAria', { name })
+      : t('cfg.undoDeleteAria', { name }));
+    // 待删除行的输入全部禁用：既是视觉状态，也让 Tab 跳过一行已经不算数的控件。
+    row.querySelectorAll('input, .cfg-bucket-seg button, .cfg-set-current')
+      .forEach(el => { el.disabled = !wasPending; });
   }
 
   function pickConfigBucket(btn) {
@@ -1720,6 +1763,7 @@ export function createSheetController(deps) {
     saveTagConfig,
     setCurrentMainline,
     pickConfigBucket,
+    toggleConfigRowDelete,
     previewLocaleDefaults,
     applyLocaleDefaults,
     cancelLocaleDefaults,

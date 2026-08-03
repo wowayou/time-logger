@@ -678,6 +678,9 @@ import {
     render,
     renderChrome,
     isLegacyOrigin,
+    // v82：删掉一个零记录标签后，还挂着的「撤销删除」会把引用它的记录放回来，
+    // 那条记录就成了孤儿标签。与跨标签页修改同一处理：让撤销失效并明说。
+    cancelPendingUndo: cancelUndoForConflict,
     getSheetEditId: () => sheetEditId,
     setSheetEditId: value => { sheetEditId = value; }
   });
@@ -882,6 +885,7 @@ import {
       if (action === 'save-tag-config') sheetController.saveTagConfig();
       if (action === 'set-current-mainline') sheetController.setCurrentMainline(el.dataset.name || '');
       if (action === 'cfg-pick-bucket') sheetController.pickConfigBucket(el);
+      if (action === 'cfg-toggle-delete') sheetController.toggleConfigRowDelete(el);
       if (action === 'preview-locale-defaults') sheetController.previewLocaleDefaults();
       if (action === 'apply-locale-defaults') sheetController.applyLocaleDefaults();
       if (action === 'cancel-locale-defaults') sheetController.cancelLocaleDefaults();
