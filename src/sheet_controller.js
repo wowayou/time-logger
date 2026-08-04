@@ -20,9 +20,13 @@ import { t } from './i18n.js';
 import {
   BUCKETS,
   defaultMotto,
+  tagKey,
   RESERVED_UNKNOWN_TAG,
   bucketForTag,
+  canonicalTagName,
   countEntriesWithTag,
+  countEntriesWithExactTag,
+  countEntriesNeedingRetag,
   appendLocaleDefaultTags,
   previewLocaleDefaultTags,
   renameMainlineTag,
@@ -1248,7 +1252,7 @@ export function createSheetController(deps) {
     if (!what) { if (whatEl) whatEl.focus(); return; }
     const ctagEl = panel.querySelector('#form-ctag');
     const ctag = ctagEl ? ctagEl.value.trim() : '';
-    const tag = ctag || formTag || RESERVED_UNKNOWN_TAG;
+    const tag = canonicalTagName(ctag || formTag || RESERVED_UNKNOWN_TAG, deps.loadConfig());
     const expected = buildOvernightPlan(panel, formBaseEntries);
     if (!expected || !expected.ok) {
       showInlineError(panel, expected && expected.message || t('form.overnightUnsavable'));
@@ -1298,7 +1302,7 @@ export function createSheetController(deps) {
     const what = document.getElementById('form-what').value.trim();
     if (!what) { document.getElementById('form-what').focus(); return; }
     const ctag = document.getElementById('form-ctag').value.trim();
-    const tag = ctag || formTag || RESERVED_UNKNOWN_TAG;
+    const tag = canonicalTagName(ctag || formTag || RESERVED_UNKNOWN_TAG, deps.loadConfig());
     const d = deps.load();
     let placeholder = openPlaceholderForDate(d.entries, checked.ts.slice(0, 10));
     const conflict = findTimeConflict(d.entries, checked.ts, placeholder ? placeholder.id : '');
@@ -1359,7 +1363,7 @@ export function createSheetController(deps) {
     const what = document.getElementById('form-what').value.trim();
     if (!what) { document.getElementById('form-what').focus(); return; }
     const ctag = document.getElementById('form-ctag').value.trim();
-    const tag = ctag || formTag || RESERVED_UNKNOWN_TAG;
+    const tag = canonicalTagName(ctag || formTag || RESERVED_UNKNOWN_TAG, deps.loadConfig());
     const expected = buildSplitPlan(panel, formBaseEntries);
     if (!expected || !expected.ok) {
       showInlineError(panel, expected && expected.message || t('form.backfillUnsavable'));
@@ -1435,7 +1439,9 @@ export function createSheetController(deps) {
     if (!what) { if (whatEl) whatEl.focus(); return; }
     const sel = chipBox ? chipBox.querySelector('.chip.sel') : null;
     const ctag = customEl ? customEl.value.trim() : '';
-    const tag = ctag || (sel ? sel.dataset.tag : RESERVED_UNKNOWN_TAG);
+    // v85：敲 `sleep` 而 config 里是 `Sleep` 时，记录存权威拼写——否则时间轴显示
+    // `#sleep`、设置页显示 `Sleep`，同一个标签两副面孔。
+    const tag = canonicalTagName(ctag || (sel ? sel.dataset.tag : RESERVED_UNKNOWN_TAG), deps.loadConfig());
     const conflict = findTimeConflict(d.entries, checked.ts, id);
     if (conflict) {
       showConflictError(box, conflict, checked.ts, 'use-conflict-plus-edit');
@@ -1614,8 +1620,83 @@ export function createSheetController(deps) {
     });
   }
 
-  function saveTagConfig() {
+  // v85：两个名字只差大小写就是同一个标签，所以重名判定按 tagKey 折叠。返回第一组
+  // 冲突（一次只处理一组——两组同时冲突时，解完一组再看下一组，比一次弹两个问题清楚）。
+  function findNameClash(rows) {
+    for (let i = 0; i < rows.length; i += 1) {
+      for (let j = i + 1; j < rows.length; j += 1) {
+        if (tagKey(rows[i].name) === tagKey(rows[j].name)) return { rows: [rows[i], rows[j]] };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 合并计划：谁并进谁。**只有已落库的行才能当来源**——草稿行（还没保存过）与已有
+   * 标签同名不是「要合并」，是「别建这个」，那种情况退回普通重名错误。
+   * 方向判据：① 恰好一边被改名（用户把它改成了另一个的名字）→ 被改名的那个是来源；
+   * ② 两边都没动（存量就是 `sleep` + `Sleep` 并存）→ 记录多的留下，少的并进去，
+   * 平手取行序靠前的留下。签名带上条数，确认前后数据变了就要求重新确认。
+   */
+  function planTagMerge(clash, entries) {
+    const [first, second] = clash.rows;
+    const renamed = clash.rows.filter(row => row.originalName && tagKey(row.originalName) !== tagKey(row.name));
+    let source = null;
+    let target = null;
+    if (renamed.length === 1) {
+      source = renamed[0];
+      target = clash.rows.find(row => row !== source);
+    } else if (renamed.length === 0) {
+      // 方向按**逐字**计数——两行折叠后属于同一个标签，用同一性计数会得出相同的数字，
+      // 分不出谁该留下。用得多的那种拼写留下。
+      const firstCount = countEntriesWithExactTag(entries, first.originalName);
+      const secondCount = countEntriesWithExactTag(entries, second.originalName);
+      target = secondCount > firstCount ? second : first;
+      source = target === first ? second : first;
+    }
+    if (!source || !target || !source.originalName) return null;
+    // 显示的是「会被改写多少条」，不是「来源名下有多少条」——已经是目标拼写的那些
+    // 不动，算进去会夸大后果。
+    const count = countEntriesNeedingRetag(entries, source.originalName, target.name);
+    return {
+      source,
+      target,
+      count,
+      from: source.originalName,
+      to: target.name,
+      signature: `${source.originalName}→${target.name}#${count}`
+    };
+  }
+
+  // 合并是**破坏性**动作（源标签消失、它的记录改归属），所以不能像普通校验那样只报
+  // 一句话就算完：这里给出确切结果与一个显式的「合并」按钮，点了才执行。
+  function showMergePrompt(panel, plan) {
+    const box = panel.querySelector('[data-role="config-error"]');
+    if (!box) return;
+    box.replaceChildren();
+    const text = document.createElement('div');
+    text.textContent = t('config.mergePrompt', { from: plan.from, to: plan.to, n: plan.count });
+    const actions = document.createElement('div');
+    actions.className = 'cfg-defaults-actions';
+    const confirm = document.createElement('button');
+    confirm.type = 'button';
+    confirm.className = 'cell-action';
+    confirm.dataset.action = 'confirm-tag-merge';
+    confirm.dataset.signature = plan.signature;
+    confirm.textContent = t('config.mergeConfirm');
+    actions.appendChild(confirm);
+    box.append(text, actions);
+    box.hidden = false;
+    if (plan.source.el && typeof plan.source.el.scrollIntoView === 'function') {
+      plan.source.el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
+
+  function saveTagConfig(opts = {}) {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    // 本次保存要被并掉的那一行（如果有）：它不参与改名、也不进最终的 config。
+    let mergeSourceRow = null;
+    let mergeTargetName = '';
     // v83：点了「新建标签」又没写名字的草稿行等于没建过，直接忽略；已有行的空名
     // 仍是错误（见下）。两者判据不同是有意的：前者从未落库，后者一旦丢掉就是删除。
     const mainlineRows = readConfigRows(panel, 'mainline').filter(row => row.name || !row.isNew);
@@ -1638,13 +1719,24 @@ export function createSheetController(deps) {
       showInlineError(panel, t('config.reservedName', { name: RESERVED_UNKNOWN_TAG }), 'config-error', reserved.input);
       return;
     }
-    // 重名判定跨三组一起做——主线与 chip 之间同名同样是冲突。
-    const duplicate = all.find((row, index) => all.findIndex(item => item.name === row.name) !== index);
-    if (duplicate) {
-      showInlineError(panel, t('config.duplicateName', { name: duplicate.name }), 'config-error', duplicate.input);
-      return;
-    }
     const d = deps.load();
+    // v85：重名判定跨三组一起做（主线与 chip 之间同名同样是冲突），且判据是 tagKey——
+    // `sleep` 与 `Sleep` 是同一个标签。判严之后必须同时给出**出口**，否则本来就同时
+    // 存有两种拼写的存量 config 会在每次保存时被拦死：出口就是合并。
+    const clash = findNameClash(all);
+    if (clash) {
+      const plan = planTagMerge(clash, d.entries);
+      if (!plan) {
+        showInlineError(panel, t('config.duplicateName', { name: clash.rows[1].name }), 'config-error', clash.rows[1].input);
+        return;
+      }
+      if (opts.confirmMerge !== plan.signature) {
+        showMergePrompt(panel, plan);
+        return;
+      }
+      mergeSourceRow = plan.source;
+      mergeTargetName = plan.to;
+    }
     // 删除的最终判据按**最新** load() 复算：sheet 打开期间另一个标签页给这个标签
     // 记了一条，删除就必须被拦下（渲染时的零记录判据已经过期）。
     const removedNames = Array.from(panel.querySelectorAll('.cfg-row[data-pending-delete="1"]'))
@@ -1661,8 +1753,14 @@ export function createSheetController(deps) {
       return;
     }
     let nextConfig = deps.loadConfig();
+    // v85：合并——把来源标签的记录迁到目标名下，来源行随后不进最终 config。
+    // 与改名共用 migrateEntryTags，同样落在**这一次** load() 的对象图上。
+    if (mergeSourceRow) {
+      migrateEntryTags(d.entries, mergeSourceRow.originalName, mergeTargetName);
+    }
     // 主线改名：先算 config 变换，再在**同一张** entries 图上迁移历史。
     for (const row of mainlineRows) {
+      if (row === mergeSourceRow) continue;
       if (row.originalName && row.originalName !== row.name) {
         nextConfig = renameMainlineTag(nextConfig, row.originalName, row.name);
         if (countEntriesWithTag(d.entries, row.originalName)) {
@@ -1671,6 +1769,7 @@ export function createSheetController(deps) {
       }
     }
     for (const chip of chipRows) {
+      if (chip === mergeSourceRow) continue;
       if (chip.originalName && chip.originalName !== chip.name && countEntriesWithTag(d.entries, chip.originalName)) {
         migrateEntryTags(d.entries, chip.originalName, chip.name);
       }
@@ -1681,12 +1780,16 @@ export function createSheetController(deps) {
     // 由 normalizeConfig 清掉；chips 本就按行整体重建。
     nextConfig = {
       ...nextConfig,
-      mainline: mainlineRows.map(row => row.name),
-      chips: chipRows.map(chip => ({ name: chip.name, bucket: chip.bucket, longOk: chip.longOk }))
+      mainline: mainlineRows.filter(row => row !== mergeSourceRow).map(row => row.name),
+      chips: chipRows.filter(chip => chip !== mergeSourceRow)
+        .map(chip => ({ name: chip.name, bucket: chip.bucket, longOk: chip.longOk }))
     };
     // longOk 必须在主线数组定稿之后再写：setMainlineLongOk 只认已在 mainline 里的名字，
     // 新建行在上一步之前还不在其中。
-    for (const row of mainlineRows) nextConfig = setMainlineLongOk(nextConfig, row.name, row.longOk);
+    for (const row of mainlineRows) {
+      if (row === mergeSourceRow) continue;
+      nextConfig = setMainlineLongOk(nextConfig, row.name, row.longOk);
+    }
     if (!deps.save(d)) {
       showInlineError(panel, t('config.quota'), 'config-error');
       return;

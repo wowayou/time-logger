@@ -926,6 +926,7 @@ import {
       if (action === 'open-backup') sheetController.openBackupSheet();
       if (action === 'open-advanced') sheetController.openAdvancedSheet();
       if (action === 'save-tag-config') sheetController.saveTagConfig();
+      if (action === 'confirm-tag-merge') sheetController.saveTagConfig({ confirmMerge: el.dataset.signature || '' });
       if (action === 'set-current-mainline') sheetController.setCurrentMainline(el.dataset.name || '');
       if (action === 'cfg-pick-bucket') sheetController.pickConfigBucket(el);
       if (action === 'cfg-toggle-delete') sheetController.toggleConfigRowDelete(el);
