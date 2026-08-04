@@ -314,6 +314,9 @@ import {
 
   // --- Render ---
   function render() {
+    // v86：记下这一帧代表的分钟。定时器被系统冻住时（S23 实录：应用在前台，界面
+    // 却停在一两分钟前），它是「界面已经过期」的廉价判据——见 refreshLiveClockOnTouch。
+    lastRenderedMinute = nowStr();
     renderChrome();
     if (state.view === 'day') {
       const day = computeDay();
@@ -1215,6 +1218,22 @@ import {
 
   // --- Init ---
   let tickTimer = null;
+  let lastRenderedMinute = '';
+
+  // v86：真机上出现过「应用一直在前台，时间却停在一两分钟前」（S23 截图：系统
+  // 21:22 / 界面 21:20）。对齐分钟的定时器本身没问题，问题是**进程被系统冻住**时
+  // 它既不会触发、也不会有 visibilitychange/focus 事件把我们叫醒（Samsung 的省电
+  // 策略尤其激进）。用户一旦碰这个页面，界面就该是当前时间：先做一次「分钟变了吗」
+  // 的字符串比较（廉价），变了才走 refreshLiveClock（那里才 load() + 算签名）。
+  // **必须挂在 click 的冒泡阶段、不能挂 pointerdown**：pointerdown 时重渲染会把
+  // 正在被点的那个元素换掉，随后的 click 落在已脱离文档的节点上、永远到不了
+  // 事件委托——一次点击被自己吞掉。第一版就是 pointerdown，`plan defaults…` 用例
+  // 当场变红（点 FAB 没反应），比线上被吞掉的那一下便宜得多。冒泡阶段则保证动作
+  // 已经跑完；若动作打开了 sheet，refreshLiveClock 自己会早退。
+  function refreshLiveClockOnTouch() {
+    if (!lastRenderedMinute || nowStr() === lastRenderedMinute) return;
+    refreshLiveClock();
+  }
 
   function refreshLiveClock() {
     if (document.hidden) return;
@@ -1413,6 +1432,8 @@ import {
     }, { passive: true });
     window.addEventListener('pageshow', resumeLiveClock, { passive: true });
     window.addEventListener('focus', resumeLiveClock, { passive: true });
+    document.addEventListener('click', refreshLiveClockOnTouch, { passive: true });
+    window.addEventListener('scroll', refreshLiveClockOnTouch, { passive: true });
     startTickTimer();
   }
 
