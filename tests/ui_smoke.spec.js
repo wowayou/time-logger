@@ -1597,9 +1597,10 @@ test('renamed defaults stay renamed and mainline/chip duplicates are rejected sa
   await expect(page.locator('.config-body')).not.toContainText('睡觉');
   await chipName.fill('求职推进');
   await page.getByRole('button', { name: '保存标签配置' }).click();
-  // 主线现在可见可编辑，「已经是主线标签」这条专用错误退化为普通重名——重名
-  // 检查跨主线/维持/偏航三组统一做，拦下的行为不变。
-  await expect(page.locator('[data-role="config-error"]')).toContainText('重复');
+  // v85：把一个已有标签改成另一个已有标签的名字，不再是死路一条的「重复」，而是
+  // 问「要不要合并」。**保护的不变量没变**：没点确认之前一个字都不写入。
+  await expect(page.locator('[data-role="config-error"]')).toContainText('是同一个标签名');
+  await expect(page.locator('[data-action="confirm-tag-merge"]')).toBeVisible();
   const config = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.config')));
   expect(config.chips).toEqual([expect.objectContaining({ name: '休息' })]);
 });

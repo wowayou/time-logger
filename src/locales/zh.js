@@ -224,6 +224,8 @@ export default {
   'config.emptyName': '标签名不能为空；不想要这个标签就点「删除」。',
   'config.reservedName': '「{name}」是未记录桶的保留名，不能用作标签名。',
   'config.deleteHasEntries': '「{name}」已经有记录了，不能删除；改名会一并迁移历史。',
+  'config.mergePrompt': '「{from}」与「{to}」是同一个标签名。合并后「{from}」的 {n} 条记录会归到「{to}」，「{from}」这一行消失。',
+  'config.mergeConfirm': '合并',
   'config.duplicateName': '「{name}」重复了，请合并成一个标签名。',
   'config.quota': '本机存储空间不足，配置页内容仍保留；请先导出备份并清理空间。',
 

@@ -235,6 +235,8 @@ export default {
   'config.emptyName': 'A tag name cannot be empty. Use Delete if you no longer want the tag.',
   'config.reservedName': '"{name}" is reserved for the Unlogged bucket and cannot be used as a tag name.',
   'config.deleteHasEntries': '"{name}" already has entries and cannot be deleted. Rename it instead — that migrates its history.',
+  'config.mergePrompt': '"{from}" and "{to}" are the same tag name. Merging moves {n} entries from "{from}" to "{to}", and the "{from}" row goes away.',
+  'config.mergeConfirm': 'Merge',
   'config.duplicateName': '"{name}" is duplicated; merge it into one tag name.',
   'config.quota': 'Local storage is full; the settings page content is kept. Export a backup and free up space first.',
 

@@ -166,6 +166,26 @@ function cleanName(name) {
   return String(name || '').trim();
 }
 
+/**
+ * v85：标签的**同一性判据**。`sleep` 与 `Sleep` 是同一个标签（维护者原话），
+ * 所以一切「这两个名字是不是同一个」的比较都走这里，而不是 `===`。
+ * 用 `toLowerCase()` 而不是 `toLocaleLowerCase()`：后者会按运行环境的语言变，
+ * 土耳其语环境下 `I` 折成无点小写 i，同一份数据在不同设备上会得出不同答案——
+ * 标签是数据，判据必须与设备语言无关。中文没有大小写，这条对中文标签是恒等。
+ * @param {string} name
+ * @returns {string}
+ */
+export function tagKey(name) {
+  return cleanName(name).toLowerCase();
+}
+
+/**
+ * 去重按**逐字相同**，不按 tagKey——这是有意的。v85 把「同一性」判据改成大小写
+ * 不敏感之后，第一版顺手让 normalizeConfig 也折叠，结果是存量里并存的 `sleep` 与
+ * `Sleep` 在加载时就被**静默丢掉一个**：用户没同意，两者的桶/longOk 若不同还会
+ * 悄悄改变历史归类。所以数据层不合并，只有标签设置里那个显式的「合并」动作才动它，
+ * 而设置页正是靠这里保留两行才能把冲突摆到用户面前。
+ */
 function uniqueNames(names) {
   const seen = new Set();
   const out = [];
@@ -218,6 +238,7 @@ export function normalizeConfig(raw) {
   const chipsSource = Array.isArray(raw.chips) ? raw.chips : seed.chips;
   const mainline = uniqueNames(mainlineSource);
   const chips = [];
+  // 同上：逐字比较。存量的大小写并存要留到设置页显式合并，不在加载时静默处理。
   const seen = new Set(mainline);
   chipsSource.forEach(chip => {
     const clean = normalizeChip(chip);
@@ -230,9 +251,9 @@ export function normalizeConfig(raw) {
   // mergeImportedConfig / uniqueNames 等多处按值使用，改形态要动一大片并强制迁移
   // 存量 config；追加一个字段则「老备份没有它＝空集」天然成立，零迁移。
   // 只保留仍在 mainline 里的名字——改名/移除后残留的条目会在这里被自然清掉。
-  const mainlineSet = new Set(mainline);
+  const mainlineSet = new Set(mainline.map(tagKey));
   const mainlineLongOk = uniqueNames(Array.isArray(raw.mainlineLongOk) ? raw.mainlineLongOk : [])
-    .filter(name => mainlineSet.has(name));
+    .filter(name => mainlineSet.has(tagKey(name)));
   // motto: undefined 会被 JSON.stringify 丢掉——「未设置」在 localStorage 里
   // 就是没有这个键，与三态模型一致。
   // 与 motto 的 undefined 同一处理：空集就**不写这个键**。否则每个从未用过主线
@@ -265,7 +286,9 @@ function addMainlineTag(tag) {
   const name = cleanName(tag);
   if (!name || name === RESERVED_UNKNOWN_TAG) return loadConfig();
   const config = loadConfig();
-  if (!config.mainline.includes(name) && !config.chips.some(chip => chip.name === name)) {
+  const key = tagKey(name);
+  if (!config.mainline.some(item => tagKey(item) === key)
+    && !config.chips.some(chip => tagKey(chip.name) === key)) {
     config.mainline.unshift(name);
     saveConfig(config);
   }
@@ -276,14 +299,15 @@ function addChipTag(tag, bucket) {
   const name = cleanName(tag);
   if (!name || name === RESERVED_UNKNOWN_TAG || bucket === 'job' || bucket === 'unrecorded') return loadConfig();
   const config = loadConfig();
-  const existing = config.chips.find(chip => chip.name === name);
+  const key = tagKey(name);
+  const existing = config.chips.find(chip => tagKey(chip.name) === key);
   if (existing) {
     // Recording an existing chip never re-buckets it: the chip's current bucket
     // wins (「同名按 chip 归类」). Silently moving it here retroactively reclassified
     // all history (v30 fix). Re-bucketing is an explicit config-page action only.
     return config;
   }
-  if (config.mainline.includes(name)) return config;
+  if (config.mainline.some(item => tagKey(item) === key)) return config;
   config.chips.push({ name, bucket, longOk: false });
   saveConfig(config);
   return config;
@@ -300,17 +324,50 @@ export function rememberCustomTagForBucket(tag, bucket) {
 }
 
 export function countEntriesWithTag(entries, name) {
+  const target = tagKey(name);
+  if (!target) return 0;
+  return (entries || []).filter(entry => tagKey((entry.tags || [])[0]) === target).length;
+}
+
+/**
+ * v85：按**逐字拼写**计数。合并的方向判据要问「哪种拼写用得多」，那必须是精确计数；
+ * countEntriesWithTag 已改为大小写不敏感（删除守卫、改名迁移要的是同一性），两者
+ * 回答的是不同问题，故并存。
+ * @param {any[]} entries
+ * @param {string} name
+ * @returns {number}
+ */
+export function countEntriesWithExactTag(entries, name) {
   const target = cleanName(name);
   if (!target) return 0;
   return (entries || []).filter(entry => cleanName((entry.tags || [])[0]) === target).length;
 }
 
+/**
+ * 合并会**改写**多少条记录：同一性下属于 `name` 、但拼写还不是 `target` 的那些。
+ * 已经是目标拼写的记录不算——它们不动，把它们算进去会让提示夸大后果。
+ * @param {any[]} entries
+ * @param {string} name
+ * @param {string} target
+ * @returns {number}
+ */
+export function countEntriesNeedingRetag(entries, name, target) {
+  const key = tagKey(name);
+  const dest = cleanName(target);
+  if (!key) return 0;
+  return (entries || []).filter(entry => {
+    const tag = cleanName((entry.tags || [])[0]);
+    return tagKey(tag) === key && tag !== dest;
+  }).length;
+}
+
 export function migrateEntryTags(entries, from, to) {
-  const source = cleanName(from);
+  const source = tagKey(from);
   const dest = cleanName(to);
-  if (!source || !dest || source === dest) return entries;
+  // 只差大小写时仍要迁移——那正是「改拼写」这个动作本身（`sleep` → `Sleep`）。
+  if (!source || !dest || from === to) return entries;
   (entries || []).forEach(entry => {
-    if (cleanName((entry.tags || [])[0]) === source) entry.tags = [dest];
+    if (tagKey((entry.tags || [])[0]) === source) entry.tags = [dest];
   });
   return entries;
 }
@@ -328,9 +385,10 @@ export function renameMainlineTag(config, from, to) {
   const source = cleanName(from);
   const dest = cleanName(to);
   const next = normalizeConfig(config);
-  if (!source || !dest || source === dest || !next.mainline.includes(source)) return next;
-  next.mainline = next.mainline.map(name => (name === source ? dest : name));
-  next.mainlineLongOk = (next.mainlineLongOk || []).map(name => (name === source ? dest : name));
+  const sourceKey = tagKey(source);
+  if (!source || !dest || source === dest || !next.mainline.some(name => tagKey(name) === sourceKey)) return next;
+  next.mainline = next.mainline.map(name => (tagKey(name) === sourceKey ? dest : name));
+  next.mainlineLongOk = (next.mainlineLongOk || []).map(name => (tagKey(name) === sourceKey ? dest : name));
   return normalizeConfig(next);
 }
 
@@ -345,8 +403,9 @@ export function renameMainlineTag(config, from, to) {
 export function setCurrentMainline(config, name) {
   const target = cleanName(name);
   const next = normalizeConfig(config);
-  if (!target || !next.mainline.includes(target)) return next;
-  next.mainline = [target, ...next.mainline.filter(item => item !== target)];
+  const key = tagKey(target);
+  if (!target || !next.mainline.some(item => tagKey(item) === key)) return next;
+  next.mainline = [target, ...next.mainline.filter(item => tagKey(item) !== key)];
   return normalizeConfig(next);
 }
 
@@ -360,9 +419,10 @@ export function setCurrentMainline(config, name) {
 export function setMainlineLongOk(config, name, longOk) {
   const target = cleanName(name);
   const next = normalizeConfig(config);
-  if (!target || !next.mainline.includes(target)) return next;
-  const current = new Set(next.mainlineLongOk || []);
-  if (longOk) current.add(target); else current.delete(target);
+  const key = tagKey(target);
+  if (!target || !next.mainline.some(item => tagKey(item) === key)) return next;
+  const current = new Set((next.mainlineLongOk || []).filter(item => tagKey(item) !== key));
+  if (longOk) current.add(target);
   next.mainlineLongOk = [...current];
   return normalizeConfig(next);
 }
@@ -377,12 +437,12 @@ export function setMainlineLongOk(config, name, longOk) {
  */
 export function previewLocaleDefaultTags(config = loadConfig()) {
   const current = normalizeConfig(config);
-  const occupied = new Set([...current.mainline, ...current.chips.map(chip => chip.name)]);
+  const occupied = new Set([...current.mainline, ...current.chips.map(chip => chip.name)].map(tagKey));
   const seed = defaultSeed();
   const additions = [];
   const skipped = [];
   seed.chips.forEach(chip => {
-    if (occupied.has(chip.name)) skipped.push(chip.name);
+    if (occupied.has(tagKey(chip.name))) skipped.push(chip.name);
     else additions.push({ ...chip });
   });
   return { additions, skipped };
@@ -410,10 +470,31 @@ export function chipGroups(config = loadConfig()) {
 export function bucketForTag(tag, config = loadConfig()) {
   const name = cleanName(tag);
   if (!name || name === RESERVED_UNKNOWN_TAG) return 'unrecorded';
-  if (config.mainline.includes(name)) return 'job';
-  const chip = config.chips.find(item => item.name === name);
+  // v85：记录里存的是用户当时敲的拼写，config 里存的是标签的权威拼写；两者只差
+  // 大小写时它们是同一个标签，不该掉进未记录。
+  const key = tagKey(name);
+  if (config.mainline.some(item => tagKey(item) === key)) return 'job';
+  const chip = config.chips.find(item => tagKey(item.name) === key);
   if (chip) return chip.bucket;
   return (LEGACY_ALIASES[name] && LEGACY_ALIASES[name].bucket) || 'unrecorded';
+}
+
+/**
+ * v85：把一个用户输入的标签名折成 config 里的**权威拼写**（若存在）。录入时敲
+ * `sleep` 而 config 里是 `Sleep`，记录应当存 `Sleep`——否则时间轴显示 `#sleep`、
+ * 设置页显示 `Sleep`，同一个标签两副面孔。找不到就原样返回。
+ * @param {string} tag
+ * @param {TagConfig} [config]
+ * @returns {string}
+ */
+export function canonicalTagName(tag, config = loadConfig()) {
+  const name = cleanName(tag);
+  if (!name) return name;
+  const key = tagKey(name);
+  const mainlineHit = config.mainline.find(item => tagKey(item) === key);
+  if (mainlineHit) return mainlineHit;
+  const chip = config.chips.find(item => tagKey(item.name) === key);
+  return chip ? chip.name : name;
 }
 
 export function longOkForTag(tag, config = loadConfig()) {
@@ -421,8 +502,9 @@ export function longOkForTag(tag, config = loadConfig()) {
   if (!name) return false;
   // SPEC-007：主线段 >3h 是常态（写代码、面试准备），此前每段都要手动确认是真实
   // 摩擦。主线名的豁免存在 mainlineLongOk 里，与 chip 的 per-tag longOk 并列。
-  if ((config.mainlineLongOk || []).includes(name)) return true;
-  const chip = config.chips.find(item => item.name === name);
+  const key = tagKey(name);
+  if ((config.mainlineLongOk || []).some(item => tagKey(item) === key)) return true;
+  const chip = config.chips.find(item => tagKey(item.name) === key);
   if (chip) return Boolean(chip.longOk);
   return Boolean(LEGACY_ALIASES[name] && LEGACY_ALIASES[name].longOk);
 }
@@ -811,17 +893,19 @@ export function mergeImportedConfig(localConfig, importedConfig) {
   const local = normalizeConfig(localConfig);
   if (!importedConfig || typeof importedConfig !== 'object') return local;
   const imported = normalizeConfig(importedConfig);
-  const occupied = new Set([...local.mainline, ...local.chips.map(chip => chip.name)]);
+  // v85：占位判据按 tagKey——备份里的 `Sleep` 遇上本机的 `sleep` 是同一个标签，
+  // 不该在本机长出第二个 chip。本机拼写优先（导入永远不改本机数据）。
+  const occupied = new Set([...local.mainline, ...local.chips.map(chip => chip.name)].map(tagKey));
   const mainline = local.mainline.slice();
   const chips = local.chips.map(chip => ({ ...chip }));
   imported.mainline.forEach(name => {
-    if (occupied.has(name)) return;
-    occupied.add(name);
+    if (occupied.has(tagKey(name))) return;
+    occupied.add(tagKey(name));
     mainline.push(name);
   });
   imported.chips.forEach(chip => {
-    if (occupied.has(chip.name)) return;
-    occupied.add(chip.name);
+    if (occupied.has(tagKey(chip.name))) return;
+    occupied.add(tagKey(chip.name));
     chips.push({ ...chip });
   });
   // 格言合并与标签同一精神——本机优先：本机的显式值（含显式隐藏 ''）保留，
