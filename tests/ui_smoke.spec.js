@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { FIXED_NOW, STATES, VIEWPORTS, boot, expectNoHorizontalOverflow, openBackupMenu, routeStaticOrigin, trackDialogs } from './ui_fixture.js';
+import { FIXED_NOW, STATES, VIEWPORTS, boot, expectNoHorizontalOverflow, openAdvancedSheet, openBackupMenu, openBackupSheet, routeStaticOrigin, trackDialogs } from './ui_fixture.js';
 
 async function setFormTimestamp(page, selector, value) {
   await page.locator(selector).evaluate((input, next) => {
@@ -39,7 +39,7 @@ for (const width of VIEWPORTS) {
 for (const share of [false, true]) {
   test(`more sheet keeps layout and always shows the send button (share ${share ? 'present' : 'absent'})`, async ({ page }) => {
     await boot(page, 320, 'one-record', share);
-    await openBackupMenu(page);
+    await openBackupSheet(page);
     // v43: 分享按钮常显——不再随 Web Share 能力显隐（旧 reveal 时序在 footer→更多
     // 迁移后丢失，iOS 卡隐藏态，P24）；无能力时点击回退下载。两种能力状态下都在。
     await expect(page.locator('#backup-send-btn')).toBeVisible();
@@ -236,10 +236,10 @@ test('past-day continuation settles at day end and restores selected date', asyn
   await expect(page.locator('.form-sheet-what')).toHaveText('写下这一段做了什么');
   // v77：起点由 23:00 改为 23:01。本用例的主张是「结算终点落在日末」，起点只是
   // 顺带写死的——而写死的那个值正是本次判定为缺陷的旧默认（尾点 23:00 是真实
-  // 记录，返回它自身的 ts 会恒撞同刻冲突）。终点仍必须是 24:00，时长随之 ~59min。
+  // 记录，返回它自身的 ts 会恒撞同刻冲突）。终点仍必须是 24:00，时长随之 59min。
   await expect(page.locator('[data-role="start-time-label"]')).toHaveText('23:01');
   await expect(page.locator('[data-role="end-label"]')).toHaveText('24:00');
-  await expect(page.locator('[data-role="duration-label"]')).toHaveText('~59min');
+  await expect(page.locator('[data-role="duration-label"]')).toHaveText('59min');
 });
 
 test('continuation save fills tail placeholder and opens unrecorded segment', async ({ page }) => {
@@ -307,7 +307,7 @@ test('reverse backfill settles at the right neighbor entry', async ({ page }) =>
 
   await expect(page.locator('[data-role="start-time-label"]')).toHaveText('14:00');
   await expect(page.locator('[data-role="end-label"]')).toHaveText('18:00');
-  await expect(page.locator('[data-role="duration-label"]')).toHaveText('~4h');
+  await expect(page.locator('[data-role="duration-label"]')).toHaveText('4h');
 
   await page.locator('#form-what').fill('午后补录');
   await page.getByRole('button', { name: '选择标签：求职推进' }).click();
@@ -339,7 +339,7 @@ test('closed cross-day segment is sliced into the selected day timeline', async 
   await expect(page.locator('.entry.placeholder .e-what')).toHaveText('还没记');
   // v47 R4：日视图尺子改 hero 结论卡——不再有百分比文字。切片生效＝维持有非零净时长
   // （2h35m 的睡觉从昨日切进今天），而非整天未记录（那样维持会是 0）。
-  await expect(page.locator('#ruler')).toContainText(/维持 ~2h/);
+  await expect(page.locator('#ruler')).toContainText(/维持 2h/);
 
   const visibleTimes = await page.locator('.entry .e-time').allTextContents();
   expect(visibleTimes).toEqual(['02:35', '00:00']);
@@ -406,6 +406,9 @@ test('help close is a text button and import shift dialog stays custom', async (
   await page.keyboard.press('Escape');
   await expect(page.locator('#form-sheet-title')).toHaveText('更多');
 
+  // v84：备份四项移进「备份与导入」二级页，导入从那里进。
+  await page.locator('[data-action="open-backup"]').click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('备份与导入');
   const chooserPromise = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
@@ -418,7 +421,7 @@ test('help close is a text button and import shift dialog stays custom', async (
   await expect(page.locator('#import-shift-hours')).toBeVisible();
   // 导入弹框同样从「更多」下钻，取消返回「更多」。
   await page.getByRole('button', { name: '取消导入' }).click();
-  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  await expect(page.locator('#form-sheet-title')).toHaveText('备份与导入');
 });
 
 // 首用日自 v61 起是**纯诊断值**（不再驱动 header 里程碑），但仍必须随完整备份
@@ -428,11 +431,11 @@ test('full backup carries the diagnostic firstUsedDate and import never rolls it
   await boot(page, 768, 'empty', false, FIXED_NOW, null, -480);
   const dialogs = trackDialogs(page);
 
-  await openBackupMenu(page);
+  await openBackupSheet(page);
   const restore = async payload => {
     // 导入从「更多」下钻进入，成功后按 v41 导航栈回到「更多」而不是整层关闭，
     // 所以第二轮直接复用同一张「更多」，不需要重开 header 菜单。
-    await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+    await expect(page.locator('#form-sheet-title')).toHaveText('备份与导入');
     const chooserPromise = page.waitForEvent('filechooser');
     await page.getByRole('button', { name: '导入 JSON 备份' }).click();
     const chooser = await chooserPromise;
@@ -470,7 +473,7 @@ test('full backup carries the diagnostic firstUsedDate and import never rolls it
       value: async payload => { window.__exported = await payload.files[0].text(); }
     });
   });
-  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  await expect(page.locator('#form-sheet-title')).toHaveText('备份与导入');
   await page.locator('#backup-send-btn').click();
   await expect.poll(() => page.evaluate(() => window.__exported && JSON.parse(window.__exported).firstUsedDate)).toBe('2026-06-28');
   expect(dialogs.count).toBe(0);
@@ -492,7 +495,7 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
   const dialogs = trackDialogs(page);
 
   const chooserPromise = page.waitForEvent('filechooser');
-  await openBackupMenu(page);
+  await openBackupSheet(page);
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
@@ -534,7 +537,7 @@ test('JSON import shifts time, merges config, and export stays sorted', async ({
 
   const downloadPromise = page.waitForEvent('download');
   // v41：确认导入后导航栈返回「更多」，无需再点 header，直接在此点下载。
-  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  await expect(page.locator('#form-sheet-title')).toHaveText('备份与导入');
   await page.getByRole('button', { name: '存储 JSON 备份' }).click();
   const download = await downloadPromise;
   const exportPath = await download.path();
@@ -568,7 +571,7 @@ test('import success toast is delayed past the close window and lands above the 
   const dialogs = trackDialogs(page);
 
   const chooserPromise = page.waitForEvent('filechooser');
-  await openBackupMenu(page);
+  await openBackupSheet(page);
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
@@ -581,7 +584,7 @@ test('import success toast is delayed past the close window and lands above the 
 
   // The breadcrumb swap back to "更多" happens synchronously on click; the
   // toast must not have surfaced yet.
-  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  await expect(page.locator('#form-sheet-title')).toHaveText('备份与导入');
   await expect(page.locator('#info-toast')).toBeHidden();
 
   await page.clock.runFor(400);
@@ -615,7 +618,7 @@ test('JSON import uses timezone metadata to suggest default shift', async ({ pag
   const dialogs = trackDialogs(page);
 
   const chooserPromise = page.waitForEvent('filechooser');
-  await openBackupMenu(page);
+  await openBackupSheet(page);
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
@@ -640,7 +643,7 @@ test('a malformed JSON file opens an inline import error, not a native alert (SP
   const dialogs = trackDialogs(page);
 
   const chooserPromise = page.waitForEvent('filechooser');
-  await openBackupMenu(page);
+  await openBackupSheet(page);
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
@@ -653,7 +656,7 @@ test('a malformed JSON file opens an inline import error, not a native alert (SP
   await expect(page.locator('.import-conflicts')).toContainText('文件解析失败');
   await expect(page.locator('[data-action="confirm-import-shift"]')).toHaveCount(0);
   await page.locator('[data-action="cancel-import-shift"]').click();
-  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  await expect(page.locator('#form-sheet-title')).toHaveText('备份与导入');
   expect(dialogs.count).toBe(0);
 });
 
@@ -662,7 +665,7 @@ test('a schema-invalid backup opens an inline import error, not a native alert (
   const dialogs = trackDialogs(page);
 
   const chooserPromise = page.waitForEvent('filechooser');
-  await openBackupMenu(page);
+  await openBackupSheet(page);
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
@@ -675,7 +678,7 @@ test('a schema-invalid backup opens an inline import error, not a native alert (
   await expect(page.locator('.import-conflicts')).toContainText('缺少 entries 数组');
   await expect(page.locator('[data-action="confirm-import-shift"]')).toHaveCount(0);
   await page.locator('[data-action="cancel-import-shift"]').click();
-  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  await expect(page.locator('#form-sheet-title')).toHaveText('备份与导入');
   expect(dialogs.count).toBe(0);
 });
 
@@ -1443,7 +1446,7 @@ test('conflicting import shows safe side-by-side cards, blocks writing, and repl
   await page.evaluate(() => { window.__importPwned = 0; });
   const maliciousId = '<img src=x onerror="window.__importPwned=1">';
   const chooserPromise = page.waitForEvent('filechooser');
-  await openBackupMenu(page);
+  await openBackupSheet(page);
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
@@ -1485,7 +1488,7 @@ test('conflicting import shows safe side-by-side cards, blocks writing, and repl
 test('import conflicts can be resolved per item with local, backup, or conservative text merge', async ({ page }) => {
   await boot(page, 375, 'interval-three', false, '2026-06-29T20:00:30');
   const chooserPromise = page.waitForEvent('filechooser');
-  await openBackupMenu(page);
+  await openBackupSheet(page);
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
@@ -1512,7 +1515,7 @@ test('import conflicts can be resolved per item with local, backup, or conservat
 
   page.once('dialog', dialog => dialog.accept());
   await page.locator('#import-confirm-btn').click();
-  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  await expect(page.locator('#form-sheet-title')).toHaveText('备份与导入');
   const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
   expect(entries.find(entry => entry.ts === '2026-06-29T14:30')).toMatchObject({ id: 'before', what: '前一段', tags: ['睡觉'] });
   expect(entries.find(entry => entry.ts === '2026-06-29T15:39')).toMatchObject({ id: 'backup-b', what: '使用备份这一条', tags: ['睡觉'] });
@@ -1542,7 +1545,7 @@ test('ten import conflicts all render, stay atomic, and reject stale resolution 
   }, localEntries);
 
   const chooserPromise = page.waitForEvent('filechooser');
-  await openBackupMenu(page);
+  await openBackupSheet(page);
   await page.getByRole('button', { name: '导入 JSON 备份' }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
@@ -1579,7 +1582,7 @@ test('ten import conflicts all render, stay atomic, and reject stale resolution 
   await expect(page.locator('#import-confirm-btn')).toBeEnabled();
   page.once('dialog', dialog => dialog.accept());
   await page.locator('#import-confirm-btn').click();
-  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+  await expect(page.locator('#form-sheet-title')).toHaveText('备份与导入');
   const finalIds = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.map(entry => entry.id));
   expect(finalIds).toEqual(incomingEntries.map(entry => entry.id));
 });
@@ -1630,7 +1633,7 @@ test('share prefers files, survives canShare exceptions, and preserves cell stru
       value: payload => { window.__shareCalls.push({ files: Boolean(payload.files), text: Boolean(payload.text) }); return Promise.resolve(); }
     });
   });
-  await openBackupMenu(page);
+  await openBackupSheet(page);
   await page.locator('#backup-send-btn').click();
   await expect(page.locator('#backup-send-btn [data-role="cell-label"]')).toHaveText('已分享备份');
   await expect(page.locator('#backup-send-btn .cell-chevron')).toHaveCount(1);
@@ -1659,7 +1662,7 @@ test('iOS storage uses the system file sheet, while cancellation never creates a
     });
     HTMLAnchorElement.prototype.click = function () { window.__fallbackClicks += 1; };
   });
-  await openBackupMenu(page);
+  await openBackupSheet(page);
   await expect(page.locator('#backup-download-btn')).toHaveText(/存储备份/);
   await expect(page.locator('#backup-send-btn')).toBeVisible();
   await page.locator('#backup-download-btn').click();
@@ -1685,7 +1688,7 @@ test('iOS storage uses the system file sheet, while cancellation never creates a
 
 test('desktop storage remains a direct JSON download', async ({ page }) => {
   await boot(page, 768, 'one-record', false, FIXED_NOW);
-  await openBackupMenu(page);
+  await openBackupSheet(page);
   const downloadPromise = page.waitForEvent('download');
   await page.locator('#backup-download-btn').click();
   const download = await downloadPromise;
@@ -1694,7 +1697,7 @@ test('desktop storage remains a direct JSON download', async ({ page }) => {
 
 test('share falls back to download without Web Share and cancellation never downloads', async ({ page }) => {
   await boot(page, 768, 'one-record', false, FIXED_NOW);
-  await openBackupMenu(page);
+  await openBackupSheet(page);
 
   const downloadPromise = page.waitForEvent('download');
   await page.locator('#backup-send-btn').click();
@@ -1916,7 +1919,7 @@ test('repair-update-channel cell unregisters and reloads on a confirmed click wh
     Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: serviceWorker });
   });
   await boot(page, 375, 'one-record', false, FIXED_NOW);
-  await openBackupMenu(page);
+  await openAdvancedSheet(page);
   const btn = page.locator('#repair-update-btn');
   await expect(btn).toBeVisible();
 
@@ -1948,7 +1951,7 @@ test('repair-update-channel cell refuses to act while offline and never touches 
     Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: serviceWorker });
   });
   await boot(page, 375, 'one-record', false, FIXED_NOW);
-  await openBackupMenu(page);
+  await openAdvancedSheet(page);
   const btn = page.locator('#repair-update-btn');
   await expect(btn).toBeVisible();
 
@@ -1980,7 +1983,7 @@ test('repair-update-channel admits failure instead of silently reloading when un
     Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: serviceWorker });
   });
   await boot(page, 375, 'one-record', false, FIXED_NOW);
-  await openBackupMenu(page);
+  await openAdvancedSheet(page);
   const btn = page.locator('#repair-update-btn');
   await expect(btn).toBeVisible();
 
@@ -2187,7 +2190,7 @@ test('overnight FAB defaults to today, writes two day-local segments, and switch
   await boot(page, 768, 'yesterday-placeholder', false, '2026-06-29T08:00:00', -1);
   await page.locator('#add-btn').click();
   await expect(page.locator('#form-sheet-title')).toContainText('过夜续记');
-  await expect(page.locator('[data-role="overnight-summary"]')).toContainText('续昨晚 23:00 起 · 到今天 08:00 · ~9h');
+  await expect(page.locator('[data-role="overnight-summary"]')).toContainText('续昨晚 23:00 起 · 到今天 08:00 · 9h');
   await page.locator('#form-what').fill('睡觉');
   await selectSleepTag(page);
   await page.getByRole('button', { name: '保存时间记录' }).click();
@@ -2409,7 +2412,7 @@ test('more sheet toggles boot diagnostics, copies samples, and disable wipes the
     });
   });
   await boot(page, 768, 'one-record', false, FIXED_NOW);
-  await openBackupMenu(page);
+  await openAdvancedSheet(page);
   await expect(page.locator('[data-action="toggle-boot-diag"]')).toContainText('启动诊断：关');
   await expect(page.locator('#boot-diag-copy-btn')).toHaveCount(0);
   await page.locator('[data-action="toggle-boot-diag"]').click();
@@ -2428,7 +2431,7 @@ test('more sheet toggles boot diagnostics, copies samples, and disable wipes the
     const parsed = JSON.parse(localStorage.getItem('timelog.bootDiag.v1') || 'null');
     return Boolean(parsed && parsed.samples.length >= 1);
   });
-  await openBackupMenu(page);
+  await openAdvancedSheet(page);
   await page.locator('#boot-diag-copy-btn').click();
   await page.waitForFunction(() => window.__copiedDiag !== '');
   const text = await page.evaluate(() => window.__copiedDiag);
@@ -2449,6 +2452,8 @@ test('short viewport more sheet scrolls instead of compressing cell groups', asy
   // 让内容总高必然超过面板可用高度——v62 真机上这会把所有分组压扁裁切（P34）。
   await page.evaluate(() => localStorage.setItem('timelog.bootDiag.v1', JSON.stringify({ enabled: true, samples: [] })));
   await page.setViewportSize({ width: 375, height: 600 });
+  // v84：主「更多」瘦身到 9 行、运维项下沉到「高级」，所以最坏内容量分布在两层，
+  // 两层都要按 P34 判据看一遍（逐个分组比 scrollHeight/clientHeight）。
   await openBackupMenu(page);
   const clipped = await page.evaluate(() => {
     const out = [];
@@ -2464,8 +2469,24 @@ test('short viewport more sheet scrolls instead of compressing cell groups', asy
   const version = page.locator('.app-version');
   await version.scrollIntoViewIfNeeded();
   await expect(version).toBeVisible();
-  // 同缺陷类的第二现场：标签高级设置同样是 cell-group 装在 grid 正文里（且为
-  // .tall 定高面板），矮视口下分组同样不得被压缩裁切。
+  // 第二现场：「高级」二级页在启动诊断开启时是两组 + 两段提示，同样按 P34 判据看。
+  await page.locator('[data-action="open-advanced"]').click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('高级');
+  const advClipped = await page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('.more-body .cell-group').forEach(group => {
+      if (group.scrollHeight > group.clientHeight + 1) {
+        out.push(`${group.textContent.trim().slice(0, 10)}: ${group.scrollHeight}>${group.clientHeight}`);
+      }
+    });
+    return out;
+  });
+  expect(advClipped).toEqual([]);
+  await page.getByRole('button', { name: '关闭高级设置' }).click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
+
+  // 第三现场：标签高级设置同样是 cell-group 装在 grid 正文里（且为 .tall 定高
+  // 面板），矮视口下分组同样不得被压缩裁切。
   await page.getByRole('button', { name: '配置标签' }).click();
   await expect(page.locator('#form-sheet-title')).toHaveText('标签高级设置');
   const configClipped = await page.evaluate(() => {
@@ -2505,7 +2526,7 @@ test('ongoing minutes update on the minute without reopening the page', async ({
 test('PWA resume immediately catches an ongoing duration up to the current minute', async ({ page }) => {
   await boot(page, 375, 'tail-placeholder', false, '2026-06-29T12:34:30');
   await expect(page.locator('.hero-aux')).toContainText('截至 12:34');
-  await expect(page.locator('#add-btn .fab-sub')).toContainText('已 ~2h34min');
+  await expect(page.locator('#add-btn .fab-sub')).toContainText('已 2h34min');
 
   await page.evaluate(() => {
     window.__setFixedNow('2026-06-29T18:55:10');
@@ -2513,7 +2534,7 @@ test('PWA resume immediately catches an ongoing duration up to the current minut
   });
 
   await expect(page.locator('.hero-aux')).toContainText('截至 18:55');
-  await expect(page.locator('#add-btn .fab-sub')).toContainText('已 ~8h55min');
+  await expect(page.locator('#add-btn .fab-sub')).toContainText('已 8h55min');
 });
 
 test('minute tick re-render keeps the day view scroll position (P35)', async ({ page }) => {
@@ -2839,9 +2860,12 @@ test.describe('SPEC-002: legacy-origin write paths are unreachable', () => {
   test('更多 menu drops the 导入备份 cell but keeps copy/storage/share', async ({ page }) => {
     await routeStaticOrigin(page, LEGACY_ORIGIN, LEGACY_PATH);
     await boot(page, 768, 'one-record', false, FIXED_NOW, null, null, null, `${LEGACY_ORIGIN}${LEGACY_PATH}`);
+    // v84：摘要留在主「更多」，备份三项在「备份与导入」二级页——只读收敛的判据
+    // 不变（导入 cell 不得渲染），只是分两层看。
     await openBackupMenu(page);
-    await expect(page.locator('[data-action="import-json"]')).toHaveCount(0);
     await expect(page.locator('[data-action="copy-summary"]')).toBeVisible();
+    await page.locator('[data-action="open-backup"]').click();
+    await expect(page.locator('[data-action="import-json"]')).toHaveCount(0);
     await expect(page.locator('[data-action="copy-json"]')).toBeVisible();
     await expect(page.locator('[data-action="download-json"]')).toBeVisible();
     await expect(page.locator('[data-action="send-backup"]')).toBeVisible();

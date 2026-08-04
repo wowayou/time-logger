@@ -69,6 +69,8 @@ test('importing a zh backup into a fresh en device keeps both tag sets with corr
 
   const chooserPromise = page.waitForEvent('filechooser');
   await page.locator('[data-action="open-more"]').click();
+  // v84：备份四项在「备份与导入」二级页里。
+  await page.locator('[data-action="open-backup"]').click();
   await page.locator('[data-action="import-json"]').click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
@@ -81,8 +83,9 @@ test('importing a zh backup into a fresh en device keeps both tag sets with corr
 
   await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.length)).toBe(1);
 
-  // SPEC-012's returnToMore breadcrumb lands back on "更多"/"More" after a
-  // successful import drilled in from there; tag settings is one tap away.
+  // SPEC-012's breadcrumb lands back on the sheet the import was drilled in from —
+  // since v84 that is "Backup & import", so step back up one level first.
+  await page.getByRole('button', { name: 'Close backup and import' }).click();
   await page.locator('[data-action="open-tag-config"]').click();
   await expect.poll(() => chipNames(page)).toEqual([...EN_DEFAULT_CHIPS, '娱乐']);
 });

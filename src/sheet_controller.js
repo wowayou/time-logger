@@ -70,8 +70,12 @@ export function createSheetController(deps) {
   let lastPreviewSignature = '';
   let editEndMode = 'fixed';
   let configDefaultsPreview = null;
-  // 导航栈：config/help/import-shift 若从「更多」下钻进入，取消/保存回「更多」而非整层关闭。
-  let returnToMore = false;
+  // 导航栈：二级页若从容器 sheet（更多 / 备份与导入 / 高级）下钻进入，取消/保存回到
+  // 上一层而非整层关闭。v84 从单个布尔升级为**栈**——「更多 → 备份与导入 → 导入检查」
+  // 现在有两层，布尔只记得住一层，关掉导入检查会一路关到底。
+  const CONTAINER_MODES = ['more', 'backup', 'advanced'];
+  const SUB_MODES = ['config', 'help', 'import-shift', 'motto', 'backup', 'advanced'];
+  let sheetStack = [];
   // R1：sheet 关闭走 class 驱动过渡；未收尾前的清理函数存这里，供重入保护调用。
   let sheetCloseCleanup = null;
   let sheetDismissDrag = null;
@@ -572,7 +576,7 @@ export function createSheetController(deps) {
     // 打开的新内容又清空、又 hidden 掉。
     if (sheetCloseCleanup) sheetCloseCleanup();
     const requestedMode = opts && opts.mode;
-    const mode = ['edit', 'help', 'config', 'import-shift', 'more', 'delete-confirm', 'motto'].includes(requestedMode) ? requestedMode : 'new';
+    const mode = ['edit', 'help', 'config', 'import-shift', 'more', 'delete-confirm', 'motto', 'backup', 'advanced'].includes(requestedMode) ? requestedMode : 'new';
     const id = opts && opts.id;
     const loaded = deps.load();
     const entry = mode === 'edit' ? loaded.entries.find(e => e.id === id) : null;
@@ -630,11 +634,16 @@ export function createSheetController(deps) {
       : (opts && opts.ts) || (formOvernightContext && formOvernightContext.startTs)
         || (formRecordMode === 'plan' ? defaultPlanTimestamp() : deps.defaultFormTs());
     const prevMode = sheet.hidden ? '' : (panel.dataset.mode || '');
-    if (mode === 'config' || mode === 'help' || mode === 'import-shift' || mode === 'motto') {
-      if (prevMode === 'more') returnToMore = true;
-      else if (prevMode !== mode) returnToMore = false;
+    if (opts && opts.restore) {
+      // 从返回栈恢复：这一层已经在关闭时弹出，别再压回去。
+    } else if (prevMode === mode) {
+      // 原地重渲染同一层（切主题/切语言/开关启动诊断/设为当前主线都走这条）：栈不动。
+      // 少了这一条，每按一次开关就会往栈里压一层，返回时要按同样多次才出得来。
+    } else if (SUB_MODES.includes(mode) && CONTAINER_MODES.includes(prevMode)) {
+      sheetStack.push(prevMode);
     } else {
-      returnToMore = false;
+      // 新开一条路径（记一条/编辑/删除确认/直接开更多），旧的返回栈作废。
+      sheetStack = [];
     }
     panel.dataset.mode = mode;
     // v43: 只有会召唤软键盘的表单（新建/编辑/标签设置）用定高高 sheet——内容从顶部流下、
@@ -665,7 +674,7 @@ export function createSheetController(deps) {
       overnightEndMode: formOvernightEndMode,
       planOutsideWindow: mode === 'edit' && Boolean(entry && entry.planned)
         && !validateTsForMode(entry.ts, { planned: true }).ok,
-      isLegacyOrigin: mode === 'more' && Boolean(deps.isLegacyOrigin && deps.isLegacyOrigin()),
+      isLegacyOrigin: (mode === 'more' || mode === 'backup') && Boolean(deps.isLegacyOrigin && deps.isLegacyOrigin()),
       intervalContext: mode === 'edit'
         ? intervalEditContext(formBaseEntries, id, { todayKey: todayStr(), nowTs: nowStr() })
         : null,
@@ -864,12 +873,12 @@ export function createSheetController(deps) {
   }
 
   function closeForm() {
-    if (returnToMore) {
-      // 二级页返回「更多」：先 blur 让键盘收起预测在旧 DOM 上跑完，再原地重渲染。
-      returnToMore = false;
+    if (sheetStack.length) {
+      // 二级页返回上一层：先 blur 让键盘收起预测在旧 DOM 上跑完，再原地重渲染。
+      const back = sheetStack.pop();
       const active = document.activeElement;
       if (active && typeof active.blur === 'function') active.blur();
-      openMoreSheet();
+      openFormSheet({ mode: back, restore: true });
       return;
     }
     // Cancel/backdrop/Esc with the keyboard up had the same two-jump close as
@@ -898,7 +907,9 @@ export function createSheetController(deps) {
     };
     sheet.addEventListener('pointerdown', event => {
       const panel = event.target.closest('.form-sheet-panel');
-      if (!panel || panel.dataset.mode !== 'more' || window.innerWidth >= 720) return;
+      // v84：备份/高级二级页与「更多」同为短 sheet，抓手下拉关闭一视同仁（它们
+      // 关闭时回到上一层，正是下拉手势的自然语义）。
+      if (!panel || !['more', 'backup', 'advanced'].includes(panel.dataset.mode) || window.innerWidth >= 720) return;
       const grabber = panel.querySelector('.sh-grab');
       const hit = grabber && grabber.getBoundingClientRect();
       if (event.pointerType === 'mouse' || !hit
@@ -958,6 +969,14 @@ export function createSheetController(deps) {
 
   function openMoreSheet(opts = {}) {
     openFormSheet({ mode: 'more', ...opts });
+  }
+
+  function openBackupSheet() {
+    openFormSheet({ mode: 'backup' });
+  }
+
+  function openAdvancedSheet() {
+    openFormSheet({ mode: 'advanced' });
   }
 
   function openEditSheet(id) {
@@ -1104,16 +1123,21 @@ export function createSheetController(deps) {
     err.innerHTML = '';
   }
 
-  function showInlineError(scope, message, role = 'conflict-error') {
+  // v84：`focusEl` 是「出问题的那一行」。标签设置的错误条挂在正文**末尾**，只把错误条
+  // 滚进视野等于把用户甩到整页最底部，离出错的行十万八千里（维护者真机反馈）。给了
+  // 目标就滚目标并聚焦它，错误文案照旧显示——它是同一屏里的说明，不是导航目标。
+  function showInlineError(scope, message, role = 'conflict-error', focusEl = null) {
     const err = scope ? scope.querySelector(`[data-role="${role}"]`) : null;
     if (!err) return;
     err.textContent = String(message || '');
     err.hidden = false;
     // ④ A blocked ✓ must give feedback the user can actually see; the panel body
     // scrolls and the iOS keyboard can hide the lower half, so pull it into view.
-    if (typeof err.scrollIntoView === 'function') {
-      err.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const target = focusEl || err;
+    if (typeof target.scrollIntoView === 'function') {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
+    if (focusEl && typeof focusEl.focus === 'function') focusEl.focus({ preventScroll: true });
   }
 
   function showConflictError(scope, conflict, ts, plusAction) {
@@ -1576,6 +1600,10 @@ export function createSheetController(deps) {
     return Array.from(panel.querySelectorAll(`.cfg-row[data-kind="${kind}"]:not([data-pending-delete="1"])`)).map(row => {
       const seg = row.querySelector('.cfg-bucket-seg button.active');
       return {
+        // v84：把行元素与输入框带出来——校验失败时要滚到**出问题的那一行**，
+        // 而不是滚到挂在正文末尾的错误条（那会把用户甩到整页最底部）。
+        el: row,
+        input: row.querySelector('.cfg-name'),
         originalName: row.dataset.originalName || '',
         // v83：草稿行（还没落库过）没有 originalName，空名时的处置与已有行相反。
         isNew: row.dataset.new === '1',
@@ -1600,20 +1628,20 @@ export function createSheetController(deps) {
     const all = [...mainlineRows, ...chipRows];
     const blank = all.find(row => !row.name);
     if (blank) {
-      showInlineError(panel, t('config.emptyName'), 'config-error');
+      showInlineError(panel, t('config.emptyName'), 'config-error', blank.input);
       return;
     }
     // 「未知」是 unrecorded 桶的保留名（`bucketForTag` 直接判它未记录）：叫这个名字
     // 的标签会显示在某个桶的分组里、却按未记录统计。新建与改名同一处拦下。
     const reserved = all.find(row => row.name === RESERVED_UNKNOWN_TAG);
     if (reserved) {
-      showInlineError(panel, t('config.reservedName', { name: RESERVED_UNKNOWN_TAG }), 'config-error');
+      showInlineError(panel, t('config.reservedName', { name: RESERVED_UNKNOWN_TAG }), 'config-error', reserved.input);
       return;
     }
     // 重名判定跨三组一起做——主线与 chip 之间同名同样是冲突。
     const duplicate = all.find((row, index) => all.findIndex(item => item.name === row.name) !== index);
     if (duplicate) {
-      showInlineError(panel, t('config.duplicateName', { name: duplicate.name }), 'config-error');
+      showInlineError(panel, t('config.duplicateName', { name: duplicate.name }), 'config-error', duplicate.input);
       return;
     }
     const d = deps.load();
@@ -1624,7 +1652,12 @@ export function createSheetController(deps) {
       .filter(Boolean);
     const stillUsed = removedNames.find(name => countEntriesWithTag(d.entries, name));
     if (stillUsed) {
+      // 待删除行的输入是 disabled，聚焦不了，只滚到行本身。标签名是用户输入，
+      // 不能拼进选择器（引号/反斜杠会把它拆掉），按属性值逐个比对更稳。
+      const row = Array.from(panel.querySelectorAll('.cfg-row[data-pending-delete="1"]'))
+        .find(item => item.dataset.originalName === stillUsed);
       showInlineError(panel, t('config.deleteHasEntries', { name: stillUsed }), 'config-error');
+      if (row && typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
     let nextConfig = deps.loadConfig();
@@ -1767,6 +1800,8 @@ export function createSheetController(deps) {
   return {
     openForm,
     openFormSheet,
+    openBackupSheet,
+    openAdvancedSheet,
     openMoreSheet,
     isFormOpen,
     getSheetMode,

@@ -536,9 +536,47 @@ import {
 
   function hideUndoToast() {
     if (undoDeleteState && undoDeleteState.timer) clearTimeout(undoDeleteState.timer);
+    if (undoDeleteState && undoDeleteState.detach) undoDeleteState.detach();
     undoDeleteState = null;
     const toast = document.getElementById('undo-toast');
     if (toast) toast.hidden = true;
+  }
+
+  // v84（维护者方案 b）：8 秒上限不动，但**你已经在做别的事**就收起——那是比倒计时
+  // 更准的失效信号，也是「横幅停留太长」的真实答案。撤销窗口与横幅同生共死（红线
+  // 语义不变：横幅在＝还能撤销），所以这里只是让它更早、更自然地结束。
+  // 触发口径刻意收窄：滚动、指针按下、键盘按键；且**不含撤销按钮自身**（点它是使用
+  // 撤销，不是放弃撤销），也跳过删除刚结束那一帧的余波（`once` + 捕获阶段 + 忽略
+  // 首次 100ms 内的事件，避免确认删除的那一下点击顺手把自己关掉）。
+  // 宽限期与 sheet 关闭动画（320ms）同源：确认删除后面板正在收起，那一段的滚动与
+  // 布局余波不是「你在做别的事」，不能算数。
+  const UNDO_ARM_GRACE_MS = 350;
+
+  function armUndoDismissOnInteraction() {
+    // 宽限期用**定时器**而不是 Date.now() 差值：测试夹具会把 Date.now() 冻在固定时刻
+    // （FixedDate），任何基于时钟差的宽限判据在那里恒为 0，守卫会静默失效——第一版
+    // 就是这么写的，用例因此变红，才发现这条依赖。定时器不受冻结时钟影响。
+    let detach = () => {};
+    const armTimer = setTimeout(() => {
+      const onInteract = event => {
+        // 点「撤销」本身是**使用**撤销，不是放弃它。
+        if (event.target instanceof Element && event.target.closest('[data-action="undo-delete"]')) return;
+        hideUndoToast();
+      };
+      const opts = { capture: true, passive: true };
+      window.addEventListener('scroll', onInteract, opts);
+      document.addEventListener('pointerdown', onInteract, opts);
+      document.addEventListener('keydown', onInteract, opts);
+      detach = () => {
+        window.removeEventListener('scroll', onInteract, opts);
+        document.removeEventListener('pointerdown', onInteract, opts);
+        document.removeEventListener('keydown', onInteract, opts);
+      };
+    }, UNDO_ARM_GRACE_MS);
+    return () => {
+      clearTimeout(armTimer);
+      detach();
+    };
   }
 
   function showUndoToast(beforeData, afterRevision) {
@@ -551,7 +589,7 @@ import {
     if (button) button.hidden = false;
     toast.hidden = false;
     const timer = setTimeout(hideUndoToast, 8000);
-    undoDeleteState = { beforeData, afterRevision, timer };
+    undoDeleteState = { beforeData, afterRevision, timer, detach: armUndoDismissOnInteraction() };
   }
 
   function cancelUndoForConflict() {
@@ -560,6 +598,9 @@ import {
     const message = toast && toast.querySelector('[data-role="undo-message"]');
     const button = toast && toast.querySelector('[data-action="undo-delete"]');
     if (undoDeleteState.timer) clearTimeout(undoDeleteState.timer);
+    // v84：撤销失效这条路径同样要摘掉交互监听，否则它会活到下一次撤销窗口，
+    // 把新横幅在第一次滚动前就关掉（也是一处泄漏）。
+    if (undoDeleteState.detach) undoDeleteState.detach();
     undoDeleteState = null;
     if (message) message.textContent = t('toast.undoCancelled');
     if (button) button.hidden = true;
@@ -882,6 +923,8 @@ import {
       if (action === 'pick-edit-bucket') sheetController.pickBucket(el);
       if (action === 'commit-edit') sheetController.commitEdit(el.dataset.id || sheetEditId);
       if (action === 'cancel-edit') sheetController.cancelEdit();
+      if (action === 'open-backup') sheetController.openBackupSheet();
+      if (action === 'open-advanced') sheetController.openAdvancedSheet();
       if (action === 'save-tag-config') sheetController.saveTagConfig();
       if (action === 'set-current-mainline') sheetController.setCurrentMainline(el.dataset.name || '');
       if (action === 'cfg-pick-bucket') sheetController.pickConfigBucket(el);
@@ -1277,7 +1320,9 @@ import {
   // 开关翻转后经 openMoreSheet 原地重渲染（returnToMore 已验证的重入路径）。
   function toggleBootDiag() {
     setBootDiagEnabled(!readBootDiag().enabled);
-    sheetController.openMoreSheet();
+    // v84：这个开关现在住在「高级」二级页里——原地重渲染当前那一层，别把用户
+    // 弹回「更多」（否则开关一按就跳走一层，还会把返回栈搞乱）。
+    sheetController.openAdvancedSheet();
   }
 
   // SPEC-013：把完整 catalog 应用到静态壳的 data-i18n* 上。index.html 的内联字典

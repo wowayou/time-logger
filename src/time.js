@@ -99,13 +99,16 @@ function fmtMinsEn(m) {
   return rem ? `${h}h ${rem}m` : `${h}h`;
 }
 
+// v84：中文时长去掉 `~` 前缀。它只存在于中文路径（英文一直是 `1h 44m`，从无波浪号），
+// 所以它不承载任何英文没有的信息——时长本来就是取整值，hero 上还写着「截至 hh:mm」。
+// 维护者真机反馈「hero 大数字那里 ~ 这类的看着不够优雅」，去掉后两个语言也终于一致。
 export function fmtMins(m) {
   if (getLocale() === 'en') return fmtMinsEn(m);
   if (m < 1) return '<1min';
-  if (m < 60) return `~${Math.round(m)}min`;
+  if (m < 60) return `${Math.round(m)}min`;
   const h = Math.floor(m / 60);
   const rem = Math.round(m % 60);
-  return rem ? `~${h}h${rem}min` : `~${h}h`;
+  return rem ? `${h}h${rem}min` : `${h}h`;
 }
 
 export function fmtPlainMins(m) {

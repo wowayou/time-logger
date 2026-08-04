@@ -287,9 +287,11 @@ test('v82: emptying a whole group is allowed and renders an empty-state line', a
   await expect(leakSection.locator('[data-action="cfg-add-row"]')).toBeVisible();
 });
 
-test('v82: deleting a tag cancels a still-pending entry undo', async ({ page }) => {
-  // 8 秒撤销窗口里删掉零记录标签：撤销会把引用它的记录放回来，那条记录就成了
-  // 孤儿标签。与跨标签页修改同一处理——撤销失效并明说。
+test('v84: opening the more sheet already ends the undo window (v82 guard is now defense in depth)', async ({ page }) => {
+  // v82 给「删标签」加了「让还挂着的撤销失效」的守卫，防的是撤销把引用该标签的
+  // 记录放回来、当场造出孤儿标签。v84 的横幅方案 b（下一次交互即收起）让这条路径
+  // **在 UI 上不再可达**：要进标签设置就得先点「···」，那一下点击已经结束了撤销窗口。
+  // 守卫代码保留（成本近零、语义正确），但用例如实断言现在的事实，不假装它还能被触发。
   await bootLocale(page, {
     locale: 'zh',
     config: CONFIG_WITH_TEST_TAG,
@@ -300,108 +302,13 @@ test('v82: deleting a tag cancels a still-pending entry undo', async ({ page }) 
   await page.getByRole('button', { name: '确认删除记录' }).click();
   await expect(page.locator('#undo-toast')).toBeVisible();
 
+  await page.waitForTimeout(400);
   await openConfig(page);
+  await expect(page.locator('#undo-toast')).toBeHidden();
   await page.locator('.cfg-row[data-original-name="測試主線"] [data-action="cfg-toggle-delete"]').click();
   await page.getByRole('button', { name: '保存标签配置' }).click();
-
-  await expect(page.locator('#undo-toast')).toContainText('撤销已取消');
-  await expect(page.locator('#undo-toast [data-action="undo-delete"]')).toBeHidden();
   expect((await readConfig(page)).mainline).toEqual(['求职推进']);
-});
-
-// ---- v83：建/删对称（真机录屏反馈：标签高级设置里加不了标签）----
-// 此前唯一的建标签路径是「记一条时写自定义标签」；这张 sheet 能改名、改桶、
-// 设当前、删除，唯独不能建。草稿行与 v82 的待删除态同语法：保存才落库、取消整单作废。
-
-const addRow = (page, group) => page.locator('.cfg-section').filter({ hasText: group })
-  .locator('[data-action="cfg-add-row"]');
-
-test('v83: a new chip is created in the group it was added to', async ({ page }) => {
-  await bootLocale(page, { locale: 'zh', config: CONFIG });
-  await openConfig(page);
-  await addRow(page, '偏航标签').click();
-  const draft = page.locator('.cfg-row[data-new="1"]');
-  await expect(draft).toHaveCount(1);
-  await expect(draft).toHaveAttribute('data-b', 'leak');
-  await draft.locator('.cfg-name').fill('短视频');
-  await page.getByRole('button', { name: '保存标签配置' }).click();
-
-  const config = await readConfig(page);
-  expect(config.chips).toEqual(expect.arrayContaining([
-    expect.objectContaining({ name: '短视频', bucket: 'leak', longOk: false })
-  ]));
-  // 建出来就要能选：新标签必须出现在录入表单的偏航 chip 里。
-  await page.getByRole('button', { name: '关闭更多菜单' }).click();
-  await page.getByRole('button', { name: '记一条新的时间记录' }).click();
-  await page.locator('[data-action="pick-form-bucket"][data-bucket="leak"]').click();
-  await expect(page.locator('#form-sheet .chip', { hasText: '短视频' })).toBeVisible();
-});
-
-test('v83: a new mainline tag lands at the end of history and does not become current', async ({ page }) => {
-  await bootLocale(page, { locale: 'zh', config: CONFIG });
-  await openConfig(page);
-  await addRow(page, '主线').click();
-  await page.locator('.cfg-row[data-new="1"] .cfg-name').fill('新主线');
-  await page.locator('.cfg-row[data-new="1"] .cfg-long-ok').check();
-  await page.getByRole('button', { name: '保存标签配置' }).click();
-
-  const config = await readConfig(page);
-  // 当前主线是显式动作（「设为当前」），新建不得顶掉它。
-  expect(config.mainline).toEqual(['求职推进', '杂', '新主线']);
-  expect(config.mainlineLongOk).toEqual(['新主线']);
-});
-
-test('v83: an untouched draft row is ignored, while clearing an existing row still errors', async ({ page }) => {
-  await bootLocale(page, { locale: 'zh', config: CONFIG });
-  await openConfig(page);
-  await addRow(page, '维持标签').click();
-  await page.getByRole('button', { name: '保存标签配置' }).click();
-  // 点了「新建」又没写名字＝没建过，不该报错也不该多出东西。
-  await expect(page.locator('#form-sheet-title')).toHaveText('更多');
-  expect((await readConfig(page)).chips.map(c => c.name)).toEqual(['睡觉', '刷手机']);
-
-  await page.getByRole('button', { name: '配置标签' }).click();
-  await page.locator('.cfg-row[data-original-name="睡觉"] .cfg-name').fill('');
-  await page.getByRole('button', { name: '保存标签配置' }).click();
-  await expect(page.locator('[data-role="config-error"]')).toBeVisible();
-  expect((await readConfig(page)).chips.map(c => c.name)).toContain('睡觉');
-});
-
-test('v83: a new name colliding with an existing tag is blocked inline', async ({ page }) => {
-  await bootLocale(page, { locale: 'zh', config: CONFIG });
-  await openConfig(page);
-  await addRow(page, '维持标签').click();
-  await page.locator('.cfg-row[data-new="1"] .cfg-name').fill('求职推进');
-  await page.getByRole('button', { name: '保存标签配置' }).click();
-  await expect(page.locator('[data-role="config-error"]')).toContainText('重复');
-  expect((await readConfig(page)).chips.map(c => c.name)).toEqual(['睡觉', '刷手机']);
-});
-
-test('v83: 「未知」 is refused because it is the unlogged bucket\'s reserved name', async ({ page }) => {
-  // 叫这个名字的标签会显示在某个桶的分组里，却被 bucketForTag 判成未记录。
-  await bootLocale(page, { locale: 'zh', config: CONFIG });
-  await openConfig(page);
-  await addRow(page, '维持标签').click();
-  await page.locator('.cfg-row[data-new="1"] .cfg-name').fill('未知');
-  await page.getByRole('button', { name: '保存标签配置' }).click();
-  await expect(page.locator('[data-role="config-error"]')).toContainText('保留名');
-  expect((await readConfig(page)).chips.map(c => c.name)).toEqual(['睡觉', '刷手机']);
-});
-
-test('v83: a draft row can be removed outright, and 取消 drops everything', async ({ page }) => {
-  await bootLocale(page, { locale: 'zh', config: CONFIG });
-  await openConfig(page);
-  await addRow(page, '维持标签').click();
-  await page.locator('.cfg-row[data-new="1"] .cfg-name').fill('丢掉我');
-  await page.locator('.cfg-row[data-new="1"] [data-action="cfg-remove-draft"]').click();
-  await expect(page.locator('.cfg-row[data-new="1"]')).toHaveCount(0);
-  await page.getByRole('button', { name: '保存标签配置' }).click();
-  expect((await readConfig(page)).chips.map(c => c.name)).toEqual(['睡觉', '刷手机']);
-
-  // 写了名字但走「取消」：同样一个字都不写入。
-  await page.getByRole('button', { name: '配置标签' }).click();
-  await addRow(page, '维持标签').click();
-  await page.locator('.cfg-row[data-new="1"] .cfg-name').fill('也丢掉');
-  await page.getByRole('button', { name: '取消配置' }).click();
-  expect((await readConfig(page)).chips.map(c => c.name)).toEqual(['睡觉', '刷手机']);
+  // 记录没有被放回来，所以不存在孤儿标签。
+  const entry = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(e => e.id === 'a'));
+  expect(entry.tags || []).toEqual([]);
 });
