@@ -312,7 +312,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '83';
+export const APP_VERSION = '84';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -348,10 +348,45 @@ function renderDeleteConfirmSheet(opts = {}) {
     </div>`;
 }
 
+// v84：「更多」瘦身——13 行 + 3 段说明压到 9 行，代价只有一层下钻。分组判据是**使用
+// 频度与心智**：备份四项是同一件事的四种出口（一次去一个地方拿），启动诊断与修复
+// 更新通道是运维动作（正常使用时不该出现在主菜单里）。两张二级页都走既有的返回栈，
+// 「取消/Esc/点遮罩」回到「更多」而不是整层关闭。
+function renderBackupSheet(opts = {}) {
+  const isLegacyOrigin = Boolean(opts.isLegacyOrigin);
+  return `
+    ${sheetHead({ title: t('backup.title'), cancelText: t('more.close'), cancelAction: 'close-form', cancelAria: t('backup.closeAria') })}
+    <div class="form-sheet-body more-body">
+      <div class="form-hint">${t('more.backupHint')}</div>
+      <div class="cell-group">
+        <button class="cell-btn" id="copy-btn" type="button" data-action="copy-json" aria-label="${t('more.copyJsonAria')}"><span data-role="cell-label">${t('more.copyJson')}</span>${cellChevron}</button>
+        <button class="cell-btn" id="backup-download-btn" type="button" data-action="download-json" aria-label="${t('more.saveAria')}"><span data-role="cell-label">${t('more.save')}</span>${cellChevron}</button>
+        ${isLegacyOrigin ? '' : `<button class="cell-btn" type="button" data-action="import-json" aria-label="${t('more.importAria')}"><span data-role="cell-label">${t('more.import')}</span>${cellChevron}</button>`}
+        <button class="cell-btn" id="backup-send-btn" type="button" data-action="send-backup" aria-label="${t('more.shareAria')}"><span data-role="cell-label">${t('more.share')}</span>${cellChevron}</button>
+      </div>
+    </div>`;
+}
+
+function renderAdvancedSheet() {
+  const bootDiag = readBootDiag();
+  return `
+    ${sheetHead({ title: t('advanced.title'), cancelText: t('more.close'), cancelAction: 'close-form', cancelAria: t('advanced.closeAria') })}
+    <div class="form-sheet-body more-body">
+      <div class="cell-group">
+        <button class="cell-btn" id="repair-update-btn" type="button" data-action="repair-update-channel" aria-label="${t('more.repairAria')}"><span data-role="cell-label">${t('more.repair')}</span>${cellChevron}</button>
+      </div>
+      <div class="form-hint">${t('more.repairHint')}</div>
+      <div class="cell-group">
+        <button class="cell-btn" type="button" data-action="toggle-boot-diag" aria-pressed="${bootDiag.enabled}" aria-label="${t('more.bootDiagAria', { state: bootDiag.enabled ? t('more.bootDiagAriaOn') : t('more.bootDiagAriaOff') })}"><span data-role="cell-label">${t('more.bootDiag', { state: bootDiag.enabled ? t('more.bootDiagOn') : t('more.bootDiagOff') })}</span>${cellChevron}</button>
+        ${bootDiag.enabled ? `<button class="cell-btn" id="boot-diag-copy-btn" type="button" data-action="copy-boot-diag" aria-label="${t('more.bootDiagCopyAria')}"><span data-role="cell-label">${t('more.bootDiagCopy')}</span>${cellChevron}</button>` : ''}
+      </div>
+      ${bootDiag.enabled ? `<div class="form-hint">${t('more.bootDiagHint')}</div>` : ''}
+    </div>`;
+}
+
 function renderMoreSheet(opts = {}) {
   let themePref = 'auto';
   try { themePref = localStorage.getItem(THEME_KEY) || 'auto'; } catch {}
-  const bootDiag = readBootDiag();
   const themeBtn = (value, label) =>
     `<button type="button" data-action="theme" data-theme="${value}" class="${themePref === value ? 'active' : ''}" aria-pressed="${themePref === value}" aria-label="${t('theme.aria', { label })}">${label}</button>`;
   // SPEC-014 §2：语言开关，紧邻主题，同款三选一 seg；'' ＝跟随系统。active 态
@@ -373,12 +408,8 @@ function renderMoreSheet(opts = {}) {
       <div class="cell-group">
         <button class="cell-btn" id="summary-btn" type="button" data-action="copy-summary" aria-label="${t('more.copySummaryAria')}"><span data-role="cell-label">${t('more.copySummary')}</span>${cellChevron}</button>
       </div>
-      <div class="form-hint">${t('more.backupHint')}</div>
       <div class="cell-group">
-        <button class="cell-btn" id="copy-btn" type="button" data-action="copy-json" aria-label="${t('more.copyJsonAria')}"><span data-role="cell-label">${t('more.copyJson')}</span>${cellChevron}</button>
-        <button class="cell-btn" id="backup-download-btn" type="button" data-action="download-json" aria-label="${t('more.saveAria')}"><span data-role="cell-label">${t('more.save')}</span>${cellChevron}</button>
-        ${isLegacyOrigin ? '' : `<button class="cell-btn" type="button" data-action="import-json" aria-label="${t('more.importAria')}"><span data-role="cell-label">${t('more.import')}</span>${cellChevron}</button>`}
-        <button class="cell-btn" id="backup-send-btn" type="button" data-action="send-backup" aria-label="${t('more.shareAria')}"><span data-role="cell-label">${t('more.share')}</span>${cellChevron}</button>
+        <button class="cell-btn" type="button" data-action="open-backup" aria-label="${t('more.backupGroupAria')}"><span data-role="cell-label">${t('more.backupGroup')}</span>${cellChevron}</button>
       </div>
       <div class="cell-group">
         <button class="cell-btn" type="button" data-action="open-tag-config" aria-label="${t('more.tagConfigAria')}">${t('more.tagConfig')}${cellChevron}</button>
@@ -397,14 +428,8 @@ function renderMoreSheet(opts = {}) {
         <a class="cell-btn" href="${privacyHref}" target="_blank" rel="noopener" aria-label="${t('more.privacyAria')}">${t('more.privacy')}${cellChevron}</a>
       </div>
       <div class="cell-group">
-        <button class="cell-btn" id="repair-update-btn" type="button" data-action="repair-update-channel" aria-label="${t('more.repairAria')}"><span data-role="cell-label">${t('more.repair')}</span>${cellChevron}</button>
+        <button class="cell-btn" type="button" data-action="open-advanced" aria-label="${t('more.advancedAria')}"><span data-role="cell-label">${t('more.advanced')}</span>${cellChevron}</button>
       </div>
-      <div class="form-hint">${t('more.repairHint')}</div>
-      <div class="cell-group">
-        <button class="cell-btn" type="button" data-action="toggle-boot-diag" aria-pressed="${bootDiag.enabled}" aria-label="${t('more.bootDiagAria', { state: bootDiag.enabled ? t('more.bootDiagAriaOn') : t('more.bootDiagAriaOff') })}"><span data-role="cell-label">${t('more.bootDiag', { state: bootDiag.enabled ? t('more.bootDiagOn') : t('more.bootDiagOff') })}</span>${cellChevron}</button>
-        ${bootDiag.enabled ? `<button class="cell-btn" id="boot-diag-copy-btn" type="button" data-action="copy-boot-diag" aria-label="${t('more.bootDiagCopyAria')}"><span data-role="cell-label">${t('more.bootDiagCopy')}</span>${cellChevron}</button>` : ''}
-      </div>
-      ${bootDiag.enabled ? `<div class="form-hint">${t('more.bootDiagHint')}</div>` : ''}
       <div class="app-version">${t('more.appVersion', { version: APP_VERSION })}</div>
     </div>`;
 }
@@ -433,6 +458,8 @@ export function renderFormSheet(opts) {
   if (opts && opts.mode === 'config') return renderConfigSheet(opts.config || loadConfig(), opts);
   if (opts && opts.mode === 'import-shift') return renderImportShiftDialog(opts);
   if (opts && opts.mode === 'more') return renderMoreSheet(opts);
+  if (opts && opts.mode === 'backup') return renderBackupSheet(opts);
+  if (opts && opts.mode === 'advanced') return renderAdvancedSheet();
   if (opts && opts.mode === 'delete-confirm') return renderDeleteConfirmSheet(opts);
   const mode = opts && opts.mode === 'edit' ? 'edit' : 'new';
   const e = opts && opts.entry;

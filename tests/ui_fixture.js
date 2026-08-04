@@ -283,6 +283,19 @@ export async function openBackupMenu(page) {
   await expect(page.locator('#form-sheet-title')).toHaveText('更多');
 }
 
+// v84：备份四项与运维两项移进二级页；这两个 helper 就是那一层下钻。
+export async function openBackupSheet(page) {
+  await openBackupMenu(page);
+  await page.locator('[data-action="open-backup"]').click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('备份与导入');
+}
+
+export async function openAdvancedSheet(page) {
+  await openBackupMenu(page);
+  await page.locator('[data-action="open-advanced"]').click();
+  await expect(page.locator('#form-sheet-title')).toHaveText('高级');
+}
+
 export async function expectNoHorizontalOverflow(page) {
   const metrics = await page.evaluate(() => {
     const doc = document.documentElement;
