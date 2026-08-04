@@ -139,6 +139,19 @@
 
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html { height: 100%; -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; }
+    /* v86：窄屏隐藏根滚动条。真机录屏逐帧放大后确认，窗口右缘那道「白边」内部有
+       滚动条滑块——它是**经典滚动条占用的轨道**（S23 上 Chrome 画的是经典滚动条，
+       不是 overlay），`scrollbar-gutter: stable` 还把它恒定预留，于是通高一条浅色带
+       贴着窗口右缘，系统缩放动效里尤其显眼。手机上滚动条本就不该占位（iOS/多数
+       Android 都是 overlay），桌面保留它做滚动位置指示——按宽度断点分流，与本项目
+       其它响应式判据同源（不按 pointer/设备名）。手法与 .wheel-col 既有做法一致。 */
+    @media (max-width: 719px) {
+      html {
+        scrollbar-gutter: auto;
+        scrollbar-width: none;
+      }
+      html::-webkit-scrollbar { width: 0; height: 0; }
+    }
     body {
       background: var(--bg);
       color: var(--text);
@@ -1888,6 +1901,18 @@
        overflow:hidden 随即拦腰裁行。复合选择器压过后文同优先级的 display:grid。 */
     .form-sheet-body.config-body { display: block; }
     .config-body > * + * { margin-top: 10px; }
+    /* v86：报错必须和「出问题的那一行」同屏可见。v84 把滚动目标从错误条改成出错行
+       之后，挂在正文末尾的错误条留在了屏幕外——保存被拦下、却什么提示都看不到
+       （真机上 A6/B5/B6 三步全中，而用例只断言了 toBeVisible()：**在布局里** 不等于
+       **在视口里**，这是这条缺陷能溜过去的真正原因）。粘到正文底边两者兼得；底色
+       改为不透明，否则内容会从下面透上来。 */
+    .config-body .form-inline-error {
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+      background: color-mix(in srgb, var(--danger) 12%, var(--card));
+      box-shadow: var(--shadow-1);
+    }
     .cfg-section .chip-group-label { margin-bottom: 6px; }
     /* v37：chip 行改两行式 cell（第一行名称+桶，第二行 longOk+条数），密度翻倍；
        分组底/分隔线来自 .cell-group，行内输入用 --card 底与 inset 底区分。 */
