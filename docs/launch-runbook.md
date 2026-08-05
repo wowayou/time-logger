@@ -90,12 +90,14 @@ gh api -X PUT repos/wowayou/time-logger-site/pages -F https_enforced=true
 
 ## Phase E · 首轮推广（SPEC-003 合并后）
 
-1. 读 `docs/promo/` 三份草稿，按自己口吻修改（AI 草稿只是底稿）。
+0. **按 `docs/promo/checklist.md` 走**（2026-08-05 新增：发帖前自检、渠道节奏、回帖纪律、48 小时后的信号归类，逐条可勾）。
+1. 读 `docs/promo/` 的草稿（中文三份 + 英文三份），按自己口吻修改（AI 草稿只是底稿）。
 2. 发布渠道与顺序（D3 建议）：少数派 → V2EX（分享创造）→ 即刻。
 3. 发帖纪律：不贴真实记录截图（只用 README 那两张 demo 图）；不声称市场验证；留 GitHub 与 `time.eigentime.org` 两个链接。
-4. 发完把各帖 URL 记到 `docs/promo/posted.md`（新建即可），便于后续跟进反馈。
+4. 发完把各帖 URL 记到 `docs/promo/posted.md`（已建好表头），便于后续跟进反馈。
+5. **英文渠道的前提已变**：D3 当时限定「只推 dev-story、不推应用」，理由是应用 UI 是中文；v78 之后界面/主页/隐私政策都有英文版，故英文渠道可直接推应用——但排在中文轮之后，一次只开一个战场。
 
-- [ ] E 完成 —— 未开始（`docs/promo/` 三份草稿待你改写）
+- [ ] E 完成 —— 未开始（底稿六份 + `checklist.md` 已就位，缺的只有你按自己口吻改写并发出去）
 
 ## Phase F · App Store 前置项（**gated**，D17 第二层触发前不启动）
 
