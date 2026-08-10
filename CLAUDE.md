@@ -60,6 +60,7 @@
 - 产品、架构、隐私、发布存续等决策一旦落入 `docs/decisions.md`，应及时形成边界清晰的独立提交并推送，不长期只留在本地；不得顺带混入无关工作区文件。
 - 正式版本推送到 `main` 后，必须创建并推送同版本 Git tag（例如 `v16`），让 GitHub 上有稳定发布锚点。
 - 正式版本 tag 推送后，必须创建或更新同版本 GitHub Release；release notes 简短列出用户影响、内部治理和验证结果，不贴真实数据或截图。
+- **只改 `site/` 时也要发布一次**：`publish-site` 只在 `v<N>` tag push 时触发，所以纯文案改动会让线上主页无声地停在上一次发布（2026-08-10 实测过一次）。改完 `site/` 走 `gh workflow run publish-site.yml`（已加 `workflow_dispatch`），或按 `scripts/build_site.py` 顶部说明本地组装后推镜像；发布后用 `curl` 复核线上那一行确实变了。**不要**把触发条件改成「push 到 main 就发」——那会把还没打 tag 的运行时一起推上线。
 - 除非用户明确要求，不把无关重构、真实数据或工作区外文件混进同一个提交。
 
 ## 当前版本

@@ -7,6 +7,11 @@ on:
   push:
     tags:
       - 'v[0-9]+'
+  # 只改 site/ 文案时没有新版本、也就没有 tag，主页会**无声地停在上一次发布**
+  # （2026-08-10 实测：仓库已改成「自用 44 天」，线上仍是「30+ 天」）。手动触发
+  # 是这里的解药，而不是「push 到 main 就自动发」——后者会把还没打 tag 的运行时
+  # 一起推上线（build_site 按 sw.js 的 FILES 组装当前 main 的运行时）。
+  workflow_dispatch:
 
 permissions:
   contents: read

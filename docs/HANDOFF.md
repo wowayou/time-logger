@@ -24,6 +24,8 @@
 
 **iOS 冷启动的口径定死了**：它不再是「待修的缺陷」，而是**已知的形态代价**——诊断已证明页面侧毫秒级健康、慢段在页面计时零点之前，剩下的唯一杠杆是换载体（原生 App / 原生壳），而那是 gated 的产品形态决策（D8/D17）。别再把它当成一条能修的 bug 提上来。
 
+**发布陷阱（实测踩到一次，已上护栏）**：`publish-site` 只在 `v<N>` tag push 时触发，所以**纯 `site/` 文案改动不会自动上线**——仓库已经是「自用 44 天」，线上主页还停在「30+ 天」。已给 workflow 加 `workflow_dispatch`（`gh workflow run publish-site.yml`），并在 `CLAUDE.md` 的推送前红线里加了一条「只改 site/ 也要发布一次 + curl 复核」。**不要**改成「push 到 main 就发」：`build_site.py` 按 `sw.js` 的 FILES 组装**当前 main** 的运行时，那会把还没打 tag 的运行时一起推上线。本轮已用本地组装手动发布，线上实测两语言均显示 44。
+
 **新增：改动与文档的同步闸**（`.claude/settings.json` 的 PreToolUse hook → `scripts/doc_sync_check.py`）。时机、判据与跳过方式写在 `CLAUDE.md`「提交与推送前红线」上方。一句话：**提交前拦「运行时改了但 CLAUDE.md 没改」，提交/推送前提醒 HANDOFF 与 README `Updated:`**。
 
 ## 上一批（2026-08-10，第二批）交付了什么
