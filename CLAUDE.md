@@ -49,9 +49,12 @@
 改动与文档的同步闸（v88 后，`.claude/settings.json` 的 PreToolUse hook → `scripts/doc_sync_check.py`）：
 
 - **时机是提交前与推送前，不是每次编辑后**。编辑中途的形态不是最终形态，那时写文档只会写错再改；会话结束才提醒又太晚（改动已进历史）。`git commit` 前是唯一「已定形、还来得及把文档一起 stage」的时刻；`git push` 前是第二道网，专抓「提交时忘了、后来也没补」。
-- **拦一条**：暂存区里有运行时文件（`src/`、`index.html`、`styles.css`、`sw.js`、`manifest.webmanifest`、`icons/`、`icon.svg`）却没有 `CLAUDE.md`——运行时一改就要走版本仪式，二者必然同批。
+- **拦一条**：改动集里有运行时文件（`src/`、`index.html`、`styles.css`、`sw.js`、`manifest.webmanifest`、`icons/`、`icon.svg`）却没有 `CLAUDE.md`——运行时一改就要走版本仪式，二者必然同批。
 - **提醒两条**（不打断）：动了运行时或对外文案却没动 `docs/HANDOFF.md`；动了对外文案而 README 的 `Updated:` 还停在今天之前。
-- 判据全部来自本文件已有的红线，不新增规矩。确有理由跳过就在命令里加 `--no-verify`，并把理由写进提交信息。
+- **改动集取全量工作区**（`git status --porcelain -z`：暂存 + 未暂存 + 未跟踪），**不是暂存区**。PreToolUse 在整条命令执行前触发，而 `git add -A && git commit` 是一条命令——那一刻还没 add，`git diff --cached` 恒为空、闸恒放行（2026-08-10 实测坐实过）。代价是「改了但这次不打算提交」会误报，逃生开关就是给这种情况的。
+- **matcher 只写 `Bash`，不用 hook 的 `if:` 字段**：那是权限规则的前缀语法，`Bash(git commit*)` 匹配不到 `git add -A && git commit`，也匹配不到 `cd x && git commit`；判定放在脚本里的正则。
+- 判据全部来自本文件已有的红线，不新增规矩。逃生开关是命令前缀 `SKIP_DOC_CHECK=1`（本仓用 `git commit -F -`，提交信息进不了 hook 的视野，所以开关不能是消息里的标记）；`--amend` 与 `--no-verify` 同样豁免。任何异常一律放行——因为 git 抽风就卡住提交的闸比没有更糟。
+- **它只查「有没有碰文档」，查不了「写得对不对」**：防的是彻底忘记，不是敷衍。
 
 提交与推送前红线：
 

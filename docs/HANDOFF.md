@@ -30,6 +30,8 @@
 
 **新增：改动与文档的同步闸**（`.claude/settings.json` 的 PreToolUse hook → `scripts/doc_sync_check.py`）。时机、判据与跳过方式写在 `CLAUDE.md`「提交与推送前红线」上方。一句话：**提交前拦「运行时改了但 CLAUDE.md 没改」，提交/推送前提醒 HANDOFF 与 README `Updated:`**。
 
+**第一版有两个坑，当天就实测坐实并修掉了**（维护者拿另一个项目的同类分析对照出来的）：① 只看暂存区 → `git add -A && git commit` 是**一条**命令，PreToolUse 在它执行前触发，那时还没 add，`git diff --cached` 恒空、闸恒放行；改成 `git status --porcelain -z` 取全量工作区（`-z` 是因为本仓有 `使用与理念.md`，默认格式会加引号转义）。② 用了 hook 的 `if: "Bash(git *)"` 过滤 → 那是权限规则前缀语法，`cd x && git commit` 之类匹配不到；改成 matcher 只写 `Bash`、判定进脚本正则。逃生开关也从 `--no-verify` 换成命令前缀 `SKIP_DOC_CHECK=1`（本仓用 `git commit -F -`，提交信息压根不出现在 hook 能看到的命令字符串里）。九种输入逐一 pipe-test：复合命令→DENY、cd 前缀→DENY、逃生开关/`--amend`/`npm run build`/`git log`/`git status`→静默、只动文档→静默。
+
 ## 上一批（2026-08-10，第二批）交付了什么
 
 v87 审计里登记「不排期、下次顺路一起做」的四条，维护者当天决定「bug 要修」，遂成 v88。都不是阻断级，但前三条都属于**静默改写或静默破坏不变量**那一类。

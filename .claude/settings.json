@@ -6,7 +6,6 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(git *)",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/doc_sync_check.py\"",
             "timeout": 15,
             "statusMessage": "检查改动与文档是否同步"
