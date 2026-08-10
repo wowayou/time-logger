@@ -14,7 +14,8 @@
 - **`git push` 之前** → 第二道网，专抓「提交时忘了、后来也没补」，赶在它变成公开
   事实之前。
 
-**两个必须踩过才知道的坑**：
+**必须踩过才知道的坑**（前两条自己踩的，第三、四条对照 eigentime 那篇
+《coding agent hooks》补的）：
 
 1. **不能只看暂存区。** PreToolUse 在**整条命令执行前**触发，而 `git add -A &&
    git commit` 是一条命令——那一刻还没 add，`git diff --cached` 永远是空，闸永远
@@ -24,6 +25,14 @@
 2. **不能用 hook 的 `if:` 字段过滤。** 它是权限规则的前缀语法，`Bash(git commit*)`
    匹配不到 `git add -A && git commit ...`，也匹配不到 `cd x && git commit`。
    改成 matcher 只写 `Bash`，进脚本里正则判定。
+3. **正则必须锚定命令位置，不能是「串里出现过」。** `\bgit\s+commit\b` 会把
+   `echo "记得 git commit 一下"` 也拦下（实测 DENY）——见字就拦的闸会被立刻关掉。
+   合法起点只有行首/`;`/`&`/`|`/换行，允许夹 `VAR=value` 前缀；`git` 与子命令之间
+   还要放行带值的全局选项（`git -C <path> commit`，只写 `(?:-\S+\s+)*` 会漏）。
+4. **`matcher: "Bash"` 会在每条命令上开销一次进程**（那篇列为反模式）。实测本脚本
+   53ms/次。粗筛移到 hook 命令里的 bash `case` 内建——命令里连 `git` 都没有就
+   根本不启动 python，实测降到 12ms。粗筛刻意做得**宽**：它只可能多调一次、不可能
+   漏调，所以判据仍然只有脚本里那一份，不产生第二处会漂移的规则。
 
 判据全部来自 CLAUDE.md 已有的红线，不新增规矩：
 
@@ -67,6 +76,19 @@ RUNTIME_FILES = {"index.html", "styles.css", "sw.js", "manifest.webmanifest", "i
 # 对外可见的文案面：改这些就该同步 README 的 Updated: 与交接文档。
 PUBLIC_COPY_PREFIXES = ("site/", "src/locales/", "docs/promo/")
 PUBLIC_COPY_FILES = {"README.md", "使用与理念.md", "CONTRIBUTING.md"}
+
+# 正则必须锚定**命令位置**，不能是「字符串里出现过」。`\bgit\s+commit\b` 会把
+# `echo "记得 git commit 一下"` 也拦下（2026-08-10 实测 DENY）——一个见字就拦的闸
+# 会被立刻关掉。合法起点只有：字符串开头、`;`/`&`/`|`/换行之后，允许中间夹
+# `VAR=value` 形式的环境变量前缀（`SKIP_DOC_CHECK=1 git commit` 正是这一形态）。
+# 残留的模糊：heredoc 正文里**独占一行**的 `git commit` 仍会命中——不写 shell
+# 解析器就分不开，交给逃生开关兜底。
+_CMD_START = r"(?:^|[;&|]|\n)\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*"
+# `git` 与子命令之间可以夹全局选项，且选项可能自带一个值（`git -C <path> commit`、
+# `git -c user.name=x commit`）——只写 `(?:-\S+\s+)*` 会漏掉带值的那种（实测放行）。
+_GIT_OPTS = r"(?:-\S+\s+(?:[^-\s]\S*\s+)?)*"
+GIT_COMMIT_RE = re.compile(_CMD_START + r"git\s+" + _GIT_OPTS + r"commit\b")
+GIT_PUSH_RE = re.compile(_CMD_START + r"git\s+" + _GIT_OPTS + r"push\b")
 
 
 def git(*args: str) -> str:
@@ -141,8 +163,8 @@ def run() -> None:
     if "SKIP_DOC_CHECK=1" in command or "--no-verify" in command or "--amend" in command:
         return
 
-    committing = bool(re.search(r"\bgit\s+(?:-\S+\s+)*commit\b", command))
-    pushing = bool(re.search(r"\bgit\s+(?:-\S+\s+)*push\b", command))
+    committing = bool(GIT_COMMIT_RE.search(command))
+    pushing = bool(GIT_PUSH_RE.search(command))
     if not committing and not pushing:
         return
 

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/doc_sync_check.py\"",
+            "command": "c=$(cat); case \"$c\" in *git*) printf %s \"$c\" | python3 \"$CLAUDE_PROJECT_DIR/scripts/doc_sync_check.py\" ;; esac",
             "timeout": 15,
             "statusMessage": "检查改动与文档是否同步"
           }

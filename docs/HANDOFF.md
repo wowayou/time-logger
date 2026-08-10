@@ -32,6 +32,25 @@
 
 **第一版有两个坑，当天就实测坐实并修掉了**（维护者拿另一个项目的同类分析对照出来的）：① 只看暂存区 → `git add -A && git commit` 是**一条**命令，PreToolUse 在它执行前触发，那时还没 add，`git diff --cached` 恒空、闸恒放行；改成 `git status --porcelain -z` 取全量工作区（`-z` 是因为本仓有 `使用与理念.md`，默认格式会加引号转义）。② 用了 hook 的 `if: "Bash(git *)"` 过滤 → 那是权限规则前缀语法，`cd x && git commit` 之类匹配不到；改成 matcher 只写 `Bash`、判定进脚本正则。逃生开关也从 `--no-verify` 换成命令前缀 `SKIP_DOC_CHECK=1`（本仓用 `git commit -F -`，提交信息压根不出现在 hook 能看到的命令字符串里）。九种输入逐一 pipe-test：复合命令→DENY、cd 前缀→DENY、逃生开关/`--amend`/`npm run build`/`git log`/`git status`→静默、只动文档→静默。
 
+## 同步闸对照 eigentime《coding agent hooks》后的两处修补
+
+维护者给了 <https://eigentime.org/zh/blog/coding-agent-hooks/> 让对照完善。四层验证法、
+`-z`、全量工作区、环境变量逃生开关、双闸（commit + push）我们已经一致；那篇多出两条，
+都实测坐实并修掉：
+
+1. **正则必须锚定命令位置**。`\bgit\s+commit\b` 是「串里出现过就算」——实测
+   `echo "记得 git commit 一下"` 直接 DENY。见字就拦的闸会被立刻关掉。改成只认
+   行首/`;`/`&`/`|`/换行之后的位置，允许夹 `VAR=value` 前缀。**顺带发现自己的洞**：
+   `git -C . commit` 原本放行（`(?:-\S+\s+)*` 覆盖不了带值的全局选项），一并修。
+2. **`matcher: "Bash"` 的每次调用开销**（那篇列为反模式）。实测 53ms/次。粗筛下沉到
+   hook 命令里的 bash `case` 内建：命令里连 `git` 都没有就不启动 python，实测 12ms。
+   粗筛刻意做**宽**——只会多调、不会漏调，所以判据仍只有脚本里那一份，不产生第二处
+   会漂移的规则。
+
+十三种输入的双向矩阵重跑：该拦的六种（裸 commit / `add -A &&` / `cd &&` / `-C` /
+`-c` / 多行第二行）全 DENY，不该拦的七种（只是提到、grep、`git log --grep`、
+`git status`、`npm run build`、逃生开关、`--amend`）全放行。
+
 ## 同步闸的第三个限制（首次真实触发当场撞上）
 
 维护者重载配置后，闸第一次真的跑起来，**第一次触发就误报**：那条命令里我先用 python 改了

@@ -53,6 +53,8 @@
 - **提醒两条**（不打断）：动了运行时或对外文案却没动 `docs/HANDOFF.md`；动了对外文案而 README 的 `Updated:` 还停在今天之前。
 - **改动集取全量工作区**（`git status --porcelain -z`：暂存 + 未暂存 + 未跟踪），**不是暂存区**。PreToolUse 在整条命令执行前触发，而 `git add -A && git commit` 是一条命令——那一刻还没 add，`git diff --cached` 恒为空、闸恒放行（2026-08-10 实测坐实过）。代价是「改了但这次不打算提交」会误报，逃生开关就是给这种情况的。
 - **matcher 只写 `Bash`，不用 hook 的 `if:` 字段**：那是权限规则的前缀语法，`Bash(git commit*)` 匹配不到 `git add -A && git commit`，也匹配不到 `cd x && git commit`；判定放在脚本里的正则。
+- **正则锚定命令位置**：`\bgit\s+commit\b` 会把 `echo "记得 git commit"` 也拦下（实测）；合法起点只有行首/`;`/`&`/`|`/换行 + 可选 `VAR=value` 前缀，且要放行 `git -C <path> commit` 这类带值全局选项。
+- **粗筛在 hook 命令里用 bash `case` 内建**：`matcher: "Bash"` 会在每条命令上开销一次进程（实测 53ms），命令里没有 `git` 就不启动 python（降到 12ms）。粗筛刻意做宽——只会多调、不会漏调，判据仍只有脚本里那一份。
 - 判据全部来自本文件已有的红线，不新增规矩。逃生开关是命令前缀 `SKIP_DOC_CHECK=1`（本仓用 `git commit -F -`，提交信息进不了 hook 的视野，所以开关不能是消息里的标记）；`--amend` 与 `--no-verify` 同样豁免。任何异常一律放行——因为 git 抽风就卡住提交的闸比没有更糟。
 - **它只查「有没有碰文档」，查不了「写得对不对」**：防的是彻底忘记，不是敷衍。
 - **它看到的是命令执行**前**的状态**：同一条 Bash 命令里「先改文档再提交」会误报（PreToolUse 的时序本性，脚本修不了）。把文档编辑与 `git commit` 分成两次调用即可——提交前那一眼 `git status` 本来也该是独立的一步。
