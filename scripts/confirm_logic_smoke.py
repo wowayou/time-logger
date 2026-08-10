@@ -28,6 +28,7 @@ import {
   intervalEditContext,
   normalizeEntries,
   overnightContinuationContext,
+  freeMinuteOnSameDay,
   planDeleteEntry,
   planIntervalEdit,
   planOvernightContinuation,
@@ -822,6 +823,23 @@ assertTotals(
   { job: 0, maintain: 300, leak: 0, unrecorded: 0, pending: 0, total: 300 },
   'the confirmed segment leaves pending'
 );
+
+// --- v88：同刻躲让不得越过午夜 ---
+// 「标记已发生」原本无条件 +1min，now 落在 23:59 且那一分钟被占用时会静默把记录
+// 挪进第二天。躲让必须限制在同一自然日内：先向后、当天到头再向前，都没有就放弃。
+const dodgeEntries = [
+  entry('taken', '2026-06-29T23:59', '求职推进'),
+  entry('earlier', '2026-06-29T23:57', '求职推进')
+];
+assert(freeMinuteOnSameDay(dodgeEntries, '2026-06-29T23:59') === '2026-06-29T23:58', 'a taken 23:59 falls back within the same day');
+assert(freeMinuteOnSameDay(dodgeEntries, '2026-06-29T23:00') === '2026-06-29T23:00', 'a free minute is returned untouched');
+assert(freeMinuteOnSameDay(dodgeEntries, '2026-06-29T23:57') === '2026-06-29T23:58', 'the forward direction is tried first');
+// 整天排满：必须返回空串，由调用方明说并放弃写入，绝不越过午夜。
+const fullDay = [];
+for (let h = 0; h < 24; h += 1) {
+  for (let m = 0; m < 60; m += 1) fullDay.push(entry(`f${h}-${m}`, `2026-06-29T${p2(h)}:${p2(m)}`, '求职推进'));
+}
+assert(freeMinuteOnSameDay(fullDay, '2026-06-29T12:00') === '', 'a fully booked day yields no minute instead of spilling into tomorrow');
 
 console.log('confirm_logic_smoke passed');
 '''

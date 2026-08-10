@@ -76,6 +76,31 @@ export function addOneMinute(ts) {
   return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
 }
 
+/**
+ * v88：在**同一自然日内**找一个没被占用的时刻。
+ * 「标记已发生」原本无条件 `+1min` 躲同刻冲突，`nowStr()` 落在 23:59 且那一分钟已被
+ * 占用时会把这条记录静默挪进**第二天**（实测落到次日 00:00）——它改变的是「这件事
+ * 发生在哪一天」，属于 D13 硬约束③那一类的静默改写，而不是无害的挪一分钟。
+ * 先向后找（与 `+1min` 的既有方向一致），当天到头再向前找；同一天真的没有空位就
+ * 返回空串，由调用方明说并放弃写入——绝不越过午夜。
+ * @param {any[]} entries
+ * @param {string} ts
+ * @param {string} [selfId]
+ * @returns {string} 可用时刻；'' 表示这一天已经排满
+ */
+export function freeMinuteOnSameDay(entries, ts, selfId = '') {
+  const start = normalizeTimestamp(ts);
+  if (!start) return '';
+  const dayKey = start.slice(0, 10);
+  for (let cursor = start; cursor.slice(0, 10) === dayKey; cursor = addOneMinute(cursor)) {
+    if (!findTimeConflict(entries, cursor, selfId)) return cursor;
+  }
+  for (let cursor = shiftedMinute(start, -1); cursor.slice(0, 10) === dayKey; cursor = shiftedMinute(cursor, -1)) {
+    if (!findTimeConflict(entries, cursor, selfId)) return cursor;
+  }
+  return '';
+}
+
 function ensureOpenPlaceholderAt(entries, ts, completedId = '', createId) {
   const existing = entries.find(entry => entry.ts === ts && entry.id !== completedId);
   if (existing) {

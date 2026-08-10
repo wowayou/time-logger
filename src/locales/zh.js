@@ -152,6 +152,7 @@ export default {
   'fab.backfillFrom': '补记 {time} 起',
   'fab.ongoingFrom': '续 {time} 起 · 已 {dur}',
   'toast.segmentChanged': '这段时间已经变化，请重新查看后再确认。',
+  'toast.plannedNoFreeMinute': '这一天已经没有空闲的时刻可以放它了，请先编辑相邻记录的时间。',
   'toast.deleted': '已删除',
   'toast.undoCancelled': '数据已在别处更新，撤销已取消',
   'toast.deleteQuota': '本机存储空间不足，删除没有执行；请先导出备份并清理空间。',

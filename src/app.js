@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
 import {
-  addOneMinute,
   entriesRevision,
   defaultFormTimestamp,
-  findTimeConflict,
+  freeMinuteOnSameDay,
   normalizeEntries,
   openPlaceholderForDate,
   planDeleteEntry,
@@ -686,15 +685,21 @@ import {
     const d = load();
     const entry = d.entries.find(e => e.id === id);
     if (!entry || !entry.planned) return;
-    delete entry.planned;
-    if (new Date(entry.ts) > new Date()) entry.ts = nowStr();
+    const wanted = new Date(entry.ts) > new Date() ? nowStr() : entry.ts;
     // ⑥ Confirming to "now" can collide with an existing entry on that exact
     // minute. Every other write path guards same-ts; here there is no sheet to
-    // host an inline prompt, so nudge forward to the next free minute (matching
-    // the "+1min" direction) instead of silently creating a duplicate timestamp.
-    while (findTimeConflict(d.entries, entry.ts, entry.id)) {
-      entry.ts = addOneMinute(entry.ts);
+    // host an inline prompt, so nudge to the next free minute instead of
+    // silently creating a duplicate timestamp.
+    // v88：躲让**限制在同一自然日内**。旧代码无条件 `+1min`，`nowStr()` 落在 23:59
+    // 且那一分钟已被占用时会把这条记录静默挪进第二天——「标记已发生」不该改变它
+    // 发生在哪一天。同一天排满时明说并放弃，不写。
+    const settled = freeMinuteOnSameDay(d.entries, wanted, entry.id);
+    if (!settled) {
+      showInfoToast(t('toast.plannedNoFreeMinute'));
+      return;
     }
+    delete entry.planned;
+    entry.ts = settled;
     normalizeEntries(d, { todayKey: todayStr(), createId: uid });
     save(d);
     render();
@@ -860,7 +865,14 @@ import {
     const label = btn.querySelector('[data-role="cell-label"]');
     if (label) label.textContent = t('repair.checking');
     try {
-      const res = await fetch('sw.js', { cache: 'no-store' });
+      // v88：探活必须**绕开自己的 SW 缓存**。`sw.js` 在 FILES 里，而 fetch 处理器是
+      // cache-first（`caches.match(req) || fetch(req)`），所以 `fetch('sw.js')` 在
+      // 断网时照样返回 200——实测：离线下 `fetch('sw.js',{cache:'no-store'})` 得到
+      // `ok=true`，带查询串的同一请求才正确抛 TypeError（`caches.match` 默认不忽略
+      // search，故查询串必然 miss、落到真实网络）。`cache:'no-store'` 只管 HTTP 缓存，
+      // 管不到 CacheStorage。守卫失效的后果不是没提示：它会让离线用户在这里 unregister
+      // 掉 SW 再 reload，而那次 reload 已经没有离线兜底了。
+      const res = await fetch(`sw.js?probe=${Date.now()}`, { cache: 'no-store' });
       if (!res || !res.ok) throw new Error('probe failed');
     } catch {
       showInfoToast(t('repair.offline'));

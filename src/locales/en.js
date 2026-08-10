@@ -163,6 +163,7 @@ export default {
   'fab.backfillFrom': 'Backfill from {time}',
   'fab.ongoingFrom': 'From {time} · {dur} so far',
   'toast.segmentChanged': 'This time span has changed; please review it again before confirming.',
+  'toast.plannedNoFreeMinute': 'This day has no free minute left for it; edit a neighbouring entry\u2019s time first.',
   'toast.deleted': 'Deleted',
   'toast.undoCancelled': 'Data was updated elsewhere; undo was cancelled',
   'toast.deleteQuota': 'Local storage is full; the delete did not run. Export a backup and free up space first.',

@@ -1314,6 +1314,12 @@ export function createSheetController(deps) {
     // 改的是主线时长——最不该被夸大的那个数。晚于占位点时不复用，新建条目、把占位条
     // 留在原地，那段如实保持未记录。
     if (placeholder && checked.ts > placeholder.ts) placeholder = null;
+    // v88：**计划从不复用占位条**（下面的 planned 分支是 push 一条新记录），所以也
+    // 不能把占位条从冲突检测里排除掉——排除了就会在同一时刻并存两条，而「同刻唯一」
+    // 是 findTimeConflict、导入的 byTime 映射、事务 planner 的 duplicateTimestamp
+    // 共同依赖的前提。正常路径够不到（计划必须晚于 now+5min，占位条在 now 之前），
+    // 导入他机备份或改系统时钟能造出来。
+    if (planned) placeholder = null;
     const conflict = findTimeConflict(d.entries, checked.ts, placeholder ? placeholder.id : '');
     if (conflict) {
       // A record can land exactly on an empty placeholder stranded in the
@@ -1329,6 +1335,11 @@ export function createSheetController(deps) {
     if (ctag) rememberTag(ctag, formBucket, d.entries);
     if (planned) {
       d.entries.push({ id: deps.uid(), ts: checked.ts, what, tags: [tag], planned: true });
+      // v88：计划保存此前是**唯一**不过 normalizeEntries 的表单写入路径，于是「今天
+      // 恒有尾占位」这条不变量会在「今天最后一条是真实记录 + 本次只加了一条计划」时
+      // 破掉：FAB 随之从「续 hh:mm 起」退化成「补记 hh:mm+1 起」。计划条不参与
+      // coalesce，走一遍只会补回占位条，不会动已有记录。
+      normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
       if (!deps.save(d)) {
         showInlineError(panel, t('form.quotaForm'));
         return;
