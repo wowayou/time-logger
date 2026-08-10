@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-import { GAP, isPlaceholderEntry, loggedEntriesFrom, primaryTag } from './stats.js';
+import { isPlaceholderEntry, loggedEntriesFrom, primaryTag } from './stats.js';
 // SPEC-013：保留标签 id 是数据常量（不是文案），本模块仍不访问 DOM / localStorage。
 import { RESERVED_UNKNOWN_TAG } from './storage.js';
 import { t } from './i18n.js';
@@ -379,17 +379,15 @@ export function planOvernightContinuation(entries, request, opts = {}) {
     if (!endPoint.ok) return endPoint;
   }
 
-  // D10/C7A：过夜表单两端都是用户显式断言，写入即视为已确认——只标超过
-  // 确认阈值的段（短段标记无信息量）；若起点被 coalesceRedundant 并入前一条
-  // 同内容记录，标记随点消亡，沿用「相邻边界变化即失效」的保守语义。
-  const markConfirmed = (point, segStartTs, segEndTs) => {
-    if (point && minsBetweenDates(new Date(segStartTs), new Date(segEndTs)) > GAP) {
-      point.longConfirm = { startTs: segStartTs, endTs: segEndTs };
-    }
-  };
-  markConfirmed(startPoint.point, startTs, crossMidnight ? context.midnightTs : context.hardEndTs);
-  if (midnightPoint) markConfirmed(midnightPoint.point, context.midnightTs, context.hardEndTs);
-
+  // v87：撤销 v67/C7A 的「写入即确认」。C7A 的前提是「过夜表单两端都是用户显式
+  // 断言」——这条前提是假的：表单里用户能改的只有**起点**，两个终点都是程序给的
+  // （跨午夜段的终点是日历上的 00:00，今天段的终点是 `now` 或今天第一条已有记录）。
+  // 于是超长段的确认机制恰恰在最该问的场合失灵：维护者真机记到一条 06:48→次日
+  // 00:00（17h12m）和一条 00:00→20:41（20h41m）的「整理」，两条都带着自动写上的
+  // longConfirm，界面从头到尾没问过一句（2026-08-09 备份取证）。
+  // 现在过夜写入不再自动确认：超阈值的段照常落待确认，行内出现「确认」按钮。
+  // 睡觉这类本来就 longOk 的标签不受影响（那条豁免在 config 里，不靠这里）。
+  // 「只记到 24:00」模式走 planSegmentSplit，本来就不自动确认，行为不变。
   const duplicate = duplicateTimestamp(resultEntries);
   if (duplicate) return transactionError('conflict', t('txn.conflictOvernight'), { context, conflict: duplicate.second });
   coalesceRedundant(resultEntries);

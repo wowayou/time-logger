@@ -207,17 +207,22 @@ import {
   function settlementEndFor(startTs, dateKey) {
     return getSettlementEndFor(load().entries, startTs, dateKey);
   }
+  // v87：`config` 一次读、往下传。stats.js 的桶查询每个片段要问三次（classifySegment
+  // 两次 + addBucket 一次），不传的话每次都重新 localStorage.getItem + JSON.parse +
+  // normalizeConfig——年视图一次 summarize 实测 1994 次。stats.js 仍不 import
+  // loadConfig（模块边界不变），config 由这里注入。
   function summarizeRange(start, end, opts = {}) {
-    return summarizeEntries(load().entries, start, end, opts);
+    return summarizeEntries(load().entries, start, end, { config: loadConfig(), ...opts });
   }
   function computeDay() {
     const { start, end } = periodRange('day', state.selectedDate);
     const statEnd = state.selectedDate === todayStr() ? new Date() : end;
     const allEntries = load().entries;
-    const segments = buildRangeSegmentsFromEntries(allEntries, start, statEnd);
+    const config = loadConfig();
+    const segments = buildRangeSegmentsFromEntries(allEntries, start, statEnd, { config });
     const timeline = segments.filter(segment => segment.e || segment.mins >= UNRECORDED_GAP_FLOOR_MIN);
     const planned = listPlannedEntries(allEntries, state.selectedDate);
-    return { timeline, planned, totals: summarizeEntries(allEntries, start, statEnd) };
+    return { timeline, planned, totals: summarizeEntries(allEntries, start, statEnd, { config }) };
   }
   function summaryRows() {
     const { start } = periodRange();
@@ -485,9 +490,13 @@ import {
   }
 
   function renderSummary() {
+    // 月视图 31 行、年视图 12 行，每行一次 summarize——entries 与 config 各读一次就够，
+    // 别让每一行都重新 JSON.parse 一遍整份记录（真实数据 120KB）。
+    const entries = load().entries;
+    const config = loadConfig();
     const rows = summaryRows().map(row => ({
       ...row,
-      totals: summarizeRange(row.rangeStart, row.rangeEnd)
+      totals: summarizeEntries(entries, row.rangeStart, row.rangeEnd, { config })
     }));
     renderSummaryRows(rows);
   }

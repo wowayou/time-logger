@@ -588,30 +588,45 @@ assert(overnightRealEnd.ok && overnightRealEnd.context.hardEndTs === '2026-07-13
 assert(overnightRealEnd.resultEntries.some(e => e.id === 'wash'), 'real hard-end entry remains untouched');
 assert(!overnightRealEnd.resultEntries.some(e => e.ts === '2026-07-13T08:00'), 'real hard end does not add a now placeholder');
 
-// --- v67 D10/C7A：过夜写入即确认（显式双端断言不再落待确认） ---
+// --- v87（D21）：撤销 v67/C7A 的「过夜写入即确认」 ---
+// C7A 的前提「两端都是用户显式断言」不成立：表单里能改的只有起点，两个终点都是
+// 程序给的（午夜是日历边界，hardEnd 是 now 或今天第一条已有记录）。于是超长段确认
+// 恰在最该问的场合失灵。现在过夜写入不再自动确认，超阈值段落照常待确认。
 const c7aPlan = planOvernightContinuation([
   { id: 'y-open', ts: '2026-07-12T20:00', what: '', tags: [] }
 ], {
   viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T20:00',
   startTs: '2026-07-12T20:00', what: '收拾行李', tags: ['洗漱']
 }, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
-assert(c7aPlan.ok, 'C7A overnight plan succeeds');
+assert(c7aPlan.ok, 'overnight plan succeeds');
 const c7aYesterday = c7aPlan.resultEntries.find(e => e.ts === '2026-07-12T20:00');
 const c7aMidnight = c7aPlan.resultEntries.find(e => e.ts === '2026-07-13T00:00');
-assert(c7aYesterday.longConfirm && c7aYesterday.longConfirm.startTs === '2026-07-12T20:00' && c7aYesterday.longConfirm.endTs === '2026-07-13T00:00', 'C7A marks the yesterday part confirmed with exact segment bounds');
-assert(c7aMidnight.longConfirm && c7aMidnight.longConfirm.startTs === '2026-07-13T00:00' && c7aMidnight.longConfirm.endTs === '2026-07-13T08:00', 'C7A marks the today part confirmed with exact segment bounds');
+assert(!c7aYesterday.longConfirm, 'overnight write must not auto-confirm the yesterday part');
+assert(!c7aMidnight.longConfirm, 'overnight write must not auto-confirm the today part');
 const c7aYesterdaySummary = summarizeEntries(c7aPlan.resultEntries, new Date(2026, 6, 12), new Date(2026, 6, 13), { now: new Date(2026, 6, 13, 8) });
 const c7aTodaySummary = summarizeEntries(c7aPlan.resultEntries, new Date(2026, 6, 13), new Date(2026, 6, 13, 8), { now: new Date(2026, 6, 13, 8) });
-assert(c7aYesterdaySummary.pending === 0 && c7aYesterdaySummary.maintain === 240, 'C7A yesterday 4h part is counted, not pending');
-assert(c7aTodaySummary.pending === 0 && c7aTodaySummary.maintain === 480, 'C7A today 8h part is counted, not pending');
+assert(c7aYesterdaySummary.pending === 240 && c7aYesterdaySummary.maintain === 0, 'overnight yesterday 4h part lands pending');
+assert(c7aTodaySummary.pending === 480 && c7aTodaySummary.maintain === 0, 'overnight today 8h part lands pending');
+// 两段都必须可确认——待确认而点不掉才是真正的死路。
+const c7aSegments = buildRangeSegmentsFromEntries(c7aPlan.resultEntries, new Date(2026, 6, 13), new Date(2026, 6, 13, 8), { now: new Date(2026, 6, 13, 8) });
+assert(c7aSegments.some(seg => seg.e && seg.e.ts === '2026-07-13T00:00' && seg.confirmable), 'the pending overnight part offers a 确认 button');
+// longOk 标签（睡觉）不受影响：豁免在 config 里，从来不靠自动确认。
+const c7aSleep = planOvernightContinuation([
+  { id: 'y-open', ts: '2026-07-12T20:00', what: '', tags: [] }
+], {
+  viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T20:00',
+  startTs: '2026-07-12T20:00', what: '睡觉', tags: ['睡觉']
+}, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
+const c7aSleepToday = summarizeEntries(c7aSleep.resultEntries, new Date(2026, 6, 13), new Date(2026, 6, 13, 8), { now: new Date(2026, 6, 13, 8) });
+assert(c7aSleepToday.pending === 0 && c7aSleepToday.maintain === 480, 'longOk tags stay exempt without any auto-confirm');
 const c7aShort = planOvernightContinuation([
   { id: 'y-open', ts: '2026-07-12T23:30', what: '', tags: [] }
 ], {
   viewedDate: '2026-07-12', sourceId: 'y-open', frozenStart: '2026-07-12T23:30',
   startTs: '2026-07-12T23:30', what: '收拾行李', tags: ['洗漱']
 }, { todayKey: '2026-07-13', nowTs: '2026-07-13T08:00', createId: txId });
-assert(c7aShort.ok && !c7aShort.resultEntries.find(e => e.ts === '2026-07-12T23:30').longConfirm, 'C7A leaves sub-threshold parts unmarked');
-assert(c7aShort.resultEntries.find(e => e.ts === '2026-07-13T00:00').longConfirm.endTs === '2026-07-13T08:00', 'C7A still marks the today part beyond threshold');
+assert(c7aShort.ok && !c7aShort.resultEntries.find(e => e.ts === '2026-07-12T23:30').longConfirm, 'sub-threshold parts carry no mark either');
+assert(!c7aShort.resultEntries.find(e => e.ts === '2026-07-13T00:00').longConfirm, 'the beyond-threshold today part carries no mark either');
 
 const midnightConflict = planOvernightContinuation([
   { id: 'y-open', ts: '2026-07-12T23:00', what: '', tags: [] },
@@ -744,6 +759,69 @@ const staleImport = mergeImportedEntries(
 );
 assert(!staleImport.ok && staleImport.stale, 'stale import conflict choices are rejected');
 assert(!validateImportData({ entries: [{ id: 42, ts: 'bad', what: '<img>', tags: 'nope' }] }).ok, 'import validates string ids, timestamps, content, and tags');
+
+// --- v87：空日不继承前一天最后标签（跨日闭合段最多切入次日） ---
+// 连着几天没打开 app → 中间没有任何占位条 → 旧代码把上一条记录一路铺到几天后的
+// 右邻，空日被填满 24h 并各挂一颗「确认」按钮。
+const skippedDaysEntries = [
+  entry('a', '2020-03-01T10:00', '洗漱'),
+  entry('b', '2020-03-04T09:00', '求职推进')
+];
+const skippedNow = { now: '2020-03-05T10:00' };
+const skippedStartSeg = buildRangeSegmentsFromEntries(
+  skippedDaysEntries, new Date('2020-03-01T00:00'), new Date('2020-03-02T00:00'), skippedNow
+).find(seg => seg.e && seg.e.id === 'a');
+assert(skippedStartSeg.rawMins === 840 && skippedStartSeg.endTs === '2020-03-02T00:00', 'the truncated segment measures itself to 24:00, not to a right neighbour three days out');
+assertTotals(
+  summarizeEntries(skippedDaysEntries, new Date('2020-03-01T00:00'), new Date('2020-03-02T00:00'), skippedNow),
+  { job: 0, maintain: 0, leak: 0, unrecorded: 1440, pending: 840, total: 1440 },
+  'start day keeps its own segment, truncated at 24:00'
+);
+for (const [emptyStart, emptyEnd] of [['2020-03-02T00:00', '2020-03-03T00:00'], ['2020-03-03T00:00', '2020-03-04T00:00']]) {
+  const daySegments = buildRangeSegmentsFromEntries(skippedDaysEntries, new Date(emptyStart), new Date(emptyEnd), skippedNow);
+  assert(daySegments.length === 0, `${emptyStart} inherits nothing from the previous day`);
+  assertTotals(
+    summarizeEntries(skippedDaysEntries, new Date(emptyStart), new Date(emptyEnd), skippedNow),
+    { job: 0, maintain: 0, leak: 0, unrecorded: 0, pending: 0, total: 0 },
+    `${emptyStart} contributes nothing`
+  );
+}
+// 恰好隔一个空日（右邻落在 D+2 00:00）同样不继承——D+1 仍是一整天没有记录。
+const twoDayExact = [entry('a', '2020-03-01T23:00', '洗漱'), entry('b', '2020-03-03T00:00', '求职推进')];
+assert(
+  buildRangeSegmentsFromEntries(twoDayExact, new Date('2020-03-02T00:00'), new Date('2020-03-03T00:00'), skippedNow).length === 0,
+  'a right neighbour at D+2 00:00 still leaves D+1 empty'
+);
+// 真正的跨一次午夜（过夜续记的常态）必须继续切入次日。
+const oneMidnight = [entry('a', '2020-03-01T23:00', '睡觉'), entry('b', '2020-03-02T07:00', '洗漱')];
+assertTotals(
+  summarizeEntries(oneMidnight, new Date('2020-03-02T00:00'), new Date('2020-03-02T07:00'), skippedNow),
+  { job: 0, maintain: 420, leak: 0, unrecorded: 0, pending: 0, total: 420 },
+  'a single-midnight crossing still fills the next day up to its right neighbour'
+);
+
+// --- v87：段内坐着一条计划时，「确认」必须仍然点得动 ---
+// 渲染侧用 loggedEntriesFrom（不含计划），确认侧原本用 sortedEntriesFrom（含计划），
+// 两边右邻不同 → endTs 对不上 → 永远 stale，那颗按钮怎么点都确认不掉。
+const planInsideData = {
+  version: 1,
+  entries: [
+    entry('a', '2020-03-10T08:00', '洗漱'),
+    { id: 'p', ts: '2020-03-10T10:00', what: '面试', tags: ['求职推进'], planned: true },
+    entry('b', '2020-03-10T13:00', '求职推进')
+  ]
+};
+const planInsideSeg = buildRangeSegmentsFromEntries(
+  planInsideData.entries, new Date('2020-03-10T00:00'), new Date('2020-03-11T00:00'), { now: '2020-03-10T20:00' }
+).find(seg => seg.e && seg.e.id === 'a');
+assert(planInsideSeg.confirmable && planInsideSeg.endTs === '2020-03-10T13:00', 'a plan inside the segment does not change the rendered right neighbour');
+const planInsideResult = confirmSegmentInData(planInsideData, 'a', planInsideSeg.endTs, { now: '2020-03-10T20:00' });
+assert(planInsideResult.ok, 'confirming a segment that contains a plan must succeed');
+assertTotals(
+  summarizeEntries(planInsideData.entries, new Date('2020-03-10T08:00'), new Date('2020-03-10T13:00'), { now: '2020-03-10T20:00' }),
+  { job: 0, maintain: 300, leak: 0, unrecorded: 0, pending: 0, total: 300 },
+  'the confirmed segment leaves pending'
+);
 
 console.log('confirm_logic_smoke passed');
 '''

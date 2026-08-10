@@ -139,6 +139,9 @@ function confirmSegmentLabel(startTs, endTs) {
 export function renderTimeline(items, opts = {}) {
   const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false } = opts;
   const el = document.getElementById('timeline');
+  // v87：桶色竖脊每行都要问一次 bucketForTag；不带 config 的话每一行都会重新
+  // 解析并归一化整份 config。整块时间轴共用同一份。
+  const config = loadConfig();
   const planned = (plannedItems || []).map(e => ({
     e,
     start: new Date(e.ts),
@@ -179,7 +182,7 @@ export function renderTimeline(items, opts = {}) {
     if (isPlanned) {
       const displayTag = (e.tags || [])[0] || t('tag.unknown');
       const interactiveAttrs = readOnly ? '' : ` data-action="start-edit" role="button" tabindex="0" aria-label="${esc(t('timeline.editPlanAria', { what: e.what || t('timeline.emptyWhat') }))}"`;
-      const card = `<div class="entry planned" data-b="${bucketForTag(displayTag)}" data-id="${esc(e.id)}"${interactiveAttrs}>
+      const card = `<div class="entry planned" data-b="${bucketForTag(displayTag, config)}" data-id="${esc(e.id)}"${interactiveAttrs}>
         <div class="e-time">${hhmm(e.ts)}</div>
         <div class="e-body">
           <div class="e-what">${esc(e.what || t('timeline.emptyWhat'))}</div>
@@ -213,7 +216,7 @@ export function renderTimeline(items, opts = {}) {
     // left by a smart delete) is honestly just "未记录".
     const activePlaceholder = isPlaceholder && isOngoing;
     const displayTag = isPlaceholder ? t('timeline.unrecorded') : tag;
-    const bucket = (isPlaceholder || unrecorded) ? 'unrecorded' : bucketForTag(tag);
+    const bucket = (isPlaceholder || unrecorded) ? 'unrecorded' : bucketForTag(tag, config);
     const entryClass = `entry${isPlaceholder ? ' placeholder' : ''}${sheetEditId === e.id ? ' sheet-editing' : ''}`;
     const durStr = timelineDurationLabel(mins, isOngoing, pendingConfirm);
     const confirmText = confirmSegmentLabel(e.ts, endTs);
@@ -312,7 +315,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '86';
+export const APP_VERSION = '87';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};

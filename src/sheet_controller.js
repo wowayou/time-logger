@@ -1305,6 +1305,15 @@ export function createSheetController(deps) {
     const tag = canonicalTagName(ctag || formTag || RESERVED_UNKNOWN_TAG, deps.loadConfig());
     const d = deps.load();
     let placeholder = openPlaceholderForDate(d.entries, checked.ts.slice(0, 10));
+    // v87：占位条只有在**新起点不晚于它**时才可以复用（复用＝把它的 ts 挪到新起点）。
+    // 往前挪是对的：占位条代表「从这一刻起还没记」，新记录起得更早就把它整个盖住，
+    // 前一条记录相应截短。往**后**挪则是把 [占位点, 新起点) 这段「确实没记」静默改写
+    // 成前一条记录的标签——尾占位停在 06:48、你把起点改成 12:00，那 5 小时就凭空
+    // 变成了前一条的桶（实测：09:00 写代码/10:00 占位，起点改 11:00 后 09:00-11:00
+    // 全成了「写代码·主线」）。这是 D13 硬约束③「不得悄悄修改原始时间线」，而且
+    // 改的是主线时长——最不该被夸大的那个数。晚于占位点时不复用，新建条目、把占位条
+    // 留在原地，那段如实保持未记录。
+    if (placeholder && checked.ts > placeholder.ts) placeholder = null;
     const conflict = findTimeConflict(d.entries, checked.ts, placeholder ? placeholder.id : '');
     if (conflict) {
       // A record can land exactly on an empty placeholder stranded in the
