@@ -5,7 +5,9 @@
   SPDX-License-Identifier: AGPL-3.0-or-later
 
   Non-runtime static homepage: not cached by the service worker, zero
-  third-party scripts, zero tracking (ADR 0001 zero-tracking zone), zero JS.
+  third-party scripts, zero tracking (ADR 0001 zero-tracking zone). The only
+  script is the first-party inline self-use-day refresher at the end of body:
+  no network, no storage, no cookie.
   Copy only describes boundaries and usage; it does not claim validated
   market demand (decisions.md D9). Mirrors site/index.html's structure and
   inline tokens (SPEC-015) — content is the English wording from that spec,
@@ -270,7 +272,7 @@
     <div class="closing">
       <h2>Want to try Time Logger?</h2>
       <a class="cta" href="../app/">Open the app</a>
-      <p class="usage-note">Built by one person, used daily by that person for 30+ days. It has not been validated with outside users yet.</p>
+      <p class="usage-note">Built by one person, used daily by that person for <span data-since="2026-06-28">44</span> days. It has not been validated with outside users yet.</p>
     </div>
 
     <footer>
@@ -300,5 +302,20 @@
       <p class="copyright">© 2026 wowayou · Source released under AGPL-3.0-or-later; this site is published automatically from the source repository.</p>
     </footer>
   </main>
+  <!--
+    The only script on this page: it refreshes the "days of self-use" count to
+    today. First-party, inline, no network request, no storage, no cookie — every
+    public promise (no third-party scripts / no analytics / no cookies) still holds.
+    Progressive enhancement: with JS off, the hard-coded lower bound in the HTML is
+    shown — it can only understate, never overstate.
+    Start date = the maintainer's first real record (same source as the app header).
+    The day self-use stops: replace data-since with a fixed number, reword, drop this.
+  -->
+  <script>
+    for (const el of document.querySelectorAll('[data-since]')) {
+      const days = Math.floor((Date.now() - Date.parse(el.dataset.since + 'T00:00:00')) / 86400000) + 1;
+      if (days > Number(el.textContent)) el.textContent = String(days);
+    }
+  </script>
 </body>
 </html>

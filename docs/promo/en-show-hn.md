@@ -44,7 +44,7 @@ So Eigentime logs the sentence, not just the stopwatch. Every span gets a few wo
 
 ### Honest limitations
 
-- **Built by one person, used daily by that person for 30+ days. It has not been validated with anyone else.** I have no idea yet whether it's useful to you.
+- **Built by one person, used daily by that person for 40+ days. It has not been validated with anyone else.** I have no idea yet whether it's useful to you.
 - Service Worker cache is best-effort browser storage, not a permanent install. If you clear site data or the OS reclaims storage, it's gone — which is why the export button is one tap from the main screen and why I keep saying "export a backup."
 - No sync, no accounts, no cloud, and none are planned. Two devices means two datasets plus an export/import.
 - The UI was Chinese-only until a few days ago. The English translation is new; if something reads badly, that's on me and I'd like to hear about it.
@@ -60,7 +60,7 @@ Source: https://github.com/wowayou/time-logger
 **Do this before you post:**
 
 1. Rewrite the above in your own voice. HN readers detect ghost-written copy instantly, and this is a draft written by a model, not by you.
-2. Verify every factual sentence against the current build. Especially the technical bullets — they were true at v78.
+2. Verify every factual sentence against the current build. Especially the technical bullets — don't trust a version number written in this draft; check `https://time.eigentime.org/app/manifest.webmanifest` on the day you post.
 3. Be around for the first few hours. On Show HN the comments are the point; a post that gets questions and no answers reads worse than no post.
 4. Do **not** add user counts, testimonials, or any "loved by / trusted by" phrasing. There aren't any users to cite, and the repo has an audit guard that fails the build over exactly those phrases on the public pages.
 5. Do not attach screenshots of your real timeline. The only allowed images are the fixed demo-data PNGs in `docs/assets/`.

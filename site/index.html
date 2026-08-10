@@ -4,7 +4,8 @@
   Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
   SPDX-License-Identifier: AGPL-3.0-or-later
 
-  非运行时静态主页：不进 SW 缓存、零第三方脚本、零追踪（ADR 0001 零追踪区）、零 JS。
+  非运行时静态主页：不进 SW 缓存、零第三方脚本、零追踪（ADR 0001 零追踪区）。
+  唯一的脚本是页尾那段首方内联的「自用天数」刷新，无网络、无存储、无 cookie。
   文案只描述边界与用法，不声称市场需求已验证（decisions.md D9）。
   SPEC-005（landing v2）：结构语言参考 otty.sh（短句特性标题 + demo 截图 + 重复
   CTA + 分组 footer），像素不抄袭；图标复用应用自己的 icon.svg（不另画仿制品）。
@@ -271,7 +272,7 @@
     <div class="closing">
       <h2>要试试时间尺吗？</h2>
       <a class="cta" href="./app/">打开应用</a>
-      <p class="usage-note">作者本人已自用 30+ 天，个人工具起步；未做过外部市场验证。</p>
+      <p class="usage-note">作者本人已自用 <span data-since="2026-06-28">44</span> 天，个人工具起步；未做过外部市场验证。</p>
     </div>
 
     <footer>
@@ -301,5 +302,18 @@
       <p class="copyright">© 2026 wowayou · 源码以 AGPL-3.0-or-later 许可发布，本站由源码仓库自动发布。</p>
     </footer>
   </main>
+  <!--
+    唯一的一段脚本：把「自用 N 天」刷新到今天。首方、内联、无网络请求、无存储、
+    无 cookie——对外承诺（无第三方脚本 / 无分析 / 无 Cookie）逐条仍然成立。
+    渐进增强：禁用 JS 时显示 HTML 里那个写死的下界，只会偏小、不会说大话。
+    起始日 = 维护者第一条真实记录的日期（应用头部「记录历程第 N 天」同源）。
+    哪天不再自用了：把 data-since 换成写死的数字并改文案，这段脚本一并删掉。
+  -->
+  <script>
+    for (const el of document.querySelectorAll('[data-since]')) {
+      const days = Math.floor((Date.now() - Date.parse(el.dataset.since + 'T00:00:00')) / 86400000) + 1;
+      if (days > Number(el.textContent)) el.textContent = String(days);
+    }
+  </script>
 </body>
 </html>

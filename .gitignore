@@ -4,6 +4,7 @@
 !package.json
 !package-lock.json
 !tsconfig.check.json
+!.claude/settings.json
 timelog-*.json
 
 # Screenshots and local review artifacts can expose real records.

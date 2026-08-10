@@ -28,6 +28,6 @@
 - 完整备份是本地导出的 JSON（复制/下载/分享随时可拿走），当前视图还能导出 Markdown 摘要直接贴给 AI 复盘。
 - 源码 AGPL-3.0-or-later，仓库：https://github.com/wowayou/time-logger
 
-现状：自用 30 多天，个人工具起步，没有对外做过市场验证，纯粹是自己需要就做了，欢迎同样有这个困扰的人试试、提 issue。
+现状：自用 40 多天，个人工具起步，没有对外做过市场验证，纯粹是自己需要就做了，欢迎同样有这个困扰的人试试、提 issue。
 
 新地址：https://time.eigentime.org/app/

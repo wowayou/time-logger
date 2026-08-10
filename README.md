@@ -4,19 +4,19 @@
 >
 > Release: v88
 >
-> Updated: 2026-07-24
+> Updated: 2026-08-10
 >
 > Intended user: 求职主线时间记录和每日复盘的个人使用者。
 >
 > Operating boundary: 本地静态 PWA，只记录时间去向，不做云同步、账号管理、KPI 考核或投资/合规判断。
 >
-> Current blocker: iOS 主屏 PWA 冷启动仍慢；启动诊断已证明页面侧毫秒级健康，慢段收窄指向系统冷拉起进程（页面计时零点之前，待录屏取证判决）。
+> Current blocker: **首轮推广尚未开始**（`docs/launch-runbook.md` Phase E）——这是唯一非 gated 的未完成项。
 >
 > Risks and failure modes: 忘记记录导致“未记录”偏高、长时间间隔被整体计为未记录、周/月/年视图诱发过度复盘、浏览器本地数据或运行缓存被系统清理。
 
 **5 秒记下真实做了什么——本地、离线、可信的一天时间线**
 
-新地址（canonical）：**https://time.eigentime.org/app/**。旧地址 `wowayou.github.io/time-logger/` 迁移中，将转为只读。
+新地址（canonical）：**https://time.eigentime.org/app/**。旧地址 `wowayou.github.io/time-logger/` 自 v76 起**已转为只读**：完整应用可浏览、可导出，但不再提供任何新增/编辑入口，页面顶部常驻迁移横幅。
 
 ![固定演示数据的移动端时间轴](docs/assets/demo-mobile-timeline.png)
 
@@ -27,10 +27,10 @@
 - **已完成的核心闭环**：记录、计划、补录、完整区间编辑、切分、删除与撤销；天/周/月/年统计；完整 JSON 备份、安全合并导入和本地 Markdown 摘要。
 - **当前形态**：纯静态、零运行时依赖、无构建的原生 ES modules PWA；数据只在当前设备和 origin 的 `localStorage`，没有账号、后端或云同步。
 - **可靠性基础**：写操作使用事务 planner、最新数据复核和结果签名；Service Worker 提供离线缓存与显式更新；Chromium + WebKit 自动化覆盖主要交互、存储、导入和跨标签冲突路径。
-- **当前首要未解问题**：iOS 主屏 PWA 冷启动仍明显迟缓。v58 提前注册 Service Worker 并加入 `modulepreload` 后，用户已在确认显示 v58 的设备上复测，主观上没有任何缓解；现阶段不能把模拟网络数据当作真机成功证据。详见 [P33](docs/postmortems.md#p33--pwa-冷启动-38s模块执行很轻时间耗在网络--sw-缓存未命中v58)。
-- **当前阶段**：2026-07-16 → 07-29 处于 **14 天功能冻结**，首要活动是真实使用、空环境恢复演练、冷启动真机取证和求职推进；冻结期只处理阻断级缺陷（数据损坏、无法启动、无法记录/编辑/导出/恢复、离线不可用）。见[《14 天 Dogfood 冻结交接》](docs/dogfood-freeze-handoff.md)与 `docs/decisions.md` D9。
+- **iOS 冷启动（已定性，PWA 形态内无解）**：主屏 PWA 冷启动仍明显迟缓。启动诊断（v62–v69，25 条真机样本）已证明**页面侧是毫秒级健康的**，慢段落在页面计时零点**之前**——即系统冷拉起进程那一段，本仪器原理上看不见，诊断已于 2026-07-20 关闭定案「已到测量上限」。**剩下的唯一杠杆是换载体**（原生 App / 原生壳把运行文件变成安装产物），而那是产品形态决策、当前 **gated**：见 `docs/decisions.md` D8（发布存续与原生载体）与 D17（原生载体维持 gated）。因此它不再是一条「待修的缺陷」，而是一条**已知的形态代价**。取证过程见 [P33](docs/postmortems.md#p33--pwa-冷启动-38s模块执行很轻时间耗在网络--sw-缓存未命中v58)。
+- **当前阶段**：14 天功能冻结（2026-07-16 → 07-29）已于 **2026-07-24 由维护者提前终止**（`docs/decisions.md` D13），转入「基础发版 + 上线推广」。当前唯一非 gated 的未完成项是**首轮中文社区推广**（`docs/launch-runbook.md` Phase E）。冻结期条文作为历史边界保留在 [《14 天 Dogfood 冻结交接》](docs/dogfood-freeze-handoff.md) 与 `docs/decisions.md` D9/D10。
 - **验证状态**：外部用户验证**已延期，尚未开始**——这不代表验证通过或失败。本项目当前只被证明对维护者个人有用，**不声称市场需求已被验证**。
-- **当前治理状态**：功能扩张仍受“累计 28 天真实记录 + 求职有实质进展”门槛约束；14 天冻结比该门槛更严格——达到 28 天只表示可以重新评审，不自动解锁 roadmap。外部建议可以挑战现有铁律，但必须把破界成本、证据和停止条件讲清楚，经评审后才实施。
+- **当前治理状态**：功能扩张仍受“累计 28 天真实记录 + 求职有实质进展”门槛约束。**28 天这一半已经满足**（截至 2026-08-10 已有 40+ 个自然日的真实记录），但达到 28 天只表示**可以重新评审**，不自动解锁 roadmap；另一半以求职外部结果为准。外部建议可以挑战现有铁律，但必须把破界成本、证据和停止条件讲清楚，经评审后才实施。
 
 供外部 AI 或评审者使用的完整上下文、阅读顺序和固定输出要求见[《外部 AI 评审上下文》](docs/external-ai-review-brief.md)。它是评审入口，不替代 `CLAUDE.md` 的维护规范，也不授权直接改代码。
 
@@ -68,18 +68,18 @@ Android Chrome：打开页面 → 菜单 → 添加到主屏幕。
 
 应用已包含 SVG 源图标、192/512 PNG、maskable PNG 和 Apple touch icon。Android Chrome 的安装入口仍由浏览器根据 manifest、Service Worker、HTTPS/Pages 访问环境综合判断。
 
-## GitHub Pages 发布（隐私边界）
+## 发布拓扑与隐私边界
 
-只把 `time-logger/` 作为独立仓库发布，例如 `github.com/<your-name>/time-logger`。不要把父目录、`toolkit/`、`archive/`、导出的 `timelog-*.json`、真实记录 JSON、真实截图或具体个人线索提交到 GitHub。README 展示图只允许使用 `docs/assets/` 中的固定演示数据 PNG。
+本项目当前是**两个仓库**（`docs/decisions.md` D12）：
 
-推荐发布方式：
+1. `wowayou/time-logger`——唯一源码仓库。它自己的 GitHub Pages 就是旧地址 `wowayou.github.io/time-logger/`，v76 起转为只读站。
+2. `wowayou/time-logger-site`——公开部署镜像，只存放 `scripts/build_site.py` 生成的产物，绑定自定义域名 `time.eigentime.org`（`/` 是产品主页，`/app/` 是固定 PWA 入口）。镜像里禁止手工维护业务代码。
 
-1. 在 `time-logger/` 内初始化独立仓库。
-2. 推送到 `github.com/wowayou/time-logger`。
-3. GitHub Pages 选择从仓库根目录发布。
-4. 其他设备通过 Pages URL 打开，再添加到主屏幕。
+两者最终都由 GitHub Pages 静态托管（`time.eigentime.org` 是 `wowayou.github.io` 的 CNAME，没有 CDN 或反向代理夹在中间）。发布由 `v<N>` tag push 触发 `publish-site` workflow 自动完成。
 
-代码和界面文案可以公开；数据不能公开。每台设备的数据仍只保存在本机 `localStorage['timelog.v1']`，访问 Pages 不会上传、同步或合并记录。
+自己 fork 部署的话，一个仓库直发根目录就够，不需要镜像那一层。
+
+隐私边界不变：不要把父目录、`toolkit/`、`archive/`、导出的 `timelog-*.json`、真实记录 JSON、真实截图或具体个人线索提交到 GitHub。README 展示图只允许使用 `docs/assets/` 中的固定演示数据 PNG。代码和界面文案可以公开；数据不能公开。每台设备的数据仍只保存在本机 `localStorage['timelog.v1']`，访问站点不会上传、同步或合并记录。
 
 ## 多设备使用
 

@@ -19,7 +19,7 @@
 - `manifest.webmanifest`：PWA 清单
 - `icon.svg` 与 `icons/*.png`：运行时图标资产
 
-允许的开发期工具包括 `scripts/project_audit.py`、`scripts/confirm_logic_smoke.py`、`scripts/bump_version.py`（版本仪式六处锚点一键联动）、`scripts/build_site.py`（D12：解析 `sw.js` FILES 组装 `time.eigentime.org` 部署产物——`site/` 主页 → 根、运行时 → `/app/`；`site/` 是非运行时静态主页源码，不进 SW 缓存）、`npm run typecheck`（tsc 对 `time/storage/stats/entry_model` 四个纯逻辑模块做 JSDoc 类型检查，devDependency、无构建产物）和 Playwright UI smoke。Python 脚本使用标准库；确认逻辑 smoke 会调用本机 `node` 导入真实 ES modules；Playwright 只用于开发期响应式验证。
+允许的开发期工具包括 `scripts/project_audit.py`、`scripts/confirm_logic_smoke.py`、`scripts/bump_version.py`（版本仪式六处锚点一键联动）、`scripts/build_site.py`（D12：解析 `sw.js` FILES 组装 `time.eigentime.org` 部署产物——`site/` 主页 → 根、运行时 → `/app/`；`site/` 是非运行时静态主页源码，不进 SW 缓存）、`scripts/doc_sync_check.py`（改动与文档的同步闸，见下）、`npm run typecheck`（tsc 对 `time/storage/stats/entry_model` 四个纯逻辑模块做 JSDoc 类型检查，devDependency、无构建产物）和 Playwright UI smoke。Python 脚本使用标准库；确认逻辑 smoke 会调用本机 `node` 导入真实 ES modules；Playwright 只用于开发期响应式验证。
 
 **铁律：无运行时依赖 / 无构建 / 原生 ES modules。** npm 只允许作为开发期测试依赖；不引入打包器、框架、账号、云同步或后端。
 
@@ -45,6 +45,13 @@
 - `src/io_actions.js`：只处理当前视图摘要、复制、下载、导入、分享；通过显式依赖接收 `load/save/render/state`，不拥有全局状态。
 - `src/sheet_controller.js`：只处理新建/编辑/config/import sheet、focus trap、picker 重挂载和表单保存；通过显式依赖读写状态和持久化。
 - `src/app.js`：只负责启动、状态组合、导航、渲染调度、事件委托和 Service Worker 注册。
+
+改动与文档的同步闸（v88 后，`.claude/settings.json` 的 PreToolUse hook → `scripts/doc_sync_check.py`）：
+
+- **时机是提交前与推送前，不是每次编辑后**。编辑中途的形态不是最终形态，那时写文档只会写错再改；会话结束才提醒又太晚（改动已进历史）。`git commit` 前是唯一「已定形、还来得及把文档一起 stage」的时刻；`git push` 前是第二道网，专抓「提交时忘了、后来也没补」。
+- **拦一条**：暂存区里有运行时文件（`src/`、`index.html`、`styles.css`、`sw.js`、`manifest.webmanifest`、`icons/`、`icon.svg`）却没有 `CLAUDE.md`——运行时一改就要走版本仪式，二者必然同批。
+- **提醒两条**（不打断）：动了运行时或对外文案却没动 `docs/HANDOFF.md`；动了对外文案而 README 的 `Updated:` 还停在今天之前。
+- 判据全部来自本文件已有的红线，不新增规矩。确有理由跳过就在命令里加 `--no-verify`，并把理由写进提交信息。
 
 提交与推送前红线：
 

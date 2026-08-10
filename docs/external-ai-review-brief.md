@@ -6,7 +6,7 @@
 >
 > 权限边界：只做分析和建议，不修改代码、不创建 PR、不把建议写成已批准计划。最终是否实施由项目维护者另行评判。
 >
-> **当前阶段：2026-07-16 → 07-29 处于 14 天功能冻结**（见 [`docs/dogfood-freeze-handoff.md`](dogfood-freeze-handoff.md) 与 `decisions.md` D9）。冻结期只处理阻断级缺陷。**建议仍然欢迎，但默认不会在本阶段实施**，且新功能建议需等待 2026-07-30 阶段复盘。
+> **当前阶段（2026-08-10）：已发版上线，唯一非 gated 的未完成项是首轮推广**（`docs/launch-runbook.md` Phase E）。14 天功能冻结（2026-07-16 → 07-29）已于 **2026-07-24 提前终止**（`decisions.md` D13），冻结条文作为历史边界保留在 [`docs/dogfood-freeze-handoff.md`](dogfood-freeze-handoff.md) 与 D9/D10。**建议仍然欢迎**，但功能扩张类仍受「28 天真实记录 + 求职有实质进展」门槛约束（前一半已满足，后一半以求职外部结果为准），且达到门槛只表示可以重新评审、不自动解锁 roadmap。
 
 ## 1. 先给结论
 
@@ -36,7 +36,7 @@
 
 ### 3.1 运行形态
 
-- 单页静态 PWA；GitHub Pages 从仓库根目录直接发布。
+- 单页静态 PWA；两个仓库（源码仓库根目录直发＝只读旧地址，部署镜像 `wowayou/time-logger-site` 绑 `time.eigentime.org`＝线上主站），均由 GitHub Pages 静态托管（D12）。
 - 运行时只有 `index.html`、`styles.css`、9 个原生 ES modules、`sw.js`、manifest 和图标。
 - 无构建、无框架、无 npm 运行时依赖；npm 仅用于 Playwright 开发期测试。
 - Service Worker 预缓存全部运行资产，读取策略为 cache-first；缓存仍由浏览器/系统管理，不是永久安装包。

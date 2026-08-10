@@ -4,15 +4,29 @@
 > 维护纪律：每完成一个里程碑就更新本文件并提交，不要攒到最后写。
 > 权威文档分工：法律＝`CLAUDE.md`；决策史＝`docs/decisions.md`；版本流水＝`CLAUDE.md` 表 + `docs/CHANGELOG.md`；协作流程＝`docs/collab-protocol.md`；人肉步骤＝`docs/launch-runbook.md`；规格＝`docs/specs/`。本文件只讲**此刻**，历史流水不往这里堆。
 
-最后更新：2026-08-10（v87 已发布上线；v88 已在本地完成版本仪式，**待推送/发 tag/发 Release**） · 更新人：Claude Opus 5（本地会话）
+最后更新：2026-08-10（v87/v88 均已发布上线；随后做了一轮全项目口径审查，见下） · 更新人：Claude Opus 5（本地会话）
 
 ---
 
 ## 一句话现状
 
-**v87 已发布上线**（tag + Release + `publish-site` 绿灯，`time.eigentime.org/app/manifest.webmanifest` 实测 `87`）：四条数据可信度缺陷 + 年视图性能，见 D24。**v88 已在本地完成版本仪式（v87 审计登记的四条尾巴），全量门禁绿，但还没推送、没打 tag、没发 Release——接手第一件事就是这个。** v82 – v86 已发布并线上验证（tag + Release + `publish-site` 绿灯，`time.eigentime.org/app/manifest.webmanifest` 实测 `86`）。AI 侧**无进行中任务、无 ready 规格**（SPEC-001–015 全 done，SPEC-008 仍 park）。唯一非 gated 的未完成项仍是 runbook `- [ ] E 完成`（首轮推广）——**它不在 AI 侧**。下次复盘按事件触发（首轮推广后的第一批外部反馈，或第一个非维护者用户），不按日历（D16）。
+**v87 已发布上线**（tag + Release + `publish-site` 绿灯，`time.eigentime.org/app/manifest.webmanifest` 实测 `87`）：四条数据可信度缺陷 + 年视图性能，见 D24。**v88 已发布上线**（tag + Release + `publish-site` 绿灯，线上 manifest 实测 `88`）：v87 审计登记的四条尾巴。 v82 – v86 已发布并线上验证（tag + Release + `publish-site` 绿灯，`time.eigentime.org/app/manifest.webmanifest` 实测 `86`）。AI 侧**无进行中任务、无 ready 规格**（SPEC-001–015 全 done，SPEC-008 仍 park）。唯一非 gated 的未完成项仍是 runbook `- [ ] E 完成`（首轮推广）——**它不在 AI 侧**。下次复盘按事件触发（首轮推广后的第一批外部反馈，或第一个非维护者用户），不按日历（D16）。
 
-## 本轮（2026-08-10，第二批）交付了什么
+## 口径审查（2026-08-10，第三批，无版本号）
+
+维护者点名「宣传页还写着 GitHub Pages 静态托管，过时了；此类表述问题整个项目审查处理下」。**先纠正前提**：实测 `time.eigentime.org` 的响应头是 `server: GitHub.com`、解析到 GitHub Pages 段 IP、无 CDN 无反代——**「GitHub Pages 静态托管」属实，隐私政策那句不能改**。真正过时的是**拓扑描述**（单仓库直发 → D12 之后是「源码仓库根目录直发＝只读旧站」+「`time-logger-site` 镜像绑自定义域名＝线上主站」）。
+
+改了：README（`Updated:`、旧地址已只读、冻结已终止、28 天门槛前一半已满足、发布拓扑、blocker 改指 Phase E）、`使用与理念.md`、`CONTRIBUTING.md`、`docs/external-ai-review-brief.md`（还停在「处于 14 天冻结」）、六份宣传底稿（30 多天 → 40 多天；checklist 不再写死版本号）。
+
+**没改的**：`docs/specs/`、`decisions.md`、`docs/CHANGELOG.md`、`postmortems.md`、`product-direction-validation-handoff.md`——它们记录的是**当时**的事实，改了就是伪造历史。
+
+**主页「自用 N 天」改成会自己长的数字**：`site/index.html` / `site/en/index.html` 用 `<span data-since="2026-06-28">44</span>` + 页尾一段**首方内联**脚本（无网络、无存储、无 cookie）。实测：把系统时间当成 2026-09-30 显示 95 天；禁用 JS 显示 HTML 里的下界 44。起始日＝第一条真实记录日，与应用头部「记录历程第 N 天」同源。**代价**：这两页从「零 JS」变成「一段首方脚本」——对外承诺（无第三方脚本 / 无分析 / 无 Cookie）逐条仍然成立，隐私页一个字没动。**停用方式**：`data-since` 换成写死数字 + 改文案 + 删那 4 行。
+
+**iOS 冷启动的口径定死了**：它不再是「待修的缺陷」，而是**已知的形态代价**——诊断已证明页面侧毫秒级健康、慢段在页面计时零点之前，剩下的唯一杠杆是换载体（原生 App / 原生壳），而那是 gated 的产品形态决策（D8/D17）。别再把它当成一条能修的 bug 提上来。
+
+**新增：改动与文档的同步闸**（`.claude/settings.json` 的 PreToolUse hook → `scripts/doc_sync_check.py`）。时机、判据与跳过方式写在 `CLAUDE.md`「提交与推送前红线」上方。一句话：**提交前拦「运行时改了但 CLAUDE.md 没改」，提交/推送前提醒 HANDOFF 与 README `Updated:`**。
+
+## 上一批（2026-08-10，第二批）交付了什么
 
 v87 审计里登记「不排期、下次顺路一起做」的四条，维护者当天决定「bug 要修」，遂成 v88。都不是阻断级，但前三条都属于**静默改写或静默破坏不变量**那一类。
 
@@ -27,7 +41,7 @@ v87 审计里登记「不排期、下次顺路一起做」的四条，维护者�
 
 **下一步（接手就做）**：推送 → `git tag v88` → 发 Release。
 
-## 上一批（2026-08-10）交付了什么
+## 更早（2026-08-10，第一批）交付了什么
 
 起因是维护者的一个问题 +『彻底审计』：**「0808-0809 这两天这么大段的一个记录 为啥没让我确认呢？」**，随附一份真实备份（633 条，43 天）。答案是①，②③④是顺着审计一起查出来的。裁决全在 **D24**。
 
