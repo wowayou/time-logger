@@ -56,6 +56,8 @@ site/en/privacy/index.html → /en/privacy/ （隐私政策 English，新增）
 6. **Changes.** 政策变更会更新本页的 Last updated 日期；变更历史可在公开仓库的 Git 历史中查证。
 7. **Contact.** GitHub issues 链接 + `eigentime.org`。
 
+**2026-08-10 追加第 4 条「Scripts on these pages / 页面上的脚本」**（原 4–7 顺延为 5–8，Last updated 同步改为 2026-08-10）：主页新增了一段首方内联脚本用于把「自用 N 天」显示为当天值。它不发请求、不读写存储、不设 Cookie，所以第 1 条的「无第三方脚本」并未失准；但按本节「诚实边界高于简洁」的标准，有脚本就该说，而不是靠「第三方」这个限定词让读者自己推断。
+
 中英两版内容必须等价（不是逐字直译，但**不得一版有一条另一版没有**）。
 
 ## 4. 应用内隐私政策入口（唯一的运行时改动）
@@ -77,7 +79,7 @@ site/en/privacy/index.html → /en/privacy/ （隐私政策 English，新增）
 - [ ] **诚实纪律护栏**（新增 audit，永久）：`site/**/*.html` 全文不得出现 `trusted by` / `loved by` / `users love` / `market-validated`（大小写不敏感）。红灯证明：临时插入一句 → fail
 - [ ] **术语一致护栏**：`site/en/**` 不得出现 `Leak`/`Waste`/`Distraction`/`Unproductive` 作为桶名（与 SPEC-014 同一条规则，可复用同一实现）
 - [ ] hreflang 四页互指、`x-default` 存在（audit 里加一条结构断言即可，无需 E2E）
-- [ ] 隐私政策中英两版条目数一致（§3 的 7 条逐条在场）
+- [ ] 隐私政策中英两版条目数一致（§3 的条目逐条在场；2026-08-10 起为 **8** 条）
 - [ ] §4：更多 sheet 里 cell 可见可点、外链正确、zh/en 各一次；`npm run test:ui` 双引擎全绿
 - [ ] `git status --short` 干净；`site/` 下**不得**出现任何 PNG（PNG 白名单只有 `docs/assets/`，CLAUDE.md）
 
