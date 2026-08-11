@@ -38,25 +38,62 @@ function generateEntries(count) {
 }
 
 // ─── A 类：数据规模压测 ────────────────────────────────────────────────────────
-// 判据从**绝对壁钟阈值**改为**相对空数据基线的倍率**（HANDOFF 登记的方向）。
+// 判据演进到第三代：绝对总耗时 → 相对基线的倍率 → **绝对的增量预算**。
+// 前两代各自坏在相反的方向，这一段把两次教训都记下来，别再来回改。
 //
-// 为什么必须改：绝对阈值测的是这台机器有多忙，不是代码有多快。实测（同一次
-// 运行、同一台机器）：空数据启动 webkit 383ms / chromium 327ms，而 500 条是
-// 0.97×/0.98×——**500 条数据本身几乎不产生任何开销**。原来 450ms 的阈值因此
-// 完全由「空载启动成本」决定：机器闲时 ~250ms 通过，机器忙时 ~390ms+ 假红。
-// 它长期在双引擎上飘，每次都要用未改动代码做对照才能排除，成本比它的价值高。
+// 第一代（绝对总耗时 <450ms）坏在：它测的是这台机器有多忙，不是代码有多快。
+// 500 条数据本身几乎不产生开销，所以那个阈值完全由「空载启动成本」决定——
+// 机器闲时 ~250ms 通过，机器忙时 ~390ms+ 假红。
 //
-// 现在每个用例先在同一 page 上量一次**空数据**基线（中位数），再量目标数据量，
-// 断言倍率。这才对应用例名字里的「数据规模」：机器速度被基线约掉，剩下的就是
-// 数据带来的增量。倍率上限按实测留足头寸，同时仍能抓住真回归——例如把统计写成
-// O(n²)，5000 条会远远冲破 2.5×。
+// 第二代（loaded/baseline 倍率）坏在：**分母又小又抖**。它把机器速度约掉的
+// 同时，也把基线的噪声放大进了判据。而且它随机器变快而**升高**：当初设计时
+// 基线是 327–383ms，2026-08-11 实测基线只有 83–133ms——固定启动成本缩水，
+// 数据那部分在比值里的占比就升高，于是同样健康的代码反而更容易撞线（实测
+// webkit 5000 条 2.69x 硬失败，而绝对耗时只有 258ms，完全健康）。
+// 反过来在慢机器上比值偏低，会**掩盖**真回归。两个方向都错。
+// 更糟的是它常常没有牙：机器忙时基线被冷启动污染，实测出现过
+// `baseline=375ms loaded=156ms ratio=0.42x`——「装 2000 条比空数据快 2.4 倍」，
+// 物理上不可能，纯粹是测量偏差，而这种轮次里断言恒真、等于没测。
+//
+// 第三代（本代）断言 **loaded − baseline 的绝对毫秒数**。这才是用例名字里
+// 「数据规模」真正要问的东西：固定启动成本被减掉，剩下的就是数据带来的增量。
+// 它是差不是商，所以基线抖动只线性传入、不被放大。实测（同一台机器、机器空闲
+// 的两轮）增量非常稳且随条数线性：500 条 3–11ms、2000 条 33–44ms、
+// 5000 条 100–113ms；同一批数据的比值却在 1.02–2.36 之间乱跳。
+//
+// **它能抓住什么、抓不住什么，是实测出来的，不是推断的**（三个探针都往
+// `loggedEntriesFrom` 注入，5000 条那档，chromium）：
+//
+//   无回归                              delta  94–123ms   绿
+//   O(n²) 平凡空转（2500 万次异或）      delta     199ms   绿 ← 没触发
+//   逐条重新解析 config（v87 的形态）    delta     104ms   绿 ← 没触发
+//   O(n²) 且每次真做字符串比较            delta    1191ms   红 ✓
+//
+// 即：**这道闸抓的是 5000 条上约 5 倍以上的劣化，不是 2 倍。** 前两个探针没触发
+// 不是漏网——2500 万次异或在现代引擎里只值 90ms，那不构成用户可感知的回归；
+// 预算若收紧到能拦住它，就会被机器负载的正常波动天天拦下。
+//
+// **但第三行是一个真的覆盖缺口，别误读这道绿灯**：v87 那次真实回归（5475 条
+// 一次 render 3055ms）出在**年视图**的逐日聚合上，而本用例量的是启动进**日视图**，
+// 只渲染一天，年视图的聚合根本不在测量路径里。所以这里探针复刻不出当年的量级，
+// 不是探针写坏了，是这个测量点看不见那条路径。要真正守住那类回归，得另加一个
+// 「切到年视图并等渲染完成」的用例——v87 当时选的结构性判据（一次年视图 render
+// 读了几次 `timelog.config`）就在 `tests/v87_fixes.spec.js` 里，那才是那条路径的闸。
 const BOOT_SAMPLES = 3;
 const SCALE_CASES = [
-  // 实测倍率（本机、取最小值口径）：见下方 console 输出；上限留足头寸，同时
-  // 仍能抓住真回归——把统计写成 O(n²) 的话 5000 条会远远冲破 2.5×。
-  { count: 500,  label: '小压 500 条  (~1 个月)',  maxRatio: 1.6 },
-  { count: 2000, label: '中压 2000 条 (~4 个月)',  maxRatio: 1.9 },
-  { count: 5000, label: '极压 5000 条 (~11 个月)', maxRatio: 2.5 }
+  // maxDeltaMs = loaded.best − baseline.best 的上限（毫秒）。
+  //
+  // 定法不是「拍一个够宽的数」，而是按**每条数据的成本**把三档对齐，这样一个
+  // 「每条记录变贵了」的回归在三个规模上都拦得住，而不是只有最大那档有牙。
+  // 实测每条约 0.02ms（500/2000/5000 三档一致，说明当前是线性的）；预算给到
+  // 每条 0.16 / 0.125 / 0.10ms，即 5–8 倍头寸，且随规模收紧——规模越大越不允许
+  // 每条变贵，正是「超线性」该被抓住的地方。
+  //
+  // 头寸为什么要这么大：机器忙时同一份数据的增量会翻倍（实测 2000 条干净时
+  // 33–44ms，忙时到过 122ms）。头寸小于 2 倍就等于把刚修掉的飘请回来。
+  { count: 500,  label: '小压 500 条  (~1 个月)',  maxDeltaMs: 80 },
+  { count: 2000, label: '中压 2000 条 (~4 个月)',  maxDeltaMs: 250 },
+  { count: 5000, label: '极压 5000 条 (~11 个月)', maxDeltaMs: 500 }
 ];
 
 /**
@@ -71,9 +108,14 @@ async function medianBoot(page, entries) {
     localStorage.clear();
     localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries: seed }));
   }, { seed: entries });
-  // 预热一次，吸收一次性的进程/缓存成本。
-  await page.goto('/');
-  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  // 预热**两次**，吸收一次性的进程/缓存成本。一次不够：baseline 总是先量的，
+  // 机器忙时它会把冷启动整个吃进去（实测样本 [542, 1014, 794]），于是基线虚高、
+  // 增量被压成负数，判据当轮恒真。这个方向不会假红，但会**悄悄失去牙齿**，
+  // 比假红更难发现。
+  for (let i = 0; i < 2; i += 1) {
+    await page.goto('/');
+    await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  }
   const samples = [];
   for (let i = 0; i < BOOT_SAMPLES; i += 1) {
     const t0 = Date.now();
@@ -85,10 +127,11 @@ async function medianBoot(page, entries) {
 }
 
 test.describe('A 类：数据规模', () => {
-  for (const { count, label, maxRatio } of SCALE_CASES) {
+  for (const { count, label, maxDeltaMs } of SCALE_CASES) {
     test(label, async ({ page }) => {
       const baseline = await medianBoot(page, []);
       const loadedBoot = await medianBoot(page, generateEntries(count));
+      const deltaMs = loadedBoot.best - baseline.best;
       const ratio = loadedBoot.best / baseline.best;
 
       // Also measure stats recompute via timeline render
@@ -99,11 +142,15 @@ test.describe('A 类：数据规模', () => {
         return performance.now() - t;
       });
 
+      // ratio 仍然打印，但**只作参考不再作判据**——留着是为了将来排查时能一眼
+      // 看出「这轮基线是不是被污染了」（比值 <1 就是铁证）。
       console.log(`[A] ${label}: baseline=${baseline.best}ms [${baseline.samples.join(', ')}] `
-        + `loaded=${loadedBoot.best}ms [${loadedBoot.samples.join(', ')}] ratio=${ratio.toFixed(2)}x `
+        + `loaded=${loadedBoot.best}ms [${loadedBoot.samples.join(', ')}] `
+        + `delta=${deltaMs}ms (预算 ${maxDeltaMs}ms) ratio=${ratio.toFixed(2)}x `
         + `render-flush=${renderMs.toFixed(1)}ms`);
-      expect(ratio, `boot ratio vs empty-dataset baseline < ${maxRatio}x `
-        + `(baseline ${baseline.best}ms, loaded ${loadedBoot.best}ms)`).toBeLessThan(maxRatio);
+      expect(deltaMs, `${count} 条带来的启动增量 < ${maxDeltaMs}ms `
+        + `(baseline ${baseline.best}ms, loaded ${loadedBoot.best}ms, delta ${deltaMs}ms)`)
+        .toBeLessThan(maxDeltaMs);
 
       // Verify data integrity after load
       const loaded = await page.evaluate(() => {
