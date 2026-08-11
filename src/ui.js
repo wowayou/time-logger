@@ -217,7 +217,11 @@ export function renderTimeline(items, opts = {}) {
     const activePlaceholder = isPlaceholder && isOngoing;
     const displayTag = isPlaceholder ? t('timeline.unrecorded') : tag;
     const bucket = (isPlaceholder || unrecorded) ? 'unrecorded' : bucketForTag(tag, config);
-    const entryClass = `entry${isPlaceholder ? ' placeholder' : ''}${pendingConfirm ? ' pending-review' : ''}${sheetEditId === e.id ? ' sheet-editing' : ''}`;
+    // v89：待核行**不加**行级 class。竖脊颜色在 v89 起恒等于桶（待核不再冒充未记录），
+    // 提醒本身由时长列的「待核 · X」和行内「确认」按钮承担，已经是两个信号；再叠一层行底色
+    // 既要重做双主题令牌，也会破坏 v56 定下的「竖脊＝唯一颜色语法」。曾有过一个 `pending-review`
+    // 钩子，但它没有任何样式规则也没有用例，属死类，已删。
+    const entryClass = `entry${isPlaceholder ? ' placeholder' : ''}${sheetEditId === e.id ? ' sheet-editing' : ''}`;
     const durStr = timelineDurationLabel(mins, isOngoing, pendingConfirm);
     const confirmText = confirmSegmentLabel(e.ts, endTs);
     const startLabel = start ? hhmm(start) : hhmm(e.ts);

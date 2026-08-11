@@ -64,6 +64,15 @@ export function createIoActions(deps) {
       const day = deps.computeDay();
       if (!day.timeline.length) return [t('io.noLoggedRows')];
       return day.timeline.map(({ e, start, mins, isOngoing, unrecorded, pendingConfirm, tag }) => {
+        // v89：无主未记录段（`stats.js` 的 pushUnknownSegment）没有对应条目，`e` 是 null。
+        // 此前这里直接读 `e.what`，于是「当天第一条记录不在 00:00」的日子——也就是任何
+        // 有前导/中段空白的日子——一点「复制当前视图摘要」就抛 TypeError：异常从事件
+        // 处理器里抛出去没人接，剪贴板一个字都不写，界面上也不报错，是纯静默失败
+        // （v88 及更早同样中招，非 v89 引入）。渲染侧 `renderTimeline` 早有 `if (!e)`
+        // 分支，这里补齐同一形状，措辞复用时间轴的缺口文案，不新增 i18n 键。
+        if (!e) {
+          return `- ${hhmm(start)} | ${detailDurationLabel(mins, isOngoing, unrecorded, pendingConfirm)} | ${t('timeline.gapWhat')} | #${t('io.noteUnrecorded')}`;
+        }
         const safeWhat = mdInline(e.what) || t('io.emptyWhat');
         const safeTag = mdInline(tag || t('tag.unknown'));
         return `- ${hhmm(start || e.ts)} | ${detailDurationLabel(mins, isOngoing, unrecorded, pendingConfirm)} | ${safeWhat} | #${safeTag}`;
@@ -111,7 +120,9 @@ export function createIoActions(deps) {
       t('io.summaryMaintain', { pct: mp, dur: fmtPlainMins(totals.maintain) }),
       t('io.summaryLeak', { pct: lp, dur: fmtPlainMins(totals.leak) }),
       t('io.summaryUnrecorded', { pct: up, dur: fmtPlainMins(totals.unrecorded) }),
-      t('io.summaryPending', { value: fmtPlainMins(totals.pending || 0) }),
+      // v89：长段待核默认关闭，所以这一行改成条件输出（与上面 io.rowPending 同一写法）。
+      // 无条件输出会让每个从没开过该功能的用户，每份摘要都带一行「其中时长待核：0分钟」。
+      ...(totals.pending ? [t('io.summaryPending', { value: fmtPlainMins(totals.pending) })] : []),
       '',
       t('io.summaryDetailHead'),
       ...currentViewDetailLines(),
