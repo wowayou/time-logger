@@ -374,7 +374,8 @@ export default {
   'summary.noEntries': 'No entries',
   'summary.empty': 'Nothing to summarize.',
   'bucketHint.maintain': 'Custom tags will be filed under Upkeep; existing tags with the same name keep their bucket.',
-  'bucketHint.leak': 'Custom tags will be filed under Drift; existing tags with the same name keep their bucket.',
+  // v90：与 zh 对等——Drift 是三个桶里唯一不自解释的一个，解释放在随桶切换的这一行。
+  'bucketHint.leak': 'Drift = time that drifted away from your current focus, with no judgement attached. Custom tags will be filed under Drift; existing tags with the same name keep their bucket.',
   'bucketHint.job': 'Custom tags will be filed under Focus; existing tags with the same name keep their bucket.',
   'seg.bucketAria': 'Bucket',
   'seg.recordModeAria': 'Record mode',
@@ -527,7 +528,7 @@ export default {
   'help.h1': 'How to log',
   'help.p1': 'Tap "＋ Log it" in the bottom right to record what you just did. If the page is still on yesterday and the tail is unlogged, the new entry form will explicitly ask you to continue into today or stop at yesterday 24:00. The day view is one continuous log: the colored spine on the left is the bucket — solid means happened, dashed means planned, gray means unlogged. Today also has a "Now" line: above it is planned, below it is happened. Tap any row to edit its text, tag, and full start/end time. "Split" lives inside the edit sheet and only splits within the original segment. Tap "Fill in" on an unlogged row to backfill it. Swiping a row left reveals edit and delete; deleting shows the exact result first, and you can undo within 8 seconds.',
   'help.h2': '4 buckets',
-  'help.p2a': 'Choose a bucket first, then a tag: Focus = job-search progress and your own custom focus tags; Upkeep = necessary upkeep such as sleep, meals, or commuting; Drift = time that drifted away from the current focus, such as entertainment, phone, or zoning out; Unlogged = unknown tags, orphaned tags, and explicit gaps. Pick the bucket first when logging; a custom tag is fixed the first time you use it, and can be renamed or re-bucketed later in Tag settings.',
+  'help.p2a': 'Choose a bucket first, then a tag: Focus = whatever you are pushing forward right now (a placeholder "Current focus" ships by default — rename it to your own); Upkeep = necessary upkeep such as sleep, meals, or commuting; Drift = time that drifted away from the current focus, such as entertainment, phone, or zoning out; Unlogged = unknown tags, orphaned tags, and explicit gaps. Pick the bucket first when logging; a custom tag is fixed the first time you use it, and can be renamed or re-bucketed later in Tag settings.',
   'help.p2b': 'Drift is not failure. Stepping back is sometimes necessary — this bucket only answers how much time drifted from focus today, not a moral judgment. If you consider a tag to actually be necessary upkeep, you can re-bucket it in Tag settings.',
   'help.h3': 'Plans',
   'help.p3': 'Today can switch between Happened and Plan; the entry point for the next 1-7 days is fixed to Plan, and plans can be made at most 7 days out — dates beyond that cannot be logged. Plans must be at least 5 minutes after now. Plan entries do not count toward the 4 buckets; once the time arrives, tap "Mark as done" to convert it into a happened entry.',

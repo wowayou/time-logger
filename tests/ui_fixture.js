@@ -230,6 +230,29 @@ export async function boot(page, width, state, share = false, now = '', selected
     }
     localStorage.clear();
     localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
+    // v90：**显式**写下这份 config，而不是靠产品的出厂种子兜底。
+    // 此前只有三个 state 写 config，其余全部落到 storage.js 的 DEFAULT_SEED_BY_LOCALE——
+    // 于是本仓 200 多条 zh 断言（点「求职推进」chip、按主线桶算分钟数）**隐式**依赖着
+    // 出厂默认值。v90 把种子从「求职推进」改成中性占位「当前主线」时，这些用例的
+    // 定位器一律等 30s 超时，全量从 2.2min 变成十几分钟还跑不完——症状是「挂起」而不是
+    // 「断言失败」，非常难回溯。夹具本就该钉死自己的输入：产品默认值现在由
+    // tests/v90_neutral_seed.spec.js 单独锁，两件事从此分开。
+    // 这里刻意保留旧的「求职推进」种子内容，好让既有断言逐字不动。
+    localStorage.setItem('timelog.config', JSON.stringify({
+      version: 1,
+      mainline: ['求职推进'],
+      chips: [
+        { name: '睡觉', bucket: 'maintain', longOk: true },
+        { name: '吃饭', bucket: 'maintain', longOk: false },
+        { name: '洗漱', bucket: 'maintain', longOk: false },
+        { name: '通勤', bucket: 'maintain', longOk: false },
+        { name: '家务', bucket: 'maintain', longOk: false },
+        { name: '运动健康', bucket: 'maintain', longOk: false },
+        { name: '娱乐', bucket: 'leak', longOk: false },
+        { name: '刷手机', bucket: 'leak', longOk: false },
+        { name: '发呆', bucket: 'leak', longOk: false }
+      ]
+    }));
     if (state === 'pending-confirm-lunch') {
       localStorage.setItem('timelog.config', JSON.stringify({
         version: 1,

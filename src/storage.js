@@ -127,9 +127,15 @@ export function resolveMotto(config = loadConfig()) {
 // `getLocale()` 读一次当前语言，不写 locale、不订阅语言变化、也不在
 // mainlineSource/chipsSource 的「已有 raw 但字段缺失」兜底分支之外被使用。
 // 英文种子与中文种子一一对应（睡觉→Sleep、吃饭→Meals……），`longOk` 逐项一致。
+// v90：主线种子必须是**中性占位**，不能是维护者自己的目标。此前 zh 种子是
+// 「求职推进」、en 是「Job search」——那是本项目作者当时的处境，不是产品语义。
+// 对外定位（D13 锁定、主页照此）是目标中立的「5 秒记下真实做了什么」，于是一个
+// 不在找工作的新用户第一次打开表单，唯一那个已经预填好的东西对他是错的，而默认
+// 格言还在旁边说「推进**主线**才是目的」。种子只在全新安装时生效（normalizeConfig
+// 的 raw 为空分支），故**存量用户一个字都不会变**，零迁移。
 const DEFAULT_SEED_BY_LOCALE = {
   zh: {
-    mainline: ['求职推进'],
+    mainline: ['当前主线'],
     chips: [
       { name: '睡觉', bucket: 'maintain', longOk: true },
       { name: '吃饭', bucket: 'maintain', longOk: false },
@@ -143,7 +149,7 @@ const DEFAULT_SEED_BY_LOCALE = {
     ]
   },
   en: {
-    mainline: ['Job search'],
+    mainline: ['Current focus'],
     chips: [
       { name: 'Sleep', bucket: 'maintain', longOk: true },
       { name: 'Meals', bucket: 'maintain', longOk: false },
