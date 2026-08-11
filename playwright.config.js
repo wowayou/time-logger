@@ -13,6 +13,29 @@ const staticServer = [
 const webkitLibraryPath = process.env.PLAYWRIGHT_WEBKIT_LD_LIBRARY_PATH;
 const webkitExecutablePath = process.env.PLAYWRIGHT_WEBKIT_EXECUTABLE_PATH;
 
+// 把开发机/CI 的 HTTP 代理挡在 WebKit 之外。
+//
+// v87/v88 两个版本的 release notes 都写着「webkit 未在本机跑通（环境问题）」，
+// 双引擎门禁的一半一直空着，根因到 v89 才查清：开发机的 GNOME 系统代理是 manual
+// 模式而**绕行白名单为空**，连回环都不放行。Chromium 读 `no_proxy` 环境变量（那里
+// 有白名单）故一直正常；Playwright 的 Linux WebKit 是 GTK 构建，代理走 GIO/GSettings，
+// 于是 http://127.0.0.1:4173 也被发往代理，返回 502、页面从未加载——`boot()` 卡满
+// 30s 超时，症状是「挂起」而不是报错，看起来像浏览器坏了。
+//
+// 本套件零外部依赖、只打自家的 127.0.0.1:4173，所以对 WebKit 一律直连。三格对照
+// 实测**两处都必须做，少一个仍然全红**：GSettings 断了它会退回环境变量，环境变量
+// 摘了它还有 GSettings。（`use.proxy` 解决不了：Playwright 的 proxy 选项要的是一个
+// 真代理地址，填 `direct://` 会让 WebKit 去解析一个叫 "direct" 的主机，比不填更糟。）
+const PROXY_ENV_KEYS = ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY'];
+
+function webkitLaunchEnv() {
+  const env = { ...process.env };
+  PROXY_ENV_KEYS.forEach(key => { delete env[key]; });
+  env.GSETTINGS_BACKEND = 'memory';
+  if (webkitLibraryPath) env.LD_LIBRARY_PATH = webkitLibraryPath;
+  return env;
+}
+
 export default defineConfig({
   testDir: './tests',
   timeout: 30_000,
@@ -26,12 +49,11 @@ export default defineConfig({
       name: 'webkit',
       use: {
         browserName: 'webkit',
-        ...(webkitLibraryPath ? {
-          launchOptions: {
-            env: { ...process.env, LD_LIBRARY_PATH: webkitLibraryPath },
-            ...(webkitExecutablePath ? { executablePath: webkitExecutablePath } : {})
-          }
-        } : {})
+        launchOptions: {
+          env: webkitLaunchEnv(),
+          // executablePath 的条件保持原样（只在同时给了库路径时生效），本次只加 env。
+          ...(webkitLibraryPath && webkitExecutablePath ? { executablePath: webkitExecutablePath } : {})
+        }
       }
     }
   ],

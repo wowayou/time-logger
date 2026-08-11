@@ -648,3 +648,34 @@ keys.filter(k => k !== CACHE)   // 把邻居的离线缓存一并删掉
 ## 协作约束补记（v28）
 
 - 多步改动走主线程；避免并发 fan-out 子代理 / workflow（上游会 429，串行 workflow 亦然）。已同步进 `CLAUDE.md` / `AGENTS.md`「开发与维护红线」。
+
+## P37 · WebKit 全红两个版本，根因不在代码里：开发机的系统代理白名单为空（v89）
+
+**现象**：本机跑 `--project=webkit` 一律全红，`--project=chromium` 全绿。每条都停在 `ui_fixture.js` 的 `boot()`——`waitForFunction(() => #timeline.children.length > 0)` 卡满 30s 超时。**症状是「挂起」而不是断言失败**，看起来像浏览器装坏了。v87 与 v88 的 release notes 因此都写着「webkit 未在本机跑通（环境问题）」，双引擎门禁的一半空了两个版本。
+
+**根因**：开发机的 GNOME 系统代理是 `manual` 模式，指向局域网一个代理，而 `ignore-hosts` 是**空数组**——连回环都不放行。
+
+```
+org.gnome.system.proxy mode         = 'manual'
+org.gnome.system.proxy ignore-hosts = @as []      ← 空
+no_proxy (环境变量)                  = localhost,127.0.0.1,::1   ← 这里有白名单
+```
+
+两个引擎读代理配置的来源不同：**Chromium 认 `no_proxy` 环境变量**（那里有白名单）故一直正常；**Playwright 的 Linux WebKit 是 GTK 构建，代理走 GIO/GSettings**，于是 `http://127.0.0.1:4173` 也被发往代理，代理够不到这台机的回环，返回 **502**，页面从未加载（`document.body.className` 为空、HTML 39 字节）。
+
+**为什么拖了两个版本**：`Failed to load resource: 502 (Bad Gateway)` 这句里的 "server" 是**代理**，不是被测服务器——不去看它就会读成「我们的静态服务器挂了」。而 chromium 同时全绿，又强烈暗示「服务器没问题、是 webkit 坏了」。**两条线索都指向错误方向。**
+
+**误诊记录**：第一版假设是环境变量的锅，`env -u HTTP_PROXY -u HTTPS_PROXY ... npx playwright test` 跑完**照样全红**——那一步才排除掉环境变量、转去查 GSettings。假设被否证是好事，但当时差点就此收手回报「环境坏了」。
+
+**定位手法**：写一次性 spec 挂 `page.on('pageerror' / 'console' / 'response')`，直接打印主文档的 `resp.status()`。**分不清「JS 报错」还是「页面根本没加载」时，先问 HTTP 状态码**——这一步把范围从「WebKit 不兼容我们的代码（严重，意味着 Safari/iOS 上也坏）」立刻收窄到「这台机器的网络配置」。
+
+**修复（两处，缺一不可）**：三格对照实测——GSettings 断了它退回环境变量，环境变量摘了它还有 GSettings，**只有两处都做才绿**。
+
+1. 仓库级（`playwright.config.js`，让任何代理机器/CI 都免疫）：webkit 项目的 `launchOptions.env` 里删掉 6 个 proxy 环境变量键 + 设 `GSETTINGS_BACKEND=memory`。
+2. 开发机：`gsettings set org.gnome.system.proxy ignore-hosts "['localhost','127.0.0.1','::1']"`——空白名单会让**任何**本地开发服务器被塞进代理，不修还会咬别的项目。
+
+**走过的弯路**：`use: { proxy: { server: 'direct://' } }` 不但没用，**比不填更糟**——Playwright 的 proxy 选项要的是一个真代理地址，WebKit 会去解析一个叫 `direct` 的主机（`Error resolving "direct": Temporary failure in name resolution`）。
+
+**经验**：① 「环境问题」是一个**待查的结论，不是可以长期挂账的状态**——它在这里挂了两个版本，代价是双引擎门禁一半失效，而真相是一行 gsettings；② 跨引擎差异不一定在渲染引擎里，也可能在**它们读系统配置的方式**上；③ 一个失败假设被否证后要继续找，别把「我试过了」当成「查过了」；④ 能写进仓库的环境修复就写进仓库——`playwright.config.js` 那一处让这台机器之外的人不必再踩。
+
+**修好之后立刻暴露的一件事**：webkit 从此能跑到 `stress.spec.js` 了，而那条 boot ratio 判据在 webkit 上**硬失败**（5000 条：基线 96ms → 加载后 258ms＝2.69x，阈值 2.5x；同一轮 chromium 的 2000/5000 两条也各 flaky 一次）。**绝对耗时是健康的**（5000 条数据 258ms 启动），问题在判据形态：分母是 ~90ms 的空数据基线，比值对噪声极敏感——CLAUDE.md 早就记着它「常年 flaky」。**没有动阈值**：放宽一个判据再宣布绿色，等于把护栏拆了还说路更安全了；真要修应该换成绝对预算而不是对一个极快基线取比值。这条与本次代理修复无因果（去掉代理只会更快，而更快的基线反而抬高比值），登记在此是因为**它此前被 WebKit 全红掩盖了两个版本**——门禁坏了的时候，它后面的所有判据都处在「未知」而不是「通过」。
