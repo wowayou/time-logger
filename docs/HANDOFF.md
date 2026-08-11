@@ -4,7 +4,7 @@
 > 维护纪律：每完成一个里程碑就更新本文件并提交，不要攒到最后写。
 > 权威文档分工：法律＝`CLAUDE.md`；决策史＝`docs/decisions.md`；版本流水＝`CLAUDE.md` 表 + `docs/CHANGELOG.md`；协作流程＝`docs/collab-protocol.md`；人肉步骤＝`docs/launch-runbook.md`；规格＝`docs/specs/`。本文件只讲**此刻**，历史流水不往这里堆。
 
-最后更新：2026-08-11（v89 长段待核口径 + 验收批次已完成；已提交到 `codex/v89-optional-long-review`，尚未合并/发布） · 更新人：Codex（实现）+ Claude Opus 5（验收与补批，均为本地会话）
+最后更新：2026-08-11（v89 长段待核口径 + 验收批次 + 首次体验批次已完成；全部在 `codex/v89-optional-long-review`，尚未合并/发布） · 更新人：Codex（实现）+ Claude Opus 5（验收与补批，均为本地会话）
 
 ---
 
@@ -38,20 +38,20 @@
 
 本轮没有新增运行时资产，`sw.js` 的 `FILES` 清单不变。下一步只剩维护者决定何时合并、tag 和发布。
 
-## v90 当前交付（2026-08-11，分支 `feat/neutral-default-mainline`，未合并）
+### 首次体验批次（同属 v89，原计划单独发 v90，维护者决定折入）
 
-起因是维护者拿来一份外部 AI 生成的 onboarding 方案要求调研。**调研结论：那份方案不成立**——它没看过产品，四处事实错误（以为有「开始计时」按钮 / 要设时区 / 要绑 Google Calendar / 要先选时间分类），后两条分别撞铁律与 D13①；它建议的「概念卡片」与「预置 Dummy data」在本产品里分别是冗余和有害（只有一个权威存储、无沙箱，假记录会进备份并让 `recordingMilestones` 编造里程碑）。完整对表见 CLAUDE.md 的 v90 行。
+起因是维护者拿来一份外部 AI 生成的 onboarding 方案要求调研。**调研结论：那份方案不成立**——它没看过产品，四处事实错误（以为有「开始计时」按钮 / 要设时区 / 要绑 Google Calendar / 要先选时间分类），后两条分别撞铁律与 D13①；它建议的「概念卡片」与「预置 Dummy data」在本产品里分别是冗余和有害（只有一个权威存储、无沙箱，假记录会进备份并让 `recordingMilestones` 编造里程碑）。完整对表见 CLAUDE.md 的 v89 行。
 
 **但实测首次打开确实有两条真问题，都不需要引导流程**，本批只做这两条：
 
 - **出厂默认主线从「求职推进」/「Job search」改为中性占位「当前主线」/「Current focus」**。旧默认是本项目作者当时的处境，而对外定位是目标中立的。**首次体验的毛病不在「缺引导」，在那个零步骤里唯一的预设值是错的。** 种子只在全新安装时生效，**存量用户零迁移**（反向哨兵用例锁死）。
 - **「偏航」的语义解释并入 `bucketHint.leak`**——它是三个桶里唯一不自解释的，而解释此前只在「···」更多的说明里。那一行本就随选中的桶实时切换、就在桶控件正下方，零新增 UI。措辞保留「不含褒贬」（红线要求）。
 
-**同批修掉一个比功能本身更值钱的测试基建问题**：`tests/ui_fixture.js` 此前只给三个 state 显式写 config，其余落到产品出厂种子，于是 200 多条 zh 断言隐式依赖产品默认值。改种子时症状不是断言失败而是**挂起**（定位器等永不出现的 chip，每条超时 30s，全量从 2.2min 变成十几分钟仍跑不完）。夹具已改为总是显式写自己那份 config（内容保留旧种子，既有断言逐字不动）；产品默认值从此只由 `tests/v90_neutral_seed.spec.js` 一处锁定。
+**同批修掉一个比功能本身更值钱的测试基建问题**：`tests/ui_fixture.js` 此前只给三个 state 显式写 config，其余落到产品出厂种子，于是 200 多条 zh 断言隐式依赖产品默认值。改种子时症状不是断言失败而是**挂起**（定位器等永不出现的 chip，每条超时 30s，全量从 2.2min 变成十几分钟仍跑不完）。夹具已改为总是显式写自己那份 config（内容保留旧种子，既有断言逐字不动）；产品默认值从此只由 `tests/v89_neutral_seed.spec.js` 一处锁定。
 
-**门禁**：`project_audit.py` / `confirm_logic_smoke.py` / `typecheck` / `git diff --check` 全绿；**全量 chromium 215 passed / 0 flaky / 2.1min**；两处 P35 红灯逐一点亮。**WebKit 仍未验证**（本机环境损坏，同 v89 那条）。零新增运行时资产，`FILES` 不变。
+**门禁**：`project_audit.py` / `confirm_logic_smoke.py` / `typecheck` / `git diff --check` 全绿；**全量 chromium 215 passed / 0 flaky / 2.1min**；两处 P35 红灯逐一点亮。**WebKit 仍未验证**（本机环境损坏，同上）。零新增运行时资产，`FILES` 不变。
 
-**分支关系**：本分支基于 `codex/v89-optional-long-review`（v89 尚未合并）。合并顺序应为 v89 → v90。
+**版本号**：本批一度按 v90 实现并推送过分支 `feat/neutral-default-mainline`，随后维护者决定折入尚未发布的 v89——六处版本锚点已回退到 89，CHANGELOG 两行已合并为一行，`v90_neutral_seed.spec.js` 已改名 `v89_neutral_seed.spec.js`。**v90 这个版本号从未发布，不要占用它**：下一个版本仍是 v90。
 
 ## 口径审查（2026-08-10，第三批，无版本号）
 

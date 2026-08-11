@@ -374,7 +374,7 @@ export default {
   'summary.noEntries': 'No entries',
   'summary.empty': 'Nothing to summarize.',
   'bucketHint.maintain': 'Custom tags will be filed under Upkeep; existing tags with the same name keep their bucket.',
-  // v90：与 zh 对等——Drift 是三个桶里唯一不自解释的一个，解释放在随桶切换的这一行。
+  // v89：与 zh 对等——Drift 是三个桶里唯一不自解释的一个，解释放在随桶切换的这一行。
   'bucketHint.leak': 'Drift = time that drifted away from your current focus, with no judgement attached. Custom tags will be filed under Drift; existing tags with the same name keep their bucket.',
   'bucketHint.job': 'Custom tags will be filed under Focus; existing tags with the same name keep their bucket.',
   'seg.bucketAria': 'Bucket',
