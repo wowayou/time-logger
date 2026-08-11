@@ -230,6 +230,14 @@ export async function boot(page, width, state, share = false, now = '', selected
     }
     localStorage.clear();
     localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
+    if (state === 'pending-confirm-lunch') {
+      localStorage.setItem('timelog.config', JSON.stringify({
+        version: 1,
+        longReview: true,
+        mainline: ['求职推进'],
+        chips: [{ name: '吃饭', bucket: 'maintain', longOk: false }]
+      }));
+    }
     if (state === 'custom-chip') {
       localStorage.setItem('timelog.config', JSON.stringify({
         version: 1,

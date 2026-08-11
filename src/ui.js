@@ -217,17 +217,17 @@ export function renderTimeline(items, opts = {}) {
     const activePlaceholder = isPlaceholder && isOngoing;
     const displayTag = isPlaceholder ? t('timeline.unrecorded') : tag;
     const bucket = (isPlaceholder || unrecorded) ? 'unrecorded' : bucketForTag(tag, config);
-    const entryClass = `entry${isPlaceholder ? ' placeholder' : ''}${sheetEditId === e.id ? ' sheet-editing' : ''}`;
+    const entryClass = `entry${isPlaceholder ? ' placeholder' : ''}${pendingConfirm ? ' pending-review' : ''}${sheetEditId === e.id ? ' sheet-editing' : ''}`;
     const durStr = timelineDurationLabel(mins, isOngoing, pendingConfirm);
     const confirmText = confirmSegmentLabel(e.ts, endTs);
     const startLabel = start ? hhmm(start) : hhmm(e.ts);
     const segStartTs = start ? localDateTimeKey(start) : e.ts;
     const segEndTs = end ? localDateTimeKey(end) : '';
-    // v56：行内动作只留指向缺口/待办的——未记录（占位/待确认）行保留「补一下」，
-    // 计划行保留「标记已发生」，超长段保留「确认」。已发生普通段的「切一刀」移入
+    // v56：行内动作只留指向缺口/待办的——未记录占位行保留「补一下」，
+    // 可选的长段待核行保留「确认」与「补一下」，计划行保留「标记已发生」。已发生普通段的「切一刀」移入
     // 编辑 sheet（逐行常显的动作词＝换了位置的 card soup）。进行中的今日尾占位不放
     // 「补一下」——FAB「记一条·续 X 起」已是同一缺口的入口，三重冗余只留一个。
-    const fillBtn = !readOnly && (isPlaceholder || unrecorded) && segEndTs && !activePlaceholder
+    const fillBtn = !readOnly && (isPlaceholder || unrecorded || pendingConfirm) && segEndTs && !activePlaceholder
       ? `<button class="mini-btn" type="button" data-action="backfill-seg" data-kind="${isPlaceholder ? 'fill' : 'split'}" data-source-id="${esc(e.id)}" data-ts="${esc(segStartTs)}" data-end="${esc(segEndTs)}" data-tip="${t('timeline.fillTip')}" aria-label="${t('timeline.fillAria')}">${t('timeline.fillIn')}</button>`
       : '';
     const cardLabel = isPlaceholder ? t('timeline.editGapAria') : t('timeline.editEntryAria', { what: esc(e.what) });
@@ -315,7 +315,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '88';
+export const APP_VERSION = '89';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -370,11 +370,16 @@ function renderBackupSheet(opts = {}) {
     </div>`;
 }
 
-function renderAdvancedSheet() {
+function renderAdvancedSheet(opts = {}) {
   const bootDiag = readBootDiag();
+  const longReview = Boolean(opts.config && opts.config.longReview === true);
   return `
     ${sheetHead({ title: t('advanced.title'), cancelText: t('more.close'), cancelAction: 'close-form', cancelAria: t('advanced.closeAria') })}
     <div class="form-sheet-body more-body">
+      <div class="cell-group">
+        <button class="cell-btn" type="button" data-action="toggle-long-review" aria-pressed="${longReview}" aria-label="${t('advanced.longReviewAria', { state: longReview ? t('advanced.longReviewAriaOn') : t('advanced.longReviewAriaOff') })}"><span data-role="cell-label">${t('advanced.longReview', { state: longReview ? t('advanced.longReviewOn') : t('advanced.longReviewOff') })}</span>${cellChevron}</button>
+      </div>
+      <div class="form-hint">${t('advanced.longReviewHint')}</div>
       <div class="cell-group">
         <button class="cell-btn" id="repair-update-btn" type="button" data-action="repair-update-channel" aria-label="${t('more.repairAria')}"><span data-role="cell-label">${t('more.repair')}</span>${cellChevron}</button>
       </div>
@@ -462,7 +467,7 @@ export function renderFormSheet(opts) {
   if (opts && opts.mode === 'import-shift') return renderImportShiftDialog(opts);
   if (opts && opts.mode === 'more') return renderMoreSheet(opts);
   if (opts && opts.mode === 'backup') return renderBackupSheet(opts);
-  if (opts && opts.mode === 'advanced') return renderAdvancedSheet();
+  if (opts && opts.mode === 'advanced') return renderAdvancedSheet(opts);
   if (opts && opts.mode === 'delete-confirm') return renderDeleteConfirmSheet(opts);
   const mode = opts && opts.mode === 'edit' ? 'edit' : 'new';
   const e = opts && opts.entry;
@@ -740,8 +745,8 @@ function renderImportShiftDialog(opts = {}) {
 // v83：行内两个零件被草稿行（新建）与已有行共用，故提到模块层——草稿行由
 // renderConfigRowDraft 生成并由 sheet_controller 插进 DOM，两条路径必须逐字同构，
 // 否则保存时的 querySelector 会在其中一条上落空。
-function cfgLongOkBox(checked) {
-  return `<label class="cfg-long">
+function cfgLongOkBox(checked, enabled = true) {
+  return `<label class="cfg-long"${enabled ? '' : ' hidden'}>
     <input type="checkbox" class="cfg-long-ok"${checked ? ' checked' : ''} aria-label="${esc(t('cfg.longOk'))}">
     <span>${t('cfg.longOk')}</span>
   </label>`;
@@ -761,7 +766,7 @@ function cfgBucketSeg(bucket) {
  * @param {string} kind 'mainline' | 'chip'
  * @param {string} bucket 'job' | 'maintain' | 'leak'
  */
-export function renderConfigRowDraft(kind, bucket) {
+export function renderConfigRowDraft(kind, bucket, longReview = false) {
   const isMainline = kind === 'mainline';
   const chipBucket = bucket === 'leak' ? 'leak' : 'maintain';
   return `<div class="cfg-row is-new" data-b="${isMainline ? 'job' : chipBucket}" data-kind="${isMainline ? 'mainline' : 'chip'}" data-new="1">
@@ -769,7 +774,7 @@ export function renderConfigRowDraft(kind, bucket) {
       <input class="inp cfg-name" type="text" value="" placeholder="${esc(t('cfg.newNamePlaceholder'))}" aria-label="${esc(t('cfg.nameAria'))}">
       ${isMainline ? '' : cfgBucketSeg(chipBucket)}
     </div>
-    <div class="cfg-sub">${cfgLongOkBox(false)}<button class="mini-btn cfg-delete" type="button" data-action="cfg-remove-draft" aria-label="${esc(t('cfg.removeDraftAria'))}">${t('cfg.removeDraft')}</button></div>
+    <div class="cfg-sub">${cfgLongOkBox(false, longReview)}<button class="mini-btn cfg-delete" type="button" data-action="cfg-remove-draft" aria-label="${esc(t('cfg.removeDraftAria'))}">${t('cfg.removeDraft')}</button></div>
   </div>`;
 }
 
@@ -801,7 +806,7 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
         ${isCurrent ? `<span class="cfg-badge">${t('cfg.currentBadge')}</span>`
           : `<button class="mini-btn cfg-set-current" type="button" data-action="set-current-mainline" data-name="${esc(name)}" aria-label="${esc(t('cfg.setCurrentAria', { name }))}">${t('cfg.setCurrent')}</button>`}
       </div>
-      <div class="cfg-sub">${cfgLongOkBox((config.mainlineLongOk || []).includes(name))}${countOrDelete(name)}</div>
+      <div class="cfg-sub">${cfgLongOkBox((config.mainlineLongOk || []).includes(name), config.longReview === true)}${countOrDelete(name)}</div>
     </div>`;
   };
 
@@ -813,7 +818,7 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
       <input class="inp cfg-name" type="text" value="${esc(chip.name)}" aria-label="${esc(t('cfg.nameAria'))}">
       ${cfgBucketSeg(chip.bucket)}
     </div>
-    <div class="cfg-sub">${cfgLongOkBox(chip.longOk)}${countOrDelete(chip.name)}</div>
+    <div class="cfg-sub">${cfgLongOkBox(chip.longOk, config.longReview === true)}${countOrDelete(chip.name)}</div>
   </div>`;
 
   // v83：每组底部一个「新建标签」，与 v82 的删除配成对——此前这张 sheet 能改名、

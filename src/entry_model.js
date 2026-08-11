@@ -410,8 +410,8 @@ export function planOvernightContinuation(entries, request, opts = {}) {
   // 于是超长段的确认机制恰恰在最该问的场合失灵：维护者真机记到一条 06:48→次日
   // 00:00（17h12m）和一条 00:00→20:41（20h41m）的「整理」，两条都带着自动写上的
   // longConfirm，界面从头到尾没问过一句（2026-08-09 备份取证）。
-  // 现在过夜写入不再自动确认：超阈值的段照常落待确认，行内出现「确认」按钮。
-  // 睡觉这类本来就 longOk 的标签不受影响（那条豁免在 config 里，不靠这里）。
+  // v89 起长段待核默认关闭；用户显式开启后，超阈值段才出现提醒，但仍照原标签计入统计。
+  // 过夜写入不替用户清除提醒；睡觉这类 longOk 标签仍由 config 豁免。
   // 「只记到 24:00」模式走 planSegmentSplit，本来就不自动确认，行为不变。
   const duplicate = duplicateTimestamp(resultEntries);
   if (duplicate) return transactionError('conflict', t('txn.conflictOvernight'), { context, conflict: duplicate.second });

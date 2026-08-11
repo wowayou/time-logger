@@ -68,12 +68,19 @@ test('v86: the root scrollbar takes no space on narrow screens (white-edge candi
   expect(narrow).toEqual({ width: 'none', gutter: 'auto' });
 
   await page.setViewportSize({ width: 900, height: 800 });
-  const wide = await page.evaluate(() => {
+  // WebKit can resolve setViewportSize before the loaded document has
+  // reevaluated its media queries. Wait for the breakpoint, not an arbitrary delay.
+  await expect.poll(() => page.evaluate(() => ({
+    width: window.innerWidth,
+    narrow: window.matchMedia('(max-width: 719px)').matches
+  }))).toEqual({ width: 900, narrow: false });
+  // The media-query match can flip one rendering turn before computed styles do.
+  // Poll the declaration itself so this test measures the final responsive state.
+  // 桌面保留滚动条与稳定 gutter（滚动位置指示 + 不因内容长短抖动）。
+  await expect.poll(() => page.evaluate(() => {
     const cs = getComputedStyle(document.documentElement);
     return { width: cs.scrollbarWidth, gutter: cs.scrollbarGutter };
-  });
-  // 桌面保留滚动条与稳定 gutter（滚动位置指示 + 不因内容长短抖动）。
-  expect(wide).toEqual({ width: 'auto', gutter: 'stable' });
+  })).toEqual({ width: 'auto', gutter: 'stable' });
 });
 
 test('v86: a frozen minute self-heals on the next touch', async ({ page }) => {

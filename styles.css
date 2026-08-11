@@ -2042,6 +2042,7 @@
       color: var(--muted);
       font-size: var(--fs-cap);
     }
+    .cfg-long[hidden] { display: none; }
     .cfg-count {
       color: var(--faint);
       font-size: var(--fs-cap);

@@ -86,13 +86,16 @@ function isSegmentConfirmed(entry, endTs) {
 export function classifySegment(entry, rawMins, endTs, isOngoing, config) {
   const tag = primaryTag(entry);
   const bucket = bucketForTag(tag, config);
-  const needsConfirmation = bucket !== 'unrecorded' && !longOkForTag(tag, config) && rawMins > GAP;
+  // v89：长段核对默认关闭；开启后也只是正交的「时长待核」标记，不再把用户已经
+  // 明确写下的标签整段改判为未记录。四桶统计因此不受开关影响，只有提醒层变化。
+  const reviewEnabled = Boolean(config && config.longReview === true);
+  const needsConfirmation = reviewEnabled && bucket !== 'unrecorded' && !longOkForTag(tag, config) && rawMins > GAP;
   const confirmed = needsConfirmation && !isOngoing && isSegmentConfirmed(entry, endTs);
   const pendingConfirm = needsConfirmation && !confirmed;
   return {
     tag,
     bucket,
-    unrecorded: bucket === 'unrecorded' || pendingConfirm,
+    unrecorded: bucket === 'unrecorded',
     pendingConfirm,
     confirmable: pendingConfirm && !isOngoing
   };
@@ -243,6 +246,7 @@ export function summarizeEntries(entries, start, end, opts = {}) {
 
 export function confirmSegmentInData(d, id, endTs, opts = {}) {
   const now = opts.now ? new Date(opts.now) : new Date();
+  const config = opts.config;
   // v87：必须与渲染侧用**同一个**序列。这里原本是 sortedEntriesFrom（含计划条），
   // 而 buildRangeSegmentsFromEntries 用 loggedEntriesFrom（不含计划条）：段内只要
   // 坐着一条计划，两边算出的右邻就不同，endTs 对不上 → 永远返回 stale。表现是那颗
@@ -263,7 +267,8 @@ export function confirmSegmentInData(d, id, endTs, opts = {}) {
 
   const tag = primaryTag(entry);
   const rawMins = minsBetweenDates(start, segmentEnd.rawEnd);
-  if (!isKnownTag(tag) || longOkForTag(tag) || rawMins <= GAP) {
+  if (!config || config.longReview !== true
+    || !isKnownTag(tag, config) || longOkForTag(tag, config) || rawMins <= GAP) {
     return { ok: false, reason: 'not-required' };
   }
   const stored = (d.entries || []).find(e => e.id === id);

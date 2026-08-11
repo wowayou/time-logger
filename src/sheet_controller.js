@@ -983,6 +983,15 @@ export function createSheetController(deps) {
     openFormSheet({ mode: 'advanced' });
   }
 
+  function toggleLongReview() {
+    const config = deps.loadConfig();
+    if (config.longReview === true) delete config.longReview;
+    else config.longReview = true;
+    deps.saveConfig(config);
+    deps.render();
+    openFormSheet({ mode: 'advanced' });
+  }
+
   function openEditSheet(id) {
     openFormSheet({ mode: 'edit', id });
   }
@@ -1854,7 +1863,11 @@ export function createSheetController(deps) {
   function addConfigRow(btn) {
     const group = btn.closest('.cell-group');
     if (!group) return;
-    btn.insertAdjacentHTML('beforebegin', renderConfigRowDraft(btn.dataset.kind || 'chip', btn.dataset.bucket || 'maintain'));
+    btn.insertAdjacentHTML('beforebegin', renderConfigRowDraft(
+      btn.dataset.kind || 'chip',
+      btn.dataset.bucket || 'maintain',
+      deps.loadConfig().longReview === true
+    ));
     const input = btn.previousElementSibling && btn.previousElementSibling.querySelector('.cfg-name');
     if (input) {
       input.focus();
@@ -1925,6 +1938,7 @@ export function createSheetController(deps) {
     openFormSheet,
     openBackupSheet,
     openAdvancedSheet,
+    toggleLongReview,
     openMoreSheet,
     isFormOpen,
     getSheetMode,

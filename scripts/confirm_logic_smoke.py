@@ -15,13 +15,13 @@ ROOT = Path(__file__).resolve().parents[1]
 HARNESS = r'''
 import {
   GAP,
-  buildRangeSegmentsFromEntries,
-  classifySegment,
-  confirmSegmentInData,
+  buildRangeSegmentsFromEntries as buildRangeSegmentsRaw,
+  classifySegment as classifySegmentRaw,
+  confirmSegmentInData as confirmSegmentRaw,
   formatPercent,
   isKnownTag,
   primaryTag,
-  summarizeEntries
+  summarizeEntries as summarizeEntriesRaw
 } from './src/stats.js';
 import {
   coalesceRedundant,
@@ -63,6 +63,30 @@ function entry(id, ts, tag, mark) {
   if (mark) value.longConfirm = mark;
   return value;
 }
+
+// v89：生产默认关闭长段提醒；这份 smoke 的既有主体专测「用户显式开启」后的绑定、
+// 日边界与随机性质，所以用包装器统一注入开启态。默认关闭另有一条反向断言锁定。
+const REVIEW_CONFIG = {
+  version: 1,
+  longReview: true,
+  mainline: ['求职推进'],
+  chips: [
+    { name: '睡觉', bucket: 'maintain', longOk: true },
+    { name: '吃饭', bucket: 'maintain', longOk: false },
+    { name: '洗漱', bucket: 'maintain', longOk: false },
+    { name: '通勤', bucket: 'maintain', longOk: false },
+    { name: '家务', bucket: 'maintain', longOk: false },
+    { name: '运动健康', bucket: 'maintain', longOk: false },
+    { name: '娱乐', bucket: 'leak', longOk: false },
+    { name: '刷手机', bucket: 'leak', longOk: false },
+    { name: '发呆', bucket: 'leak', longOk: false }
+  ]
+};
+const withReview = opts => ({ ...(opts || {}), config: REVIEW_CONFIG });
+const summarizeEntries = (entries, start, end, opts = {}) => summarizeEntriesRaw(entries, start, end, withReview(opts));
+const buildRangeSegmentsFromEntries = (entries, start, end, opts = {}) => buildRangeSegmentsRaw(entries, start, end, withReview(opts));
+const classifySegment = (entryValue, rawMins, endTs, isOngoing) => classifySegmentRaw(entryValue, rawMins, endTs, isOngoing, REVIEW_CONFIG);
+const confirmSegmentInData = (data, id, endTs, opts = {}) => confirmSegmentRaw(data, id, endTs, withReview(opts));
 
 function p2(n) {
   return String(n).padStart(2, '0');
@@ -120,7 +144,12 @@ const pendingEntries = [
   entry('b', '2020-01-01T12:01', '杂')
 ];
 const pendingTotals = summarizeEntries(pendingEntries, new Date('2020-01-01T09:00'), new Date('2020-01-01T12:01'));
-assertTotals(pendingTotals, { job: 0, maintain: 0, leak: 0, unrecorded: 181, pending: 181, total: 181 }, '181 minute pending');
+assertTotals(pendingTotals, { job: 181, maintain: 0, leak: 0, unrecorded: 0, pending: 181, total: 181 }, '181 minute pending reminder');
+assertTotals(
+  summarizeEntriesRaw(pendingEntries, new Date('2020-01-01T09:00'), new Date('2020-01-01T12:01'), { config: { ...REVIEW_CONFIG, longReview: false } }),
+  { job: 181, maintain: 0, leak: 0, unrecorded: 0, pending: 0, total: 181 },
+  'long review is off by default and does not change buckets'
+);
 const pendingSegments = buildRangeSegmentsFromEntries(pendingEntries, new Date('2020-01-01T09:00'), new Date('2020-01-01T12:01'));
 assert(pendingSegments[0].confirmable === true, 'closed 181 minute known segment should be confirmable');
 
@@ -161,8 +190,8 @@ const mealEntries = [
 ];
 assertTotals(
   summarizeEntries(mealEntries, new Date('2020-01-01T00:00'), new Date('2020-01-01T06:00')),
-  { job: 0, maintain: 0, leak: 0, unrecorded: 360, pending: 360, total: 360 },
-  'non-longOk maintain chip still requires confirmation'
+  { job: 0, maintain: 360, leak: 0, unrecorded: 0, pending: 360, total: 360 },
+  'non-longOk maintain chip is tagged while pending review'
 );
 
 assertTotals(
@@ -186,7 +215,7 @@ const insertedEntries = [
 ];
 assertTotals(
   summarizeEntries(insertedEntries, new Date('2020-01-01T09:00'), new Date('2020-01-01T15:00')),
-  { job: 0, maintain: 120, leak: 0, unrecorded: 240, pending: 240, total: 360 },
+  { job: 240, maintain: 120, leak: 0, unrecorded: 0, pending: 240, total: 360 },
   'inserted middle record invalidates old confirmation'
 );
 
@@ -196,7 +225,7 @@ const changedStartEntries = [
 ];
 assertTotals(
   summarizeEntries(changedStartEntries, new Date('2020-01-01T09:05'), new Date('2020-01-01T15:00')),
-  { job: 0, maintain: 0, leak: 0, unrecorded: 355, pending: 355, total: 355 },
+  { job: 355, maintain: 0, leak: 0, unrecorded: 0, pending: 355, total: 355 },
   'changed start invalidates old confirmation'
 );
 
@@ -206,7 +235,7 @@ const changedEndEntries = [
 ];
 assertTotals(
   summarizeEntries(changedEndEntries, new Date('2020-01-01T09:00'), new Date('2020-01-01T15:05')),
-  { job: 0, maintain: 0, leak: 0, unrecorded: 365, pending: 365, total: 365 },
+  { job: 365, maintain: 0, leak: 0, unrecorded: 0, pending: 365, total: 365 },
   'changed end invalidates old confirmation'
 );
 
@@ -269,7 +298,7 @@ const movedCrossDayEntries = [
 ];
 assertTotals(
   summarizeEntries(movedCrossDayEntries, new Date('2020-01-02T00:00'), new Date('2020-01-02T02:40'), { now: '2020-01-03T00:00' }),
-  { job: 0, maintain: 0, leak: 0, unrecorded: 160, pending: 160, total: 160 },
+  { job: 160, maintain: 0, leak: 0, unrecorded: 0, pending: 160, total: 160 },
   'cross-day adjacent time change invalidates old confirmation'
 );
 
@@ -342,7 +371,7 @@ for (let round = 0; round < 250; round += 1) {
   const end = new Date(entries[entries.length - 1].ts);
   const totals = summarizeEntries(entries, start, end);
   approx(totals.job + totals.maintain + totals.leak + totals.unrecorded, totals.total, `random ${round} bucket sum`);
-  assert(totals.pending <= totals.unrecorded + 1e-9, `random ${round} pending exceeds unrecorded`);
+  assert(totals.pending <= totals.total + 1e-9, `random ${round} pending exceeds total`);
 
   const segments = buildRangeSegmentsFromEntries(entries, start, end);
   for (const seg of segments) {
@@ -353,7 +382,7 @@ for (let round = 0; round < 250; round += 1) {
     const matched = Boolean(mark && mark.startTs === seg.e.ts && mark.endTs === seg.endTs);
     if (knownLong) {
       assert(seg.pendingConfirm === !matched, `random ${round} confirmation binding mismatch`);
-      assert(seg.unrecorded === !matched, `random ${round} unrecorded binding mismatch`);
+      assert(seg.unrecorded === false, `random ${round} pending known segment became unrecorded`);
     } else if (tag === '未知') {
       assert(seg.unrecorded === true, `random ${round} unknown should be unrecorded`);
       assert(seg.pendingConfirm === false, `random ${round} unknown should not be pending`);
@@ -592,7 +621,8 @@ assert(!overnightRealEnd.resultEntries.some(e => e.ts === '2026-07-13T08:00'), '
 // --- v87（D21）：撤销 v67/C7A 的「过夜写入即确认」 ---
 // C7A 的前提「两端都是用户显式断言」不成立：表单里能改的只有起点，两个终点都是
 // 程序给的（午夜是日历边界，hardEnd 是 now 或今天第一条已有记录）。于是超长段确认
-// 恰在最该问的场合失灵。现在过夜写入不再自动确认，超阈值段落照常待确认。
+// 恰在最该问的场合失灵。现在过夜写入不再自动确认；显式开启提醒时，超阈值段落
+// 保留原桶统计，同时显示正交的待核状态。
 const c7aPlan = planOvernightContinuation([
   { id: 'y-open', ts: '2026-07-12T20:00', what: '', tags: [] }
 ], {
@@ -606,8 +636,8 @@ assert(!c7aYesterday.longConfirm, 'overnight write must not auto-confirm the yes
 assert(!c7aMidnight.longConfirm, 'overnight write must not auto-confirm the today part');
 const c7aYesterdaySummary = summarizeEntries(c7aPlan.resultEntries, new Date(2026, 6, 12), new Date(2026, 6, 13), { now: new Date(2026, 6, 13, 8) });
 const c7aTodaySummary = summarizeEntries(c7aPlan.resultEntries, new Date(2026, 6, 13), new Date(2026, 6, 13, 8), { now: new Date(2026, 6, 13, 8) });
-assert(c7aYesterdaySummary.pending === 240 && c7aYesterdaySummary.maintain === 0, 'overnight yesterday 4h part lands pending');
-assert(c7aTodaySummary.pending === 480 && c7aTodaySummary.maintain === 0, 'overnight today 8h part lands pending');
+assert(c7aYesterdaySummary.pending === 240 && c7aYesterdaySummary.maintain === 240, 'overnight yesterday 4h part stays tagged while pending');
+assert(c7aTodaySummary.pending === 480 && c7aTodaySummary.maintain === 480, 'overnight today 8h part stays tagged while pending');
 // 两段都必须可确认——待确认而点不掉才是真正的死路。
 const c7aSegments = buildRangeSegmentsFromEntries(c7aPlan.resultEntries, new Date(2026, 6, 13), new Date(2026, 6, 13, 8), { now: new Date(2026, 6, 13, 8) });
 assert(c7aSegments.some(seg => seg.e && seg.e.ts === '2026-07-13T00:00' && seg.confirmable), 'the pending overnight part offers a 确认 button');
@@ -775,7 +805,7 @@ const skippedStartSeg = buildRangeSegmentsFromEntries(
 assert(skippedStartSeg.rawMins === 840 && skippedStartSeg.endTs === '2020-03-02T00:00', 'the truncated segment measures itself to 24:00, not to a right neighbour three days out');
 assertTotals(
   summarizeEntries(skippedDaysEntries, new Date('2020-03-01T00:00'), new Date('2020-03-02T00:00'), skippedNow),
-  { job: 0, maintain: 0, leak: 0, unrecorded: 1440, pending: 840, total: 1440 },
+  { job: 0, maintain: 840, leak: 0, unrecorded: 600, pending: 840, total: 1440 },
   'start day keeps its own segment, truncated at 24:00'
 );
 for (const [emptyStart, emptyEnd] of [['2020-03-02T00:00', '2020-03-03T00:00'], ['2020-03-03T00:00', '2020-03-04T00:00']]) {

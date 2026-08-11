@@ -503,7 +503,7 @@ import {
   // --- Segment confirmation ---
   function confirmSegment(id, endTs) {
     const d = load();
-    const result = confirmSegmentInData(d, id, endTs);
+    const result = confirmSegmentInData(d, id, endTs, { config: loadConfig() });
     if (!result.ok) {
       if (result.reason === 'stale') {
         showInfoToast(t('toast.segmentChanged'));
@@ -949,6 +949,7 @@ import {
       if (action === 'cancel-edit') sheetController.cancelEdit();
       if (action === 'open-backup') sheetController.openBackupSheet();
       if (action === 'open-advanced') sheetController.openAdvancedSheet();
+      if (action === 'toggle-long-review') sheetController.toggleLongReview();
       if (action === 'save-tag-config') sheetController.saveTagConfig();
       if (action === 'confirm-tag-merge') sheetController.saveTagConfig({ confirmMerge: el.dataset.signature || '' });
       if (action === 'set-current-mainline') sheetController.setCurrentMainline(el.dataset.name || '');

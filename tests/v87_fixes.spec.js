@@ -21,6 +21,15 @@ async function seedAndRerender(page, entries, backDays) {
   }
 }
 
+async function enableLongReview(page) {
+  await page.evaluate(async () => {
+    const mod = await import(new URL('./src/storage.js', location.href).href);
+    const config = mod.loadConfig();
+    config.longReview = true;
+    mod.saveConfig(config);
+  });
+}
+
 // ── ① 起点晚于尾占位点：那段「确实没记」不得被吞进前一条记录 ──────────────────
 // 种子 tail-placeholder：09:00「写代码」#求职推进 + 10:00 空占位条，FIXED_NOW 12:34。
 // 修复前：占位条被挪到 11:00，09:00-11:00 整段变成「写代码·主线」——两小时未记录
@@ -70,6 +79,7 @@ test('v87: a start earlier than the tail placeholder still consumes it', async (
 // 00:00-12:34（12h34m）这一段带着自动写上的 longConfirm 落库，界面从不问一句。
 test('v87: an overnight continuation leaves the long part pending, with a working 确认', async ({ page }) => {
   await boot(page, 768, 'yesterday-placeholder', false, FIXED_NOW, -1);
+  await enableLongReview(page);
   await page.getByRole('button', { name: '记一条新的时间记录' }).click();
   await page.locator('#form-what').fill('回家整理');
   await page.locator('#form-ctag').fill('洗漱');
@@ -82,11 +92,11 @@ test('v87: an overnight continuation leaves the long part pending, with a workin
 
   const confirmBtn = page.locator('[data-action="confirm-segment"]');
   await expect(confirmBtn).toHaveCount(1);
-  await expect(page.locator('#ruler')).toContainText('待确认');
+  await expect(page.locator('#ruler')).toContainText('待核');
   // 按钮必须真的确认得掉（不是摆设）。
   await confirmBtn.click();
   await expect(page.locator('[data-action="confirm-segment"]')).toHaveCount(0);
-  await expect(page.locator('#ruler')).not.toContainText('待确认');
+  await expect(page.locator('#ruler')).not.toContainText('待核');
 });
 
 // ── ③ 空日不继承前一天最后一个标签 ───────────────────────────────────────────
@@ -111,7 +121,7 @@ test('v87: days with no records of their own inherit nothing', async ({ page }) 
   await expect(page.locator('#timeline .entry').filter({ hasText: '刷B站' })).toHaveCount(1);
   // 真正跨一次午夜的过夜段不受影响：06-28 的 09:00 之前没有更早的右邻可继承，
   // 但 06-25 22:00 起的这一段自己只算到 24:00（2h，未过 3h 阈值，不待确认）。
-  await expect(page.locator('#ruler')).not.toContainText('待确认');
+  await expect(page.locator('#ruler')).not.toContainText('待核');
 });
 
 // ── ⑤ 年视图不再对每个片段重新解析一遍 config ────────────────────────────────
@@ -151,6 +161,7 @@ test('v87: a year-view render reads the tag config a handful of times, not per s
 // 两边算出的右邻不同 → endTs 对不上 → 永远 stale，按钮怎么点都只弹「这一段已经变了」。
 test('v87: a plan sitting inside a long segment does not break its 确认', async ({ page }) => {
   await boot(page, 768, 'empty', false, FIXED_NOW);
+  await enableLongReview(page);
   await seedAndRerender(page, [
     { id: 'a', ts: '2026-06-28T08:00', what: '吃了很久', tags: ['吃饭'] },
     { id: 'p', ts: '2026-06-28T10:00', what: '面试', tags: ['求职推进'], planned: true },
@@ -159,13 +170,13 @@ test('v87: a plan sitting inside a long segment does not break its 确认', asyn
     { id: 'c', ts: '2026-06-28T14:00', what: '睡了', tags: ['睡觉'] }
   ], 1);
   await expect(page.locator('#period-label')).toContainText('2026/06/28');
-  await expect(page.locator('#ruler')).toContainText('待确认');
+  await expect(page.locator('#ruler')).toContainText('待核');
 
   const confirmBtn = page.locator('[data-action="confirm-segment"]');
   await expect(confirmBtn).toHaveCount(1);
   await confirmBtn.click();
   await expect(page.locator('[data-action="confirm-segment"]')).toHaveCount(0);
-  await expect(page.locator('#ruler')).not.toContainText('待确认');
+  await expect(page.locator('#ruler')).not.toContainText('待核');
   const marks = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries
     .filter(e => e.longConfirm).map(e => `${e.ts}..${e.longConfirm.endTs}`));
   expect(marks).toEqual(['2026-06-28T08:00..2026-06-28T13:00']);

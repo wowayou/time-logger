@@ -6,6 +6,7 @@ import { bootLocale, TODAY_KEY } from './i18n_fixture.js';
 
 const CONFIG = {
   version: 1,
+  longReview: true,
   mainline: ['求职推进', '杂'],
   chips: [
     { name: '睡觉', bucket: 'maintain', longOk: true },
@@ -75,8 +76,8 @@ test('设为当前 moves a history name to the head of mainline without touching
   expect(data.entries.find(e => e.id === 'a').tags).toEqual(['求职推进']);
 });
 
-test('mainline longOk persists and exempts a >3h mainline span from confirmation', async ({ page }) => {
-  // 6h 主线段：未豁免时是待确认（未记录桶），豁免后按主线统计。
+test('mainline longOk persists and exempts a >3h mainline span from reminders', async ({ page }) => {
+  // 6h 主线段：未豁免时标为待核但仍按主线统计；豁免后不再提醒。
   await bootLocale(page, {
     locale: 'zh',
     config: CONFIG,

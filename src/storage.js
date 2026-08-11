@@ -206,7 +206,7 @@ function normalizeChip(chip) {
 }
 
 /**
- * 标签配置的形状。`mainlineLongOk` 与 `motto` 都是**可选键**——空集/未设置时
+ * 标签配置的形状。`longReview`、`mainlineLongOk` 与 `motto` 都是**可选键**——关闭/空集/未设置时
  * 根本不写进 localStorage（见 normalizeConfig 里的说明），所以类型上必须是
  * optional 而不是必填。不显式声明的话，tsc 会把 normalizeConfig 的两个 return
  * 分支推成一个联合类型，其中早退分支不含该键，任何 `config.mainlineLongOk`
@@ -214,6 +214,7 @@ function normalizeChip(chip) {
  * @typedef {object} TagConfig
  * @property {number} version
  * @property {string[]} mainline
+ * @property {boolean} [longReview]
  * @property {string[]} [mainlineLongOk]
  * @property {{ name: string, bucket: string, longOk: boolean }[]} chips
  * @property {string} [motto]
@@ -262,6 +263,7 @@ export function normalizeConfig(raw) {
   return {
     version: 1,
     mainline,
+    ...(raw.longReview === true ? { longReview: true } : {}),
     ...(mainlineLongOk.length ? { mainlineLongOk } : {}),
     chips,
     motto: normalizeMotto(raw.motto)
@@ -667,6 +669,9 @@ export function validateImportData(imported) {
         || imported.config.mainlineLongOk.some(name => typeof name !== 'string'))) {
       errors.push(t('import.errConfigMainlineLongOk'));
     }
+    if (imported.config.longReview !== undefined && typeof imported.config.longReview !== 'boolean') {
+      errors.push(t('import.errConfigLongReview'));
+    }
     if (imported.config.motto !== undefined && typeof imported.config.motto !== 'string') {
       errors.push(t('import.errConfigMotto'));
     }
@@ -914,5 +919,14 @@ export function mergeImportedConfig(localConfig, importedConfig) {
   // （normalizeConfig 会再过滤一次）。本机已有的条目不会被备份删掉。
   const mainlineLongOk = [...new Set([...(local.mainlineLongOk || []), ...(imported.mainlineLongOk || [])])];
   const motto = local.motto !== undefined ? local.motto : imported.motto;
-  return normalizeConfig({ version: 1, mainline, mainlineLongOk, chips, motto });
+  // 行为开关始终以本机为准：导入是合并，不应让一份备份在本机静默开启提醒。
+  // 开启过的设备会显式保存 `longReview:true`；关闭态不写键，保持默认关闭与零迁移。
+  return normalizeConfig({
+    version: 1,
+    mainline,
+    ...(local.longReview === true ? { longReview: true } : {}),
+    mainlineLongOk,
+    chips,
+    motto
+  });
 }
