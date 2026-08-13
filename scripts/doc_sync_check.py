@@ -2,7 +2,13 @@
 # 时间尺 (time-logger)
 # Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""改动与文档的同步闸（开发期工具，不进运行时、不进 SW 缓存）。
+r"""改动与文档的同步闸（开发期工具，不进运行时、不进 SW 缓存）。
+
+（docstring 是 raw 字符串：正文里引用了 `\b` / `\s` 等正则片段，普通字符串下
+Python 3.12+ 会对每个未知转义发 SyntaxWarning——而本脚本由 PreToolUse hook 在
+**每条含 git 的命令**上运行，那就是每次都往 stderr 吐一行噪音。更要紧的是这类
+转义终将变成 SyntaxError：那时脚本无法解析、非零退出，而 PreToolUse 的非阻断
+错误等于放行——闸会**静默失效**，且失效方向恰好是「什么都不拦」。）
 
 **为什么闸在提交前与推送前**（时机分析，别挪）：
 
