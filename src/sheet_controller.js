@@ -729,6 +729,10 @@ export function createSheetController(deps) {
     autosizeTextareas(panel);
     trapFocus(sheet);
     requestAnimationFrame(() => {
+      // 打开后延迟一帧聚焦面板，给读屏一个稳定的 dialog 起点；但这一帧到来前用户
+      // 可能已经点进输入框、甚至正按保存。此时再无条件抢焦点，会在 pointerdown 与
+      // click 之间换掉激活目标，让快速连续操作的第二次点击偶发消失。
+      if (sheet.hidden || sheet.classList.contains('sheet-closing') || sheet.contains(document.activeElement)) return;
       panel.setAttribute('tabindex', '-1');
       panel.focus({ preventScroll: true });
     });
@@ -987,7 +991,11 @@ export function createSheetController(deps) {
     const config = deps.loadConfig();
     if (config.longReview === true) delete config.longReview;
     else config.longReview = true;
-    deps.saveConfig(config);
+    const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    if (!deps.saveConfig(config)) {
+      showInlineError(panel, t('config.quota'), 'advanced-error');
+      return;
+    }
     deps.render();
     openFormSheet({ mode: 'advanced' });
   }
@@ -1245,7 +1253,17 @@ export function createSheetController(deps) {
   }
 
   function rememberTag(tag, bucket, entries) {
-    deps.rememberCustomTagForBucket(tag, safeBucket(bucket), entries);
+    return deps.rememberCustomTagForBucket(tag, safeBucket(bucket), entries);
+  }
+
+  // 自定义标签与记录是跨两个 localStorage key 的一次用户动作。记录先落库，再记住
+  // 标签；若第二步因配额失败，就把记录回滚到写前快照并留在表单里，避免新标签掉进
+  // 「未记录」桶。覆盖旧值通常不增加占用，正好是配额已满时最可靠的补偿写。
+  function rememberTagOrRollback(tag, bucket, entries, beforeData, scope) {
+    if (!tag || rememberTag(tag, bucket, entries)) return true;
+    deps.save(beforeData);
+    showInlineError(scope, t('form.tagConfigQuota'));
+    return false;
   }
 
   function saveOvernightEntry(panel) {
@@ -1269,6 +1287,7 @@ export function createSheetController(deps) {
       return;
     }
     const d = deps.load();
+    const beforeData = { ...d, entries: cloneEntries(d.entries) };
     const latest = buildOvernightPlan(panel, d.entries);
     if (!latest || !latest.ok) {
       showInlineError(panel, latest && latest.message || t('form.boundaryChanged'));
@@ -1286,7 +1305,7 @@ export function createSheetController(deps) {
       showInlineError(panel, t('form.quotaForm'));
       return;
     }
-    if (ctag) rememberTag(ctag, formBucket, d.entries);
+    if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel)) return;
     const staysYesterday = latest.kind === 'overnight-day-end' && startTs < formOvernightContext.midnightTs;
     deps.setSelectedDate(staysYesterday ? formOvernightContext.yesterdayKey : formOvernightContext.todayKey);
     teardownNow(() => { closeForm(); deps.render(); });
@@ -1313,6 +1332,7 @@ export function createSheetController(deps) {
     const ctag = document.getElementById('form-ctag').value.trim();
     const tag = canonicalTagName(ctag || formTag || RESERVED_UNKNOWN_TAG, deps.loadConfig());
     const d = deps.load();
+    const beforeData = { ...d, entries: cloneEntries(d.entries) };
     let placeholder = openPlaceholderForDate(d.entries, checked.ts.slice(0, 10));
     // v87：占位条只有在**新起点不晚于它**时才可以复用（复用＝把它的 ts 挪到新起点）。
     // 往前挪是对的：占位条代表「从这一刻起还没记」，新记录起得更早就把它整个盖住，
@@ -1341,7 +1361,6 @@ export function createSheetController(deps) {
         return;
       }
     }
-    if (ctag) rememberTag(ctag, formBucket, d.entries);
     if (planned) {
       d.entries.push({ id: deps.uid(), ts: checked.ts, what, tags: [tag], planned: true });
       // v88：计划保存此前是**唯一**不过 normalizeEntries 的表单写入路径，于是「今天
@@ -1353,6 +1372,7 @@ export function createSheetController(deps) {
         showInlineError(panel, t('form.quotaForm'));
         return;
       }
+      if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel)) return;
       deps.setSelectedDate(checked.ts.slice(0, 10));
       teardownNow(() => { closeForm(); deps.render(); });
       return;
@@ -1373,6 +1393,7 @@ export function createSheetController(deps) {
       showInlineError(panel, t('form.quotaForm'));
       return;
     }
+    if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel)) return;
     deps.setSelectedDate(checked.ts.slice(0, 10));
     teardownNow(() => { closeForm(); deps.render(); });
   }
@@ -1400,6 +1421,7 @@ export function createSheetController(deps) {
       return;
     }
     const d = deps.load();
+    const beforeData = { ...d, entries: cloneEntries(d.entries) };
     const latest = planSegmentSplit(d.entries, {
       sourceId: formSourceId,
       frozenStart: formFrozenStart,
@@ -1426,7 +1448,7 @@ export function createSheetController(deps) {
       showInlineError(panel, t('form.quotaForm'));
       return;
     }
-    if (ctag) rememberTag(ctag, formBucket, d.entries);
+    if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel)) return;
     deps.setSelectedDate(startChecked.ts.slice(0, 10));
     teardownNow(() => { closeForm(); deps.render(); });
   }
@@ -1448,6 +1470,7 @@ export function createSheetController(deps) {
     const chipBox = box.querySelector('[data-role="edit-chips"]');
     const customEl = box.querySelector('[data-role="edit-custom-tag"]');
     const d = deps.load();
+    const beforeData = { ...d, entries: cloneEntries(d.entries) };
     const entry = d.entries.find(e => e.id === id);
     const planned = Boolean(entry && entry.planned);
     const normalizedInputTs = normalizeTimestamp(tsEl ? tsEl.value : '');
@@ -1514,7 +1537,7 @@ export function createSheetController(deps) {
         showInlineError(box, t('form.quotaForm'));
         return;
       }
-      if (ctag) rememberTag(ctag, editBucket, d.entries.filter(item => item.id !== id));
+      if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box)) return;
     } else if (entry) {
       entry.ts = checked.ts;
       entry.what = what;
@@ -1526,7 +1549,7 @@ export function createSheetController(deps) {
         showInlineError(box, t('form.quotaForm'));
         return;
       }
-      if (ctag) rememberTag(ctag, editBucket, d.entries.filter(item => item.id !== id));
+      if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box)) return;
     }
     deps.setSelectedDate(checked.ts.slice(0, 10));
     teardownNow(() => { closeEditSheet(); deps.render(); });
@@ -1749,6 +1772,7 @@ export function createSheetController(deps) {
       return;
     }
     const d = deps.load();
+    const beforeData = { ...d, entries: cloneEntries(d.entries) };
     // v85：重名判定跨三组一起做（主线与 chip 之间同名同样是冲突），且判据是 tagKey——
     // `sleep` 与 `Sleep` 是同一个标签。判严之后必须同时给出**出口**，否则本来就同时
     // 存有两种拼写的存量 config 会在每次保存时被拦死：出口就是合并。
@@ -1823,7 +1847,11 @@ export function createSheetController(deps) {
       showInlineError(panel, t('config.quota'), 'config-error');
       return;
     }
-    deps.saveConfig(nextConfig);
+    if (!deps.saveConfig(nextConfig)) {
+      deps.save(beforeData);
+      showInlineError(panel, t('config.quota'), 'config-error');
+      return;
+    }
     // 删除生效后，还挂着的「撤销删除记录」会把引用这个标签的记录放回来——那条记录
     // 会当场变成孤儿标签（统计掉进未记录）。与跨标签页修改同一处理：撤销失效。
     if (removedNames.length && deps.cancelPendingUndo) deps.cancelPendingUndo();
@@ -1834,7 +1862,11 @@ export function createSheetController(deps) {
   // 「设为当前」立即落库并重开 sheet——它不产生记录变化，也不该被「保存」按钮
   // 的成败牵连；重开是为了让置顶顺序与徽章即时反映新状态。
   function setCurrentMainline(name) {
-    deps.saveConfig(storageSetCurrentMainline(deps.loadConfig(), name));
+    const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    if (!deps.saveConfig(storageSetCurrentMainline(deps.loadConfig(), name))) {
+      showInlineError(panel, t('config.quota'), 'config-error');
+      return;
+    }
     openFormSheet({ mode: 'config' });
     deps.render();
   }
@@ -1902,7 +1934,11 @@ export function createSheetController(deps) {
   }
 
   function applyLocaleDefaults() {
-    deps.saveConfig(appendLocaleDefaultTags(deps.loadConfig()));
+    const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    if (!deps.saveConfig(appendLocaleDefaultTags(deps.loadConfig()))) {
+      showInlineError(panel, t('config.quota'), 'config-error');
+      return;
+    }
     openFormSheet({ mode: 'config' });
     deps.render();
   }
@@ -1919,7 +1955,11 @@ export function createSheetController(deps) {
     if (!input) { closeForm(); return; }
     const config = deps.loadConfig();
     config.motto = input.value;
-    deps.saveConfig(config);
+    const panel = input.closest('.form-sheet-panel');
+    if (!deps.saveConfig(config)) {
+      showInlineError(panel, t('config.quota'), 'motto-error');
+      return;
+    }
     closeForm();
     deps.render();
   }

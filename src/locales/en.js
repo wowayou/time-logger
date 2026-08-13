@@ -230,6 +230,7 @@ export default {
   'form.boundaryChanged': 'The entry boundary has changed; please confirm again.',
   'form.previewRecomputed': 'Data has changed; the preview was recomputed from the latest entries. Please confirm again.',
   'form.quotaForm': 'Local storage is full; the form content is kept. Export a backup and free up space first.',
+  'form.tagConfigQuota': 'Local storage is full; neither the custom tag nor this entry was saved. The form content is kept. Export a backup and free up space first.',
   'form.endAfterStart': 'End time must be after start time.',
   'form.backfillUnsavable': 'This time span cannot be backfilled; check the start and end times.',
   'form.sourceChanged': 'The original segment has changed; please confirm again.',

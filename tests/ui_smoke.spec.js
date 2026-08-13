@@ -2592,9 +2592,9 @@ test('motto edits persist to config and clearing hides the line (C13 ②③)', a
   await page.locator('#motto-line').click();
   await page.locator('[data-role="motto-input"]').fill('');
   await page.getByRole('button', { name: '保存阶段格言' }).click();
-  await expect(page.locator('#motto-line')).toBeHidden();
   config = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.config')));
   expect(config.motto).toBe('');
+  await expect(page.locator('#motto-line')).toBeHidden();
 });
 
 test('hidden motto stays reachable from 更多 and 恢复默认 round-trips to unset (C13 ③④)', async ({ page }) => {

@@ -266,18 +266,18 @@ test.describe('C 类：存储配额极限', () => {
     const pageErrors = [];
     page.on('pageerror', e => pageErrors.push(e.message));
 
-    // Inject mock: next write to timelog.v1 throws QuotaExceededError
+    // Inject mock on Storage.prototype: assigning localStorage.setItem on the instance
+    // does not reliably replace the native method, so that form only pretends to test
+    // the quota path. Block exactly the first data write, then allow compensation writes.
     await page.evaluate(() => {
-      const real = localStorage.setItem.bind(localStorage);
+      const real = Storage.prototype.setItem;
       let blocked = false;
-      localStorage.setItem = function (key, value) {
+      Storage.prototype.setItem = function (key, value) {
         if (key === 'timelog.v1' && !blocked) {
           blocked = true;
-          const err = new DOMException('QuotaExceededError');
-          Object.defineProperty(err, 'name', { value: 'QuotaExceededError' });
-          throw err;
+          throw new DOMException('quota', 'QuotaExceededError');
         }
-        return real(key, value);
+        return real.call(this, key, value);
       };
     });
 

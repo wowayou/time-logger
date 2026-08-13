@@ -502,7 +502,7 @@ export function createIoActions(deps) {
       return false;
     }
     try {
-      deps.saveConfig(nextConfig);
+      if (!deps.saveConfig(nextConfig)) throw new Error('config-save-failed');
     } catch {
       deps.save(current);
       const error = document.querySelector('#form-sheet [data-role="import-error"]');

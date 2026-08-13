@@ -219,6 +219,7 @@ export default {
   'form.boundaryChanged': '记录边界已经变化，请重新确认。',
   'form.previewRecomputed': '数据已变化，预览已按最新记录重新计算；请再次确认。',
   'form.quotaForm': '本机存储空间不足，表单内容仍保留；请先导出备份并清理空间。',
+  'form.tagConfigQuota': '本机存储空间不足，自定义标签和本次记录都没有保存；表单内容仍保留。请先导出备份并清理空间。',
   'form.endAfterStart': '结束时间要晚于开始时间。',
   'form.backfillUnsavable': '这段时间无法补录，请检查起止时间。',
   'form.sourceChanged': '原段已经变化，请重新确认。',

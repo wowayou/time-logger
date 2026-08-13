@@ -319,7 +319,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '89';
+export const APP_VERSION = '90';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -393,6 +393,7 @@ function renderAdvancedSheet(opts = {}) {
         ${bootDiag.enabled ? `<button class="cell-btn" id="boot-diag-copy-btn" type="button" data-action="copy-boot-diag" aria-label="${t('more.bootDiagCopyAria')}"><span data-role="cell-label">${t('more.bootDiagCopy')}</span>${cellChevron}</button>` : ''}
       </div>
       ${bootDiag.enabled ? `<div class="form-hint">${t('more.bootDiagHint')}</div>` : ''}
+      <div class="form-inline-error" data-role="advanced-error" hidden></div>
     </div>`;
 }
 
@@ -461,6 +462,7 @@ function renderMottoSheet(opts = {}) {
       </div>
       <div class="form-hint">${t('motto.clearHint')}</div>
       <button class="cell-action" type="button" data-action="reset-motto-input" aria-label="${t('motto.resetAria')}">${t('motto.reset')}</button>
+      <div class="form-inline-error" data-role="motto-error" hidden></div>
     </div>`;
 }
 

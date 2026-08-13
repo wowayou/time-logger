@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "test:ui": "playwright test",
-    "test:stress": "playwright test tests/stress.spec.js",
+    "test:stress": "playwright test tests/stress.spec.js tests/v90_storage_pressure.spec.js",
     "typecheck": "tsc -p tsconfig.check.json"
   },
   "devDependencies": {

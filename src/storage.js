@@ -286,8 +286,16 @@ export function loadConfig() {
 
 export function saveConfig(config) {
   const normalized = normalizeConfig(config);
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(normalized));
-  return normalized;
+  try {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(normalized));
+    return normalized;
+  } catch (e) {
+    if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+      console.error(t('storage.quotaExceeded'));
+      return false;
+    }
+    throw e;
+  }
 }
 
 function addMainlineTag(tag) {
@@ -298,7 +306,7 @@ function addMainlineTag(tag) {
   if (!config.mainline.some(item => tagKey(item) === key)
     && !config.chips.some(chip => tagKey(chip.name) === key)) {
     config.mainline.unshift(name);
-    saveConfig(config);
+    return saveConfig(config) || false;
   }
   return config;
 }
@@ -317,8 +325,7 @@ function addChipTag(tag, bucket) {
   }
   if (config.mainline.some(item => tagKey(item) === key)) return config;
   config.chips.push({ name, bucket, longOk: false });
-  saveConfig(config);
-  return config;
+  return saveConfig(config) || false;
 }
 
 function rememberTagForBucket(tag, bucket) {
