@@ -12,7 +12,7 @@
 // `CACHE = 'timelog-vN'` 逐字匹配它，改成模板字符串会把六锚点联动打断。
 // 前缀因此单独声明；两者一致性由 audit 断言（见 audit_service_worker）。
 const CACHE_PREFIX = 'timelog-';
-const CACHE = 'timelog-v90';
+const CACHE = 'timelog-v91';
 const FILES = [
   './',
   './index.html',

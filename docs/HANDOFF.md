@@ -4,15 +4,27 @@
 > 维护纪律：每完成一个里程碑就更新本文件并提交，不要攒到最后写。
 > 权威文档分工：法律＝`CLAUDE.md`；决策史＝`docs/decisions.md`；版本流水＝`CLAUDE.md` 表 + `docs/CHANGELOG.md`；协作流程＝`docs/collab-protocol.md`；人肉步骤＝`docs/launch-runbook.md`；规格＝`docs/specs/`。本文件只讲**此刻**，历史流水不往这里堆。
 
-最后更新：2026-08-13（v90 压测、配置配额半事务与连续保存丢点击修复；尚未提交/发布。v89 已发布上线） · 更新人：Codex（实现）+ Claude Opus 5（移植到最新 main、门禁复跑，均为本地会话）
+最后更新：2026-08-13（v91 补上 v90 漏网的两条写入路径；尚未提交/发布。v90 已发布上线） · 更新人：Claude Opus 5（本地会话）
 
 ---
 
 ## 一句话现状
 
-**v90 本地改动已完成，尚未提交/发布**：压测发现写 `timelog.config` 的配额失败会让标签/格言保存抛异常，标签改名/合并还可能留下「记录已迁移、配置未写入」的跨 key 半事务（P38）；全量回归又把格言连续保存的旧 flaky 坐实为 sheet 延迟聚焦竞态（P39）。两条均已修复并加护栏。v89 的长段待核口径不变。
+**v91 本地改动已完成，尚未提交/发布**：v90 发布后的一次全量审计发现，「确认长段」与「标记已发生」这两个行内动作仍吞掉 `save()` 的失败返回值——正是 v90 那一批（写入失败必须可见）的同类漏网。存储写满时点下去只表现为「点了没反应」。已修复并加护栏。
 
-**v89 已发布上线**（合并 main + tag + Release + `publish-site` 绿灯，`time.eigentime.org/app/manifest.webmanifest` 实测 `89`），v82–v88 均已发布并线上验证。唯一非 gated 的产品未完成项仍是 runbook `- [ ] E 完成`（首轮推广）——它不在 AI 侧。
+**v90 已发布上线**（main + tag + Release + `publish-site` 绿灯，线上实测 manifest `90`、`sw.js` `CACHE = 'timelog-v90'`），v82–v89 均已发布并线上验证。唯一非 gated 的产品未完成项仍是 runbook `- [ ] E 完成`（首轮推广）——它不在 AI 侧。
+
+## v91 当前交付（2026-08-13）
+
+- `app.js` 的 `confirmSegment` / `confirmPlanned` 检查 `save(d)` 返回值，失败时 `showInfoToast(t('toast.writeQuota'))`。新增 i18n 键 `toast.writeQuota`（zh/en 对等），与既有 `toast.deleteQuota` 并列而非复用。
+- 新增 `tests/v91_confirm_quota.spec.js` 3 条（双引擎 6/6），含一条反向哨兵锁「正常路径不得弹提示」。
+- 版本仪式已升至 v91；无新增运行时资产，`sw.js` `FILES` 不变；`docs/CHANGELOG.md` 归档 v83。
+
+**三处 P35 红灯**：撤 `confirmPlanned` 守卫→只「标记已发生」那条红；撤 `confirmSegment` 守卫→只「长段确认」那条红；把提示改成**无条件**弹→只反向哨兵红。
+
+**红灯③第一次没点亮，暴露哨兵本身是假的**（值得单独记）：哨兵原本写 `await expect(toast).toBeHidden()`，而它会自动重试到默认 5s 超时、toast 自己 3s 后消失——于是它等到 toast 自然过期再判过，「无条件弹提示」照样全绿。改成一次性 `isVisible()` 后才正确点亮。**这与「已知坑」里那条「反馈类断言一律 `toBeVisible()`」是同一枚硬币的反面**：断言「不该出现」时，带自动重试的否定断言会把「暂时出现过」判成通过。已补进下方「已知坑」。
+
+**门禁结果**：静态四项全绿；双引擎全量见提交说明。
 
 ## v90 当前交付（2026-08-13）
 
@@ -252,6 +264,7 @@ v87 审计里登记「不排期、下次顺路一起做」的四条，维护者�
 - **P35 证明不了「规格本身够不够」**：v74 验收时读实现 diff 又抓出两处规格没写的问题。红灯证明保证的是「规格要求的行为在不在」，验收环读 diff 仍然必要。
 - **测试本身可能是假的**：v80 的「只追加」红灯第一次没点亮，因为断言只看「预览整体是否包含某名字」，`normalizeConfig` 去重把缺陷盖住了；改成方向性断言（同名必须在「将跳过」行、且**不得**在「将新增」行）才成立。
 - **反馈类断言一律 `toBeVisible()`**：`toContainText` 对 `display:none` 和被遮挡元素照样通过——SPEC-012 那个回归就是这么漏网的。
+- **同一枚硬币的反面（v91）：断言「不该出现」时不能用带自动重试的否定断言。** `toBeHidden()` 会重试到默认 5s 超时，而 info toast 自己 3s 后消失——于是它等到 toast 自然过期再判过，「无条件弹提示」这个红灯照样全绿。凡是判据里含「自动消失/自动收起」的元素，否定断言必须用一次性读取（`isVisible()`），并在注释里写明为什么不存在「还没来得及出现」的竞态。
 - **`returnToMore` 会让 sheet「关不掉」**：从「更多」下钻的 sheet，`closeForm()` 是把内容换回「更多」而非 hidden，构成持续性遮挡（详见 SPEC-012 文末实测校正）。写用例时的直接后果：保存后**不要**再点一次「···」，「更多」已经在那儿了；要露出 FAB 得先点「关闭更多菜单」。
 - **端口陷阱（v65）**：`reuseExistingServer: true` 会把 4173 上任何陈旧 server 当被测应用，整套假超时。同一个坑的第二面：全量套件正在跑时再起一个 Playwright 进程会因端口占用直接失败——要临时截图，等全量跑完。
 - **`gh pr edit` 会撞 Projects classic 弃用报错**：改用 `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> --input -`；转 ready 用 GraphQL `markPullRequestReadyForReview`。另：`gh pr create --body "$(cat <<'EOF' … )"` 偶发 graphql 连接被重置，改用 `--body-file -` 直接喂 heredoc 更稳。

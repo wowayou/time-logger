@@ -168,6 +168,7 @@ export default {
   'toast.deleted': 'Deleted',
   'toast.undoCancelled': 'Data was updated elsewhere; undo was cancelled',
   'toast.deleteQuota': 'Local storage is full; the delete did not run. Export a backup and free up space first.',
+  'toast.writeQuota': 'Local storage is full; this change was not saved. Export a backup and free up space first.',
   'repair.label': 'Repair update channel',
   'repair.needOnline': 'Repairing the update channel needs a network connection; connect and try again.',
   'repair.armed': 'Tap again to confirm the repair (entries on this device are not affected)',

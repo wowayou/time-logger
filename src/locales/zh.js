@@ -157,6 +157,7 @@ export default {
   'toast.deleted': '已删除',
   'toast.undoCancelled': '数据已在别处更新，撤销已取消',
   'toast.deleteQuota': '本机存储空间不足，删除没有执行；请先导出备份并清理空间。',
+  'toast.writeQuota': '本机存储空间不足，这次改动没有保存；请先导出备份并清理空间。',
   'repair.label': '修复更新通道',
   'repair.needOnline': '需要联网才能修复更新通道，请连接网络后重试。',
   'repair.armed': '再次点击确认修复（本机记录不受影响）',

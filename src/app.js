@@ -512,7 +512,15 @@ import {
       return;
     }
     normalizeEntries(d, { todayKey: todayStr(), createId: uid });
-    save(d);
+    // v91：写入失败必须说出来。这两个行内动作（确认长段 / 标记已发生）是仅剩的
+    // 两条吞掉 save() 返回值的写入路径——v90 统一了配置侧与删除路径，漏了它们，
+    // 因为它们没有 sheet 可以挂 inline error。失败后 render() 会照常重新 load()，
+    // 于是界面回到原样、用户只看到「点了没反应」——与 v89 那条「复制没反应」同形。
+    if (!save(d)) {
+      showInfoToast(t('toast.writeQuota'));
+      render();
+      return;
+    }
     render();
   }
 
@@ -701,7 +709,13 @@ import {
     delete entry.planned;
     entry.ts = settled;
     normalizeEntries(d, { todayKey: todayStr(), createId: uid });
-    save(d);
+    // v91：同上——失败要出声。这里改的是内存里的对象图，save 失败后它整个被丢弃，
+    // 所以不需要回滚，只需要让用户知道「这条还是计划」不是自己看错了。
+    if (!save(d)) {
+      showInfoToast(t('toast.writeQuota'));
+      render();
+      return;
+    }
     render();
   }
 
