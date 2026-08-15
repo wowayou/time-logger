@@ -73,7 +73,7 @@ SPEC-013 执行时发现：`DEFAULT_CONFIG` 的默认 chips（睡觉/吃饭/洗�
 
 英文种子（与术语表同源，非道德评判）：
 
-- mainline：`Job search`
+- mainline：`Current focus`（v89 起从 `Job search` 改为中性占位）
 - maintain：`Sleep` / `Meals` / `Wash up` / `Commute` / `Chores` / `Exercise`
 - leak：`Entertainment` / `Phone` / `Zoning out`
 

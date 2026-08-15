@@ -4,17 +4,25 @@
 > 维护纪律：每完成一个里程碑就更新本文件并提交，不要攒到最后写。
 > 权威文档分工：法律＝`CLAUDE.md`；决策史＝`docs/decisions.md`；版本流水＝`CLAUDE.md` 表 + `docs/CHANGELOG.md`；协作流程＝`docs/collab-protocol.md`；人肉步骤＝`docs/launch-runbook.md`；规格＝`docs/specs/`。本文件只讲**此刻**，历史流水不往这里堆。
 
-最后更新：2026-08-13（v91 补上 v90 漏网的两条写入路径；尚未提交/发布。v90 已发布上线） · 更新人：Claude Opus 5（本地会话）
+最后更新：2026-08-13（v92 压测修复：跨标签页 CAS 保护 + 回滚检查 + 文案对齐） · 更新人：AI 代理（本地会话）
 
 ---
 
 ## 一句话现状
 
-**v91 本地改动已完成，尚未提交/发布**：v90 发布后的一次全量审计发现，「确认长段」与「标记已发生」这两个行内动作仍吞掉 `save()` 的失败返回值——正是 v90 那一批（写入失败必须可见）的同类漏网。存储写满时点下去只表现为「点了没反应」。已修复并加护栏。
+**v92 已完成**：v91 发布后的完整压测与审计发现两类问题并修复。详见下方 v92 交付段。
 
-**v90 已发布上线**（main + tag + Release + `publish-site` 绿灯，线上实测 manifest `90`、`sw.js` `CACHE = 'timelog-v90'`），v82–v89 均已发布并线上验证。唯一非 gated 的产品未完成项仍是 runbook `- [ ] E 完成`（首轮推广）——它不在 AI 侧。
+**v91 已发布上线**（main + tag + Release），v82–v90 均已发布并线上验证。唯一非 gated 的产品未完成项仍是 runbook `- [ ] E 完成`（首轮推广）——它不在 AI 侧。
 
-## v91 当前交付（2026-08-13）
+## v92 当前交付（2026-08-13）
+
+- **跨标签页 CAS 保护**：`storage.js` 新增 `saveChecked(d, expectedRaw)` 和 `readRaw()`。所有写入路径在 `load()` 后捕获 localStorage 原始字符串快照，写入前比较——不一致说明另一个标签页在中间写了，中止写入并提示用户重试。覆盖 app.js 4 条路径 + sheet_controller.js 6 条路径 + io_actions.js 1 条路径，共 10 条。
+- **回滚 save() 返回值检查**：三处 `deps.save(beforeData)` / `deps.save(current)` 回滚路径此前静默丢弃返回值。现在检查返回值，失败时显示 `io.importRollbackFailed`。
+- **文案对齐**：`manifest.webmanifest` 描述去掉「求职主线」；`README.md` 同步；`docs/external-ai-review-brief.md` 同步；`docs/specs/SPEC-014-english-ui-catalog.md` 英文种子引用更新为 `Current focus`。
+- 新增 i18n 键 `toast.concurrentWrite`（zh/en）和 `io.importRollbackFailed`（zh/en）。
+- 零新增运行时资产（`FILES` 不变）。
+
+## v91 当前交付（2026-08-13，已发布）
 
 - `app.js` 的 `confirmSegment` / `confirmPlanned` 检查 `save(d)` 返回值，失败时 `showInfoToast(t('toast.writeQuota'))`。新增 i18n 键 `toast.writeQuota`（zh/en 对等），与既有 `toast.deleteQuota` 并列而非复用。
 - 新增 `tests/v91_confirm_quota.spec.js` 3 条（双引擎 6/6），含一条反向哨兵锁「正常路径不得弹提示」。
