@@ -476,6 +476,7 @@ export function createIoActions(deps) {
 
   function applyImportedData(imported, shiftMinutes) {
     const current = deps.load();
+    const raw = deps.readRaw();
     const plan = deps.mergeImportedEntries(current, imported.entries, { shiftMinutes, resolutions: importResolutions });
     if (!plan.ok) {
       const latest = deps.mergeImportedEntries(current, imported.entries, { shiftMinutes });
@@ -493,10 +494,11 @@ export function createIoActions(deps) {
     }
     const currentConfig = deps.loadConfig();
     const nextConfig = deps.mergeImportedConfig(currentConfig, imported.config);
-    if (!deps.save(plan.data)) {
+    const write = deps.saveChecked(plan.data, raw);
+    if (!write.ok) {
       const error = document.querySelector('#form-sheet [data-role="import-error"]');
       if (error) {
-        error.textContent = t('io.importQuota');
+        error.textContent = write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('io.importQuota');
         error.hidden = false;
       }
       return false;
@@ -504,7 +506,14 @@ export function createIoActions(deps) {
     try {
       if (!deps.saveConfig(nextConfig)) throw new Error('config-save-failed');
     } catch {
-      deps.save(current);
+      if (!deps.save(current)) {
+        const error = document.querySelector('#form-sheet [data-role="import-error"]');
+        if (error) {
+          error.textContent = t('io.importRollbackFailed');
+          error.hidden = false;
+        }
+        return false;
+      }
       const error = document.querySelector('#form-sheet [data-role="import-error"]');
       if (error) {
         error.textContent = t('io.configSaveFailed');

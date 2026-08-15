@@ -27,10 +27,12 @@ import {
   mergeImportedFirstUsedDate,
   readBootDiag,
   readFirstUsedDate,
+  readRaw,
   rememberCustomTagForBucket,
   resolveMotto,
   setBootDiagEnabled,
   save,
+  saveChecked,
   saveConfig,
   uid,
   validateImportData,
@@ -503,6 +505,7 @@ import {
   // --- Segment confirmation ---
   function confirmSegment(id, endTs) {
     const d = load();
+    const raw = readRaw();
     const result = confirmSegmentInData(d, id, endTs, { config: loadConfig() });
     if (!result.ok) {
       if (result.reason === 'stale') {
@@ -512,12 +515,9 @@ import {
       return;
     }
     normalizeEntries(d, { todayKey: todayStr(), createId: uid });
-    // v91：写入失败必须说出来。这两个行内动作（确认长段 / 标记已发生）是仅剩的
-    // 两条吞掉 save() 返回值的写入路径——v90 统一了配置侧与删除路径，漏了它们，
-    // 因为它们没有 sheet 可以挂 inline error。失败后 render() 会照常重新 load()，
-    // 于是界面回到原样、用户只看到「点了没反应」——与 v89 那条「复制没反应」同形。
-    if (!save(d)) {
-      showInfoToast(t('toast.writeQuota'));
+    const write = saveChecked(d, raw);
+    if (!write.ok) {
+      showInfoToast(write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('toast.writeQuota'));
       render();
       return;
     }
@@ -645,6 +645,7 @@ import {
   function confirmDelete(id) {
     if (!pendingDelete || pendingDelete.id !== id) return;
     const d = load();
+    const raw = readRaw();
     const entry = d.entries.find(item => item.id === id);
     const latest = planDeleteEntry(d.entries, id, { todayKey: todayStr(), nowTs: nowStr() });
     if (!entry || !latest.ok) {
@@ -663,8 +664,9 @@ import {
     }
     const beforeData = JSON.parse(JSON.stringify(d));
     d.entries = latest.resultEntries;
-    if (!save(d)) {
-      deleteError(t('toast.deleteQuota'));
+    const write = saveChecked(d, raw);
+    if (!write.ok) {
+      deleteError(write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('toast.deleteQuota'));
       return;
     }
     pendingDelete = null;
@@ -677,11 +679,14 @@ import {
     const pending = undoDeleteState;
     if (!pending) return;
     const current = load();
+    const raw = readRaw();
     if (entriesRevision(current.entries) !== pending.afterRevision) {
       cancelUndoForConflict();
       return;
     }
-    if (!save(pending.beforeData)) {
+    const write = saveChecked(pending.beforeData, raw);
+    if (!write.ok) {
+      if (write.reason === 'concurrent') showInfoToast(t('toast.concurrentWrite'));
       cancelUndoForConflict();
       return;
     }
@@ -691,6 +696,7 @@ import {
 
   function confirmPlanned(id) {
     const d = load();
+    const raw = readRaw();
     const entry = d.entries.find(e => e.id === id);
     if (!entry || !entry.planned) return;
     const wanted = new Date(entry.ts) > new Date() ? nowStr() : entry.ts;
@@ -709,10 +715,9 @@ import {
     delete entry.planned;
     entry.ts = settled;
     normalizeEntries(d, { todayKey: todayStr(), createId: uid });
-    // v91：同上——失败要出声。这里改的是内存里的对象图，save 失败后它整个被丢弃，
-    // 所以不需要回滚，只需要让用户知道「这条还是计划」不是自己看错了。
-    if (!save(d)) {
-      showInfoToast(t('toast.writeQuota'));
+    const write = saveChecked(d, raw);
+    if (!write.ok) {
+      showInfoToast(write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('toast.writeQuota'));
       render();
       return;
     }
@@ -740,6 +745,8 @@ import {
     load,
     loadConfig,
     save,
+    saveChecked,
+    readRaw,
     saveConfig,
     rememberCustomTagForBucket,
     uid,
@@ -762,6 +769,8 @@ import {
     load,
     loadConfig,
     save,
+    saveChecked,
+    readRaw,
     saveConfig,
     validateImportData,
     mergeImportedEntries,

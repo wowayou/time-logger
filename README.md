@@ -6,7 +6,7 @@
 >
 > Updated: 2026-08-13
 >
-> Intended user: 求职主线时间记录和每日复盘的个人使用者。
+> Intended user: 需要记录每天时间去向并进行每日复盘的个人使用者。
 >
 > Operating boundary: 本地静态 PWA，只记录时间去向，不做云同步、账号管理、KPI 考核或投资/合规判断。
 >

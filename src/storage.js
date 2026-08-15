@@ -627,6 +627,42 @@ export function save(d) {
   }
 }
 
+/**
+ * 读取 localStorage['timelog.v1'] 的原始字符串。用于跨标签页 CAS 写入：
+ * 调用方在 load() 后立即 readRaw()，在 saveChecked() 时比较两者——
+ * 如果原始字符串变了，说明另一个标签页在中间写了，当前写入必须中止。
+ * @returns {string}
+ */
+export function readRaw() {
+  try {
+    return localStorage.getItem(KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 跨标签页 CAS（compare-and-swap）写入。在写入前比较 localStorage 当前原始字符串
+ * 与 expectedRaw（load() 时捕获的快照）。如果不一致，说明另一个标签页在 load() 和
+ * saveChecked() 之间写了数据——当前写入会覆盖那些更改，必须中止。
+ *
+ * 这不能完全消除竞态（readRaw 和 setItem 之间仍有极小窗口），但把窗口从
+ * 「整个用户操作周期」缩小到「一次同步函数调用内」，实际上消除了多标签页
+ * 同时编辑导致静默数据丢失的问题。
+ *
+ * @param {object} d 要写入的数据
+ * @param {string} expectedRaw load() 时捕获的原始字符串
+ * @returns {{ ok: true } | { ok: false, reason: 'concurrent' } | { ok: false, reason: 'quota' }}
+ */
+export function saveChecked(d, expectedRaw) {
+  const currentRaw = readRaw();
+  if (currentRaw !== expectedRaw) {
+    return { ok: false, reason: 'concurrent' };
+  }
+  if (save(d)) return { ok: true };
+  return { ok: false, reason: 'quota' };
+}
+
 export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }

@@ -1261,7 +1261,10 @@ export function createSheetController(deps) {
   // 「未记录」桶。覆盖旧值通常不增加占用，正好是配额已满时最可靠的补偿写。
   function rememberTagOrRollback(tag, bucket, entries, beforeData, scope) {
     if (!tag || rememberTag(tag, bucket, entries)) return true;
-    deps.save(beforeData);
+    if (!deps.save(beforeData)) {
+      showInlineError(scope, t('io.importRollbackFailed'));
+      return false;
+    }
     showInlineError(scope, t('form.tagConfigQuota'));
     return false;
   }
@@ -1287,6 +1290,7 @@ export function createSheetController(deps) {
       return;
     }
     const d = deps.load();
+    const raw = deps.readRaw();
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     const latest = buildOvernightPlan(panel, d.entries);
     if (!latest || !latest.ok) {
@@ -1301,8 +1305,9 @@ export function createSheetController(deps) {
       return;
     }
     d.entries = latest.resultEntries;
-    if (!deps.save(d)) {
-      showInlineError(panel, t('form.quotaForm'));
+    const write = deps.saveChecked(d, raw);
+    if (!write.ok) {
+      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
       return;
     }
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel)) return;
@@ -1332,6 +1337,7 @@ export function createSheetController(deps) {
     const ctag = document.getElementById('form-ctag').value.trim();
     const tag = canonicalTagName(ctag || formTag || RESERVED_UNKNOWN_TAG, deps.loadConfig());
     const d = deps.load();
+    const raw = deps.readRaw();
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     let placeholder = openPlaceholderForDate(d.entries, checked.ts.slice(0, 10));
     // v87：占位条只有在**新起点不晚于它**时才可以复用（复用＝把它的 ts 挪到新起点）。
@@ -1368,8 +1374,9 @@ export function createSheetController(deps) {
       // 破掉：FAB 随之从「续 hh:mm 起」退化成「补记 hh:mm+1 起」。计划条不参与
       // coalesce，走一遍只会补回占位条，不会动已有记录。
       normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
-      if (!deps.save(d)) {
-        showInlineError(panel, t('form.quotaForm'));
+      const write = deps.saveChecked(d, raw);
+      if (!write.ok) {
+        showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
         return;
       }
       if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel)) return;
@@ -1389,8 +1396,9 @@ export function createSheetController(deps) {
     // Single normalization out: coalesce redundant boundaries + re-ensure today's
     // tail placeholder so the next record's default start can never collide.
     normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
-    if (!deps.save(d)) {
-      showInlineError(panel, t('form.quotaForm'));
+    const write = deps.saveChecked(d, raw);
+    if (!write.ok) {
+      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
       return;
     }
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel)) return;
@@ -1421,6 +1429,7 @@ export function createSheetController(deps) {
       return;
     }
     const d = deps.load();
+    const raw = deps.readRaw();
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     const latest = planSegmentSplit(d.entries, {
       sourceId: formSourceId,
@@ -1444,8 +1453,9 @@ export function createSheetController(deps) {
       return;
     }
     d.entries = latest.resultEntries;
-    if (!deps.save(d)) {
-      showInlineError(panel, t('form.quotaForm'));
+    const write = deps.saveChecked(d, raw);
+    if (!write.ok) {
+      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
       return;
     }
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel)) return;
@@ -1470,6 +1480,7 @@ export function createSheetController(deps) {
     const chipBox = box.querySelector('[data-role="edit-chips"]');
     const customEl = box.querySelector('[data-role="edit-custom-tag"]');
     const d = deps.load();
+    const raw = deps.readRaw();
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     const entry = d.entries.find(e => e.id === id);
     const planned = Boolean(entry && entry.planned);
@@ -1533,8 +1544,9 @@ export function createSheetController(deps) {
         return;
       }
       d.entries = latest.resultEntries;
-      if (!deps.save(d)) {
-        showInlineError(box, t('form.quotaForm'));
+      const write = deps.saveChecked(d, raw);
+      if (!write.ok) {
+        showInlineError(box, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
         return;
       }
       if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box)) return;
@@ -1545,8 +1557,9 @@ export function createSheetController(deps) {
       if (planned) entry.planned = true;
       else delete entry.planned;
       normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
-      if (!deps.save(d)) {
-        showInlineError(box, t('form.quotaForm'));
+      const write = deps.saveChecked(d, raw);
+      if (!write.ok) {
+        showInlineError(box, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
         return;
       }
       if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box)) return;
@@ -1772,6 +1785,7 @@ export function createSheetController(deps) {
       return;
     }
     const d = deps.load();
+    const raw = deps.readRaw();
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     // v85：重名判定跨三组一起做（主线与 chip 之间同名同样是冲突），且判据是 tagKey——
     // `sleep` 与 `Sleep` 是同一个标签。判严之后必须同时给出**出口**，否则本来就同时
@@ -1843,12 +1857,16 @@ export function createSheetController(deps) {
       if (row === mergeSourceRow) continue;
       nextConfig = setMainlineLongOk(nextConfig, row.name, row.longOk);
     }
-    if (!deps.save(d)) {
-      showInlineError(panel, t('config.quota'), 'config-error');
+    const write = deps.saveChecked(d, raw);
+    if (!write.ok) {
+      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'config-error');
       return;
     }
     if (!deps.saveConfig(nextConfig)) {
-      deps.save(beforeData);
+      if (!deps.save(beforeData)) {
+        showInlineError(panel, t('io.importRollbackFailed'), 'config-error');
+        return;
+      }
       showInlineError(panel, t('config.quota'), 'config-error');
       return;
     }
