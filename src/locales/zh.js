@@ -312,7 +312,7 @@ export default {
   'io.mergeNote': '合并会保留本机时间、标签和状态，把两边不同的文字合成一条。',
   'io.importQuota': '本机存储空间不足，导入没有执行；表单和原数据均已保留。',
   'io.configSaveFailed': '标签配置保存失败，记录导入已回滚。',
-  'io.importRollbackFailed': '存储空间不足，记录与配置均未保存。请先导出备份并清理空间。',
+  'io.importRollbackFailed': '配置未保存，记录回滚也未完成。为避免继续覆盖，请刷新后检查数据并导出备份。',
   'io.importDone': '导入完成：写入 {imported} 条，保留/跳过 {skipped} 条，处理冲突 {conflicts} 条。',
   'io.parseFailed': '文件解析失败，请确认是有效的 JSON 文件。',
   'io.shareDone': '已分享备份',

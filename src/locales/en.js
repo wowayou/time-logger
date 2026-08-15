@@ -323,7 +323,7 @@ export default {
   'io.mergeNote': 'Merging keeps the local time, tag, and status, and combines the two different texts into one.',
   'io.importQuota': 'Local storage is full; the import did not run. The form and original data are both kept.',
   'io.configSaveFailed': 'Saving tag settings failed; the entry import was rolled back.',
-  'io.importRollbackFailed': 'Storage is full; neither entries nor config were saved. Export a backup and free up space first.',
+  'io.importRollbackFailed': 'The config was not saved, and the entry rollback could not finish. Refresh, inspect the data, and export a backup before making more changes.',
   'io.importDone': 'Import complete: wrote {imported}, kept/skipped {skipped}, resolved {conflicts} conflicts.',
   'io.parseFailed': 'Could not parse the file; make sure it is a valid JSON file.',
   'io.shareDone': 'Backup shared',

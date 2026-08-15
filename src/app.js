@@ -21,19 +21,21 @@ import {
   ensureFirstUsedDate,
   ensureLegacyLocalePinned,
   load,
+  loadSnapshot,
   loadConfig,
+  loadConfigSnapshot,
   mergeImportedConfig,
   mergeImportedEntries,
   mergeImportedFirstUsedDate,
   readBootDiag,
+  readConfigRaw,
   readFirstUsedDate,
-  readRaw,
   rememberCustomTagForBucket,
   resolveMotto,
   setBootDiagEnabled,
   save,
   saveChecked,
-  saveConfig,
+  saveConfigChecked,
   uid,
   validateImportData,
   loadLocalePref,
@@ -504,8 +506,7 @@ import {
 
   // --- Segment confirmation ---
   function confirmSegment(id, endTs) {
-    const d = load();
-    const raw = readRaw();
+    const { data: d, raw } = loadSnapshot();
     const result = confirmSegmentInData(d, id, endTs, { config: loadConfig() });
     if (!result.ok) {
       if (result.reason === 'stale') {
@@ -644,8 +645,7 @@ import {
 
   function confirmDelete(id) {
     if (!pendingDelete || pendingDelete.id !== id) return;
-    const d = load();
-    const raw = readRaw();
+    const { data: d, raw } = loadSnapshot();
     const entry = d.entries.find(item => item.id === id);
     const latest = planDeleteEntry(d.entries, id, { todayKey: todayStr(), nowTs: nowStr() });
     if (!entry || !latest.ok) {
@@ -678,8 +678,7 @@ import {
   function undoDelete() {
     const pending = undoDeleteState;
     if (!pending) return;
-    const current = load();
-    const raw = readRaw();
+    const { data: current, raw } = loadSnapshot();
     if (entriesRevision(current.entries) !== pending.afterRevision) {
       cancelUndoForConflict();
       return;
@@ -695,8 +694,7 @@ import {
   }
 
   function confirmPlanned(id) {
-    const d = load();
-    const raw = readRaw();
+    const { data: d, raw } = loadSnapshot();
     const entry = d.entries.find(e => e.id === id);
     if (!entry || !entry.planned) return;
     const wanted = new Date(entry.ts) > new Date() ? nowStr() : entry.ts;
@@ -743,11 +741,13 @@ import {
   const sheetController = createSheetController({
     state,
     load,
+    loadSnapshot,
     loadConfig,
+    loadConfigSnapshot,
     save,
     saveChecked,
-    readRaw,
-    saveConfig,
+    saveConfigChecked,
+    readConfigRaw,
     rememberCustomTagForBucket,
     uid,
     defaultFormTs,
@@ -767,11 +767,13 @@ import {
   const ioActions = createIoActions({
     state,
     load,
+    loadSnapshot,
     loadConfig,
+    loadConfigSnapshot,
     save,
     saveChecked,
-    readRaw,
-    saveConfig,
+    saveConfigChecked,
+    readConfigRaw,
     validateImportData,
     mergeImportedEntries,
     mergeImportedConfig,

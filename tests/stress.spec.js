@@ -15,9 +15,16 @@ const TAG_POOL = [
 
 function generateEntries(count) {
   const entries = [];
-  let current = new Date('2025-01-01T08:00:00');
 
   for (let i = 0; i < count; i++) {
+    // 每天约 15 条，而不是把 15–40 分钟间隔无休止地铺满 24 小时。旧生成器实际
+    // 约 52 条/天，导致标成“11 个月”的 5000 条只覆盖约 3 个月，年视图压力被
+    // 严重低估。日内仍保留 15–40 分钟的真实间隔，满 15 条后跳到次日 08:00。
+    const day = Math.floor(i / 15);
+    const slot = i % 15;
+    let minuteOfDay = 8 * 60;
+    for (let j = 0; j < slot; j += 1) minuteOfDay += 15 + ((day * 15 + j) % 6) * 5;
+    const current = new Date(2025, 0, 1 + day, Math.floor(minuteOfDay / 60), minuteOfDay % 60);
     const pad = n => String(n).padStart(2, '0');
     const ts = `${current.getFullYear()}-${pad(current.getMonth() + 1)}-${pad(current.getDate())}T${pad(current.getHours())}:${pad(current.getMinutes())}`;
     const entry = {
@@ -31,8 +38,6 @@ function generateEntries(count) {
       entry.longConfirm = { startTs: entries[i - 1].ts, endTs: ts };
     }
     entries.push(entry);
-    // Advance 15–40 min (matches real avg of 15–18 entries/day)
-    current = new Date(current.getTime() + (15 + (i % 6) * 5) * 60_000);
   }
   return entries;
 }
@@ -161,6 +166,41 @@ test.describe('A 类：数据规模', () => {
       expect(loaded.entries.length).toBe(count);
     });
   }
+
+  test('极压 5000 条（约 11 个月）— 年视图完整聚合', async ({ page }) => {
+    const entries = generateEntries(5000);
+    await page.addInitScript(({ entries }) => {
+      localStorage.clear();
+      localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
+      localStorage.setItem('timelog.selectedDate', '2025-06-30');
+      localStorage.setItem('timelog.view', 'day');
+    }, { entries });
+    await page.goto('/');
+    await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+
+    await page.evaluate(() => {
+      window.__yearConfigReads = 0;
+      const original = Storage.prototype.getItem;
+      Storage.prototype.getItem = function (key) {
+        if (key === 'timelog.config') window.__yearConfigReads += 1;
+        return original.call(this, key);
+      };
+      window.__yearRenderStarted = performance.now();
+    });
+    await page.locator('#view-tabs button[data-view="year"]').click();
+    await expect(page.locator('.summary-list .sum-row')).toHaveCount(12);
+
+    const result = await page.evaluate(() => ({
+      elapsedMs: performance.now() - window.__yearRenderStarted,
+      configReads: window.__yearConfigReads
+    }));
+    console.log(`[A-year] 5000 条/11 个月: render=${result.elapsedMs.toFixed(1)}ms, config reads=${result.configReads}`);
+
+    // 健康基线是百毫秒级；2s 只拦截灾难性退化，留足共享 CI 的负载头寸。
+    // v87 的旧 O(天数×条数) 实测约 3055ms，会被这道闸稳定抓住。
+    expect(result.elapsedMs, '5000 条全年聚合应在 2s 内完成').toBeLessThan(2000);
+    expect(result.configReads, 'tag config 不得按片段反复解析').toBeLessThan(50);
+  });
 });
 
 // ─── B 类：交互压测 ────────────────────────────────────────────────────────────

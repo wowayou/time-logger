@@ -277,10 +277,28 @@ export function normalizeConfig(raw) {
 }
 
 export function loadConfig() {
+  return loadConfigSnapshot().config;
+}
+
+/**
+ * 一次读取配置对象与其原始字符串，供较长的配置表单保存时做 CAS。
+ * @returns {{ config: TagConfig, raw: string }}
+ */
+export function loadConfigSnapshot() {
+  let raw = '';
   try {
-    return normalizeConfig(JSON.parse(localStorage.getItem(CONFIG_KEY)));
+    raw = localStorage.getItem(CONFIG_KEY) || '';
+    return { config: normalizeConfig(JSON.parse(raw)), raw };
   } catch {
-    return normalizeConfig(null);
+    return { config: normalizeConfig(null), raw };
+  }
+}
+
+export function readConfigRaw() {
+  try {
+    return localStorage.getItem(CONFIG_KEY) || '';
+  } catch {
+    return '';
   }
 }
 
@@ -298,15 +316,25 @@ export function saveConfig(config) {
   }
 }
 
+/**
+ * 配置侧 compare-and-swap。长表单必须把打开时的 raw 传进来，避免用旧行状态
+ * 覆盖另一标签页在表单打开期间做的改动。
+ * @returns {{ ok: true } | { ok: false, reason: 'concurrent' | 'quota' }}
+ */
+export function saveConfigChecked(config, expectedRaw) {
+  if (readConfigRaw() !== expectedRaw) return { ok: false, reason: 'concurrent' };
+  return saveConfig(config) ? { ok: true } : { ok: false, reason: 'quota' };
+}
+
 function addMainlineTag(tag) {
   const name = cleanName(tag);
   if (!name || name === RESERVED_UNKNOWN_TAG) return loadConfig();
-  const config = loadConfig();
+  const { config, raw } = loadConfigSnapshot();
   const key = tagKey(name);
   if (!config.mainline.some(item => tagKey(item) === key)
     && !config.chips.some(chip => tagKey(chip.name) === key)) {
     config.mainline.unshift(name);
-    return saveConfig(config) || false;
+    return saveConfigChecked(config, raw).ok ? config : false;
   }
   return config;
 }
@@ -314,7 +342,7 @@ function addMainlineTag(tag) {
 function addChipTag(tag, bucket) {
   const name = cleanName(tag);
   if (!name || name === RESERVED_UNKNOWN_TAG || bucket === 'job' || bucket === 'unrecorded') return loadConfig();
-  const config = loadConfig();
+  const { config, raw } = loadConfigSnapshot();
   const key = tagKey(name);
   const existing = config.chips.find(chip => tagKey(chip.name) === key);
   if (existing) {
@@ -325,7 +353,7 @@ function addChipTag(tag, bucket) {
   }
   if (config.mainline.some(item => tagKey(item) === key)) return config;
   config.chips.push({ name, bucket, longOk: false });
-  return saveConfig(config) || false;
+  return saveConfigChecked(config, raw).ok ? config : false;
 }
 
 function rememberTagForBucket(tag, bucket) {
@@ -528,12 +556,30 @@ export function tagKnownForConfirmation(tag, config = loadConfig()) {
   return bucketForTag(tag, config) !== 'unrecorded';
 }
 
-export function load() {
+/**
+ * 一次读取同时取得数据对象和与之逐字对应的原始字符串。
+ *
+ * 写路径不能先 `load()` 再单独 `readRaw()`：另一标签页若恰在两次读取之间写入，
+ * 旧对象会配上新 raw，后续 `saveChecked()` 就会把对方的新数据当成自己的基线并
+ * 静默覆盖。单次 getItem 后再解析，才能保证 data/raw 来自同一个版本。
+ *
+ * @returns {{ data: any, raw: string }}
+ */
+export function loadSnapshot() {
+  let raw = '';
   try {
-    return JSON.parse(localStorage.getItem(KEY)) || { version: 1, entries: [] };
+    raw = localStorage.getItem(KEY) || '';
+    return {
+      data: JSON.parse(raw) || { version: 1, entries: [] },
+      raw
+    };
   } catch {
-    return { version: 1, entries: [] };
+    return { data: { version: 1, entries: [] }, raw };
   }
+}
+
+export function load() {
+  return loadSnapshot().data;
 }
 
 export function ensureFirstUsedDate(todayKey, entries = []) {
@@ -628,9 +674,8 @@ export function save(d) {
 }
 
 /**
- * 读取 localStorage['timelog.v1'] 的原始字符串。用于跨标签页 CAS 写入：
- * 调用方在 load() 后立即 readRaw()，在 saveChecked() 时比较两者——
- * 如果原始字符串变了，说明另一个标签页在中间写了，当前写入必须中止。
+ * 读取 localStorage['timelog.v1'] 的当前原始字符串。供 saveChecked() 在真正写入前
+ * 复核；调用方的基线必须来自 loadSnapshot()，不能由 load()+readRaw() 拼接。
  * @returns {string}
  */
 export function readRaw() {
@@ -652,14 +697,14 @@ export function readRaw() {
  *
  * @param {object} d 要写入的数据
  * @param {string} expectedRaw load() 时捕获的原始字符串
- * @returns {{ ok: true } | { ok: false, reason: 'concurrent' } | { ok: false, reason: 'quota' }}
+ * @returns {{ ok: true, raw: string } | { ok: false, reason: 'concurrent' } | { ok: false, reason: 'quota' }}
  */
 export function saveChecked(d, expectedRaw) {
   const currentRaw = readRaw();
   if (currentRaw !== expectedRaw) {
     return { ok: false, reason: 'concurrent' };
   }
-  if (save(d)) return { ok: true };
+  if (save(d)) return { ok: true, raw: JSON.stringify(d) };
   return { ok: false, reason: 'quota' };
 }
 

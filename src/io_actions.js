@@ -475,8 +475,7 @@ export function createIoActions(deps) {
   }
 
   function applyImportedData(imported, shiftMinutes) {
-    const current = deps.load();
-    const raw = deps.readRaw();
+    const { data: current, raw } = deps.loadSnapshot();
     const plan = deps.mergeImportedEntries(current, imported.entries, { shiftMinutes, resolutions: importResolutions });
     if (!plan.ok) {
       const latest = deps.mergeImportedEntries(current, imported.entries, { shiftMinutes });
@@ -492,7 +491,7 @@ export function createIoActions(deps) {
       }
       return false;
     }
-    const currentConfig = deps.loadConfig();
+    const { config: currentConfig, raw: configRaw } = deps.loadConfigSnapshot();
     const nextConfig = deps.mergeImportedConfig(currentConfig, imported.config);
     const write = deps.saveChecked(plan.data, raw);
     if (!write.ok) {
@@ -503,10 +502,18 @@ export function createIoActions(deps) {
       }
       return false;
     }
+    let configFailureMessage = t('io.configSaveFailed');
     try {
-      if (!deps.saveConfig(nextConfig)) throw new Error('config-save-failed');
+      const configWrite = deps.saveConfigChecked(nextConfig, configRaw);
+      if (!configWrite.ok) {
+        configFailureMessage = configWrite.reason === 'concurrent' ? t('toast.concurrentWrite') : t('io.configSaveFailed');
+        throw new Error('config-save-failed');
+      }
     } catch {
-      if (!deps.save(current)) {
+      // 配置合并失败时，只在数据仍是本次导入写入的版本上回滚。无条件 save()
+      // 会覆盖另一标签页在导入与配置 CAS 之间追加的记录。
+      const rollback = deps.saveChecked(current, write.raw);
+      if (!rollback.ok) {
         const error = document.querySelector('#form-sheet [data-role="import-error"]');
         if (error) {
           error.textContent = t('io.importRollbackFailed');
@@ -516,7 +523,7 @@ export function createIoActions(deps) {
       }
       const error = document.querySelector('#form-sheet [data-role="import-error"]');
       if (error) {
-        error.textContent = t('io.configSaveFailed');
+        error.textContent = configFailureMessage;
         error.hidden = false;
       }
       return false;

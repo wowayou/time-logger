@@ -74,6 +74,7 @@ export function createSheetController(deps) {
   let lastPreviewSignature = '';
   let editEndMode = 'fixed';
   let configDefaultsPreview = null;
+  let configRawAtOpen = '';
   // 导航栈：二级页若从容器 sheet（更多 / 备份与导入 / 高级）下钻进入，取消/保存回到
   // 上一层而非整层关闭。v84 从单个布尔升级为**栈**——「更多 → 备份与导入 → 导入检查」
   // 现在有两层，布尔只记得住一层，关掉导入检查会一路关到底。
@@ -630,6 +631,7 @@ export function createSheetController(deps) {
       // SPEC-007/D18：默认标签预览是一次性的——每次重开 config sheet 都清掉，
       // 只有显式点「添加本语言的默认标签」那一次才带着它重开。
       configDefaultsPreview = (opts && opts.defaultsPreview) || null;
+      configRawAtOpen = deps.readConfigRaw();
     }
     const sheet = document.getElementById('form-sheet');
     const panel = sheet.querySelector('.form-sheet-panel');
@@ -988,12 +990,13 @@ export function createSheetController(deps) {
   }
 
   function toggleLongReview() {
-    const config = deps.loadConfig();
+    const { config, raw } = deps.loadConfigSnapshot();
     if (config.longReview === true) delete config.longReview;
     else config.longReview = true;
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
-    if (!deps.saveConfig(config)) {
-      showInlineError(panel, t('config.quota'), 'advanced-error');
+    const write = deps.saveConfigChecked(config, raw);
+    if (!write.ok) {
+      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'advanced-error');
       return;
     }
     deps.render();
@@ -1259,9 +1262,12 @@ export function createSheetController(deps) {
   // 自定义标签与记录是跨两个 localStorage key 的一次用户动作。记录先落库，再记住
   // 标签；若第二步因配额失败，就把记录回滚到写前快照并留在表单里，避免新标签掉进
   // 「未记录」桶。覆盖旧值通常不增加占用，正好是配额已满时最可靠的补偿写。
-  function rememberTagOrRollback(tag, bucket, entries, beforeData, scope) {
+  function rememberTagOrRollback(tag, bucket, entries, beforeData, scope, writtenRaw) {
     if (!tag || rememberTag(tag, bucket, entries)) return true;
-    if (!deps.save(beforeData)) {
+    // 配置写入失败时，只在数据仍是本次写入版本上回滚；无条件 save() 会抹掉
+    // 另一标签页在两次写入之间追加的记录。
+    const rollback = deps.saveChecked(beforeData, writtenRaw);
+    if (!rollback.ok) {
       showInlineError(scope, t('io.importRollbackFailed'));
       return false;
     }
@@ -1289,8 +1295,7 @@ export function createSheetController(deps) {
       paintTransactionPreview(panel, expected);
       return;
     }
-    const d = deps.load();
-    const raw = deps.readRaw();
+    const { data: d, raw } = deps.loadSnapshot();
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     const latest = buildOvernightPlan(panel, d.entries);
     if (!latest || !latest.ok) {
@@ -1310,7 +1315,7 @@ export function createSheetController(deps) {
       showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
       return;
     }
-    if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel)) return;
+    if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
     const staysYesterday = latest.kind === 'overnight-day-end' && startTs < formOvernightContext.midnightTs;
     deps.setSelectedDate(staysYesterday ? formOvernightContext.yesterdayKey : formOvernightContext.todayKey);
     teardownNow(() => { closeForm(); deps.render(); });
@@ -1336,8 +1341,7 @@ export function createSheetController(deps) {
     if (!what) { document.getElementById('form-what').focus(); return; }
     const ctag = document.getElementById('form-ctag').value.trim();
     const tag = canonicalTagName(ctag || formTag || RESERVED_UNKNOWN_TAG, deps.loadConfig());
-    const d = deps.load();
-    const raw = deps.readRaw();
+    const { data: d, raw } = deps.loadSnapshot();
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     let placeholder = openPlaceholderForDate(d.entries, checked.ts.slice(0, 10));
     // v87：占位条只有在**新起点不晚于它**时才可以复用（复用＝把它的 ts 挪到新起点）。
@@ -1379,7 +1383,7 @@ export function createSheetController(deps) {
         showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
         return;
       }
-      if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel)) return;
+      if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
       deps.setSelectedDate(checked.ts.slice(0, 10));
       teardownNow(() => { closeForm(); deps.render(); });
       return;
@@ -1401,7 +1405,7 @@ export function createSheetController(deps) {
       showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
       return;
     }
-    if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel)) return;
+    if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
     deps.setSelectedDate(checked.ts.slice(0, 10));
     teardownNow(() => { closeForm(); deps.render(); });
   }
@@ -1428,8 +1432,7 @@ export function createSheetController(deps) {
       paintTransactionPreview(panel, expected);
       return;
     }
-    const d = deps.load();
-    const raw = deps.readRaw();
+    const { data: d, raw } = deps.loadSnapshot();
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     const latest = planSegmentSplit(d.entries, {
       sourceId: formSourceId,
@@ -1458,7 +1461,7 @@ export function createSheetController(deps) {
       showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
       return;
     }
-    if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel)) return;
+    if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
     deps.setSelectedDate(startChecked.ts.slice(0, 10));
     teardownNow(() => { closeForm(); deps.render(); });
   }
@@ -1479,8 +1482,7 @@ export function createSheetController(deps) {
     const whatEl = box.querySelector('[data-role="edit-what"]');
     const chipBox = box.querySelector('[data-role="edit-chips"]');
     const customEl = box.querySelector('[data-role="edit-custom-tag"]');
-    const d = deps.load();
-    const raw = deps.readRaw();
+    const { data: d, raw } = deps.loadSnapshot();
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     const entry = d.entries.find(e => e.id === id);
     const planned = Boolean(entry && entry.planned);
@@ -1549,7 +1551,7 @@ export function createSheetController(deps) {
         showInlineError(box, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
         return;
       }
-      if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box)) return;
+      if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box, write.raw)) return;
     } else if (entry) {
       entry.ts = checked.ts;
       entry.what = what;
@@ -1562,7 +1564,7 @@ export function createSheetController(deps) {
         showInlineError(box, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
         return;
       }
-      if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box)) return;
+      if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box, write.raw)) return;
     }
     deps.setSelectedDate(checked.ts.slice(0, 10));
     teardownNow(() => { closeEditSheet(); deps.render(); });
@@ -1784,8 +1786,7 @@ export function createSheetController(deps) {
       showInlineError(panel, t('config.reservedName', { name: RESERVED_UNKNOWN_TAG }), 'config-error', reserved.input);
       return;
     }
-    const d = deps.load();
-    const raw = deps.readRaw();
+    const { data: d, raw } = deps.loadSnapshot();
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     // v85：重名判定跨三组一起做（主线与 chip 之间同名同样是冲突），且判据是 tagKey——
     // `sleep` 与 `Sleep` 是同一个标签。判严之后必须同时给出**出口**，否则本来就同时
@@ -1857,17 +1858,28 @@ export function createSheetController(deps) {
       if (row === mergeSourceRow) continue;
       nextConfig = setMainlineLongOk(nextConfig, row.name, row.longOk);
     }
+    // 标签设置是长表单：若另一个标签页在打开期间写过 config，旧行状态不能继续
+    // 参与这次重建，否则会静默抹掉对方的改名/分桶。先做一次便宜的前置检查，
+    // 保存后再由 saveConfigChecked() 复核一次。
+    if (deps.readConfigRaw() !== configRawAtOpen) {
+      showInlineError(panel, t('toast.concurrentWrite'), 'config-error');
+      return;
+    }
     const write = deps.saveChecked(d, raw);
     if (!write.ok) {
       showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'config-error');
       return;
     }
-    if (!deps.saveConfig(nextConfig)) {
-      if (!deps.save(beforeData)) {
+    const configWrite = deps.saveConfigChecked(nextConfig, configRawAtOpen);
+    if (!configWrite.ok) {
+      // 配置写入失败时只在数据仍保持本次写入的原始值时回滚。无条件 save()
+      // 会把另一标签页在这段窗口里追加的记录一起抹掉，反而制造第二次覆盖。
+      const rollback = deps.saveChecked(beforeData, write.raw);
+      if (!rollback.ok) {
         showInlineError(panel, t('io.importRollbackFailed'), 'config-error');
         return;
       }
-      showInlineError(panel, t('config.quota'), 'config-error');
+      showInlineError(panel, configWrite.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'config-error');
       return;
     }
     // 删除生效后，还挂着的「撤销删除记录」会把引用这个标签的记录放回来——那条记录
@@ -1881,8 +1893,10 @@ export function createSheetController(deps) {
   // 的成败牵连；重开是为了让置顶顺序与徽章即时反映新状态。
   function setCurrentMainline(name) {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
-    if (!deps.saveConfig(storageSetCurrentMainline(deps.loadConfig(), name))) {
-      showInlineError(panel, t('config.quota'), 'config-error');
+    const { config, raw } = deps.loadConfigSnapshot();
+    const write = deps.saveConfigChecked(storageSetCurrentMainline(config, name), raw);
+    if (!write.ok) {
+      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'config-error');
       return;
     }
     openFormSheet({ mode: 'config' });
@@ -1953,8 +1967,10 @@ export function createSheetController(deps) {
 
   function applyLocaleDefaults() {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
-    if (!deps.saveConfig(appendLocaleDefaultTags(deps.loadConfig()))) {
-      showInlineError(panel, t('config.quota'), 'config-error');
+    const { config, raw } = deps.loadConfigSnapshot();
+    const write = deps.saveConfigChecked(appendLocaleDefaultTags(config), raw);
+    if (!write.ok) {
+      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'config-error');
       return;
     }
     openFormSheet({ mode: 'config' });
@@ -1971,11 +1987,12 @@ export function createSheetController(deps) {
   function saveMotto() {
     const input = document.querySelector('#form-sheet [data-role="motto-input"]');
     if (!input) { closeForm(); return; }
-    const config = deps.loadConfig();
+    const { config, raw } = deps.loadConfigSnapshot();
     config.motto = input.value;
     const panel = input.closest('.form-sheet-panel');
-    if (!deps.saveConfig(config)) {
-      showInlineError(panel, t('config.quota'), 'motto-error');
+    const write = deps.saveConfigChecked(config, raw);
+    if (!write.ok) {
+      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'motto-error');
       return;
     }
     closeForm();
