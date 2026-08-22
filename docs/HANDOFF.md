@@ -4,7 +4,7 @@
 > 维护纪律：每完成一个里程碑就更新本文件并提交，不要攒到最后写。
 > 权威文档分工：法律＝`CLAUDE.md`；决策史＝`docs/decisions.md`；版本流水＝`CLAUDE.md` 表 + `docs/CHANGELOG.md`；协作流程＝`docs/collab-protocol.md`；人肉步骤＝`docs/launch-runbook.md`；规格＝`docs/specs/`。本文件只讲**此刻**，历史流水不往这里堆。
 
-最后更新：2026-08-15（v93 压测补洞：一致数据快照 + 配置页 CAS + 完整年视图压力闸） · 更新人：AI 代理（本地会话）
+最后更新：2026-08-22（安卓原生壳另立仓库，D26；本仓无运行时改动） · 更新人：AI 代理（本地会话）
 
 ---
 
@@ -13,6 +13,15 @@
 **v93 已完成**：在 v92 CAS 保护上补齐双读取竞态、配置页跨标签覆盖与失败回滚覆盖，并把完整 11 个月年视图纳入压力门禁。详见下方 v93 交付段。
 
 **v91 已发布上线**（main + tag + Release），v82–v90 均已发布并线上验证。唯一非 gated 的产品未完成项仍是 runbook `- [ ] E 完成`（首轮推广）——它不在 AI 侧。
+
+## 安卓原生壳已另立仓库（2026-08-22，D26）
+
+**本仓不受影响**：无运行时改动、无版本仪式；新增的只有 `docs/decisions.md` 的 D26 与这一段指针。
+
+- 位置：`../time-logger-android`（本机），独立仓库，Gradle 工程**不进本仓**（铁律：单页静态 / 无构建 / 无运行时依赖）。
+- 关系：本仓是**单一真源**。安卓仓的 `scripts/sync_runtime.py` 解析本仓 `sw.js` 的 `FILES` 逐字节复制运行时到 APK 的 `assets/app/`（刻意跳过 `sw.js`），并把本仓 commit 与 manifest 版本写进它的版本锚点（`versionName = <web 版本>.<android revision>`）。
+- 边界：原生侧**不实现业务逻辑**——一键写入的起点、占位条复用、同刻唯一、`normalizeEntries`、`saveChecked` 全部由本仓真实模块在一个无界面 WebView 里执行，契约与红灯在安卓仓 `docs/DATA-CONTRACT.md` / `scripts/redlight.py`。
+- 改本仓这几处时要知道安卓仓在依赖它们：`entry_model.js` 的 `defaultFormTimestamp` / `normalizeEntries`、`storage.js` 的 `loadSnapshot` / `saveChecked` / `canonicalTagName` / `tagKey`、`stats.js` 的 `isPlaceholderEntry` / `loggedEntriesFrom`，以及 `index.html` 的 `#add-btn` / `#form-what` / `#form-chips` / `#form-sheet`（安卓壳的「打开表单并预填」与返回键靠这几个选择器）。改名不会让本仓变红，但会让安卓壳静默失效。
 
 ## v93 当前交付（2026-08-15）
 
