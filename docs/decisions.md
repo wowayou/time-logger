@@ -941,3 +941,37 @@ D14 第 3 条早已预留过这条路（「若未来走『免费 Web + 付费原
 - 网站支持页**尚不存在**。在它上线之前，应用内不放链接（宁可少一行也不给死链）。
 - 本条不改变 D26 的登记：原生载体是维护者提前放行的 gated 项；也不构成「市场愿意付费」
   的任何证据——那件事至今未被验证过。
+
+## D29 · 英文名统一为 Eigentime（口径对齐，非改名）（2026-08-22）
+
+**背景**：维护者问「叫什么名字合适呢？eigentime 还是什么」。调研先查了自己的仓库，
+结论是**这个决定其实早就做过了**——运行时的英文词典里 `shell.brand` 就是 `Eigentime`
+（英文界面的 header 一直显示它），域名 `eigentime.org` 也早已在手。真正的问题不是取名，
+而是**三处两个名字**：
+
+| 表面 | 之前 |
+|---|---|
+| 运行时英文界面 | **Eigentime** |
+| `site/en/` 英文站点（title / h1 / meta / alt，13 处） | Time Logger |
+| 安卓壳的英文应用标签与小组件标题 | Time Logger |
+
+**裁决**：英文统一为 **Eigentime**，中文保持 **时间尺**。站点英文页与安卓标签改过来，
+运行时不动（它本来就是对的）。这是口径对齐，不是改名。
+
+**为什么不留 "Time Logger"**：它是通用词。Apple 自己的命名指南明确劝退
+（"Be distinctive. Avoid names that use generic terms or are too similar to existing app
+names"），Play 的元数据政策也要求标题「honest, relevant」且禁止塞关键词——通用词既排不上，
+也不构成品牌。描述性文字的正确位置是简短描述，不是标题。
+
+**Eigentime 这个词本身**：德语 *Eigenzeit* 是相对论里的「固有时」——沿着你自己的世界线
+测得的时间。对一个只记录「你自己这一天」的账本来说，这个来历比任何通用词都贴。
+
+**可获得性（如实标注证据强度）**：Play 商店搜索 `eigentime` **没有同名应用**（实测，
+只有 EmanTime / EasyTimeManager 这类不相干的近似词）。**商标未查**——USPTO / EUIPO / CNIPA
+的检索没做，搜索引擎只返回了通用的商标常识页。上架前应自行检索一次；本条不构成商标可用性结论。
+
+**包名 `org.eigentime.timelogger` 保持不变**：反向域名、用户看不见、上架后不可改，
+换它没有任何收益。仓库名 `time-logger-android` 也保持（与 `time-logger` 成对；GitHub 改名
+随时可做且会保留跳转）。
+
+**Play 标题按语言分别设置**：`zh-CN` = 时间尺，`en-US` = Eigentime（均在 30 字符上限内）。
