@@ -6,7 +6,11 @@ name: publish-site
 on:
   push:
     tags:
+      # 两种形态都要接：`v93` 及更早的单整数（历史 tag，保留可回溯），以及 v1.0.0
+      # 起的三段式。**改格式时这一行必须先就绪**——glob 不匹配的后果不是报错，而是
+      # workflow 静默不触发、线上主页停在上一次发布（2026-08-10 实测过一次同形失败）。
       - 'v[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   # 只改 site/ 文案时没有新版本、也就没有 tag，主页会**无声地停在上一次发布**
   # （2026-08-10 实测：仓库已改成「自用 44 天」，线上仍是「30+ 天」）。手动触发
   # 是这里的解药，而不是「push 到 main 就自动发」——后者会把还没打 tag 的运行时
@@ -24,6 +28,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: src
+
+      # tag 与 manifest 版本必须一致：否则「打了 v1.0.1 的 tag，却把 manifest 还是
+      # 1.0.0 的运行时推上线」会成为一次静默的错版发布。手动触发没有 tag，跳过。
+      - name: Verify tag matches manifest version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          manifest_version=$(python3 -c "import json;print(json.load(open('src/manifest.webmanifest'))['version'])")
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "$manifest_version" != "$tag_version" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match manifest version ${manifest_version}" >&2
+            exit 1
+          fi
+          echo "tag ${GITHUB_REF_NAME} matches manifest version ${manifest_version}"
 
       - name: Checkout deploy mirror
         uses: actions/checkout@v4
