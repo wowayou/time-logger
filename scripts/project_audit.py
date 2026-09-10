@@ -11,7 +11,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "93"
+# v1.0.0 起是三段式（此前是单整数，v1–v93）。判据必须**只认三段式**：写回单整数
+# 会让 android 仓的 versionCode 派生与 publish-site 的 tag 校验重新分叉，那两处
+# 现在都按三段式解析。历史 tag 与 docs/CHANGELOG.md 的单整数条目不受影响。
+EXPECTED_VERSION = "1.0.0"
+VERSION_PATTERN = r"\d+\.\d+\.\d+"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
     "index.html",
@@ -117,9 +121,9 @@ def audit_manifest(errors: list[str]) -> None:
 
 def audit_service_worker(errors: list[str]) -> None:
     sw = read_text("sw.js")
-    match = re.search(r"const\s+CACHE\s*=\s*['\"]timelog-v(\d+)['\"]", sw)
+    match = re.search(rf"const\s+CACHE\s*=\s*['\"]timelog-v({VERSION_PATTERN})['\"]", sw)
     if not match:
-        fail(errors, "sw.js must declare CACHE = 'timelog-vN'")
+        fail(errors, "sw.js must declare CACHE = 'timelog-vN.N.N'")
     elif match.group(1) != EXPECTED_VERSION:
         fail(errors, f"sw.js cache must be timelog-v{EXPECTED_VERSION}")
 
@@ -156,9 +160,9 @@ def audit_service_worker(errors: list[str]) -> None:
 def audit_app_version_string(errors: list[str]) -> None:
     # 更多 sheet 底部展示的版本号（真机核对用）必须与 CACHE/manifest 同步。
     ui = read_text("src/ui.js")
-    match = re.search(r"const\s+APP_VERSION\s*=\s*['\"](\d+)['\"]", ui)
+    match = re.search(rf"const\s+APP_VERSION\s*=\s*['\"]({VERSION_PATTERN})['\"]", ui)
     if not match:
-        fail(errors, "src/ui.js must declare APP_VERSION = 'N'")
+        fail(errors, "src/ui.js must declare APP_VERSION = 'N.N.N'")
     elif match.group(1) != EXPECTED_VERSION:
         fail(errors, f"src/ui.js APP_VERSION must be {EXPECTED_VERSION!r}")
 

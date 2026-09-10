@@ -9,10 +9,12 @@
 // 两边都静默失去离线能力，而且从表象几乎无法回溯到成因（缓存没命中就走网络，
 // 联网时一切正常）。
 // CACHE 保持字面量形态：版本仪式的 `bump_version.py` 与 audit 都按
-// `CACHE = 'timelog-vN'` 逐字匹配它，改成模板字符串会把六锚点联动打断。
+// `CACHE = 'timelog-vN.N.N'` 逐字匹配它，改成模板字符串会把六锚点联动打断。
+// 版本自 v1.0.0 起是三段式；旧的单整数缓存名（timelog-v93 及更早）由下面的
+// 前缀清理正常淘汰，不需要迁移代码。
 // 前缀因此单独声明；两者一致性由 audit 断言（见 audit_service_worker）。
 const CACHE_PREFIX = 'timelog-';
-const CACHE = 'timelog-v93';
+const CACHE = 'timelog-v1.0.0';
 const FILES = [
   './',
   './index.html',
