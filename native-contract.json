@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "description": "Web → Android 契约：android 侧（bridge + MainActivity + shell_browser_check）依赖的 web 模块 exports 与 DOM selectors。这是开发期文件，刻意不进 sw.js FILES，audit 有反向断言。",
+  "modules": {
+    "src/storage.js": {
+      "exports": [
+        "canonicalTagName",
+        "loadConfig",
+        "loadSnapshot",
+        "readRaw",
+        "saveChecked",
+        "tagKey",
+        "uid"
+      ]
+    },
+    "src/entry_model.js": {
+      "exports": [
+        "defaultFormTimestamp",
+        "findTimeConflict",
+        "normalizeEntries",
+        "openPlaceholderForDate"
+      ]
+    },
+    "src/stats.js": {
+      "exports": [
+        "isPlaceholderEntry",
+        "loggedEntriesFrom"
+      ]
+    },
+    "src/time.js": {
+      "exports": [
+        "nowStr",
+        "todayStr"
+      ]
+    }
+  },
+  "selectors": [
+    "#add-btn",
+    "#form-what",
+    "#form-sheet",
+    "#form-chips .chip[data-tag]",
+    "#timeline",
+    "a[href^=\"https://github.com\"]"
+  ]
+}

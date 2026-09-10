@@ -790,6 +790,124 @@ def audit_i18n_catalog_parity(errors: list[str]) -> None:
 FORBIDDEN_CATALOG_BUCKET_TERMS = ("Leak", "Waste", "Distraction", "Unproductive", "Wasted")
 
 
+def audit_native_contract(errors: list[str]) -> None:
+    """Web → Android 契约：验证 native-contract.json 声明的 exports 与 selectors
+    真实存在；且契约本身不进 sw.js FILES（它是开发期文件，不该进运行时缓存）。
+
+    export 检查用 Node 真实导入模块验证，selector 检查用静态文本搜索（复杂的
+    如 form 相关动态 DOM 留给测试用例覆盖红灯）。"""
+    contract_path = ROOT / "native-contract.json"
+    if not contract_path.exists():
+        fail(errors, "native-contract.json 缺失（android 侧依赖它）")
+        return
+
+    try:
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        fail(errors, f"native-contract.json 不是合法 JSON: {exc}")
+        return
+
+    if contract.get("version") != 1:
+        fail(errors, "native-contract.json 必须声明 version: 1")
+
+    # 验证 modules 里的 exports 真实存在：用 Node 导入模块，按导出的实际键集校验
+    modules = contract.get("modules", {})
+    if not isinstance(modules, dict) or not modules:
+        fail(errors, "native-contract.json modules 必须是非空对象")
+        return
+
+    for module_path, spec in modules.items():
+        full_path = ROOT / module_path
+        if not full_path.exists():
+            fail(errors, f"契约声明的模块不存在: {module_path}")
+            continue
+        if not isinstance(spec, dict) or not isinstance(spec.get("exports"), list) or not spec["exports"]:
+            fail(errors, f"契约 {module_path} 的 exports 必须是非空字符串数组")
+            continue
+
+        # Node 真实导入该模块，读取导出键集
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["node", "--input-type=module", "-e",
+                 f"import * as mod from './{module_path}'; "
+                 f"console.log(JSON.stringify(Object.keys(mod).filter(k => !k.startsWith('_')).sort()));"],
+                cwd=ROOT, capture_output=True, text=True, timeout=5
+            )
+            if result.returncode != 0:
+                fail(errors, f"Node 导入 {module_path} 失败: {result.stderr.strip()}")
+                continue
+            actual_exports = set(json.loads(result.stdout.strip()))
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError) as exc:
+            fail(errors, f"检查 {module_path} exports 时出错: {exc}")
+            continue
+
+        for export_name in spec["exports"]:
+            if export_name not in actual_exports:
+                fail(errors, f"{module_path} 缺少契约声明的 export: {export_name}")
+
+    # 验证 selectors：在 index.html 或任何 src/*.js 里出现过（静态文本搜索）
+    selectors = contract.get("selectors", [])
+    if not isinstance(selectors, list) or not selectors:
+        fail(errors, "native-contract.json selectors 必须是非空数组")
+        return
+
+    index_html = read_text("index.html")
+    src_files = list((ROOT / "src").glob("*.js"))
+    all_src = "\n".join(f.read_text(encoding="utf-8") for f in src_files)
+
+    for selector in selectors:
+        # 复合 selector（含空格或中括号）：必须完整检查所有部分（容器/class/属性/层级）
+        if " " in selector or "[" in selector:
+            parts_ok = True
+            # 例如 `#form-chips .chip[data-tag]` 检查 data-tag、form-chips、chip 都出现
+            if "data-" in selector:
+                attr_match = re.search(r'data-([a-z-]+)', selector)
+                if attr_match:
+                    attr = f"data-{attr_match.group(1)}"
+                    # 精确匹配属性：data-tag="..." 或 data-tag='...'，不被 data-tag-removed 误触
+                    if (f'{attr}="' not in index_html and f"{attr}='" not in index_html
+                        and f'{attr}="' not in all_src and f"{attr}='" not in all_src):
+                        fail(errors, f"契约 selector 的属性未找到: {attr} (来自 {selector})")
+                        parts_ok = False
+            # 容器 id
+            if "#" in selector:
+                container_id = re.search(r'#([a-z-]+)', selector)
+                if container_id:
+                    cid = container_id.group(1)
+                    if (f'id="{cid}"' not in index_html and f'id="{cid}"' not in all_src):
+                        fail(errors, f"契约 selector 的容器 id 未找到: #{cid} (来自 {selector})")
+                        parts_ok = False
+            # class（只取空格后的第一个 . 类名，避免 github.com 误触）
+            class_match = re.search(r'\s\.([a-z-]+)', selector)
+            if class_match:
+                cls = class_match.group(1)
+                if f'class="{cls}"' not in all_src and f"'{cls}'" not in all_src:
+                    fail(errors, f"契约 selector 的 class 未找到: .{cls} (来自 {selector})")
+                    parts_ok = False
+        # 链接 selector（不检查 URL 部分，只确认有 <a href）
+        elif selector.startswith("a[href"):
+            if "<a href" not in index_html and "<a href" not in all_src:
+                fail(errors, f"契约声明的 selector 未找到: {selector}")
+        # 简单 #id selector（无空格无中括号）：#form-* 在 index/src 都可能，其他必须在 index
+        elif selector.startswith("#") and " " not in selector and "[" not in selector:
+            elem_id = selector[1:]
+            if selector.startswith("#form-"):
+                if (f'id="{elem_id}"' not in index_html and f"id='{elem_id}'" not in index_html
+                    and f'id="{elem_id}"' not in all_src and f"id='{elem_id}'" not in all_src):
+                    fail(errors, f"契约声明的 #form-* id 未在 index.html 或 src/ 找到: {selector}")
+            else:
+                if f'id="{elem_id}"' not in index_html:
+                    fail(errors, f"契约声明的 #id 未在 index.html 找到: {selector}")
+        else:
+            fail(errors, f"契约 selector 形态不在已知范围，需人工核对: {selector}")
+
+    # 反向断言：契约不得进 sw.js FILES
+    sw = read_text("sw.js")
+    if "native-contract.json" in sw:
+        fail(errors, "native-contract.json 是开发期文件，不得出现在 sw.js FILES 里")
+
+
 def audit_i18n_en_terminology_guard(errors: list[str]) -> None:
     """SPEC-014 永久护栏：src/locales/en.js 的**取词结果**（catalog 值，不含 key）
     不得出现 Leak/Waste/Distraction/Unproductive/Wasted（大小写不敏感、按独立
@@ -839,6 +957,7 @@ def main() -> int:
     audit_site_honesty_guard(errors)
     audit_site_en_terminology_guard(errors)
     audit_site_hreflang(errors)
+    audit_native_contract(errors)
     audit_no_hardcoded_cjk_in_runtime(errors)
     audit_shell_dict_matches_catalog(errors)
     audit_i18n_keys_referenced(errors)
