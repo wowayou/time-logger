@@ -12,7 +12,7 @@
 
 **v1.0.0（原 v93）已完成**：版本格式从单整数迁到语义化三段式（存储键与备份载荷不变、数据零迁移），并为安卓壳加显式 Web → Android 契约（`native-contract.json`）+ audit 静态预检 + Playwright 真实 DOM 验证。详见下方 v1.0.0 交付段。
 
-**尚未发布上线**：v1.0.0 的三个提交（f1badb2 / 9699781 / 0cf0338）在本地 main，领先 origin 4 个提交，**未 push、未打 tag**——发布/tag 仪式留给维护者按 runbook 执行。v91 已发布上线，v82–v90 均已发布并线上验证。唯一非 gated 的产品未完成项仍是 runbook `- [ ] E 完成`（首轮推广）——它不在 AI 侧。
+**尚未发布上线**：v1.0.0 的相关提交（f1badb2 / 9699781 / 0cf0338）在本地 main，领先 origin 5 个提交，**未 push、未打 tag**——发布/tag 仪式留给维护者按 runbook 执行。v91 已发布上线，v82–v90 均已发布并线上验证。唯一非 gated 的产品未完成项仍是 runbook `- [ ] E 完成`（首轮推广）——它不在 AI 侧。
 
 ## v1.0.0 当前交付（2026-09-10 → 09-12，f1badb2 / 9699781 / 0cf0338）
 
@@ -25,7 +25,9 @@
 
 **门禁（2026-09-12 独立复验，Windows Git Bash 跑 Playwright、WSL 跑 typecheck）**：迁移测试 10/10、契约测试 8/8（chromium+webkit 双引擎）；**改坏 `storage.js` 的 KEY 后 REDLIGHT 双引擎正确变红，恢复后全绿**（红灯纪律现场点亮）；`project_audit.py` / `confirm_logic_smoke.py` / typecheck / `git diff --check` 全绿。
 
-**契约的已知边界与下一步**：契约目前只保证「web 侧声明的东西存在」，还不保证「android 侧实际依赖的东西都已登记」——9699781 提交说明留了对侧待办：android 仓对侧 audit（验证 bridge/MainActivity/shell_browser_check 实际引用的 export/selector 都已在契约里，删掉契约条目不能绕过检查）。批次 4–6 中 Android release 的剩余项全在维护者侧（开发者账号、上传密钥、截图、商标检索，见安卓仓 `docs/release-checklist.md`）；site 的一次性支持页（D28）尚未创建，涉及支付渠道选择等维护者决策。
+**对侧契约闸已落地（安卓仓 82c52d5，2026-09-12）**：安卓 `scripts/project_audit.py` 新增 `audit_contract_covers_dependencies()`，从安卓侧反查四个方向——桥 import 的 (模块， 符号) 必须已登记（新增依赖不登记→红）、契约 export 必须真被桥 import（死条目→红）、消费方（MainActivity.kt / shell_browser_check.mjs）用到的每个 web selector 必须被契约覆盖（未登记→红）、契约 selector 必须真有消费者（死条目→红）；四向红灯均已现场点亮后恢复。同批适配 semver：`sync_runtime.py` 校验三段式、`build.gradle.kts` 的 versionCode 改为 `major*10_000_000 + minor*100_000 + patch*1_000 + revision`（1.0.0.1 = 10_001_001，大于旧方案的 9301，跨格式不回退）、tag 示例更新为 `a1.0.0.1`。**安卓仓内嵌运行时已重新同步到 web ff800a2 / 1.0.0**；Gradle 侧 `gradlew help` 与 `:app:assertRuntimeSynced`（WSL JDK17）通过。
+
+**剩余项全在维护者侧**：Android release（开发者账号、上传密钥、真机复验，见安卓仓 `docs/release-checklist.md` 顶部进度表；商店截图脚本已就绪）；site 的一次性支持页（D28）尚未创建，涉及支付渠道选择等决策。两仓的本地提交均未 push。
 
 ## 安卓原生壳已另立仓库（2026-08-22，D26/D27/D28/D29）
 
