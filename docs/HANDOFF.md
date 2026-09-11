@@ -4,15 +4,28 @@
 > 维护纪律：每完成一个里程碑就更新本文件并提交，不要攒到最后写。
 > 权威文档分工：法律＝`CLAUDE.md`；决策史＝`docs/decisions.md`；版本流水＝`CLAUDE.md` 表 + `docs/CHANGELOG.md`；协作流程＝`docs/collab-protocol.md`；人肉步骤＝`docs/launch-runbook.md`；规格＝`docs/specs/`。本文件只讲**此刻**，历史流水不往这里堆。
 
-最后更新：2026-08-22（安卓壳公开仓库 + 真机 26/26；隐私政策加「Android 应用」一节并已上线；英文名统一 Eigentime；本仓无运行时改动） · 更新人：AI 代理（本地会话）
+最后更新：2026-09-12（版本格式迁移 v93 → v1.0.0；Web → Android 显式契约 + 真实 DOM 验证；本仓无 UI/行为改动） · 更新人：AI 代理（本地会话）
 
 ---
 
 ## 一句话现状
 
-**v93 已完成**：在 v92 CAS 保护上补齐双读取竞态、配置页跨标签覆盖与失败回滚覆盖，并把完整 11 个月年视图纳入压力门禁。详见下方 v93 交付段。
+**v1.0.0（原 v93）已完成**：版本格式从单整数迁到语义化三段式（存储键与备份载荷不变、数据零迁移），并为安卓壳加显式 Web → Android 契约（`native-contract.json`）+ audit 静态预检 + Playwright 真实 DOM 验证。详见下方 v1.0.0 交付段。
 
-**v91 已发布上线**（main + tag + Release），v82–v90 均已发布并线上验证。唯一非 gated 的产品未完成项仍是 runbook `- [ ] E 完成`（首轮推广）——它不在 AI 侧。
+**尚未发布上线**：v1.0.0 的三个提交（f1badb2 / 9699781 / 0cf0338）在本地 main，领先 origin 4 个提交，**未 push、未打 tag**——发布/tag 仪式留给维护者按 runbook 执行。v91 已发布上线，v82–v90 均已发布并线上验证。唯一非 gated 的产品未完成项仍是 runbook `- [ ] E 完成`（首轮推广）——它不在 AI 侧。
+
+## v1.0.0 当前交付（2026-09-10 → 09-12，f1badb2 / 9699781 / 0cf0338）
+
+**版本格式迁移（f1badb2）**：产品版本从单整数 v93 迁到语义化三段式 1.0.0，七个版本锚点同步（sw.js CACHE / manifest / ui.js APP_VERSION / audit EXPECTED_VERSION / CLAUDE.md / README / `bump_version.py`）；`bump_version.py` 支持 `--patch/--minor/--major` 三段式。**数据零迁移**：存储键 `timelog.v1`、备份载荷 `version: 1`、`exportMeta()` 均与产品版本解耦，v93 与 v1.0.0 备份互读不变；唯一一次性行为是启动快照版本门把旧格式快照判 `rejected:version` 退回正常启动（设计如此）。新增 `tests/v1_0_0_version_migration.spec.js` 5 条。
+
+**Web → Android 显式契约（9699781 + 0cf0338）**：新增 `native-contract.json`（version 1），登记安卓壳依赖的 4 模块 15 个 export 与 6 个 DOM selector——堵上「改名不会让本仓变红、却让安卓壳静默失效」的盲区。两道防线：
+- `audit_native_contract()`（静态预检）：用 node 真实导入模块、按实际导出键集校验（别名/注释不算），复合 selector 逐段完整校验；契约文件有反向断言——不得进 sw.js `FILES`。
+- `tests/native_contract.spec.js`（真实 DOM）：契约全部 selector 在 Playwright 渲染 DOM 中必须可命中（`#form-*` 自动开表单验证），另加 3 组红灯变异（删 `.chip` class / 按钮移出 `#form-chips` / 删 GitHub 链接）验证破坏会被拦住。
+- 迁移测试的 REDLIGHT 探针已去夹具污染（0cf0338）：探针改在夹具写完种子**之后**安装，触发一次真实保存并断言捕获键是 `timelog.v1` 且记录真实写入该键——此前探针捕获的是夹具自己的写入，改坏 KEY 照样假绿。
+
+**门禁（2026-09-12 独立复验，Windows Git Bash 跑 Playwright、WSL 跑 typecheck）**：迁移测试 10/10、契约测试 8/8（chromium+webkit 双引擎）；**改坏 `storage.js` 的 KEY 后 REDLIGHT 双引擎正确变红，恢复后全绿**（红灯纪律现场点亮）；`project_audit.py` / `confirm_logic_smoke.py` / typecheck / `git diff --check` 全绿。
+
+**契约的已知边界与下一步**：契约目前只保证「web 侧声明的东西存在」，还不保证「android 侧实际依赖的东西都已登记」——9699781 提交说明留了对侧待办：android 仓对侧 audit（验证 bridge/MainActivity/shell_browser_check 实际引用的 export/selector 都已在契约里，删掉契约条目不能绕过检查）。批次 4–6 中 Android release 的剩余项全在维护者侧（开发者账号、上传密钥、截图、商标检索，见安卓仓 `docs/release-checklist.md`）；site 的一次性支持页（D28）尚未创建，涉及支付渠道选择等维护者决策。
 
 ## 安卓原生壳已另立仓库（2026-08-22，D26/D27/D28/D29）
 
