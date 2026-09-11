@@ -957,6 +957,8 @@ def main() -> int:
     audit_site_honesty_guard(errors)
     audit_site_en_terminology_guard(errors)
     audit_site_hreflang(errors)
+    # Web → Android 契约：audit 静态预检（export 真实导入 + selector 文本搜索），
+    # 真实 DOM 验证由 tests/native_contract.spec.js 覆盖（class/层级/链接完整性）
     audit_native_contract(errors)
     audit_no_hardcoded_cjk_in_runtime(errors)
     audit_shell_dict_matches_catalog(errors)

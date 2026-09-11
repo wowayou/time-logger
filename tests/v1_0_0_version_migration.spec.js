@@ -89,8 +89,11 @@ test('v1.0.0: the export payload carries data version 1 and no app version at al
 test('v1.0.0 REDLIGHT: changing the storage key name would make the test fail', async ({ page }) => {
   // P35 红灯纪律：改坏守卫时对应用例必须变红。把 src/storage.js 的 `const KEY`
   // 改成跟随产品版本（`timelog.v1.0.0`），前一条的反向哨兵必须红——那正是它
-  // 存在的意义。probe 必须在 boot 写种子之前挂好，且判据要准确捕获数据键。
-  await page.addInitScript(() => {
+  // 存在的意义。**探针必须在夹具写种子后安装**，否则会捕获夹具自己的写入。
+  await boot(page, 768, 'one-record', false, FIXED_NOW);
+
+  // 夹具已写完种子，现在安装探针（拦截后续真实保存的 setItem）
+  await page.evaluate(() => {
     const originalSet = Storage.prototype.setItem;
     Storage.prototype.setItem = function (name, value) {
       // 数据键是 timelog.v1（精确匹配，不被 timelog.view / timelog.bootSnapshot.v1 误触）
@@ -100,9 +103,26 @@ test('v1.0.0 REDLIGHT: changing the storage key name would make the test fail', 
       return originalSet.call(this, name, value);
     };
   });
-  await boot(page, 768, 'one-record', false, FIXED_NOW);
+
+  // 触发真实保存：新增一条记录
+  await page.locator('#add-btn').click();
+  await expect(page.locator('#form-sheet')).toBeVisible();
+  await page.locator('#form-what').fill('红灯探针记录');
+  await page.getByRole('button', { name: '选择标签：求职推进' }).click();
+  await page.getByRole('button', { name: '保存时间记录' }).click();
+  await expect(page.locator('#form-sheet')).toBeHidden();
+  await expect(page.locator('#timeline')).toContainText('红灯探针记录');
+
+  // 断言探针捕获到的键是 timelog.v1
   const probed = await page.evaluate(() => localStorage.getItem('__timelogKeyProbe'));
   expect(probed, '这条是守卫真实值的红灯锁，本断言必须通过').toBe('timelog.v1');
+
+  // 额外断言：保存的内容确实写进了 timelog.v1
+  const saved = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('timelog.v1'));
+    return data.entries.some(e => e.what === '红灯探针记录');
+  });
+  expect(saved, '保存的记录必须真实写入 timelog.v1').toBe(true);
 });
 
 test('v1.0.0: the key the app actually writes to is timelog.v1, not a versioned one', async ({ page }) => {
