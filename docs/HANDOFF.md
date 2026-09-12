@@ -4,7 +4,7 @@
 > 维护纪律：每完成一个里程碑就更新本文件并提交，不要攒到最后写。
 > 权威文档分工：法律＝`CLAUDE.md`；决策史＝`docs/decisions.md`；版本流水＝`CLAUDE.md` 表 + `docs/CHANGELOG.md`；协作流程＝`docs/collab-protocol.md`；人肉步骤＝`docs/launch-runbook.md`；规格＝`docs/specs/`。本文件只讲**此刻**，历史流水不往这里堆。
 
-最后更新：2026-09-12（版本格式迁移 v93 → v1.0.0；Web → Android 显式契约 + 真实 DOM 验证；审查修复——契约补第 7 个 selector、删自证式红灯用例、安卓侧 versionCode 上界；本仓无 UI/行为改动） · 更新人：AI 代理（本地会话）
+最后更新：2026-09-12（**v1.0.0 已发布上线**：tag + Release + publish-site 绿灯 + 线上复核；CHANGELOG 行修订为实况、未实施项入待办；digit-only 第八处修复；本版本无 UI 行为改动） · 更新人：AI 代理（本地会话）
 
 ---
 
@@ -12,7 +12,9 @@
 
 **v1.0.0（原 v93）已完成**：版本格式从单整数迁到语义化三段式（存储键与备份载荷不变、数据零迁移），并为安卓壳加显式 Web → Android 契约（`native-contract.json`）+ audit 静态预检 + Playwright 真实 DOM 验证。详见下方 v1.0.0 交付段。
 
-**尚未发布上线**：v1.0.0 的相关提交（f1badb2 / 9699781 / 0cf0338）在本地 main，领先 origin 5 个提交，**未 push、未打 tag**——发布/tag 仪式留给维护者按 runbook 执行。v91 已发布上线，v82–v90 均已发布并线上验证。唯一非 gated 的产品未完成项仍是 runbook `- [ ] E 完成`（首轮推广）——它不在 AI 侧。
+**v1.0.0 已发布上线（2026-09-12）**：tag `v1.0.0` + [Release](https://github.com/wowayou/time-logger/releases/tag/v1.0.0) + publish-site 绿灯，线上复核 `sw.js CACHE = timelog-v1.0.0`、manifest `1.0.0`、`app.js` 已含 semver 采样修复。发布闸为双引擎全量 **463 passed / 0 failed / 1 flaky**（webkit 既有时序类，重试通过）。发布流程本身还逮出并修掉了 digit-only 第八处（启动诊断缓存采样，33a705f）。此后新版本照常走 `bump_version.py --patch/--minor/--major`。
+
+v82–v93 均已发布并线上验证。唯一非 gated 的产品未完成项仍是 runbook `- [ ] E 完成`（首轮推广）——它不在 AI 侧。
 
 ## v1.0.0 当前交付（2026-09-10 → 09-12，f1badb2 / 9699781 / 0cf0338）
 
