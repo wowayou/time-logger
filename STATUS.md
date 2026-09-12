@@ -3,7 +3,7 @@
 > 打开仓库先看这一页。DONE＝已发布/已落地且有判据守护；OPEN＝已排期未完成；BLOCKED＝缺维护者侧资源。
 > 历史与规范不在这里：规范＝[`CLAUDE.md`](CLAUDE.md)；决策史＝`docs/decisions.md`；版本流水＝`CLAUDE.md` 表 + `docs/CHANGELOG.md`；交接须知＝[`docs/HANDOFF.md`](docs/HANDOFF.md)。
 
-**Last Verified：2026-09-12 · web `v1.0.0`（tag 锚点）已发布上线 · android `fec5a23`（领先 origin，未发版） · 核验人：AI 代理**
+**Last Verified：2026-09-12 · web `v1.0.0`（tag 锚点）+ 本批 site/docs 提交已推送 · android `aa6fba7`（已推送，未发版） · 核验人：AI 代理**
 
 ## DONE
 
