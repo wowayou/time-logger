@@ -66,6 +66,32 @@ test('activate deletes only this app\'s own stale caches, never a co-hosted app\
   //    就变成什么都不删。
   expect(keys).not.toContain(STALE_OWN);
 
-  // ③ 当前版本缓存存在。
-  expect(keys.some(k => /^timelog-v\d+$/.test(k))).toBe(true);
+  // ③ 当前版本缓存存在。缓存名自 v1.0.0 起是三段式——这里的单整数正则
+  //    `/^timelog-v\d+$/` 是 digit-only 判据第八处漏网，迁移后永远匹配不到，
+  //    全量双引擎 2 failed 两轮才逮到（发布闸）。
+  expect(keys.some(k => /^timelog-v\d+(\.\d+)*$/.test(k))).toBe(true);
+
+  // ④ 启动诊断的缓存采样必须认得 semver 缓存名（v1.0.0 回归：app.js 的采样
+  //    用了同一枚单整数正则，cacheCount 恒 0、cache 恒空）。开着诊断重载一次，
+  //    读真实采样，不做逻辑复制。
+  await page.evaluate(() => {
+    localStorage.setItem('timelog.bootDiag.v1', JSON.stringify({ enabled: true, samples: [] }));
+  });
+  await page.reload();
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+  await expect.poll(async () => page.evaluate(() => {
+    const diag = JSON.parse(localStorage.getItem('timelog.bootDiag.v1') || 'null');
+    return diag && diag.enabled ? diag.samples.length : 0;
+  }), { timeout: 15000 }).toBeGreaterThan(0);
+  const lastSample = await page.evaluate(() => {
+    const diag = JSON.parse(localStorage.getItem('timelog.bootDiag.v1'));
+    return diag.samples[diag.samples.length - 1];
+  });
+  expect(lastSample.cache).toMatch(/^timelog-v\d+(\.\d+)*$/);
+  expect(lastSample.cacheCount).toBeGreaterThan(0);
+  // cacheFiles 只锁「字段存在且是整数」，不锁值：webkit 走完本用例的注销→重激活
+  // 后缓存条目读回为空是上面 ① 注释里已记录的引擎怪癖（采样发生在 boot，SW
+  // install 未必完成）；旧正则下 newest 为空、这个字段根本不会写——存在性本身
+  // 就是新旧判据的分辨器。
+  expect(Number.isInteger(lastSample.cacheFiles)).toBe(true);
 });

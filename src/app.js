@@ -1373,9 +1373,25 @@ import {
     } catch {}
     try {
       if (window.caches) {
-        const names = (await caches.keys()).filter(name => /^timelog-v\d+$/.test(name));
+        // 缓存名自 v1.0.0 起是三段式（timelog-v1.0.0），旧单整数名（timelog-v93）
+        // 在前缀清理跑完前可能短暂并存——两种形态都要计入。单整数正则在迁移后
+        // 让 cacheCount 恒 0、cache 恒空，是 digit-only 判据第八处漏网（发布闸
+        // 全量双引擎 2 failed 逮到，sw_cache_scope.spec.js 锁回归）。
+        const names = (await caches.keys()).filter(name => /^timelog-v\d+(\.\d+)*$/.test(name));
         sample.cacheCount = names.length;
-        names.sort((a, b) => Number(a.slice(9)) - Number(b.slice(9)));
+        const verOf = name => name.slice(9).split('.').map(Number);
+        names.sort((a, b) => {
+          // 三段式必然新于任何单整数（格式切换就发生在 1.0.0）；同格式内按
+          // semver 元组比大小。
+          const d = (b.slice(9).includes('.') ? 1 : 0) - (a.slice(9).includes('.') ? 1 : 0);
+          if (d) return d;
+          const A = verOf(a), B = verOf(b);
+          for (let i = 0; i < Math.max(A.length, B.length); i++) {
+            const step = (A[i] || 0) - (B[i] || 0);
+            if (step) return step;
+          }
+          return 0;
+        });
         const newest = names[names.length - 1] || '';
         sample.cache = newest;
         if (newest) sample.cacheFiles = (await (await caches.open(newest)).keys()).length;
