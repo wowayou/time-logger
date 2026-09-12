@@ -567,6 +567,64 @@ FORBIDDEN_SOCIAL_PROOF_PHRASES = (
 )
 
 
+def audit_site_favicon(errors: list[str]) -> None:
+    """site 四页此前没有任何 favicon 声明（只有 hero <img>）。判据按**部署镜像**
+    解析——build_site.py 把 site/ 主页映到根、运行时映到 /app/，所以 favicon 的
+    相对深度因页而异（./app/、../app/、../app/、../../app/）。这里按页解析每个
+    icon/apple-touch-icon 的 href、还原部署路径，并核对目标文件真实存在：app/
+    开头的目标必须是 sw.js FILES 里的运行时资产，其余必须是 site/ 树里的文件——
+    不是只 grep "favicon" 字样。"""
+    sw = read_text("sw.js")
+    match = re.search(r"const\s+FILES\s*=\s*\[(.*?)\]", sw, re.DOTALL)
+    runtime_files: set[str] = set()
+    if match:
+        runtime_files = {e[2:] for e in re.findall(r"['\"]([^'\"]+)['\"]", match.group(1))
+                         if e.startswith("./")}
+    deployed_dir = {
+        "site/index.html": ".",
+        "site/privacy/index.html": "privacy",
+        "site/en/index.html": "en",
+        "site/en/privacy/index.html": "en/privacy",
+    }
+    for rel, dir_ in deployed_dir.items():
+        path = ROOT / rel
+        if not path.exists():
+            fail(errors, f"{rel} is missing — required for favicon coverage")
+            continue
+        html = path.read_text(encoding="utf-8")
+        hrefs = re.findall(r'<link\s+rel="(?:icon|apple-touch-icon)"[^>]*?href="([^"]+)"', html)
+        if not hrefs:
+            fail(errors, f"{rel} has no favicon/apple-touch-icon link — four public pages must declare them")
+            continue
+        for href in hrefs:
+            parts = (dir_.split("/") if dir_ != "." else []) + href.split("/")
+            resolved: list[str] = []
+            for part in parts:
+                if part in ("", "."):
+                    continue
+                if part == "..":
+                    if not resolved:
+                        fail(errors, f"{rel}: favicon href {href!r} escapes the deploy root")
+                        resolved = None
+                        break
+                    resolved.pop()
+                else:
+                    resolved.append(part)
+            if resolved is None:
+                continue
+            target = "/".join(resolved)
+            if target.startswith("app/"):
+                runtime_rel = target[len("app/"):]
+                if runtime_rel not in runtime_files:
+                    fail(errors, f"{rel}: favicon {href!r} → {target} 不在 sw.js FILES 里"
+                                 "——favicon 必须指向真实存在的运行时资产")
+                elif not (ROOT / runtime_rel).is_file():
+                    fail(errors, f"{rel}: favicon 目标 {runtime_rel} 在仓库里不存在")
+            else:
+                site_file = ROOT / "site" / target
+                if not site_file.is_file():
+                    fail(errors, f"{rel}: favicon 目标 {target} 在 site/ 树里不存在")
+
 def audit_site_honesty_guard(errors: list[str]) -> None:
     """Permanent guard (SPEC-015): none of the public site/ pages may claim
     unverified social proof or validated market demand — CLAUDE.md's D3
@@ -963,6 +1021,7 @@ def main() -> int:
     audit_site_honesty_guard(errors)
     audit_site_en_terminology_guard(errors)
     audit_site_hreflang(errors)
+    audit_site_favicon(errors)
     # Web → Android 契约：audit 静态预检（export 真实导入 + selector 文本搜索），
     # 真实 DOM 验证由 tests/native_contract.spec.js 覆盖（class/层级/链接完整性）
     audit_native_contract(errors)
