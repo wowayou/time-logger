@@ -4,7 +4,7 @@
 > 维护纪律：每完成一个里程碑就更新本文件并提交，不要攒到最后写。
 > 权威文档分工：法律＝`CLAUDE.md`；决策史＝`docs/decisions.md`；版本流水＝`CLAUDE.md` 表 + `docs/CHANGELOG.md`；协作流程＝`docs/collab-protocol.md`；人肉步骤＝`docs/launch-runbook.md`；规格＝`docs/specs/`。本文件只讲**此刻**，历史流水不往这里堆。
 
-最后更新：2026-09-12（版本格式迁移 v93 → v1.0.0；Web → Android 显式契约 + 真实 DOM 验证；本仓无 UI/行为改动） · 更新人：AI 代理（本地会话）
+最后更新：2026-09-12（版本格式迁移 v93 → v1.0.0；Web → Android 显式契约 + 真实 DOM 验证；审查修复——契约补第 7 个 selector、删自证式红灯用例、安卓侧 versionCode 上界；本仓无 UI/行为改动） · 更新人：AI 代理（本地会话）
 
 ---
 
@@ -28,6 +28,8 @@
 **对侧契约闸已落地（安卓仓 82c52d5，2026-09-12）**：安卓 `scripts/project_audit.py` 新增 `audit_contract_covers_dependencies()`，从安卓侧反查四个方向——桥 import 的 (模块， 符号) 必须已登记（新增依赖不登记→红）、契约 export 必须真被桥 import（死条目→红）、消费方（MainActivity.kt / shell_browser_check.mjs）用到的每个 web selector 必须被契约覆盖（未登记→红）、契约 selector 必须真有消费者（死条目→红）；四向红灯均已现场点亮后恢复。同批适配 semver：`sync_runtime.py` 校验三段式、`build.gradle.kts` 的 versionCode 改为 `major*10_000_000 + minor*100_000 + patch*1_000 + revision`（1.0.0.1 = 10_001_001，大于旧方案的 9301，跨格式不回退）、tag 示例更新为 `a1.0.0.1`。**安卓仓内嵌运行时已重新同步到 web ff800a2 / 1.0.0**；Gradle 侧 `gradlew help` 与 `:app:assertRuntimeSynced`（WSL JDK17）通过。
 
 **剩余项全在维护者侧**：Android release（开发者账号、上传密钥、真机复验，见安卓仓 `docs/release-checklist.md` 顶部进度表；商店截图脚本已就绪）；site 的一次性支持页（D28）尚未创建，涉及支付渠道选择等决策。两仓的本地提交均未 push。
+
+**审查修复（2026-09-12，缺陷优先审查后）**：① **对侧闸漏掉 `waitForSelector` 形态**——`body.app-ready`（web `app.js:1466` 写、安卓 `shell_browser_check.mjs:96` 等）此前既不在契约也不被提取正则认识，web 改名会让两仓全绿、只有真跑 shell 检查才炸。已修：安卓提取网补 `waitForSelector`/双引号/`classList.contains` 三种形态，契约 selectors 补 `body.app-ready`（现 7 个）+ web 静态预检新增「元素限定 class」已知形态，web 契约测试自动验证它在真实 DOM 可命中。红灯复验：契约删掉 `body.app-ready` → 安卓闸红（修复前该场景完全隐形）。② **删掉契约测试里三条自证式红灯用例**（先破坏 DOM 再断言命中 0）——它们验证 CSS 选择器语义而非应用，契约怎么坏都照样绿，不是哨兵；红灯证据以「临时变异 → 契约测试红 → 恢复」的过程形式保留在 9699781 / 0cf0338 提交说明里。③ **安卓侧 versionCode 编码上界校验**：minor/patch ≤ 99、revision ≤ 999——字段字面值一旦越过位权会跨字段进位撞码（patch=100 撞 minor=1），此前要到 Play 上传才被拒。
 
 ## 安卓原生壳已另立仓库（2026-08-22，D26/D27/D28/D29）
 

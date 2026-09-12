@@ -35,6 +35,7 @@
     }
   },
   "selectors": [
+    "body.app-ready",
     "#add-btn",
     "#form-what",
     "#form-sheet",

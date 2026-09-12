@@ -885,6 +885,12 @@ def audit_native_contract(errors: list[str]) -> None:
                 if f'class="{cls}"' not in all_src and f"'{cls}'" not in all_src:
                     fail(errors, f"契约 selector 的 class 未找到: .{cls} (来自 {selector})")
                     parts_ok = False
+        # 元素限定 class（如 body.app-ready）：class 名必须在 src/ 里出现
+        # （app-ready 由 app.js 的 classList.add('app-ready') 写上）
+        elif re.fullmatch(r"[a-z][a-z-]*\.[a-z][a-z0-9-]*", selector):
+            cls = selector.split(".", 1)[1]
+            if f"'{cls}'" not in all_src and f'"{cls}"' not in all_src:
+                fail(errors, f"契约 selector 的 class 未在 src/ 找到: {selector}")
         # 链接 selector（不检查 URL 部分，只确认有 <a href）
         elif selector.startswith("a[href"):
             if "<a href" not in index_html and "<a href" not in all_src:
