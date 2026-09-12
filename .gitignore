@@ -24,8 +24,8 @@ screenshots/
 ui_snapshots/
 bug-screenrecordings/
 
-# Zone.Identifier（Windows 下载伴生文件，主文件 .mp4 已被上面挡掉，这个没有，
-# 会直接卡住 android 仓 sync_runtime.py --release 的 web-clean 预检）
+# Zone.Identifier（Windows 下载伴生文件，主文件 .mp4 已被上面挡掉，这个没有；
+# 且它出现在工作区会让 android 仓 sync_runtime.py 把 web 仓判为「不干净」）
 *:Zone.Identifier
 
 # Local temp and OS files.

@@ -29,6 +29,15 @@
 
 **剩余项全在维护者侧**：Android release（开发者账号、上传密钥、真机复验，见安卓仓 `docs/release-checklist.md` 顶部进度表；商店截图脚本已就绪）；site 的一次性支持页（D28）尚未创建，涉及支付渠道选择等决策。两仓的本地提交均未 push。
 
+**CHANGELOG 修订（2026-09-12，发布前核实）**：f1badb2 预写的 v1.0.0 CHANGELOG 行把计划中的批次 4–6 一并写成了「已完成」，其中 **安卓 release fail-closed 签名、`app/release.properties` versionCode、`sync_runtime.py --release` 预检、`STATUS.md` 状态治理、site favicon 与首屏文案** 五项从未实施（逐项核实过两仓）。已把该行修订为只含真实落地内容，未做项移入下方待办。教训：**CHANGELOG 行只能在对应工作落地后写**，预写等于制造假发布说明。
+
+**待办（v1.0.0 预写条目剔除的未实施项，按需排期，不阻塞本版本）**：
+- [ ] 安卓 `build.gradle.kts`：release 构建缺 `keystore.properties` 时从 debug 静默回退改为 fail-closed（现在仍会产出不可上架的 debug 签名产物）
+- [ ] 安卓 versionCode 方案复核：现行＝web semver 派生（`major*10M+minor*100k+patch*1k+revision`，82c52d5）；预写条目曾设想 `app/release.properties` 显式计数器与 web 版本解耦——二选一定案后把另一条的描述从文档里清干净
+- [ ] 安卓 `sync_runtime.py`：`--release` 预检模式（先校验 web 仓 clean/commit/版本/契约再替换资产；`.gitignore` 注释里引用过它但从未实现）
+- [ ] `STATUS.md` 状态治理（DONE/OPEN/BLOCKED + 跨仓 commit + Last Verified）；HANDOFF 是否收缩为入口随之定
+- [ ] site 四页 favicon + 首屏文案「不用记得先按开始／做完再补记」（含 audit 按页相对深度核对 favicon 目标文件存在的判据）
+
 **审查修复（2026-09-12，缺陷优先审查后）**：① **对侧闸漏掉 `waitForSelector` 形态**——`body.app-ready`（web `app.js:1466` 写、安卓 `shell_browser_check.mjs:96` 等）此前既不在契约也不被提取正则认识，web 改名会让两仓全绿、只有真跑 shell 检查才炸。已修：安卓提取网补 `waitForSelector`/双引号/`classList.contains` 三种形态，契约 selectors 补 `body.app-ready`（现 7 个）+ web 静态预检新增「元素限定 class」已知形态，web 契约测试自动验证它在真实 DOM 可命中。红灯复验：契约删掉 `body.app-ready` → 安卓闸红（修复前该场景完全隐形）。② **删掉契约测试里三条自证式红灯用例**（先破坏 DOM 再断言命中 0）——它们验证 CSS 选择器语义而非应用，契约怎么坏都照样绿，不是哨兵；红灯证据以「临时变异 → 契约测试红 → 恢复」的过程形式保留在 9699781 / 0cf0338 提交说明里。③ **安卓侧 versionCode 编码上界校验**：minor/patch ≤ 99、revision ≤ 999——字段字面值一旦越过位权会跨字段进位撞码（patch=100 撞 minor=1），此前要到 Play 上传才被拒。
 
 ## 安卓原生壳已另立仓库（2026-08-22，D26/D27/D28/D29）
