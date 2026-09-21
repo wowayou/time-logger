@@ -25,6 +25,19 @@ const PRIVACY_URL = {
   en: 'https://time.eigentime.org/en/privacy/'
 };
 
+// D30（修订 D28）：自愿支持入口。**应用内零支付界面**——这里只有一条外链和一句
+// 事实陈述，收款全程发生在站外；D7 的「所有功能始终免费」不受影响。
+//
+// 指向 eigentime.org 的**中转页**而不是收款平台本身，是刻意的解耦：换平台或加
+// 平台时只改那一页，不用为此发一版 PWA（本仓发版要走七锚点仪式 + tag + Release，
+// 把平台 URL 写进运行时等于把平台变更绑上发版成本）。
+//
+// URL **不按 locale 分流**，与 PRIVACY_URL 相反：中转页自己按 Accept-Language
+// 决定语言，而 `from` 是来源归因参数，两种语言必须落进同一个来源桶，分流会把它
+// 拆成两份数据。`from=time-logger` 取自 D30 登记的来源 allowlist，不得自创变体
+// （`timelogger` / `time_logger` 之类），归因按它逐字聚合。
+const SUPPORT_URL = 'https://eigentime.org/support?from=time-logger';
+
 export function esc(s) {
   return String(s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -319,7 +332,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -443,6 +456,10 @@ function renderMoreSheet(opts = {}) {
       <div class="cell-group">
         <button class="cell-btn" type="button" data-action="open-advanced" aria-label="${t('more.advancedAria')}"><span data-role="cell-label">${t('more.advanced')}</span>${cellChevron}</button>
       </div>
+      <div class="cell-group">
+        <a class="cell-btn" href="${SUPPORT_URL}" target="_blank" rel="noopener" aria-label="${t('more.supportAria')}">${t('more.support')}${cellChevron}</a>
+      </div>
+      <div class="form-hint">${t('more.supportHint')}</div>
       <div class="app-version">${t('more.appVersion', { version: APP_VERSION })}</div>
     </div>`;
 }

@@ -455,6 +455,13 @@ export default {
   'more.appVersion': 'Eigentime v{version}',
   'more.privacy': 'Privacy Policy',
   'more.privacyAria': 'Open the Privacy Policy',
+  // D30 (amends D28): wording for the voluntary support entry. All three
+  // clauses are statements of fact, not marketing: (1) voluntary, (2) every
+  // feature stays free (D7), (3) supporting buys nothing (D28 §2). No
+  // obligation, urgency, or hardship framing — see D30.
+  'more.support': 'Support the author',
+  'more.supportAria': 'Support the author, opens the support page in a new tab',
+  'more.supportHint': 'Entirely voluntary. Every feature stays free, with no ads and no in-app purchases; supporting buys no features, no priority, and no say over the roadmap.',
   'more.language': 'Language',
   'more.languageAria': 'Language',
   'more.languageAuto': 'System',

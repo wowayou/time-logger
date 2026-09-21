@@ -14,7 +14,7 @@
 // 前缀清理正常淘汰，不需要迁移代码。
 // 前缀因此单独声明；两者一致性由 audit 断言（见 audit_service_worker）。
 const CACHE_PREFIX = 'timelog-';
-const CACHE = 'timelog-v1.0.0';
+const CACHE = 'timelog-v1.1.0';
 const FILES = [
   './',
   './index.html',
