@@ -1775,6 +1775,39 @@
     .delete-result.is-unrecorded p { color: var(--danger); }
     .import-summary { color: var(--text); font-size: 14px; line-height: 1.5; font-weight: 600; }
     .import-summary.is-error { color: var(--danger); }
+    /* v1.2.0：导入预览逐条清单——新增/已跳过分组，与冲突区分色。折叠在 details 里。 */
+    .import-detail { display: grid; gap: 8px; }
+    .import-detail:empty { display: none; }
+    .import-group {
+      border: 1px solid var(--border);
+      border-radius: var(--r-ctl);
+      background: var(--card);
+      overflow: hidden;
+    }
+    .import-group-add { border-color: color-mix(in srgb, var(--job) 55%, var(--border)); }
+    .import-group-head {
+      list-style: none;
+      cursor: pointer;
+      padding: 9px 11px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .import-group-head::-webkit-details-marker { display: none; }
+    .import-group-head::after { content: '\203a'; float: right; color: var(--faint); transition: transform 120ms ease; }
+    .import-group[open] .import-group-head::after { transform: rotate(90deg); }
+    .import-group-skip .import-group-head { color: var(--muted); }
+    .import-item-list { border-top: 1px solid var(--border); }
+    .import-item {
+      display: grid;
+      gap: 1px;
+      padding: 8px 11px;
+      min-width: 0;
+    }
+    .import-item + .import-item { border-top: 1px solid var(--border); }
+    .import-item-meta { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .import-item-what { color: var(--text); font-size: 14px; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .import-group-skip .import-item-what { color: var(--muted); }
     .import-conflicts {
       display: grid;
       gap: 10px;

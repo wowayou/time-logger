@@ -844,12 +844,15 @@ function preflightImportedEntries(current, importedEntries, opts = {}) {
   });
   const additions = [];
   const conflicts = [];
-  let skipped = 0;
+  // v1.2.0：跳过项从「只计数」升级为「留下条目」，让导入预览把「完全相同、
+  // 已存在」的记录也逐条摆出来——用户不必凭一个数字猜到底跳过了什么。skipped
+  // 计数保留（旧调用方与 toast 文案仍读它），skippedEntries 是同一集合的明细。
+  const skippedEntries = [];
   for (const [importIndex, raw] of (importedEntries || []).entries()) {
     const entry = shiftedEntry(raw, shiftMinutes);
     const sameId = byId.get(entry.id);
     if (sameId) {
-      if (comparableImportEntry(sameId) === comparableImportEntry(entry)) skipped += 1;
+      if (comparableImportEntry(sameId) === comparableImportEntry(entry)) skippedEntries.push(shiftedEntry(entry, 0));
       else conflicts.push({
         key: `conflict-${importIndex}-id`,
         index: importIndex,
@@ -882,14 +885,17 @@ function preflightImportedEntries(current, importedEntries, opts = {}) {
     byTime.set(entry.ts, entry);
     additions.push(entry);
   }
+  const skipped = skippedEntries.length;
   if (conflicts.length) {
-    return { ok: false, imported: 0, skipped, conflicts, resultEntries: currentEntries.map(entry => shiftedEntry(entry, 0)) };
+    // 有冲突时也照样把 additions/skippedEntries 报出去：它们不依赖冲突如何解决
+    // （非冲突新增就是要加、完全相同就是要跳），预览要在用户还没做决定时就展示。
+    return { ok: false, imported: 0, skipped, additions, skippedEntries, conflicts, resultEntries: currentEntries.map(entry => shiftedEntry(entry, 0)) };
   }
   const resultEntries = [...currentEntries.map(entry => shiftedEntry(entry, 0)), ...additions]
     .sort((a, b) => a.ts === b.ts
       ? String(a.id).localeCompare(String(b.id))
       : (a.ts < b.ts ? -1 : 1));
-  return { ok: true, imported: additions.length, skipped, conflicts: [], resultEntries };
+  return { ok: true, imported: additions.length, skipped, additions, skippedEntries, conflicts: [], resultEntries };
 }
 
 function mergedImportText(localWhat, incomingWhat) {

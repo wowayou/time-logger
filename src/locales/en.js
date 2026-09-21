@@ -307,6 +307,10 @@ export default {
   'io.emptyWhatFull': 'no content filled in',
   'io.unknownTime': 'time unknown',
   'io.conflictMeta': '{ts} · #{tag}{planned}',
+  // v1.2.0: itemized import preview — group headers for additions/skipped plus per-entry meta line.
+  'io.groupAdditions': 'Will add {n} (tap to review each)',
+  'io.groupSkipped': 'Identical · already present {n} (won\'t be re-imported)',
+  'io.itemMeta': '{ts} · #{tag}{planned}',
   'io.plannedSuffix': ' · plan',
   'io.conflictProgress': '{n} conflicts · {done}/{n} resolved',
   'io.importablePlan': '{imported} importable · {skipped} already present, skipped',

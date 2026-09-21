@@ -3,10 +3,11 @@
 > 打开仓库先看这一页。DONE＝已发布/已落地且有判据守护；OPEN＝已排期未完成；BLOCKED＝缺维护者侧资源。
 > 历史与规范不在这里：规范＝[`CLAUDE.md`](CLAUDE.md)；决策史＝`docs/decisions.md`；版本流水＝`CLAUDE.md` 表 + `docs/CHANGELOG.md`；交接须知＝[`docs/HANDOFF.md`](docs/HANDOFF.md)。
 
-**Last Verified：2026-09-21 · web `v1.1.0`（已发布上线：main + tag + Release + publish-site 绿灯 + 线上复核 CACHE `timelog-v1.1.0`） · android `aab025d`（已推送，未发版） · 核验人：AI 代理**
+**Last Verified：2026-09-21 · web `v1.2.0`（导入预览逐条化，四道闸全绿 + 全量 test:ui 478 passed；tag/Release/publish 状态见下方 OPEN） · android `aab025d`（已推送，未发版） · 核验人：AI 代理**
 
 ## DONE
 
+- **v1.2.0 导入预览逐条化已落地**（D13 ③ 透明度硬化）：导入检查 sheet 把「新增 N 条」「完全相同·已存在 M 条」从一行计数升级为可展开的逐条清单（`<details>`，新增组主线色、跳过组置灰）；冲突区与保留本机/使用备份/合并文字的逐条决策一字不改，全部处理后才能写入。`preflightImportedEntries` 新暴 `additions`/`skippedEntries` 字段（有冲突时也报出）。判据＝`tests/v1_2_0_import_preview.spec.js` 2 条双引擎 4/4。**顺手修了 v1.1.0 遗留的静默破缺**：`tests/v84_polish.spec.js` 断言「更多」9 行，而 v1.1.0 的支持外链早把它变成 10——v1.1.0 只跑了支持入口 spec、未跑全量 test:ui，故未被逆。现改 10 并加支持外链存在断言。**⚠ push/tag/Release/publish 状态见 OPEN**。
 - **v1.1.0 已发布上线**（D30，修订 D28）：main `860898d` + tag [`v1.1.0`](https://github.com/wowayou/time-logger/releases/tag/v1.1.0) + [Release](https://github.com/wowayou/time-logger/releases/tag/v1.1.0) + publish-site 绿灯 + 线上复核（cache-bust 后线上 `const CACHE = 'timelog-v1.1.0'`、manifest `1.1.0`）。内容＝「更多」sheet 里排在「高级」之后的一条外链（`a.cell-btn`，`target=_blank rel=noopener`），指向 `https://eigentime.org/support?from=time-logger` 的**中转页**（不直连收款平台），旁附三句事实声明（自愿 / 功能始终免费 / 支持不购买任何东西）。应用内零支付界面、零埋点、零分析 SDK。判据＝`tests/v1_1_0_support_entry.spec.js` 6 条双引擎 10/10；四道闸全绿。**⚠ 已知死链窗口见 OPEN**。
 - **v1.0.0 已发布上线**：tag + [Release](https://github.com/wowayou/time-logger/releases/tag/v1.0.0) + publish-site 绿灯 + 线上复核（CACHE `timelog-v1.0.0`）。内容＝版本格式三段式 + Web→Android 显式契约（两仓 audit 双向咬合）+ 发布防护 + digit-only 第八处修复。发布闸：双引擎全量 463 passed / 0 failed / 1 flaky（webkit 既有时序类）。
 - **v1.0.0 预写计划的未实施项已全部补齐**（2026-09-12，本批）：
@@ -16,6 +17,7 @@
 
 ## OPEN
 
+- **v1.2.0 发布收尾**（本批 AI 完成到「四闸全绿 + 全量 test:ui 478 passed、本地 commit 就绪」为止）：push main → tag `v1.2.0` → GitHub Release → publish-site → 线上复核 CACHE 是否变 `timelog-v1.2.0`。以实际 git/gh 记录为准。
 - `- [ ] E`（runbook Phase E，首轮推广）——**唯一非 gated 的产品未完成项**，底稿在 `docs/promo/`。
 - **无前缀 `/support` 仍 404**（2026-09-21 实测：`/zh/support/` 与 `/en/support/` 均 200，但 app 逐字链接的无前缀 `https://eigentime.org/support?from=time-logger` 跟到底不重定向、仍 404）：v1.1.0 的应用内链接已按维护者裁定**先行发布**（D30 显式修订 D28 的「上线前不放链接」），因此在网站侧给无前缀 `/support` 补重定向（→ `/zh/support/`）之前存在**已知死链窗口**。收口动作在网站侧（改一页轻），不是在本仓回滚或改 URL（会重走发版仪式）。
 - runbook `- [ ] A3 / C / D` 的勾选动作（AI 无法验证，维护者自查）；SPEC-008 已 park；技术债与裁定详单见 `docs/HANDOFF.md`「还没做的」。

@@ -332,7 +332,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -761,6 +761,7 @@ function renderImportShiftDialog(opts = {}) {
         <input type="number" class="inp" id="import-shift-hours" value="${esc(value)}" step="0.25" inputmode="decimal">
       </div>
       <div class="import-summary" data-role="import-summary" aria-live="polite"></div>
+      <div class="import-detail" data-role="import-detail"></div>
       <div class="import-conflicts" data-role="import-error" role="alert" hidden></div>
     </div>`;
 }

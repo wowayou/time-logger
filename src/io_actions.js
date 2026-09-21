@@ -376,7 +376,54 @@ export function createIoActions(deps) {
     return side;
   }
 
+  function importEntryRow(entry) {
+    const row = document.createElement('div');
+    row.className = 'import-item';
+    const meta = document.createElement('span');
+    meta.className = 'import-item-meta';
+    const tag = entry && Array.isArray(entry.tags) && entry.tags[0] ? entry.tags[0] : t('io.noteUnrecorded');
+    meta.textContent = t('io.itemMeta', {
+      ts: entry && entry.ts ? fmtTs(entry.ts) : t('io.unknownTime'),
+      tag,
+      planned: entry && entry.planned ? t('io.plannedSuffix') : ''
+    });
+    const what = document.createElement('span');
+    what.className = 'import-item-what';
+    what.textContent = entry && entry.what ? entry.what : t('io.emptyWhatFull');
+    row.append(meta, what);
+    return row;
+  }
+
+  // v1.2.0：把「新增 N 条」「已存在跳过 M 条」从光秃秃的计数升级成可展开的逐条清单，
+  // 让用户在写入前明明白白看到导入会往时间线里加什么、跳过了什么（冲突项仍在下方
+  // 的 import-error 区逐条决策）。清单折叠在 <details> 里，默认收起不撑爆矮视口。
+  function paintImportDetail(plan) {
+    const host = document.querySelector('#form-sheet [data-role="import-detail"]');
+    if (!host) return;
+    host.replaceChildren();
+    if (!plan) return;
+    const section = (kind, entries, label) => {
+      if (!entries || !entries.length) return;
+      const box = document.createElement('details');
+      box.className = `import-group import-group-${kind}`;
+      const summary = document.createElement('summary');
+      summary.className = 'import-group-head';
+      summary.textContent = label;
+      box.appendChild(summary);
+      const list = document.createElement('div');
+      list.className = 'import-item-list';
+      entries.forEach(entry => list.appendChild(importEntryRow(entry)));
+      box.appendChild(list);
+      host.appendChild(box);
+    };
+    const additions = plan.additions || [];
+    const skippedEntries = plan.skippedEntries || [];
+    section('add', additions, t('io.groupAdditions', { n: additions.length }));
+    section('skip', skippedEntries, t('io.groupSkipped', { n: skippedEntries.length }));
+  }
+
   function paintImportPlan(plan) {
+    paintImportDetail(plan);
     const summary = document.querySelector('#form-sheet [data-role="import-summary"]');
     const error = document.querySelector('#form-sheet [data-role="import-error"]');
     const confirm = document.getElementById('import-confirm-btn');

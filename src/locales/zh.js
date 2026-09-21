@@ -296,6 +296,10 @@ export default {
   'io.emptyWhatFull': '未填写内容',
   'io.unknownTime': '时间未知',
   'io.conflictMeta': '{ts} · #{tag}{planned}',
+  // v1.2.0：导入预览逐条清单——新增/已跳过分组标题与每条的元信息行。
+  'io.groupAdditions': '将新增 {n} 条（点开逐条查看）',
+  'io.groupSkipped': '完全相同 · 已存在 {n} 条（不会重复写入）',
+  'io.itemMeta': '{ts} · #{tag}{planned}',
   'io.plannedSuffix': ' · 计划',
   'io.conflictProgress': '{n} 条冲突 · 已处理 {done}/{n}',
   'io.importablePlan': '可导入 {imported} 条 · 已存在跳过 {skipped} 条',
