@@ -308,8 +308,10 @@ export default {
   'io.unknownTime': 'time unknown',
   'io.conflictMeta': '{ts} · #{tag}{planned}',
   // v1.2.0: itemized import preview — group headers for additions/skipped plus per-entry meta line.
-  'io.groupAdditions': 'Will add {n} (tap to review each)',
-  'io.groupSkipped': 'Identical · already present {n} (won\'t be re-imported)',
+  // v1.2.1 (B): reworded to "optional review" tone (additions need no per-item confirmation; all import at once).
+  'io.additionsAutoNote': 'These new records all import at once when you tap Import — no per-item confirmation. Expand only to review.',
+  'io.groupAdditions': 'Adding {n} (expand to review)',
+  'io.groupSkipped': 'Identical·already present {n}, won\'t be re-imported (expand to review)',
   'io.itemMeta': '{ts} · #{tag}{planned}',
   'io.plannedSuffix': ' · plan',
   'io.conflictProgress': '{n} conflicts · {done}/{n} resolved',

@@ -297,8 +297,10 @@ export default {
   'io.unknownTime': '时间未知',
   'io.conflictMeta': '{ts} · #{tag}{planned}',
   // v1.2.0：导入预览逐条清单——新增/已跳过分组标题与每条的元信息行。
-  'io.groupAdditions': '将新增 {n} 条（点开逐条查看）',
-  'io.groupSkipped': '完全相同 · 已存在 {n} 条（不会重复写入）',
+  // v1.2.1（B）：措辞改成「可选核对」口吻（新增不需逐条确认，会自动全部导入）。
+  'io.additionsAutoNote': '以下新记录会随「导入」一次性全部加入，无需逐条确认；展开仅供核对。',
+  'io.groupAdditions': '新增 {n} 条（可展开核对）',
+  'io.groupSkipped': '完全相同·已存在 {n} 条，不会重复写入（可展开核对）',
   'io.itemMeta': '{ts} · #{tag}{planned}',
   'io.plannedSuffix': ' · 计划',
   'io.conflictProgress': '{n} 条冲突 · 已处理 {done}/{n}',

@@ -397,6 +397,10 @@ export function createIoActions(deps) {
   // v1.2.0：把「新增 N 条」「已存在跳过 M 条」从光秃秃的计数升级成可展开的逐条清单，
   // 让用户在写入前明明白白看到导入会往时间线里加什么、跳过了什么（冲突项仍在下方
   // 的 import-error 区逐条决策）。清单折叠在 <details> 里，默认收起不撑爆矮视口。
+  // v1.2.1（B）：新增项**不需逐条确认**——它们会随「导入」一次性全部写入。清单
+  // 只是可选核对，故在新增组前置一句安心文案，并把展开器做得更轻（去掉主线色
+  // 强调边框、标题降为 muted），消除“像一份待办勾选表”的错觉（D13 ③ 只要求
+  // 不**惄悔**改时间线，可见可审计即满足，不需逐条闸）。
   function paintImportDetail(plan) {
     const host = document.querySelector('#form-sheet [data-role="import-detail"]');
     if (!host) return;
@@ -418,6 +422,12 @@ export function createIoActions(deps) {
     };
     const additions = plan.additions || [];
     const skippedEntries = plan.skippedEntries || [];
+    if (additions.length) {
+      const note = document.createElement('div');
+      note.className = 'import-detail-note';
+      note.textContent = t('io.additionsAutoNote');
+      host.appendChild(note);
+    }
     section('add', additions, t('io.groupAdditions', { n: additions.length }));
     section('skip', skippedEntries, t('io.groupSkipped', { n: skippedEntries.length }));
   }

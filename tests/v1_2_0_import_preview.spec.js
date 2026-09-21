@@ -47,7 +47,9 @@ test('导入预览把新增与已跳过逐条摊开，不只报计数', async ({
 
   const addGroup = page.locator('.import-group-add');
   await expect(addGroup).toBeVisible();
-  await expect(addGroup.locator('.import-group-head')).toContainText('将新增 1');
+  // v1.2.1（B）：安心文案——新增会随「导入」一次性全部加入，无需逐条确认。
+  await expect(page.locator('.import-detail-note')).toContainText('无需逐条确认');
+  await expect(addGroup.locator('.import-group-head')).toContainText('新增 1');
   await addGroup.locator('summary').click();
   await expect(addGroup.locator('.import-item-what')).toHaveText('从备份导入的新记录');
   await expect(addGroup.locator('.import-item-meta')).toContainText('吃饭');
@@ -81,7 +83,7 @@ test('有冲突时新增清单照样显示，且冲突未处理前导入按钮�
   // 新增清单在冲突存在时仍然渲染。
   const addGroup = page.locator('.import-group-add');
   await expect(addGroup).toBeVisible();
-  await expect(addGroup.locator('.import-group-head')).toContainText('将新增 1');
+  await expect(addGroup.locator('.import-group-head')).toContainText('新增 1');
 
   // 冲突卡在下方冲突区，导入按钮此刻禁用。
   await expect(page.locator('.import-conflict-card')).toHaveCount(1);
