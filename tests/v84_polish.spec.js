@@ -17,10 +17,12 @@ const MANY_CHIPS = {
 test('v84: the more sheet keeps 9 rows; backup and ops move one level down', async ({ page }) => {
   await bootLocale(page, { locale: 'zh' });
   await page.locator('[data-action="open-more"]').click();
-  // v1.1.0 起「更多」多了一条自愿支持外链（a.cell-btn），故由 9 增到 10。v84 的
-  // 「面板别太长」约束仍在：备份四项与运维两项依旧下钻到二级页，主面板只多这一条。
-  await expect(page.locator('.more-body .cell-btn, .more-body .cell-row')).toHaveCount(10);
+  // v1.1.0 起「更多」多了一条自愿支持外链（a.cell-btn），9→10。v1.3.0 又多了一条
+  // 「时间拨号盘」分析页入口，10→11。v84 的「面板别太长」约束仍在：备份四项与运维
+  // 两项依旧下钻到二级页，主面板只多这两条只读入口。
+  await expect(page.locator('.more-body .cell-btn, .more-body .cell-row')).toHaveCount(11);
   await expect(page.locator('.more-body a[href*="eigentime.org/support"]')).toHaveCount(1);
+  await expect(page.locator('.more-body [data-action="open-analytics"]')).toHaveCount(1);
   // 主面板里不再有备份四项与运维两项。
   for (const gone of ['#copy-btn', '#backup-download-btn', '#backup-send-btn',
     '[data-action="import-json"]', '#repair-update-btn', '[data-action="toggle-boot-diag"]']) {

@@ -2199,3 +2199,75 @@
     }
     .cell-btn[aria-disabled="true"]:active { opacity: 0.45; }
     .import-file { display: none; }
+
+    /* === v1.3.0 时间拨号盘分析页 ===
+       挂在「更多」下的 analytics sheet。调色全部复用既有令牌：拨号键面用 --input，
+       四桶脊色用 --accent/--maintain/--leak/--track，「接通」键用 --maintain（本站无
+       独立 green 令牌，维持键的绿即连接色）。无新令牌、无新运行时资产。 */
+    .analytics-body { display: flex; flex-direction: column; gap: 6px; }
+    .an-period { align-self: center; margin: 2px 0 4px; }
+    .an-period-label { text-align: center; color: var(--muted); font-size: var(--fs-cap); }
+
+    .an-display { text-align: center; padding: 6px 4px 2px; }
+    .an-headline {
+      font-size: 40px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05;
+      font-variant-numeric: tabular-nums; color: var(--text);
+    }
+    .an-headline .u { font-size: 20px; font-weight: 600; color: var(--muted); margin-left: 2px; }
+    .an-subline { color: var(--muted); font-size: var(--fs-ui); margin-top: 6px; }
+    .an-subline b { color: var(--text); }
+    .an-delta { color: var(--faint); font-size: var(--fs-cap); margin-top: 3px; min-height: 16px; }
+    .an-trend { color: var(--accent); font-size: var(--fs-cap); margin-top: 2px; }
+    .an-coverage { color: var(--faint); font-size: var(--fs-cap); margin-top: 4px; }
+    .an-spark { height: 40px; margin: 8px 6px 0; }
+    .an-spark svg { width: 100%; height: 40px; overflow: visible; }
+    .an-spark rect { fill: var(--accent); }
+    .an-spark-maintain rect { fill: var(--maintain); }
+    .an-spark-leak rect { fill: var(--leak); }
+    .an-spark-unrecorded rect { fill: var(--track); }
+
+    .an-padwrap { display: flex; justify-content: center; }
+    .an-pad {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 8px;
+      padding: 12px 2px 6px; width: 100%; max-width: 340px;
+    }
+    .an-tile {
+      display: flex; flex-direction: column; align-items: center; gap: 7px;
+      background: none; border: 0; cursor: pointer; font: inherit; color: inherit; padding: 0;
+    }
+    .an-disc {
+      width: 72px; height: 72px; border-radius: 50%; background: var(--input);
+      display: grid; place-items: center; position: relative; box-shadow: var(--shadow-2);
+      transition: transform var(--t-fast);
+    }
+    .an-tile:active .an-disc { transform: scale(0.93); }
+    .an-tile.sel .an-disc { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .an-tile:focus-visible .an-disc { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .an-big { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+    .an-big .u { font-size: 11px; font-weight: 600; color: var(--muted); margin-left: 1px; }
+    .an-disc::after {
+      content: ""; position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+      width: 15px; height: 3px; border-radius: 2px; background: var(--track);
+    }
+    .an-disc.job::after { background: var(--accent); }
+    .an-disc.maintain::after { background: var(--maintain); }
+    .an-disc.leak::after { background: var(--leak); }
+    .an-disc.unrec::after { background: var(--track); }
+    .an-cap { font-size: var(--fs-cap); color: var(--muted); text-align: center; line-height: 1.25; max-width: 92px; overflow-wrap: anywhere; }
+
+    .an-pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 2px 0; min-height: 24px; }
+    .an-dots { display: flex; gap: 7px; }
+    .an-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--track); border: 0; padding: 0; cursor: pointer; }
+    .an-dot.on { background: var(--accent); }
+    .an-arrow { background: none; border: 0; color: var(--muted); font-size: 18px; cursor: pointer; padding: 2px 8px; line-height: 1; }
+    .an-arrow[disabled] { opacity: 0.3; cursor: default; }
+
+    .an-call-wrap { display: grid; place-items: center; padding: 10px 0 4px; }
+    .an-call {
+      width: 60px; height: 60px; border-radius: 50%; background: var(--maintain); border: 0; cursor: pointer;
+      display: grid; place-items: center; box-shadow: var(--shadow-2);
+    }
+    .an-call svg { width: 27px; height: 27px; fill: #fff; }
+    .an-call:active { transform: scale(0.94); }
+    .an-call:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .an-call-label { color: var(--muted); font-size: var(--fs-cap); margin-top: 7px; }

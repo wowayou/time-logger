@@ -269,3 +269,36 @@ export function periodLabel(view, dateKey, opts = {}) {
   if (isEn) return String(start.getFullYear());
   return t('date.yearLabel', { y: start.getFullYear() });
 }
+
+// ── 周期对比支持（v1.3.0 分析页）：全是纯日期算术，不碰 DOM / localStorage ──
+
+// 上一个同类周期的 [start, end)。week=前 7 天；month/year=上一个日历月/年
+// （用 addMonths/addYears 回退再取 periodRange，天然处理月末与闰年）。
+export function previousPeriodRange(view, dateKey) {
+  const { start } = periodRange(view, dateKey);
+  let prevRef;
+  if (view === 'week') prevRef = addDays(start, -7);
+  else if (view === 'month') prevRef = addMonths(start, -1);
+  else if (view === 'year') prevRef = addYears(start, -1);
+  else prevRef = addDays(start, -1);
+  return periodRange(view, localDateKey(prevRef));
+}
+
+// 同步进度对比：当期只走到 now 时，把"当期已过的时长"平移到上期起点，得到
+// 上期"同样走到这个点"的裁剪终点。让半周只跟上周的半周比，而不是整周。
+// 返回上期用于对比的 [start, matchedEnd)；now 超过当期 end（当期已完成）时
+// matchedEnd = 上期 end（整期对整期）。
+export function elapsedMatchedRange(view, dateKey, now = new Date()) {
+  const cur = periodRange(view, dateKey);
+  const prev = previousPeriodRange(view, dateKey);
+  // 当期已完成 → 整期对整期：直接用上期完整区间。不能靠“平移当期长度”推算，
+  // 因为月/年不等长（如 2月28 vs 1月31），平移会把上期尾巴几天漏掉。
+  if (+now >= +cur.end) {
+    return { start: prev.start, end: prev.end, curElapsedEnd: cur.end };
+  }
+  const clampedNow = now < cur.start ? cur.start : now;
+  const elapsedMs = +clampedNow - +cur.start;
+  const matchedEnd = new Date(+prev.start + elapsedMs);
+  const cappedEnd = matchedEnd > prev.end ? prev.end : matchedEnd;
+  return { start: prev.start, end: cappedEnd, curElapsedEnd: clampedNow };
+}

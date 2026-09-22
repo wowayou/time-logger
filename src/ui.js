@@ -332,7 +332,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.2.1';
+export const APP_VERSION = '1.3.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -433,6 +433,7 @@ function renderMoreSheet(opts = {}) {
     <div class="form-sheet-body more-body">
       <div class="cell-group">
         <button class="cell-btn" id="summary-btn" type="button" data-action="copy-summary" aria-label="${t('more.copySummaryAria')}"><span data-role="cell-label">${t('more.copySummary')}</span>${cellChevron}</button>
+        <button class="cell-btn" type="button" data-action="open-analytics" aria-label="${t('more.analyticsAria')}"><span data-role="cell-label">${t('more.analytics')}</span>${cellChevron}</button>
       </div>
       <div class="cell-group">
         <button class="cell-btn" type="button" data-action="open-backup" aria-label="${t('more.backupGroupAria')}"><span data-role="cell-label">${t('more.backupGroup')}</span>${cellChevron}</button>
@@ -483,9 +484,171 @@ function renderMottoSheet(opts = {}) {
     </div>`;
 }
 
+// ── v1.3.0 时间拨号盘分析页 ────────────────────────────────
+// 纯渲染：model 由 sheet_controller.buildAnalyticsModel 用 stats.js 的
+// comparePeriods / periodTrend / tagMinutes / summarizeEntries 算好后注入，
+// 这里只把数字/百分比/趋势排进拨号盘 DOM。不碰事件（走 app.js 委托）、
+// 不读 storage、不算业务逻辑。
+const ANALYTICS_PAGE = 12;
+const analyticsDiscClass = { job: 'job', maintain: 'maintain', leak: 'leak', unrecorded: 'unrec' };
+
+// 圆内数字：短、同质。>=1h 用 h（四舍五入），否则分钟——精度留给「接通」摘要。
+function analyticsDiscNum(mins) {
+  const h = Math.round(mins / 60);
+  if (h >= 1000) return `${(h / 1000).toFixed(1)}<span class="u">kh</span>`;
+  if (h >= 1) return `${h}<span class="u">h</span>`;
+  return `${Math.round(mins)}<span class="u">m</span>`;
+}
+
+// 全量键：前 4 格＝四桶（含未记录），其余按时长降序续排标签。覆盖率不进网格。
+function analyticsKeys(model) {
+  const total = model.total || 0;
+  const buckets = model.buckets || {};
+  const keys = BUCKET_ORDER.map(bucket => ({
+    key: 'b:' + bucket,
+    bucket,
+    kind: 'bucket',
+    name: BUCKETS[bucket],
+    mins: buckets[bucket] || 0,
+    cap: t('analytics.capBucket', { name: BUCKETS[bucket], pct: formatPercent(buckets[bucket] || 0, total) })
+  }));
+  (model.tags || []).forEach(tag => keys.push({
+    key: 't:' + tag.name,
+    bucket: tag.bucket,
+    kind: 'tag',
+    name: tag.name,
+    mins: tag.mins,
+    cap: t('analytics.capTag', { name: esc(tag.name) })
+  }));
+  return keys;
+}
+
+function analyticsPageCount(keys) {
+  return Math.max(1, Math.ceil(keys.length / ANALYTICS_PAGE));
+}
+
+function analyticsSpark(series) {
+  if (!series || series.length < 2) return '';
+  const max = Math.max(...series, 1);
+  const n = series.length, gap = 3, w = 100, bw = (w - gap * (n - 1)) / n;
+  const bars = series.map((v, i) => {
+    const h = Math.max(2, v / max * 38);
+    return `<rect x="${(i * (bw + gap)).toFixed(2)}" y="${(40 - h).toFixed(2)}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}" rx="1"/>`;
+  }).join('');
+  return `<svg viewBox="0 0 100 46" preserveAspectRatio="none" role="img" aria-label="${esc(t('analytics.title'))}">${bars}</svg>`;
+}
+
+// 顶部结论区：选中键的时长（大字）+ 占比 + 对比上期 delta +（桶才有的）趋势 spark。
+function renderAnalyticsDisplay(model, keys) {
+  const total = model.total || 0;
+  const selected = keys.find(k => k.key === model.selectedKey) || keys[0];
+  const pct = formatPercent(selected.mins, total);
+  const subline = model.selectedKey === model.defaultKey
+    ? t('analytics.subline', { name: esc(selected.name), pct })
+    : t('analytics.sublineReselect', { name: esc(selected.name), pct });
+
+  let delta;
+  if (!model.comparable) {
+    delta = t('analytics.deltaInsufficient');
+  } else {
+    const d = selected.kind === 'bucket'
+      ? (model.deltaByBucket[selected.bucket] || 0)
+      : (model.deltaByTag[selected.name] || 0);
+    if (Math.abs(d) < 1) delta = t('analytics.deltaFlat');
+    else if (d > 0) delta = t('analytics.deltaUp', { dur: fmtMins(d) });
+    else delta = t('analytics.deltaDown', { dur: fmtMins(-d) });
+  }
+
+  let trendLine = '';
+  let sparkHtml = '';
+  if (selected.kind === 'bucket' && model.trend && model.trend.bucket === selected.bucket) {
+    const tr = model.trend;
+    if (tr.direction === 'up') trendLine = t('analytics.trendUp', { name: esc(selected.name), n: tr.runLength });
+    else if (tr.direction === 'down') trendLine = t('analytics.trendDown', { name: esc(selected.name), n: tr.runLength });
+    else if (tr.direction === 'flat') trendLine = t('analytics.trendFlat', { name: esc(selected.name) });
+    sparkHtml = analyticsSpark(tr.comparableSeries);
+  }
+
+  return `
+    <div class="an-display" data-role="an-display">
+      <div class="an-headline" aria-live="polite">${fmtMins(selected.mins)}</div>
+      <div class="an-subline">${subline}</div>
+      <div class="an-delta">${delta}</div>
+      ${trendLine ? `<div class="an-trend">${trendLine}</div>` : ''}
+      <div class="an-coverage">${t('analytics.coverage', { logged: model.coverage.logged, days: model.coverage.days, total: fmtMins(total) })}</div>
+      ${sparkHtml ? `<div class="an-spark an-spark-${selected.bucket}">${sparkHtml}</div>` : ''}
+    </div>`;
+}
+
+function renderAnalyticsPad(model, keys) {
+  const pages = analyticsPageCount(keys);
+  const page = Math.min(Math.max(0, model.page || 0), pages - 1);
+  const slice = keys.slice(page * ANALYTICS_PAGE, page * ANALYTICS_PAGE + ANALYTICS_PAGE);
+  const total = model.total || 0;
+  const tiles = slice.map(k => {
+    const disc = analyticsDiscClass[k.bucket] || '';
+    const sel = k.key === model.selectedKey ? ' sel' : '';
+    const aria = t('analytics.tileAria', { name: k.name, dur: fmtMins(k.mins), pct: formatPercent(k.mins, total) });
+    return `<button class="an-tile${sel}" type="button" data-action="analytics-pick" data-key="${esc(k.key)}" aria-pressed="${k.key === model.selectedKey}" aria-label="${esc(aria)}">
+      <span class="an-disc ${disc}"><span class="an-big">${analyticsDiscNum(k.mins)}</span></span>
+      <span class="an-cap">${k.cap}</span>
+    </button>`;
+  }).join('');
+
+  const dots = Array.from({ length: pages }, (_, i) =>
+    `<button class="an-dot${i === page ? ' on' : ''}" type="button" data-action="analytics-page" data-page="${i}" aria-label="${esc(t('analytics.pageAria', { n: i + 1 }))}"></button>`
+  ).join('');
+  const pager = pages <= 1 ? '' : `
+    <div class="an-pager">
+      <button class="an-arrow" type="button" data-action="analytics-page" data-page="${page - 1}" ${page === 0 ? 'disabled aria-disabled="true"' : ''} aria-label="${esc(t('analytics.prevPage'))}">‹</button>
+      <div class="an-dots">${dots}</div>
+      <button class="an-arrow" type="button" data-action="analytics-page" data-page="${page + 1}" ${page >= pages - 1 ? 'disabled aria-disabled="true"' : ''} aria-label="${esc(t('analytics.nextPage'))}">›</button>
+    </div>`;
+
+  return `
+    <div class="an-padwrap">
+      <div class="an-pad" data-role="an-pad" role="group" aria-label="${esc(t('analytics.title'))}">${tiles}</div>
+    </div>
+    ${pager}`;
+}
+
+function renderAnalyticsPeriodSeg(view) {
+  const btn = (value, label) =>
+    `<button type="button" data-action="analytics-period" data-period="${value}" class="${view === value ? 'on' : ''}" aria-pressed="${view === value}">${esc(label)}</button>`;
+  return `<div class="an-period seg" role="group" aria-label="${esc(t('analytics.title'))}">
+    ${btn('week', t('period.week'))}${btn('month', t('period.month'))}${btn('year', t('period.year'))}
+  </div>`;
+}
+
+// 可刷新部分（区间切换/选键/翻页）包在 [data-role=analytics-content] 里，
+// sheet_controller.refreshAnalytics 只替换它，不重建整张 sheet。
+export function renderAnalyticsContent(model) {
+  const keys = analyticsKeys(model);
+  return `
+    ${renderAnalyticsPeriodSeg(model.view)}
+    <div class="an-period-label">${esc(model.periodLabel || '')}</div>
+    ${renderAnalyticsDisplay(model, keys)}
+    ${renderAnalyticsPad(model, keys)}`;
+}
+
+export function renderAnalyticsSheet(model) {
+  return `
+    ${sheetHead({ title: t('analytics.title'), cancelText: t('analytics.close'), cancelAction: 'close-form', cancelAria: t('analytics.closeAria') })}
+    <div class="form-sheet-body analytics-body">
+      <div data-role="analytics-content">${renderAnalyticsContent(model)}</div>
+      <div class="an-call-wrap">
+        <button class="an-call" type="button" data-action="analytics-summary" aria-label="${esc(t('analytics.callAria'))}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1l-2.3 2.2z"/></svg>
+        </button>
+        <div class="an-call-label" data-role="an-call-label">${t('analytics.call')}</div>
+      </div>
+    </div>`;
+}
+
 export function renderFormSheet(opts) {
   if (opts && opts.mode === 'help') return renderHelpSheet();
   if (opts && opts.mode === 'motto') return renderMottoSheet(opts);
+  if (opts && opts.mode === 'analytics') return renderAnalyticsSheet(opts.analytics || {});
   if (opts && opts.mode === 'config') return renderConfigSheet(opts.config || loadConfig(), opts);
   if (opts && opts.mode === 'import-shift') return renderImportShiftDialog(opts);
   if (opts && opts.mode === 'more') return renderMoreSheet(opts);

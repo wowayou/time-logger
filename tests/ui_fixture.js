@@ -228,6 +228,23 @@ export async function boot(page, width, state, share = false, now = '', selected
         { id: 'lunch-end', ts: `${dateKey(today)}T12:00`, what: '下午工作', tags: ['求职推进'] }
       );
     }
+    if (state === 'analytics-weeks') {
+      // v1.3.0 拨号盘：连续多周工作日记录，写代码（主线）逐周 +30min 上升，
+      // 每天配一条睡觉制造段边界。配 FIXED 周三 now（见 spec），验同步进度对比与趋势。
+      const baseMon = new Date(today);
+      baseMon.setDate(baseMon.getDate() - today.getDay() + 1 - 5 * 7); // 回到 5 周前的周一
+      for (let w = 0; w < 6; w += 1) {
+        const codeMins = 60 + w * 30;
+        for (let dd = 0; dd < 5; dd += 1) {
+          const day = new Date(baseMon);
+          day.setDate(baseMon.getDate() + w * 7 + dd);
+          const dk = dateKey(day);
+          entries.push({ id: `aw-${w}-${dd}-a`, ts: `${dk}T09:00`, what: '写代码', tags: ['求职推进'] });
+          const endH = 9 + Math.floor(codeMins / 60), endM = codeMins % 60;
+          entries.push({ id: `aw-${w}-${dd}-b`, ts: `${dk}T${p2(endH)}:${p2(endM)}`, what: '睡觉', tags: ['睡觉'] });
+        }
+      }
+    }
     localStorage.clear();
     localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
     // v89：**显式**写下这份 config，而不是靠产品的出厂种子兜底。

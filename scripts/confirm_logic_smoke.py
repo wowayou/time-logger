@@ -17,11 +17,15 @@ import {
   GAP,
   buildRangeSegmentsFromEntries as buildRangeSegmentsRaw,
   classifySegment as classifySegmentRaw,
+  comparePeriods as comparePeriodsRaw,
   confirmSegmentInData as confirmSegmentRaw,
   formatPercent,
   isKnownTag,
+  periodTrend as periodTrendRaw,
   primaryTag,
-  summarizeEntries as summarizeEntriesRaw
+  summarizeEntries as summarizeEntriesRaw,
+  tagMinutes as tagMinutesRaw,
+  COMPARE
 } from './src/stats.js';
 import {
   coalesceRedundant,
@@ -37,6 +41,9 @@ import {
 import {
   defaultPlannedTimestamp,
   entryModeForDate,
+  elapsedMatchedRange,
+  periodRange,
+  previousPeriodRange,
   inclusiveCalendarDayCount,
   planningWindow,
   validateTsForMode
@@ -87,6 +94,9 @@ const summarizeEntries = (entries, start, end, opts = {}) => summarizeEntriesRaw
 const buildRangeSegmentsFromEntries = (entries, start, end, opts = {}) => buildRangeSegmentsRaw(entries, start, end, withReview(opts));
 const classifySegment = (entryValue, rawMins, endTs, isOngoing) => classifySegmentRaw(entryValue, rawMins, endTs, isOngoing, REVIEW_CONFIG);
 const confirmSegmentInData = (data, id, endTs, opts = {}) => confirmSegmentRaw(data, id, endTs, withReview(opts));
+const comparePeriods = (entries, view, dateKey, opts = {}) => comparePeriodsRaw(entries, view, dateKey, withReview(opts));
+const periodTrend = (entries, view, dateKey, opts = {}) => periodTrendRaw(entries, view, dateKey, withReview(opts));
+const tagMinutes = (entries, start, end, opts = {}) => tagMinutesRaw(entries, start, end, withReview(opts));
 
 function p2(n) {
   return String(n).padStart(2, '0');
@@ -870,6 +880,79 @@ for (let h = 0; h < 24; h += 1) {
   for (let m = 0; m < 60; m += 1) fullDay.push(entry(`f${h}-${m}`, `2026-06-29T${p2(h)}:${p2(m)}`, '求职推进'));
 }
 assert(freeMinuteOnSameDay(fullDay, '2026-06-29T12:00') === '', 'a fully booked day yields no minute instead of spilling into tomorrow');
+
+// --- v1.3.0：周期对比与趋势（分析页） ---
+// 造周一~周五的记录，写代码逐周 +30min（上升），每天配一条睡觉制造段边界。
+// now = 周三 14:00（本周进行中），验证同步进度对比、覆盖率守门、趋势方向。
+function analyticsWeekdayEntries(startMon, weeks, baseMins, stepMins, daysPerWeek) {
+  const out = [];
+  let n = 0;
+  for (let w = 0; w < weeks; w += 1) {
+    const codeMins = baseMins + w * stepMins;
+    for (let dd = 0; dd < daysPerWeek; dd += 1) {
+      const day = new Date(startMon.getFullYear(), startMon.getMonth(), startMon.getDate() + w * 7 + dd);
+      const dk = `${day.getFullYear()}-${p2(day.getMonth() + 1)}-${p2(day.getDate())}`;
+      out.push({ id: 'aw' + (n++), ts: `${dk}T09:00`, what: '写代码', tags: ['求职推进'] });
+      const endH = 9 + Math.floor(codeMins / 60), endM = codeMins % 60;
+      out.push({ id: 'aw' + (n++), ts: `${dk}T${p2(endH)}:${p2(endM)}`, what: '睡觉', tags: ['睡觉'] });
+    }
+  }
+  return out;
+}
+const analyticsNow = new Date(2026, 5, 24, 14, 0); // 周三
+// 6 周（含本周），每周 5 天，写代码 60/90/.../ 逐周 +30。最近一周（本周）到周三=3 天。
+const risingEntries = analyticsWeekdayEntries(new Date(2026, 4, 25), 6, 60, 30, 5);
+const cmp = comparePeriods(risingEntries, 'week', '2026-06-24', { now: analyticsNow });
+// 本周到周三：周一二三各 180min（w=4 的 codeMins）= 540；上周同步（到周三）：各 150 = 450。
+assert(cmp.current.job === 540, `comparePeriods current.job expected 540, got ${cmp.current.job}`);
+assert(cmp.previousMatched.job === 450, `comparePeriods previousMatched.job expected 450, got ${cmp.previousMatched.job}`);
+assert(cmp.deltaByBucket.job === 90, `comparePeriods deltaByBucket.job expected 90, got ${cmp.deltaByBucket.job}`);
+assert(cmp.deltaByTag.get('求职推进') === 90, 'per-tag delta tracks the mainline tag');
+assert(cmp.comparable === true, 'both sides at full elapsed coverage are comparable');
+// 同步进度对比不拿半周比整周：上期只取到同样走到周三的裁剪点。
+const priorWeekFull = summarizeEntries(risingEntries, new Date(2026, 5, 15), new Date(2026, 5, 22), { now: new Date(2026, 5, 22) }).job;
+assert(cmp.previousMatched.job < priorWeekFull, `previousMatched clips to the elapsed point (${cmp.previousMatched.job}) rather than the whole prior week (${priorWeekFull})`);
+
+// 趋势：只用已完成周期。5 个已完成周（每周 5 天≥60% 覆盖）逐周上升。
+const trend = periodTrend(risingEntries, 'week', '2026-06-24', { now: analyticsNow, bucket: 'job' });
+assert(trend.direction === 'up', `rising weeks should trend up, got ${trend.direction}`);
+assert(trend.comparableSeries.length >= COMPARE.MIN_TREND_PERIODS, 'enough comparable completed weeks for a trend');
+assert(trend.runLength >= 3, `monotonic rise should report a run, got ${trend.runLength}`);
+
+// 持平：每周固定时长 → flat（落在死区内）。
+const flatEntries = analyticsWeekdayEntries(new Date(2026, 4, 25), 6, 150, 0, 5);
+const flatTrend = periodTrend(flatEntries, 'week', '2026-06-24', { now: analyticsNow, bucket: 'job' });
+assert(flatTrend.direction === 'flat', `constant weeks should be flat, got ${flatTrend.direction}`);
+assert(flatTrend.runLength === 0, `flat trend must not report a run, got ${flatTrend.runLength}`);
+
+// 小样本守门（趋势侧）：每周只记 2 天，已完成周期覆盖 2/7 < 60% → 趋势不给方向。
+const sparseEntries = analyticsWeekdayEntries(new Date(2026, 4, 25), 6, 120, 30, 2);
+const sparseTrend = periodTrend(sparseEntries, 'week', '2026-06-24', { now: analyticsNow, bucket: 'job' });
+assert(sparseTrend.direction === 'insufficient', `sparse coverage must not fabricate a trend, got ${sparseTrend.direction}`);
+assert(sparseTrend.runLength === 0, `insufficient trend must not report a run, got ${sparseTrend.runLength}`);
+// 说明性：当期对比的覆盖率按**已历天数**算（不是整周 7 天）——周三 now 时已历 3 天，
+// 记了周一二 2 天 = 2/3 ≥ 60%，所以仍可比（这是正确的：进行中的周不能拿整周当分母）。
+const sparseCmp = comparePeriods(sparseEntries, 'week', '2026-06-24', { now: analyticsNow });
+assert(sparseCmp.comparable === true, 'in-progress coverage is judged against elapsed days, so 2/3 still comparable');
+
+// 真正欠覆盖的对比会被拦：周三 now（已历 3 天）但两周都只记周一 1 天 = 1/3 < 60% → 不可比。
+const underCovered = analyticsWeekdayEntries(new Date(2026, 4, 25), 6, 120, 30, 1);
+const underCmp = comparePeriods(underCovered, 'week', '2026-06-24', { now: analyticsNow });
+assert(underCmp.comparable === false, `1-of-3 elapsed days must mark the comparison not comparable, got coverage cur=${underCmp.coverage.current.loggedDays}/${underCmp.coverage.current.days}`);
+
+// 回归：已完成周期不等长时，整期对整期（不能靠“平移当期长度”推算上期终点）。
+// 已完成 2月(28天) vs 1月(31天)：matched 必须覆盖整个 1 月，而不是只到 1/29。
+const febCompleted = elapsedMatchedRange('month', '2026-02-15', new Date(2026, 5, 1));
+const janRange = periodRange('month', '2026-01-15');
+assert(+febCompleted.end === +janRange.end, `completed shorter month must match whole prior month, got matchedEnd=${febCompleted.end.toISOString()} vs prevEnd=${janRange.end.toISOString()}`);
+assert(+febCompleted.start === +janRange.start, 'completed comparison starts at prior period start');
+// 已完成非闰年(365) vs 上一年闰年(366)：同样要覆盖整年，不能漏掉 12/31。
+const y2025 = elapsedMatchedRange('year', '2025-06-01', new Date(2027, 0, 1));
+const y2024 = periodRange('year', '2024-06-01');
+assert(+y2025.end === +y2024.end, 'completed non-leap year matches whole prior leap year (no dropped Dec 31)');
+// 进行中的当期仍走同步进度裁剪（不受上面修复影响）：2月过到 15 号，matched 落在 1 月中旬。
+const febInProgress = elapsedMatchedRange('month', '2026-02-15', new Date(2026, 1, 15, 12, 0));
+assert(+febInProgress.end < +janRange.end, 'in-progress current month still clips prior month to elapsed progress');
 
 console.log('confirm_logic_smoke passed');
 '''

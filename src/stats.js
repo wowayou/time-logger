@@ -5,9 +5,13 @@
 import {
   addDays,
   inclusiveCalendarDayCount,
+  localDateKey,
   localDateTimeKey,
   minsBetweenDates,
   normalizeTimestamp,
+  periodRange,
+  elapsedMatchedRange,
+  previousPeriodRange,
   startOfDay
 } from './time.js';
 // SPEC-013：保留标签 id 是数据（config 的键、随备份走），不是文案；显示名在 ui/io 层
@@ -242,6 +246,166 @@ export function summarizeEntries(entries, start, end, opts = {}) {
     }, opts.config);
   });
   return totals;
+}
+
+// ── 周期对比与趋势（v1.3.0 分析页）。全是纯逻辑，config 由调用方注入，不碰
+// DOM / localStorage / navigator。三条诚实前提落进代码：
+//   ① 分钟是权威值，%/delta/趋势都是派生展示；
+//   ② 当期进行中时按“同步进度”对比（elapsedMatchedRange），不拿半周比整周；
+//   ③ 数据不足时不给方向——只显示水平，方向判 insufficient。
+// 阈值是保守默认（维护者 2026-09-21 认可），集中在此，便于日后调。
+export const COMPARE = {
+  COMPARABLE_COVERAGE: 0.6, // 一期“可比”：已记录天数 / 该期已历天数 ≥ 60%
+  TREND_PERIODS: 8,          // 趋势最多回看 8 个已完成同类周期
+  MIN_TREND_PERIODS: 3,      // 少于 3 个可比周期 → 不给趋势方向
+  FLAT_ABS_MIN: 30,          // 持平死区：绝对差 < 30 分钟
+  FLAT_REL: 0.10             // 持平死区：相对差 < 10%
+};
+
+// 区间内有真实记录的自然日数（不含计划/占位）。
+function recordedDayCountInRange(entries, start, end) {
+  const s = +startOfDay(new Date(start));
+  const e = +new Date(end);
+  const seen = new Set();
+  loggedEntriesFrom(entries).forEach(entry => {
+    if (isPlaceholderEntry(entry)) return;
+    const t = +new Date(entry.ts);
+    if (t >= s && t < e) seen.add(entry.ts.slice(0, 10));
+  });
+  return seen.size;
+}
+
+// 区间跨越的自然日数（按已历部分算，用于当期覆盖率分母）。
+function calendarDayCountInRange(start, end) {
+  const s = startOfDay(new Date(start));
+  const last = new Date(+end - 1);
+  if (+last < +s) return 0;
+  return inclusiveCalendarDayCount(localDateKey(s), localDateKey(last));
+}
+
+function coverageInRange(entries, start, end) {
+  const days = calendarDayCountInRange(start, end);
+  const loggedDays = recordedDayCountInRange(entries, start, end);
+  return { loggedDays, days, ratio: days > 0 ? loggedDays / days : 0 };
+}
+
+// 区间内各标签的已发生分钟（不含未记录段）。返回 Map<tag, mins>。
+export function tagMinutes(entries, start, end, opts = {}) {
+  const map = new Map();
+  buildRangeSegmentsFromEntries(entries, start, end, opts).forEach(segment => {
+    if (segment.unrecorded || segment.mins <= 0) return;
+    map.set(segment.tag, (map.get(segment.tag) || 0) + segment.mins);
+  });
+  return map;
+}
+
+function diffTagMaps(curMap, prevMap) {
+  const out = new Map();
+  const keys = new Set([...curMap.keys(), ...prevMap.keys()]);
+  keys.forEach(tag => out.set(tag, (curMap.get(tag) || 0) - (prevMap.get(tag) || 0)));
+  return out;
+}
+
+/**
+ * 当期 vs 上期（同步进度）对比。
+ * @returns {{
+ *   current: object, previousMatched: object,
+ *   deltaByBucket: {job:number,maintain:number,leak:number,unrecorded:number},
+ *   deltaByTag: Map<string,number>,
+ *   coverage: { current: object, previous: object },
+ *   comparable: boolean
+ * }}
+ */
+export function comparePeriods(entries, view, dateKey, opts = {}) {
+  const now = opts.now ? new Date(opts.now) : new Date();
+  const config = opts.config;
+  const cur = periodRange(view, dateKey);
+  const matched = elapsedMatchedRange(view, dateKey, now);
+  const so = { now, config };
+
+  const current = summarizeEntries(entries, cur.start, cur.end, so);
+  // 上期只取“同样走到这个点”的裁剪区间；now 传该裁剪终点，避免 buildRange 用真实 now 把它顶回去。
+  const previousMatched = summarizeEntries(entries, matched.start, matched.end, { now: matched.end, config });
+
+  const curTags = tagMinutes(entries, cur.start, cur.end, so);
+  const prevTags = tagMinutes(entries, matched.start, matched.end, { now: matched.end, config });
+
+  const covCur = coverageInRange(entries, cur.start, matched.curElapsedEnd);
+  const covPrev = coverageInRange(entries, matched.start, matched.end);
+
+  return {
+    current,
+    previousMatched,
+    deltaByBucket: {
+      job: current.job - previousMatched.job,
+      maintain: current.maintain - previousMatched.maintain,
+      leak: current.leak - previousMatched.leak,
+      unrecorded: current.unrecorded - previousMatched.unrecorded
+    },
+    deltaByTag: diffTagMaps(curTags, prevTags),
+    coverage: { current: covCur, previous: covPrev },
+    comparable: covCur.ratio >= COMPARE.COMPARABLE_COVERAGE && covPrev.ratio >= COMPARE.COMPARABLE_COVERAGE
+  };
+}
+
+function mean(nums) {
+  return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+}
+
+// 近半均值 vs 前半均值，带持平死区。刻意不做回归/显著性——那是假装严谨。
+function classifyDirection(series) {
+  if (series.length < 2) return 'flat';
+  const mid = Math.floor(series.length / 2);
+  const older = mean(series.slice(0, series.length - mid));
+  const recent = mean(series.slice(series.length - mid));
+  const diff = recent - older;
+  if (Math.abs(diff) < Math.max(COMPARE.FLAT_ABS_MIN, COMPARE.FLAT_REL * older)) return 'flat';
+  return diff > 0 ? 'up' : 'down';
+}
+
+// 末尾连续朝指定方向（'up'/'down'）的期数（“连续 N 周上升”）。方向为 flat/
+// insufficient 时没有可展示的 run，返回 0——避免显示“连续上升”却没有趋势箭头。
+function trailingRun(series, direction) {
+  if (series.length < 2 || (direction !== 'up' && direction !== 'down')) return 0;
+  const want = direction === 'up' ? 1 : -1;
+  let run = 0;
+  for (let i = series.length - 1; i > 0; i -= 1) {
+    if (Math.sign(series[i] - series[i - 1]) === want) run += 1;
+    else break;
+  }
+  return run;
+}
+
+/**
+ * 某个桶（默认主线 job）在最近若干“已完成”同类周期上的走向。
+ * 只用已完成周期（end <= now），当期进行中那期不混入。方向仅由“可比”周期决定，
+ * 可比周期少于 MIN_TREND_PERIODS 时返回 insufficient——不编方向。
+ * @returns {{ series:number[], comparableSeries:number[], direction:'up'|'down'|'flat'|'insufficient', runLength:number, bucket:string }}
+ */
+export function periodTrend(entries, view, dateKey, opts = {}) {
+  const now = opts.now ? new Date(opts.now) : new Date();
+  const config = opts.config;
+  const bucket = opts.bucket || 'job';
+  const periods = opts.periods || COMPARE.TREND_PERIODS;
+
+  // 从当期起点往回，逐个取“已完成”周期（end <= now），最多 periods 个，按时间正序。
+  const collected = [];
+  let ref = dateKey;
+  for (let i = 0; i < periods; i += 1) {
+    const prev = previousPeriodRange(view, ref);
+    if (+prev.end > +now) break; // 未完成的不算
+    const totals = summarizeEntries(entries, prev.start, prev.end, { now: prev.end, config });
+    const cov = coverageInRange(entries, prev.start, prev.end);
+    collected.unshift({ mins: totals[bucket] || 0, comparable: cov.ratio >= COMPARE.COMPARABLE_COVERAGE });
+    ref = localDateKey(prev.start);
+  }
+
+  const series = collected.map(p => p.mins);
+  const comparableSeries = collected.filter(p => p.comparable).map(p => p.mins);
+  const direction = comparableSeries.length >= COMPARE.MIN_TREND_PERIODS
+    ? classifyDirection(comparableSeries)
+    : 'insufficient';
+  return { series, comparableSeries, direction, runLength: trailingRun(comparableSeries, direction), bucket };
 }
 
 export function confirmSegmentInData(d, id, endTs, opts = {}) {

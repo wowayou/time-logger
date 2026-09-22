@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>时间拨号盘 · 分析页原型 v2</title>
+<!--
+  静态交互原型 v2，不是运行时资产：hardcode 示例数据、独立自包含。
+  v2 改动（据维护者反馈）：
+  ① 去掉键角的 ①②③ 索引 —— 时长成为圆内唯一数字，更像真实拨号键，也去掉了
+     「一圈两个数字」的视觉噪音。
+  ② 覆盖率（6/7天，非时长）移出网格、放进顶部显示区，网格 12 键全是同质时长值。
+  ③「更多」改为**分页拨号盘**：第 1 页＝4 桶 + Top 标签，第 2 页起续排更多标签，
+     配页点 + 左右箭头 + 滑动，只有溢出时才分页。
+  真实实现时数据全来自 stats.js，不进 sw.js FILES。调色板逐字取自 styles.css。
+-->
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e0f13; --card: #16171e; --input: #1d1f29; --chrome: #1d1f29;
+    --border: rgba(255,255,255,0.09); --track: #262838;
+    --accent: #a99fff; --accent-bg: rgba(139,124,255,0.14);
+    --maintain: #63c894; --leak: #e19a59;
+    --text: #e8e9f1; --muted: #9fa1b8; --faint: #898ba2; --danger: #e0596b;
+    --green: #34c759; --shadow-2: 0 4px 16px rgba(0,0,0,0.35); --key: #2a2c39;
+  }
+  html[data-theme="light"] {
+    color-scheme: light;
+    --bg: #eceef3; --card: #ffffff; --input: #e2e5ea; --chrome: #f2f3f7;
+    --border: rgba(28,32,44,0.08); --track: #e2e5eb;
+    --accent: #5745c7; --accent-bg: #efecfc;
+    --maintain: #237a52; --leak: #9a4f1e;
+    --text: #33323b; --muted: #686570; --faint: #66646d; --danger: #ae414f;
+    --green: #2aa14a; --key: #eef0f5; --shadow-2: 0 2px 6px rgba(28,32,44,0.07), 0 10px 28px rgba(28,32,44,0.08);
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, "SF Pro Text", "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: flex; justify-content: center; min-height: 100vh; }
+  .phone { width: 100%; max-width: 420px; min-height: 100vh; display: flex; flex-direction: column; padding: 12px 18px 22px; }
+
+  /* ── 顶部显示区 = 本期结论 ── */
+  .display { padding: 14px 4px 4px; text-align: center; }
+  .period { display: inline-flex; gap: 2px; background: var(--chrome); border: 1px solid var(--border); border-radius: 999px; padding: 3px; margin-bottom: 16px; }
+  .period button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 14px; padding: 6px 18px; border-radius: 999px; cursor: pointer; }
+  .period button.on { background: var(--accent); color: #fff; font-weight: 600; }
+  .headline { font-size: 44px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; margin: 2px 0 8px; }
+  .headline .u { font-size: 22px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+  .subline { color: var(--muted); font-size: 14px; min-height: 20px; }
+  .subline b { color: var(--text); }
+  .coverage { color: var(--faint); font-size: 12px; margin-top: 5px; }
+  .display.dialed .headline { animation: dialpop 220ms ease-out; }
+  @keyframes dialpop { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .spark { height: 46px; margin: 10px 6px 0; display: none; }
+  .spark.show { display: block; }
+  .spark svg { width: 100%; height: 46px; overflow: visible; }
+
+  /* ── 拨号盘（可分页） ── */
+  .padwrap { flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 10px; padding: 14px 6px 8px; }
+  .pad.slidein { animation: slidein 220ms ease-out; }
+  @keyframes slidein { from { opacity: 0; transform: translateX(var(--dir, 16px)); } to { opacity: 1; transform: none; } }
+  .tile { display: flex; flex-direction: column; align-items: center; gap: 8px; background: none; border: 0; cursor: pointer; font: inherit; color: inherit; }
+  .disc { width: 76px; height: 76px; border-radius: 50%; background: var(--key); display: grid; place-items: center; position: relative; box-shadow: var(--shadow-2); transition: transform 120ms ease; }
+  .tile:active .disc { transform: scale(0.93); }
+  .tile.sel .disc { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .disc .big { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .disc .big .u { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 1px; }
+  .disc.job::after, .disc.maintain::after, .disc.leak::after, .disc.unrec::after { content: ""; position: absolute; left: 50%; bottom: 9px; transform: translateX(-50%); width: 16px; height: 3px; border-radius: 2px; }
+  .disc.job::after { background: var(--accent); }
+  .disc.maintain::after { background: var(--maintain); }
+  .disc.leak::after { background: var(--leak); }
+  .disc.unrec::after { background: var(--track); }
+  .cap { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.25; max-width: 92px; }
+  .cap .pct { color: var(--faint); }
+
+  /* ── 页导航 ── */
+  .pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 4px 0 2px; min-height: 26px; }
+  .pager.hidden { visibility: hidden; }
+  .dots { display: flex; gap: 7px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--track); border: 0; padding: 0; cursor: pointer; }
+  .dot.on { background: var(--accent); }
+  .arrow { background: none; border: 0; color: var(--muted); font-size: 18px; cursor: pointer; padding: 2px 6px; line-height: 1; }
+  .arrow:disabled { opacity: 0.3; cursor: default; }
+
+  /* ── 绿色接通键 ── */
+  .call-wrap { display: grid; place-items: center; padding: 10px 0 4px; }
+  .call { width: 64px; height: 64px; border-radius: 50%; background: var(--green); border: 0; cursor: pointer; display: grid; place-items: center; box-shadow: 0 8px 22px rgba(52,199,89,0.35); }
+  .call svg { width: 29px; height: 29px; fill: #fff; }
+  .call-label { color: var(--muted); font-size: 12px; margin-top: 7px; }
+
+  /* ── 摘要 sheet ── */
+  .sheet-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: flex-end; justify-content: center; }
+  .sheet-mask.show { display: flex; }
+  .sheet { width: 100%; max-width: 420px; background: var(--card); border-radius: 20px 20px 0 0; padding: 14px 18px 24px; border-top: 1px solid var(--border); }
+  .sheet h2 { font-size: 16px; margin: 4px 0 12px; text-align: center; }
+  .sheet pre { background: var(--input); border: 1px solid var(--border); border-radius: 12px; padding: 12px; font-size: 13px; white-space: pre-wrap; color: var(--text); max-height: 42vh; overflow: auto; margin: 0 0 12px; }
+  .sheet .row { display: flex; gap: 10px; }
+  .sheet .row button { flex: 1; padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--chrome); color: var(--text); font: inherit; cursor: pointer; }
+  .sheet .row button.primary { background: var(--accent); color: #fff; border-color: transparent; font-weight: 600; }
+  .themebtn { position: fixed; top: 10px; right: 14px; background: var(--chrome); border: 1px solid var(--border); color: var(--muted); border-radius: 999px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+  .note { text-align: center; color: var(--faint); font-size: 11px; padding: 2px 0 0; }
+</style>
+</head>
+<body>
+<button class="themebtn" id="theme">☀︎ / ☾</button>
+<div class="phone">
+  <div class="display" id="display">
+    <div class="period" role="group" aria-label="统计区间">
+      <button data-p="week" class="on">本周</button>
+      <button data-p="month">本月</button>
+      <button data-p="year">今年</button>
+    </div>
+    <div class="headline" id="headline" aria-live="polite"></div>
+    <div class="subline" id="subline"></div>
+    <div class="coverage" id="coverage"></div>
+    <div class="spark" id="spark" aria-hidden="true"></div>
+  </div>
+
+  <div class="padwrap">
+    <div class="pad" id="pad" role="group" aria-label="时间统计拨号盘"></div>
+  </div>
+  <div class="pager" id="pager">
+    <button class="arrow" id="prev" aria-label="上一页">‹</button>
+    <div class="dots" id="dots"></div>
+    <button class="arrow" id="next" aria-label="下一页">›</button>
+  </div>
+
+  <div class="call-wrap">
+    <button class="call" id="call" aria-label="生成本期摘要并复制或分享">
+      <svg viewBox="0 0 24 24"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1l-2.3 2.2z"/></svg>
+    </button>
+    <div class="call-label">接通 · 生成本期摘要</div>
+  </div>
+  <div class="note">示例数据 · 静态原型 v2 · 数字为占位</div>
+</div>
+
+<div class="sheet-mask" id="mask">
+  <div class="sheet" role="dialog" aria-label="本期摘要">
+    <h2>本期摘要</h2>
+    <pre id="summary"></pre>
+    <div class="row"><button id="close">关闭</button><button class="primary" id="copy">复制</button></div>
+  </div>
+</div>
+
+<script>
+// ── 示例数据（占位）。真实实现来自 stats.js 的 summarizeEntries / buildRangeSegmentsFromEntries ──
+// 为演示分页，标签列表刻意超过一页。
+const mkTags = base => base.concat([
+  ['通勤','maintain',Math.round(base[0][2]*0.14)],['运动健康','maintain',Math.round(base[0][2]*0.10)],
+  ['家务','maintain',Math.round(base[0][2]*0.08)],['发呆','leak',Math.round(base[0][2]*0.06)],
+  ['洗漱','maintain',Math.round(base[0][2]*0.05)],['阅读','job',Math.round(base[0][2]*0.05)],
+  ['整理','maintain',Math.round(base[0][2]*0.03)]
+]);
+const DATA = {
+  week:  { label:'本周（6/23–6/29）', days:7, logged:6, buckets:{job:1935,maintain:3600,leak:840,unrecorded:720},
+    tags: mkTags([['睡觉','maintain',2940],['写代码','job',1200],['刷手机','leak',540],['面试准备','job',480],['吃饭','maintain',420],['娱乐','leak',300]]),
+    trend:{ job:[180,240,300,210,360,420,225], maintain:[520,540,500,510,530,480,520], leak:[90,120,150,60,180,120,120], '睡觉':[420,440,410,430,450,400,390] } },
+  month: { label:'本月（6月）', days:30, logged:24, buckets:{job:8200,maintain:15400,leak:3600,unrecorded:3100},
+    tags: mkTags([['睡觉','maintain',12600],['写代码','job',5100],['刷手机','leak',2200],['面试准备','job',2000],['吃饭','maintain',1800],['娱乐','leak',1400]]),
+    trend:{ job:Array.from({length:12},(_,i)=>500+Math.round(400*Math.abs(Math.sin(i)))), maintain:Array.from({length:12},()=>1200), leak:Array.from({length:12},(_,i)=>200+i*15), '睡觉':Array.from({length:12},()=>1000) } },
+  year:  { label:'今年（截至 9月）', days:273, logged:190, buckets:{job:72000,maintain:138000,leak:31000,unrecorded:26000},
+    tags: mkTags([['睡觉','maintain',115000],['写代码','job',44000],['刷手机','leak',19000],['面试准备','job',16000],['吃饭','maintain',15000],['娱乐','leak',12000]]),
+    trend:{ job:Array.from({length:9},(_,i)=>6000+i*400), maintain:Array.from({length:9},()=>15000), leak:Array.from({length:9},(_,i)=>3000+i*100), '睡觉':Array.from({length:9},()=>12500) } }
+};
+const BUCKET_NAME = { job:'主线', maintain:'维持', leak:'偏航', unrecorded:'未记录' };
+const PAGE = 12;
+let period='week', selected=null, page=0;
+
+// 圆内数字：短、同质。>=1000h 用 k；>=1h 用 h；否则分钟。精度留给摘要。
+function discNum(mins){
+  const h = Math.round(mins/60);
+  if (h >= 1000) return `${(h/1000).toFixed(1)}<span class="u">kh</span>`;
+  if (h >= 1) return `${h}<span class="u">h</span>`;
+  return `${mins}<span class="u">m</span>`;
+}
+function fmt(mins){ const h=Math.floor(mins/60),m=mins%60; if(h&&m)return `${h}<span class="u">时</span>${m}<span class="u">分</span>`; if(h)return `${h}<span class="u">时</span>`; return `${m}<span class="u">分</span>`; }
+function fmtPlain(mins){ const h=Math.floor(mins/60),m=mins%60; return h?(m?`${h}h${m}m`:`${h}h`):`${m}m`; }
+function pct(n,total){ return total<=0?0:Math.round(n/total*100); }
+function bucketTotal(d){ return d.buckets.job+d.buckets.maintain+d.buckets.leak+d.buckets.unrecorded; }
+function color(b){ return b==='job'?'var(--accent)':b==='maintain'?'var(--maintain)':b==='leak'?'var(--leak)':'var(--track)'; }
+
+// 全量键序列：第 1 页前 4 格＝四桶（含未记录），其余按时长续排的标签；覆盖率不进网格。
+function allKeys(d){
+  const total = bucketTotal(d);
+  const keys = ['job','maintain','leak','unrecorded'].map(b => ({
+    key:b, bucket:b, big:discNum(d.buckets[b]), mins:d.buckets[b], capName:BUCKET_NAME[b],
+    cap:`${BUCKET_NAME[b]} <span class="pct">${pct(d.buckets[b],total)}%</span>`, color:color(b)
+  }));
+  d.tags.filter(t=>t[2]>0).forEach(t => keys.push({
+    key:t[0], bucket:t[1], big:discNum(t[2]), mins:t[2], capName:'#'+t[0], cap:`#${t[0]}`, color:color(t[1])
+  }));
+  return keys;
+}
+function pageCount(d){ return Math.max(1, Math.ceil(allKeys(d).length / PAGE)); }
+
+function render(dir){
+  const d = DATA[period], total = bucketTotal(d);
+  const headline=document.getElementById('headline'), subline=document.getElementById('subline'),
+        coverage=document.getElementById('coverage'), spark=document.getElementById('spark'), display=document.getElementById('display');
+  if (selected){
+    const meta = allKeys(d).find(k=>k.key===selected);
+    headline.innerHTML = fmt(meta.mins);
+    subline.innerHTML = `${meta.capName} · 占本期 <b>${pct(meta.mins,total)}%</b> · 再点一次返回`;
+    coverage.textContent = '';
+    const series = d.trend[selected] || d.trend[meta.bucket] || [];
+    spark.innerHTML = series.length ? drawSpark(series, meta.color) : '';
+    spark.classList.toggle('show', series.length>0);
+  } else {
+    headline.innerHTML = fmt(d.buckets.job);
+    subline.innerHTML = `主线 · 占本期 <b>${pct(d.buckets.job,total)}%</b> · ${d.label}`;
+    coverage.textContent = `记录覆盖 ${d.logged}/${d.days} 天 · 总计 ${fmtPlain(total)}`;
+    spark.classList.remove('show'); spark.innerHTML='';
+  }
+  display.classList.remove('dialed'); void display.offsetWidth; display.classList.add('dialed');
+  renderPad(d, dir);
+}
+
+function drawSpark(series, col){
+  const max=Math.max(...series,1), n=series.length, gap=3, w=100, bw=(w-gap*(n-1))/n;
+  const bars=series.map((v,i)=>{ const h=Math.max(2,v/max*38); return `<rect x="${(i*(bw+gap)).toFixed(2)}" y="${(40-h).toFixed(2)}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}" rx="1" style="fill:${col}"/>`; }).join('');
+  return `<svg viewBox="0 0 100 46" preserveAspectRatio="none" role="img" aria-label="按日趋势，示例数据">${bars}</svg>`;
+}
+
+function renderPad(d, dir){
+  const keys = allKeys(d), pages = pageCount(d);
+  if (page >= pages) page = pages-1;
+  const slice = keys.slice(page*PAGE, page*PAGE+PAGE);
+  const pad = document.getElementById('pad');
+  pad.style.setProperty('--dir', dir==='left' ? '-16px' : '16px');
+  pad.classList.remove('slidein'); void pad.offsetWidth; pad.classList.add('slidein');
+  pad.innerHTML = '';
+  slice.forEach(t => {
+    const btn = document.createElement('button');
+    btn.className = 'tile' + (selected===t.key?' sel':'');
+    const bc = t.bucket ? ({job:'job',maintain:'maintain',leak:'leak',unrecorded:'unrec'})[t.bucket] : '';
+    btn.innerHTML = `<span class="disc ${bc}"><span class="big">${t.big}</span></span><span class="cap">${t.cap}</span>`;
+    btn.setAttribute('aria-label', `${t.capName}，${fmtPlain(t.mins)}`);
+    btn.onclick = () => { selected = (selected===t.key)?null:t.key; render(); };
+    pad.appendChild(btn);
+  });
+  renderPager(pages);
+}
+
+function renderPager(pages){
+  const pager=document.getElementById('pager'), dots=document.getElementById('dots');
+  pager.classList.toggle('hidden', pages<=1);
+  dots.innerHTML='';
+  for (let i=0;i<pages;i++){ const b=document.createElement('button'); b.className='dot'+(i===page?' on':''); b.setAttribute('aria-label',`第 ${i+1} 页`); b.onclick=()=>goto(i); dots.appendChild(b); }
+  document.getElementById('prev').disabled = page===0;
+  document.getElementById('next').disabled = page>=pages-1;
+}
+function goto(p){ const pages=pageCount(DATA[period]); const np=Math.max(0,Math.min(pages-1,p)); if(np===page)return; const dir=np>page?'right':'left'; page=np; selected=null; render(dir); }
+
+document.getElementById('prev').onclick=()=>goto(page-1);
+document.getElementById('next').onclick=()=>goto(page+1);
+
+// 滑动翻页
+let sx=0, sy=0, tracking=false;
+const padwrap=document.querySelector('.padwrap');
+padwrap.addEventListener('touchstart',e=>{ sx=e.touches[0].clientX; sy=e.touches[0].clientY; tracking=true; },{passive:true});
+padwrap.addEventListener('touchend',e=>{ if(!tracking)return; tracking=false; const dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy; if(Math.abs(dx)>50 && Math.abs(dx)>Math.abs(dy)*1.5) goto(page + (dx<0?1:-1)); });
+
+document.querySelectorAll('.period button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.period button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); period=b.dataset.p; selected=null; page=0; render();
+});
+
+function buildSummary(){
+  const d=DATA[period], total=bucketTotal(d), L=[];
+  L.push(`# 时间尺 · ${d.label}`,'',`记录覆盖：${d.logged}/${d.days} 天`,`总计（四桶）：${fmtPlain(total)}`,'','## 桶占比');
+  ['job','maintain','leak','unrecorded'].forEach(b=>L.push(`- ${BUCKET_NAME[b]}：${fmtPlain(d.buckets[b])} · ${pct(d.buckets[b],total)}%`));
+  L.push('','## Top 标签');
+  d.tags.filter(t=>t[2]>0).sort((a,b)=>b[2]-a[2]).forEach(t=>L.push(`- #${t[0]}（${BUCKET_NAME[t[1]]}）：${fmtPlain(t[2])}`));
+  return L.join('\n');
+}
+document.getElementById('call').onclick=()=>{ document.getElementById('summary').textContent=buildSummary(); document.getElementById('mask').classList.add('show'); };
+document.getElementById('close').onclick=()=>document.getElementById('mask').classList.remove('show');
+document.getElementById('mask').onclick=e=>{ if(e.target.id==='mask') document.getElementById('mask').classList.remove('show'); };
+document.getElementById('copy').onclick=async()=>{ try{ await navigator.clipboard.writeText(buildSummary()); document.getElementById('copy').textContent='已复制'; setTimeout(()=>document.getElementById('copy').textContent='复制',1200);}catch{ document.getElementById('copy').textContent='复制失败'; } };
+document.getElementById('theme').onclick=()=>{ const h=document.documentElement; h.dataset.theme=h.dataset.theme==='dark'?'light':'dark'; };
+render();
+</script>
+</body>
+</html>

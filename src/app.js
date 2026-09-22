@@ -974,6 +974,11 @@ import {
       if (action === 'cancel-edit') sheetController.cancelEdit();
       if (action === 'open-backup') sheetController.openBackupSheet();
       if (action === 'open-advanced') sheetController.openAdvancedSheet();
+      if (action === 'open-analytics') sheetController.openAnalyticsSheet();
+      if (action === 'analytics-period') sheetController.analyticsSetPeriod(el.dataset.period);
+      if (action === 'analytics-pick') sheetController.analyticsPickKey(el.dataset.key);
+      if (action === 'analytics-page') sheetController.analyticsGoPage(el.dataset.page);
+      if (action === 'analytics-summary') sheetController.copyAnalyticsSummary();
       if (action === 'toggle-long-review') sheetController.toggleLongReview();
       if (action === 'save-tag-config') sheetController.saveTagConfig();
       if (action === 'confirm-tag-merge') sheetController.saveTagConfig({ confirmMerge: el.dataset.signature || '' });
