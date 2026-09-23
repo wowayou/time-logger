@@ -350,6 +350,8 @@ export default {
   'dur.pendingOngoing': 'Pending review · {dur} so far',
   'dur.pending': 'Pending review · {dur}',
   'dur.ongoing': '{dur} so far',
+  'nowStrip.label': 'Now doing',
+  'nowStrip.doingAria': 'Now doing {what}, {dur} so far — tap to edit this entry',
   'confirm.range': 'Confirm {start}-{end}',
   'confirm.generic': 'Confirm this segment',
   'timeline.emptyOtherDay': 'No entries for this day. Switch dates to see history.',

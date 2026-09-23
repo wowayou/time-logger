@@ -73,6 +73,7 @@ import {
   esc,
   iconSvg,
   renderDayHero,
+  renderNowStrip,
   renderRuler,
   renderSummaryRows,
   renderTimeline,
@@ -333,6 +334,7 @@ import {
         isToday,
         asOf: nowStr().slice(11, 16)
       });
+      renderNowStrip(day.timeline, isToday);
       renderTimeline(day.timeline, {
         sheetEditId,
         plannedItems: day.planned,
@@ -348,6 +350,7 @@ import {
     }
     const { start, end } = periodRange();
     renderRuler(summarizeRange(start, end), 1, state.view);
+    renderNowStrip([], false);
     renderSummary();
     lastIntervalSignature = dataSignature();
     saveBootSnapshot();

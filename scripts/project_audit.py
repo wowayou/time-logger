@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # v1.0.0 起是三段式（此前是单整数，v1–v93）。判据必须**只认三段式**：写回单整数
 # 会让 android 仓的 versionCode 派生与 publish-site 的 tag 校验重新分叉，那两处
 # 现在都按三段式解析。历史 tag 与 docs/CHANGELOG.md 的单整数条目不受影响。
-EXPECTED_VERSION = "1.3.0"
+EXPECTED_VERSION = "1.4.0"
 VERSION_PATTERN = r"\d+\.\d+\.\d+"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [

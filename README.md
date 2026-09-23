@@ -2,7 +2,7 @@
 
 > Status: active · 核心记录闭环可日常使用；D13 发版上线冲刺中（域名迁移 + 首轮推广，14 天冻结已于 2026-07-24 提前终止）
 >
-> Release: v1.3.0
+> Release: v1.4.0
 >
 > Updated: 2026-09-22
 >
@@ -182,6 +182,10 @@ git diff --check
 - JSON 导入先整批预检：相同记录跳过，同 ID 不同内容或同时刻冲突会阻止整批写入并列出原因；可按时区 meta 建议整体平移
 - 当前视图摘要复制（Markdown，可直接贴给 AI）
 - 离线可用；新版 worker 等待时始终提示，只有点击「更新应用」后才刷新，预缓存失败会继续保留旧版本
+
+## 支持作者（自愿）
+
+若时间尺对你有用，可以在 [`eigentime.org/support`](https://eigentime.org/support?from=time-logger) 自愿支持作者。这完全自愿：所有功能始终免费、无广告无内购，支持也不购买任何功能、优先权或产品方向。链接指向 eigentime.org 的中转页而不是收款平台本身（决策见 `docs/decisions.md` D30）。
 
 ## 许可证与版权
 

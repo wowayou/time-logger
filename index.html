@@ -131,6 +131,12 @@
     <div class="ruler-bar"></div>
   </div>
 
+  <!-- v1.4.0「现在」条：仅在日视图看今天、且尾段是一条进行中的已发生记录时，由
+       renderNowStrip 填充并显示「正在做：X · 已 Ymin」，点按直接编辑该段——让应用
+       本身就是那个计时器（R2 方案 1 的最小落地）。静态壳保持空 + hidden，文案由 JS
+       从 src/locales/ 填（同 #motto-line 纪律，不写死任何文案，避免运行时 CJK 字面量）。 -->
+  <button class="now-strip" id="now-strip" type="button" hidden></button>
+
   <!-- v69 阶段格言（C13）：静态壳保持空 + hidden，由 JS 按三态填充（同 #usage-day
        的纪律，不得写死任何文案）。点击打开编辑 sheet。 -->
   <button class="motto-line" id="motto-line" type="button" data-action="open-motto" hidden></button>

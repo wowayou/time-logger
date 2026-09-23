@@ -339,6 +339,8 @@ export default {
   'dur.pendingOngoing': '待核 · 已 {dur}',
   'dur.pending': '待核 · {dur}',
   'dur.ongoing': '已 {dur}',
+  'nowStrip.label': '正在做',
+  'nowStrip.doingAria': '正在做 {what}，已进行 {dur}，点按编辑这段记录',
   'confirm.range': '确认 {start}-{end}',
   'confirm.generic': '确认这段',
   'timeline.emptyOtherDay': '这一天没有记录。切换日期查看历史。',

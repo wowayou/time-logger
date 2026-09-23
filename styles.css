@@ -1048,6 +1048,66 @@
     .motto-line:hover { color: var(--text); }
     .motto-line:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+    /* v1.4.0「现在」条：今天有进行中的已发生段时，在 hero 结论与时间轴之间站一
+       行「正在做：X · 已 Ymin」。真按钮（点按编辑该段），视觉上是一张贴地的状态条；
+       左侧桶色竖脏沿用 .entry 的 data-b→--rail 语法（与时间轴同一套颜色）。 */
+    .now-strip {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      width: 100%;
+      min-height: var(--control-h);
+      margin: -2px 0 6px;
+      padding: 9px 14px 9px 16px;
+      position: relative;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--r-ctl);
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+      overflow: hidden;
+      transition: background var(--t-fast);
+    }
+    /* display:flex 会压过 UA 的 [hidden]{display:none}，必须显式让位。 */
+    .now-strip[hidden] { display: none; }
+    .now-strip::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
+      background: var(--rail, var(--track));
+    }
+    .now-strip[data-b="job"] { --rail: var(--accent); }
+    .now-strip[data-b="maintain"] { --rail: var(--maintain); }
+    .now-strip[data-b="leak"] { --rail: var(--leak); }
+    .now-strip[data-b="unrecorded"] { --rail: var(--track); }
+    .now-strip:hover { background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
+    .now-strip:active { background: color-mix(in srgb, var(--accent) 10%, var(--card)); }
+    .now-strip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .now-strip .now-label {
+      flex: none;
+      font-size: var(--fs-cap);
+      color: var(--faint);
+      letter-spacing: 0.02em;
+    }
+    .now-strip .now-what {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: var(--fs-body);
+      color: var(--text);
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .now-strip .now-dur {
+      flex: none;
+      font-size: var(--fs-cap);
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
     .tl-head {
       display: flex;
       align-items: center;

@@ -149,6 +149,41 @@ function confirmSegmentLabel(startTs, endTs) {
 }
 
 
+// v1.4.0「现在」条：把日视图里那条**进行中的已发生段**（尾点是真实记录、结算到
+// 此刻）提到顶部一眼可见——「正在做：X · 已 Ymin」。计时能力早已在（时长由下一条
+// 派生、FAB 副文案也报「已 Ymin」），缺的只是**在做什么**这一眼在长列表里要滚到底
+// 才看得到；本条只把既有派生数据前置，不新增字段、不加真计时器、不碰统计。只对
+// 今天、且尾段是非空 what 的已发生段显示；未记录尾段沿用 FAB「续 X 起」入口，不重复。
+// 点整条＝编辑该段（复用 start-edit，data-id 走既有点击委托）。
+export function renderNowStrip(items, isToday) {
+  const el = document.getElementById('now-strip');
+  if (!el) return;
+  const ongoing = isToday
+    ? (items || []).find(it => it.isOngoing && it.e && typeof it.e.what === 'string' && it.e.what.trim() !== '')
+    : null;
+  if (!ongoing) {
+    el.hidden = true;
+    el.innerHTML = '';
+    el.removeAttribute('data-action');
+    el.removeAttribute('data-id');
+    el.removeAttribute('data-b');
+    el.removeAttribute('aria-label');
+    return;
+  }
+  const config = loadConfig();
+  const tag = (ongoing.e.tags || [])[0] || t('tag.unknown');
+  const bucket = bucketForTag(tag, config);
+  const dur = fmtMins(ongoing.mins);
+  const what = ongoing.e.what;
+  el.hidden = false;
+  el.dataset.action = 'start-edit';
+  el.dataset.id = ongoing.e.id;
+  el.dataset.b = bucket;
+  el.setAttribute('aria-label', t('nowStrip.doingAria', { what, dur }));
+  el.innerHTML = `<span class="now-label">${esc(t('nowStrip.label'))}</span><span class="now-what">${esc(what)}</span><span class="now-dur">${esc(t('dur.ongoing', { dur }))}</span>`;
+}
+
+
 export function renderTimeline(items, opts = {}) {
   const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false } = opts;
   const el = document.getElementById('timeline');
@@ -332,7 +367,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
