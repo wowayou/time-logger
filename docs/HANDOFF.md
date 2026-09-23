@@ -49,7 +49,7 @@
 
 **跨仓依赖（本仓已交付、等对侧）**
 
-- **`eigentime.org/support` 未上线，而 v1.1.0 的应用内链接已先行发布**（D30，显式修订 D28）：这是维护者裁定接受的**已知死链窗口**，不是遗漏。它的解法在**网站侧**（Agent A 补 `/support`），不在本仓——**别为它发一版把链接摘掉**，那要再走一遍完整发版仪式，成本远高于补一个静态页。上线后用 `curl -sI https://eigentime.org/support` 复核不再 404，并确认它按 `?from=` 参数正常工作。附带约束：eigentime.org 是双语站，若 `/support` 落成带 `/zh/` 前缀，须让无前缀 `/support` 保持可达（本仓运行时写死的是无前缀 URL，规格 §12 的验收项也是它）。
+- **`eigentime.org/support` 死链窗口已闭合**（D30，显式修订 D28）：v1.1.0 应用内链接曾先行发布、承担了一段维护者裁定接受的**已知死链窗口**；2026-09-23 网站侧对无前缀 `/support` 设 301 → `/zh/support/`，且**保留 `?from=` query**（`curl -sIL https://eigentime.org/support?from=time-logger` 终态 `/zh/support/?from=time-logger` 200），归因参数完整跟随。D30 附带约束（双语站落成带 `/zh/` 前缀时须让无前缀 `/support` 保持可达）由此满足——**本仓运行时写死的无前缀 URL 无需改动、无需再发一版**。
 
 **技术债（登记在案，都需要单独立规格，不要顺手改）**
 
