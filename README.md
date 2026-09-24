@@ -4,7 +4,7 @@
 >
 > Release: v1.4.1
 >
-> Updated: 2026-09-22
+> Updated: 2026-09-24
 >
 > Intended user: 需要记录每天时间去向并进行每日复盘的个人使用者。
 >

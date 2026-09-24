@@ -191,7 +191,7 @@ test('⑥ single page: staged rename survives preview+apply and both land on sav
   expect(names).toContain('吃饭'); // 新增的默认标签
 });
 
-test('⑷ apply-locale-defaults is blocked by CAS when another tab wrote (应用路径)', async ({ context }) => {
+test('⑦ apply-locale-defaults is blocked by CAS when another tab wrote (应用路径)', async ({ context }) => {
   const { pageA, pageB } = await openTwoConfigPages(context);
 
   // B 把「睡觉」从维持改成偏航（leak）并保存：A 的 CAS 基线变陈。
