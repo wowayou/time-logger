@@ -30,9 +30,9 @@ I built this for myself and it turns out to be about as self-hostable as a web a
 **Honest caveats, because this sub deserves them:**
 
 - **This is single-device by design.** No sync, no accounts, no cloud — and none are planned. If you want the same timeline on your phone and laptop, that's an export and an import, manually. If cross-device sync is a requirement for you, this is the wrong tool and I'd rather you know now.
-- **`localStorage` is browser storage, not a database.** Clear site data, uninstall the PWA, or let the OS reclaim storage, and it's gone. That's why I export backups regularly and why the export is one tap from the main screen. I'm not going to pretend browser storage is durable.
-- **Built by one person, used daily by that person for 40+ days, never validated with anyone else.** No user base, no testimonials, nothing to cite.
-- If you host the public copy rather than your own, note that any web host logs incoming requests (IP, user agent) as a transport-layer fact. The project doesn't touch, retain, or analyze those logs, and injects no identifiers — full disclosure at /en/privacy/. Self-hosting removes even that.
+- **`localStorage` is browser storage, not a database.** Clear site data, uninstall the PWA, or let the OS reclaim storage, and it's gone. That's why I export backups regularly and why backup export is available under More → Backup & import. I'm not going to pretend browser storage is durable.
+- **Built and used by its maintainer, not yet validated with external users.** No user base, no testimonials, nothing to cite.
+- If you use the public site rather than hosting your own copy, note that the web host logs incoming requests (IP, user agent) as a transport-layer fact. The project doesn't touch, retain, or analyze those logs, and injects no identifiers — full disclosure at /en/privacy/. With self-hosting, your chosen server and its logging policy determine who can access request logs.
 
 Site: https://time.eigentime.org/en/
 App: https://time.eigentime.org/app/

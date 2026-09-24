@@ -7,6 +7,7 @@
 - `index.html`：DOM 壳、PWA/meta 引用、`styles.css` 和 `src/app.js` 模块入口
 - `styles.css`：全部样式
 - `src/app.js`：启动、状态组合、导航、渲染调度、事件委托和 Service Worker 注册
+- `src/i18n.js`、`src/locales/zh.js`、`src/locales/en.js`：语言选择、中英文文案和格式化；语言偏好的持久化仍归 `storage.js`
 - `src/entry_model.js`：记录日期模型、续记默认起点、占位条、结算点、同刻冲突和 `+1min` helper
 - `src/io_actions.js`：当前视图摘要、复制、下载、导入、分享等本地 IO 动作
 - `src/sheet_controller.js`：新建/编辑/config/import sheet、focus trap、picker 重挂载和表单保存
@@ -23,12 +24,14 @@
 
 **铁律：无运行时依赖 / 无构建 / 原生 ES modules。** npm 只允许作为开发期测试依赖；不引入打包器、框架、账号、云同步或后端。
 
+中文品牌为**时间尺**，英文品牌为 **Eigentime**（D29）。本文件是维护规范唯一真源；当前进度只在 [`STATUS.md`](STATUS.md) 维护。决策、故障和已完成规格记录当时的事实，后续修订以现行规则为准，不把历史计划重新当作待办。
+
 ## 开发与维护红线
 
 - `package.json` 必须保持 `"private": true` 和 `"type": "module"`；禁止新增 `dependencies`，只能在 `devDependencies` 中放开发期测试工具。
 - 改动开发期 npm 依赖时必须提交 `package-lock.json`；不得提交 `node_modules/`、`test-results/`、`playwright-report/`。
 - 运行时文件禁止从 npm 包导入代码；`src/*.js` 只能使用相对路径导入本项目模块。
-- 不新增构建命令、产物目录、压缩产物或框架初始化文件；GitHub Pages 继续从仓库根目录直接发布静态文件。
+- 不新增应用编译、打包命令、压缩产物或框架初始化文件。Web 源码仓库根目录直发的是只读旧站；主站由 `scripts/build_site.py` 复制组装到部署镜像 `wowayou/time-logger-site`，再由 GitHub Pages 发布。静态组装不改变「无构建」的运行时边界，产物不提交到源码仓库。
 - 新增任何运行时资产时，必须同步 `sw.js` 缓存列表；文档、测试、npm 元数据不进 Service Worker 缓存。
 - 本地开发必须通过 HTTP server 打开页面；不要用 `file://` 验证 ES modules 或 Service Worker。
 - 多步改动走主线程，逐个顺序做；不要为了加速并发 fan-out 子代理 / workflow——上游 API 不扛并发，连串行 workflow 都会 429。
@@ -37,6 +40,7 @@
 模块边界：
 
 - `src/time.js`：只放日期、时间、周期和格式化工具；不读写 DOM / localStorage。
+- `src/i18n.js` / `src/locales/`：语言解析、取词和格式化，不持久化偏好，不翻译用户标签；新增文案保持中英文词典对等。
 - `src/storage.js`：只负责本地数据/config、导入校验和合并；不渲染 UI。
 - `src/stats.js`：保持统计逻辑集中；不访问 DOM / navigator；桶归类只能通过 `storage.js` 的配置 helper；日边界规则必须在这里测试。
 - `src/pickers.js`：只负责时间选择器 DOM；不直接保存业务数据。
@@ -61,29 +65,28 @@
 
 提交与推送前红线：
 
-- 至少跑 `python3 scripts/project_audit.py`、`python3 scripts/confirm_logic_smoke.py`、`npm run test:ui`、`git diff --check`。
+- 至少跑 `python3 scripts/project_audit.py`、`python3 scripts/confirm_logic_smoke.py`、`npm run typecheck`、`npm run test:ui`、`git diff --check`。
 - 推送前检查 `git status --short`，确认没有真实记录、真实截图、导出 JSON、Playwright 结果或本机临时文件。
 - 产品、架构、隐私、发布存续等决策一旦落入 `docs/decisions.md`，应及时形成边界清晰的独立提交并推送，不长期只留在本地；不得顺带混入无关工作区文件。
-- 正式版本推送到 `main` 后，必须创建并推送同版本 Git tag（例如 `v16`），让 GitHub 上有稳定发布锚点。
+- 正式版本推送到 `main` 后，必须创建并推送同版本 Git tag（例如 `v1.4.2`），让 GitHub 上有稳定发布锚点。
 - 正式版本 tag 推送后，必须创建或更新同版本 GitHub Release；release notes 简短列出用户影响、内部治理和验证结果，不贴真实数据或截图。
-- **只改 `site/` 时也要发布一次**：`publish-site` 只在 `v<N>` tag push 时触发，所以纯文案改动会让线上主页无声地停在上一次发布（2026-08-10 实测过一次）。改完 `site/` 走 `gh workflow run publish-site.yml`（已加 `workflow_dispatch`），或按 `scripts/build_site.py` 顶部说明本地组装后推镜像；发布后用 `curl` 复核线上那一行确实变了。**不要**把触发条件改成「push 到 main 就发」——那会把还没打 tag 的运行时一起推上线。
+- **只改 `site/` 时也要发布一次**：`publish-site` 的自动触发是版本 tag push（当前为 `v<major>.<minor>.<patch>`，兼容历史整数 tag）。改完 `site/` 走 `gh workflow run publish-site.yml`，或按 `scripts/build_site.py` 顶部说明本地组装后推镜像；手动发布前确认所选提交的运行时已正式发版，发布后用 `curl` 复核线上文案。**不要**把触发条件改成「push 到 main 就发」——那会把还没打 tag 的运行时一起推上线。
 - 除非用户明确要求，不把无关重构、真实数据或工作区外文件混进同一个提交。
 
 ## 当前版本
 
 当前版本：`timelog-v1.4.2` / manifest `version: "1.4.2"`。
 
-改动 `index.html`、`sw.js`、`manifest.webmanifest` 或新增运行时资产后，必须同步：
+改动任何运行时文件后，必须用 `python3 scripts/bump_version.py <major.minor.patch>` 联动六处版本锚点：
 
-1. `sw.js` 的 `CACHE = 'timelog-vN'` 声明
+1. `sw.js` 的 `CACHE = 'timelog-v<major>.<minor>.<patch>'`
 2. `manifest.webmanifest` 的 `version`
-3. `sw.js` 的 `FILES` 运行时缓存列表
-4. `scripts/project_audit.py` 的 `EXPECTED_VERSION`、`REQUIRED_RUNTIME_ASSETS` 和运行时 import 检查列表
-5. `src/ui.js` 的 `APP_VERSION`（更多 sheet 底部展示的版本号，audit 脚本校验同步）
+3. `scripts/project_audit.py` 的 `EXPECTED_VERSION`
+4. `src/ui.js` 的 `APP_VERSION`（更多 sheet 底部展示）
+5. 本文件的当前版本行
+6. `README.md` 的 Release 行
 
-运行时资产必须进 SW 缓存；文档和开发脚本不进缓存。
-
-六处版本锚点（上表 1/2/5 + CLAUDE.md 当前版本行 + README Release 行）可用 `python3 scripts/bump_version.py <N>` 一键联动；CHANGELOG 行与 `FILES` 清单属内容判断仍需手动，脚本会在锚点漂移时拒绝改写任何文件。
+脚本会在锚点漂移时拒绝改写。CHANGELOG 行仍需手写；新增、移除运行时资产还须同步 `sw.js` 的 `FILES`、audit 的 `REQUIRED_RUNTIME_ASSETS` 与 import 检查。运行时资产必须进 SW 缓存；文档和开发脚本不进缓存。纯文档改动不升运行时版本。
 
 ## UI 红线
 
@@ -97,7 +100,7 @@
 - 静态壳的 `#usage-day` 必须为空且 `hidden`，由 JS 填充；`styles.css` 的 `body:not(.app-ready):not(.boot-restored) .usage-day{visibility:hidden}` 同时挡住冷启动露出，不得往静态壳里写死任何天数。
 - 窄屏日期导航必须允许两行：上一段/周期/下一段一行，回到今天/本周/本月/今年独立一行；周视图窄屏周期标题可用短格式，完整日期保留在可访问标签中。
 - 日视图时间轴是**连续日志容器**（v56，取代 v36–v55 离散卡片列表）：一整块贴地 `--card` 面（`.log`：hairline 边、无阴影——hero 仍是唯一带内容阴影的主表面），行按时间倒序（最新在最上），行＝时间｜内容｜时长三列网格。左缘 4px 通高桶色竖脊由 `data-b` 驱动：色相＝桶（与 hero 比例条同源），实色＝已发生、虚线（CSS mask 圆头胶囊，不支持时退化实色）＝计划、`--track` 灰＝未记录；发丝分隔线从 16px 起、放在不滑动的 wrapper 层，**不得横穿竖脊**（行行相接、竖读色序＝一天的形状）。今天视图在计划块与已发生块之间渲染「现在 hh:mm」一线（`.tl-now`，accent 呼吸点，`prefers-reduced-motion` 静止），非今天不渲染；tag 是素色 `#标签` 小字——桶色职责已移交竖脊，不得恢复彩色 tag 胶囊。点行编辑（行是 `role="button" tabindex="0"` 的 `div[data-action]`，键盘 Enter/Space 激活）；空隙行整行=补录；行内动作只留指向缺口/待办的 accent 文字链（`mini-btn` 无底色，44px 热区靠透明伪元素）：未记录/占位行「补一下」、计划行「标记已发生」、超长段「确认」；**已发生普通段的「切一刀」在编辑 sheet 内**（`cell-action` 按钮；行内禁止逐行常显动作词）。行自带不透明 `--card` 底（左滑时行滑过底部轨道，透明底会透出——v53 教训的行级版）；行入场过渡仍只碰 `opacity` 不碰 `transform`。**v48 区间编辑**：普通已发生记录编辑完整开始—结束，不能跨自然日、越过相邻记录或产生零时长；共享边界变化必须实时预览前/本/后三段。今日尾段可选「至今」或固定结束，固定结束后自动留下未记录尾段；计划记录仍只编辑计划时刻。**v48 切分**（入口 v56 迁入编辑 sheet）：打开时冻结原段边界，两端只允许在段内选择，预览内部/贴边/整段结果，禁止吞掉其它记录。**v48 删除**：应用内确认 sheet 显示确切结果；仅前后内容和标签完全一致时接回，其余已发生记录转同区间未记录，计划直接移除；成功后 8 秒撤销，检测到其它标签页修改即取消撤销。**v48 左滑轨道**：仅触摸/触控笔启用，水平轴锁定、跟手拖动并吸附到 2×72px「编辑/删除」，一次只开一张，纵向滚动或点空白关闭；桌面和键盘继续点行编辑、编辑页删除。右下角 FAB 与 hero 结论卡保持 v47/v55 规则（v56 起 hero 大数字 36px、仍为墨色）。
-- 阶段格言（v69，C13）：`#motto-line` 只在日视图、hero 结论卡与时间轴之间显示；三态逻辑全部在 `storage.js`（`DEFAULT_MOTTO`/`normalizeMotto`/`resolveMotto`——键缺失=默认、空串=显式隐藏、非空=自定义，60 字上限，恰等于默认归一化回未设置）；文案只经 textContent/`esc` 注入，静态壳保持空 + hidden（同 `#usage-day` 纪律，不得写死文案）；隐藏态唯一入口是「···」更多的「阶段格言」cell；motto sheet 召唤键盘走 tall + returnToMore；`.motto-line` 是 `display:block` 按钮，`[hidden]{display:none}` 让位规则不得删除。v1 边界（D11 锁定）：不做多条轮换、按阶段自动切换、格言历史。
+- 阶段格言（v69，C13）：`#motto-line` 只在日视图、hero 结论卡与时间轴之间显示；三态逻辑全部在 `storage.js`（`defaultMotto`/`normalizeMotto`/`resolveMotto`——键缺失=默认、空串=显式隐藏、非空=自定义，60 字上限，恰等于默认归一化回未设置）；文案只经 textContent/`esc` 注入，静态壳保持空 + hidden（同 `#usage-day` 纪律，不得写死文案）；隐藏态唯一入口是「···」更多的「阶段格言」cell；motto sheet 召唤键盘走 tall + returnToMore；`.motto-line` 是 `display:block` 按钮，`[hidden]{display:none}` 让位规则不得删除。v1 边界（D11 锁定）：不做多条轮换、按阶段自动切换、格言历史。
 - 表单 sheet 只按宽度适配：`>=720px` 居中 dialog，`<720px` bottom sheet；不要用 `pointer:fine` 决定视觉布局。
 - 统一 sheet 头部语法：抓手条 + 左「取消/关闭」右「完成/保存」文字按钮 + 居中标题；正文低频列表用 cell 分组（inset 底 + 内分隔线）；cell 分组容器用块级流布局、不用 grid——iOS WebKit 对 grid auto 轨道内 button 的 min-height 计量有缺陷，会累计裁掉最后一行（P21）。**正文层同理（P34，v63）**：承载 cell-group 的 sheet 正文不得让分组坐在会被压缩的 grid/flex 轨道里——`.form-sheet-body` 的 grid（min-height:0 flex 子项）在内容超过面板可用高度时会把 auto 轨道压到低于内容高，分组的 `overflow:hidden` 随即拦腰裁行（双引擎可复现，非 iOS 特有）；更多正文已改 `.form-sheet-body.more-body{display:block}`（复合选择器压过后文同优先级 `display:grid`），超高由正文滚动接住；矮视口（375×600）+ 最大内容量的回归测试同时锁更多与标签设置两处。
 - 时间选择器只按宽度选择 wheel/desktop picker；打开表单后跨断点 resize 或旋转屏幕时，必须按当前宽度重挂载，不能停留在旧 picker。
@@ -162,29 +165,14 @@
 
 ## v2 锁死 & 别镀金
 
-在累计 **28 天真实记录**之前：
+功能扩张的评审门槛仍是**累计 28 天真实记录 + 求职有实质进展**；28 天这一半已有记录支持，达到门槛只表示可以重新评审，**不自动解锁路线图**。逐项批准的例外以对应决策或版本记录为准，不外推为整体放行。
 
-- 不做可扩展分类法
-- 不做人类报表 / 更多图表
-- 不为滚轮像素手感无限打磨
-- 不引入跨设备同步、登录、云端
+- 不主动扩张可配置分类体系、复杂报表、更多图表或无限打磨滚轮手感；新需求先过 `CONTRIBUTING.md` 的判断清单。
+- 账号、云同步、后端及运行时依赖仍不进入本仓库。安卓载体已按 D26 提前放行到独立仓库；iOS 原生载体仍按 D17 评审。
+- 最大风险＝用打磨工具逃避面试推进。没有充分求职进展却要求继续打磨功能时，应指出这一风险；作品集不是新增功能的理由。
+- 外部用户验证尚未开始，不能把自用、发布或自动化测试当作市场验证。
 
-最大风险 = 用打磨工具逃避面试推进。如果用户或 AI 在没有充分求职进展的情况下要求继续打磨功能，请明确指出这一风险。
-
-### 当前更严格的约束：14 天功能冻结（2026-07-16 → 2026-07-29，GMT+8）
-
-> **2026-07-24 终止（D13）**：维护者明确决定**提前终止本冻结**，转入「基础发版 + 上线推广」冲刺（域名迁移三步序列、定位文案、首轮中文社区推广）；多模型协作模式（Fable 定规格/验收、Sonnet 5 等执行、维护者做人肉步骤）与产品硬约束见 `docs/decisions.md` D13、`docs/collab-protocol.md` 与 `docs/launch-runbook.md`。28 天 gate 与别镀金条款对**功能扩张类** roadmap 继续有效；隐私红线、铁律、版本仪式、自测清单不变。以下冻结条文保留作历史边界记录。
-
-> **2026-07-18 修订（D10）**：维护者因 AI 协作窗口临近关闭，决定**定向提前处置**部分候选——C11（开发期工具）与 v67（C8 文案 + 死 export + C7 方案 A）提前执行；其余候选（C1–C6 语义改动、C3/C4/C5/C9/C10）**继续冻结**，07-30 复盘照常举行。28 天 gate、别镀金与求职硬约束不变。详见 `docs/decisions.md` D10。
-
-冻结期内**上述 28 天 gate 不是当前门槛，本冻结才是**（决策见 `docs/decisions.md` D9 与 D10 修订，执行边界见 `docs/dogfood-freeze-handoff.md`）：
-
-- **只允许修阻断级问题**：数据丢失/损坏、保存提示与真实状态不一致、无法打开、无法进入记录流程、无法创建/编辑/补录/撤销、无法导出完整备份、无法在空环境导入恢复、离线核心流程完全不可用。
-- 即便是阻断修复，仍需复现证据 + 最小改动 + 回退方法 + 自动化测试 + 维护者明确批准。**发现问题不等于自动获得编码权限。**
-- 冻结期新想法**只记录为候选**，不排期、不估时、不顺手实现。
-- **达到 28 天真实记录只表示可以重新评审，不自动解锁 roadmap**；14 天内任何新功能仍需等待 2026-07-30 阶段复盘。
-- 外部用户验证已延期且**尚未开始**——不是通过也不是失败。任何文档或对外表述**不得声称市场需求已被验证**。
-- 本阶段并行的硬约束是求职外部结果（10 次高质量投递 + 1 个作品集案例）。**作品集不是新增功能的理由。**
+2026-07 的 14 天冻结已于 **2026-07-24 提前终止**，原定 07-30 复盘未举行；不再执行那份日历或旧多模型协作流程。历史依据见 `docs/decisions.md` D9–D16；候选方向见 `docs/roadmap.md`，当前执行项以 `STATUS.md` 为准。
 
 ## 改动自测清单
 

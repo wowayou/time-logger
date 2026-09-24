@@ -24,9 +24,9 @@ If you do have standing there, the angle below is the one that fits the site's c
 
 **Comment to attach (required — Lobsters expects context on self-authored links):**
 
-> A time logger I built for myself. The part I think is interesting here isn't the product, it's the constraint: it's ~9 ES modules served as static files, with no bundler, no framework, and no runtime dependencies at all. npm is in the repo purely for Playwright and `tsc --checkJs`; nothing from it reaches a browser.
+> A time logger I built for myself. The part I think is interesting here isn't the product, it's the constraint: it uses native ES modules served as static files, with no bundler, no framework, and no runtime dependencies at all. npm is in the repo purely for Playwright and `tsc --checkJs`; nothing from it reaches a browser.
 >
-> Holding that line for 78 versions has been the actual experiment. What it bought: no build, no dependency churn, no supply chain, and a repo that will still run in five years. What it cost: hand-rolled everything, including a wheel time picker and an i18n layer, and a governance document that has grown to include red lines I keep re-learning the hard way.
+> Holding that line across releases has been the actual experiment. What it bought: no build step and no npm runtime dependency chain; development tools still need maintenance. What it cost: hand-rolled everything, including a wheel time picker and an i18n layer, and a governance document that has grown to include red lines I keep re-learning the hard way.
 >
 > Data is local-only (`localStorage`), no accounts, no server, no telemetry. AGPL-3.0-or-later.
 
@@ -36,9 +36,9 @@ If you do have standing there, the angle below is the one that fits the site's c
 
 Candidate topics, in the order I'd rank them by how much genuinely-earned material exists:
 
-1. **"Every guard rail in this repo exists because something broke."** The audit script has ~20 assertions and most map to a specific postmortem. Concrete examples: a `.gitignore` rule that matched nothing for weeks because the real directory name had a trailing space (rule present, never effective — worse than no rule); `reuseExistingServer: true` making a whole test suite silently test a stale server; a boot snapshot restoring a previous *version's* DOM into new JS.
+1. **"Every guard rail in this repo exists because something broke."** The audit script has explicit maintenance checks and most map to a specific postmortem. Concrete examples: a `.gitignore` rule that matched nothing for weeks because the real directory name had a trailing space (rule present, never effective — worse than no rule); `reuseExistingServer: true` making a whole test suite silently test a stale server; a boot snapshot restoring a previous *version's* DOM into new JS.
 
-2. **"Prove the test fails before you claim it passes."** The repo's P35 rule: no regression test is accepted without first demonstrating it goes red. Real payoff from this week: an i18n guard rail caught two full-width Chinese punctuation marks that a human pass had missed, and a migration guard needed *two* opposing tests because the one-directional version could be satisfied by hardcoding the answer.
+2. **"Prove the test fails before you claim it passes."** The repo's P35 rule: no regression test is accepted without first demonstrating it goes red. A recorded example: an i18n guard rail caught two full-width Chinese punctuation marks that a human pass had missed, and a migration guard needed *two* opposing tests because the one-directional version could be satisfied by hardcoding the answer.
 
 3. **"Translating a UI is mostly deciding what isn't UI."** The i18n work's hard part wasn't translation — it was discovering that some strings were data: a reserved tag name that was a config key travelling in user backups, and default tag seeds that must never be re-translated for an existing install. Translating them would have made old backups unreadable.
 

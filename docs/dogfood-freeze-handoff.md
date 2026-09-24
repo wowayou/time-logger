@@ -1,4 +1,6 @@
-# 14 天 Dogfood 冻结交接（2026-07-16 → 2026-07-29）
+# 自用冻结历史边界（2026-07-16 → 2026-07-24）
+
+> **历史记录，已终止。** 原计划至 07-29，实际于 07-24 提前结束；不再按本文执行或收集观察。当前状态见 [STATUS.md](../STATUS.md)。
 
 > 状态：**已获维护者批准并落盘**
 > 决策日期：2026-07-15
@@ -7,7 +9,7 @@
 > 决策记录：`docs/decisions.md` D9
 > **2026-07-18 修订**：D10 定向提前处置（v67/v68 已发；非整体解冻，本文其余边界与复盘安排不变）——见 `docs/decisions.md` D10 与 `docs/freeze-candidates.md` 顶部状态注记。
 
-> **2026-07-24 终止（`docs/decisions.md` D13）**：维护者**提前终止**本次冻结，转入「基础发版 + 上线推广」。因此冻结**没有跑满到 07-29**，**2026-07-30 的阶段复盘也没有发生**（复盘改为按事件触发，见 D16）。**本文自此是历史边界记录，不再是任何阶段的执行依据**——当前阶段看 `README.md` 与 `docs/HANDOFF.md`。下面的条文原样保留，不改写。
+> **2026-07-24 终止（`docs/decisions.md` D13）**：维护者**提前终止**本次冻结，转入「基础发版 + 上线推广」。因此冻结**没有跑满到 07-29**，**2026-07-30 的阶段复盘也没有发生**（复盘改为按事件触发，见 D16）。**本文自此是历史边界记录，不再是任何阶段的执行依据**——当前阶段看 `STATUS.md`。下面的条文原样保留，不改写。
 
 本文（在 2026-07-16 → 07-24 期间）是当时阶段的执行边界。它**取代** `docs/product-direction-validation-handoff.md` 作为当时两周的行动依据；后者仍是未来恢复外部验证时的决策输入，不删除、不改写。
 
@@ -127,7 +129,7 @@ iPhone 上的原始记录、原始 JSON 备份和原始时间字符串是**权�
 
 冻结期间的新想法**只记录为候选**，不排期、不估时、不顺手实现。格式最多包含：触发场景、当前损失、临时绕法、出现次数、14 天后是否仍然重要。
 
-技术性候选（非阻断缺陷、有复现证据、不含隐私数据）记入 [`docs/freeze-candidates.md`](freeze-candidates.md)；涉及真实活动内容的私人观察写在仓库外的每日副本里（模板见 `docs/dogfood-daily-template.md`）。**记录不等于排期**，也不构成修复授权。
+技术性候选（非阻断缺陷、有复现证据、不含隐私数据）记入 [`docs/freeze-candidates.md`](freeze-candidates.md)；涉及真实活动内容的私人观察写在仓库外的每日副本里（模板见 [docs/dogfood-daily-template.md（历史原文）](https://github.com/wowayou/time-logger/blob/d31519799b9cecfb8a10648a6c32fb9c69364da9/docs/dogfood-daily-template.md)）。**记录不等于排期**，也不构成修复授权。
 
 ---
 
@@ -141,7 +143,7 @@ iPhone 上的原始记录、原始 JSON 备份和原始时间字符串是**权�
 
 ### 5.2 私有每日记录
 
-仓库中**只保存空白模板**（`docs/dogfood-daily-template.md`），真实填写副本必须放在仓库外。不要求复制原始日志，不要求提交敏感活动内容。
+仓库中**只保存空白模板**（[docs/dogfood-daily-template.md（历史原文）](https://github.com/wowayou/time-logger/blob/d31519799b9cecfb8a10648a6c32fb9c69364da9/docs/dogfood-daily-template.md)），真实填写副本必须放在仓库外。不要求复制原始日志，不要求提交敏感活动内容。
 
 ### 5.3 14 天自用验收参考
 
@@ -163,7 +165,7 @@ iPhone 上的原始记录、原始 JSON 备份和原始时间字符串是**权�
 
 已知事实：v58 的 SW 提前注册和 `modulepreload` 在桌面模拟中改善了 waterfall，但 iPhone SE 真机**没有可感知改善**（见 `docs/postmortems.md` P33）。
 
-冻结期只收集至少 **10 次真实冷启动观察**，模板见 `docs/dogfood-daily-template.md`。
+冻结期只收集至少 **10 次真实冷启动观察**，模板见 [docs/dogfood-daily-template.md（历史原文）](https://github.com/wowayou/time-logger/blob/d31519799b9cecfb8a10648a6c32fb9c69364da9/docs/dogfood-daily-template.md)。
 
 边界：
 

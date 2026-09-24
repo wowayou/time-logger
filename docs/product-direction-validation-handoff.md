@@ -1,11 +1,9 @@
 # Eigentime / 时间尺：产品方向与两周验证交接文档
 
-> ## ⚠️ 当前状态：外部验证计划已延期（2026-07-15 追加）
+> **历史研究快照（2026-07-15），未批准实现，不是当前交接入口。** 外部招募、12 次访谈与 8 人 7 天试用已延期，尚无外部验证结果。接替它的自用冻结也已于 2026-07-24 提前终止（D13）。
 >
-> - 本文规划的**外部招募、12 次访谈和 8 人 7 天试用全部延期**。延期**不代表验证通过或失败**——外部验证尚未开始，没有产生任何外部证据。真实原因是维护者当前没有候选用户，并选择先把产品作为个人工具跑通闭环。
-> - 当前阶段已被 **14 天 Dogfood 冻结**（2026-07-16 → 07-29）临时取代，执行依据见 [`docs/dogfood-freeze-handoff.md`](dogfood-freeze-handoff.md)，决策记录见 [`docs/decisions.md`](decisions.md) D9。
-> - 本文**不再构成当前两周的执行计划**。其中「验证目标偏差复盘能否让用户第二天改变一个具体动作」已降为**候选增值假设**，不是 V1 门槛。
-> - 本文**仍作为未来恢复外部验证时的决策输入保留**，历史判断不删除、不改写。阅读时请把它当作 2026-07-15 的快照，而非当前状态。
+> 保留本文的假设、研究方法与停止条件，供未来重新评审；下文的旧地址、功能描述和两周日历均属于当时语境。当前状态看 [STATUS.md](../STATUS.md)，现行用法看 [README.md](../README.md)。
+> 「目标偏差复盘能否让用户次日改变一个动作」仍只是候选增值假设，不是 V1 门槛；延期不代表验证通过或失败。
 >
 > ---
 
@@ -29,7 +27,7 @@
 1. `README.md`
 2. `CLAUDE.md`：维护规范唯一真源
 3. `CONTRIBUTING.md`
-4. `docs/external-ai-review-brief.md`
+4. [docs/external-ai-review-brief.md（历史原文）](https://github.com/wowayou/time-logger/blob/d31519799b9cecfb8a10648a6c32fb9c69364da9/docs/external-ai-review-brief.md)
 5. `docs/decisions.md`
 6. `docs/roadmap.md`
 7. 本文
@@ -804,7 +802,7 @@ git diff --check
 1. README.md
 2. CLAUDE.md（维护规范唯一真源）
 3. CONTRIBUTING.md
-4. docs/external-ai-review-brief.md
+4. [docs/external-ai-review-brief.md（历史原文）](https://github.com/wowayou/time-logger/blob/d31519799b9cecfb8a10648a6c32fb9c69364da9/docs/external-ai-review-brief.md)
 5. docs/decisions.md
 6. docs/roadmap.md
 7. docs/product-direction-validation-handoff.md

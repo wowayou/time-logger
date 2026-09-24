@@ -1,32 +1,31 @@
 # STATUS — 当前状态唯一入口
 
-> 打开仓库先看这一页。DONE＝已发布/已落地且有判据守护；OPEN＝已排期未完成；BLOCKED＝缺维护者侧资源。
-> 历史与规范不在这里：规范＝[`CLAUDE.md`](CLAUDE.md)；决策史＝`docs/decisions.md`；版本流水＝`CLAUDE.md` 表 + `docs/CHANGELOG.md`；交接须知＝[`docs/HANDOFF.md`](docs/HANDOFF.md)。
+> DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
+> 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**Last Verified：2026-09-24 · web `v1.4.2`（合并提示样式隔离、草稿局部重渲保留原分组和顺序；**已发布上线**——main `fedba48` + tag `v1.4.2` + Release + publish-site 绿灯 + 线上复核 CACHE `timelog-v1.4.2`、manifest `1.4.2`；audit / smoke / typecheck / diff 检查通过；全量 test:ui 512 passed / 2 flaky / 0 failed，两条波动用例关闭重试、双引擎各重复十次 40/40 通过） · android `aab025d`（已推送，未发版） · 核验人：AI 代理**
+**状态整理：2026-09-24。最近发布核验：2026-09-24，Web `v1.4.2`；安卓 `aab025d` 已推送、未发版。** 本次仅整理文档，以下线上与跨仓结论沿用已有核验记录，不代表重新发布或重新验收。
 
 ## DONE
 
-- **v1.4.2 两项验收遗留已修复并发布上线**：合并提示使用独立 `.cfg-merge-actions`，保持两键等高并恢复默认标签预览两键原有 10px 下边距；草稿暂存单独捕获原分组，局部重渲保留原组、组内顺序和所选桶，保存前行为与已有行一致，保存后重开才按桶归组。修复前双引擎六处检查按预期失败；修复后标签设置九条双引擎 **18/18 一次通过**。全量 514 条为 **512 passed / 2 flaky / 0 failed**（7.0 分钟）：Chromium 启动等待超时、WebKit 区间结束时间预览未更新均重试通过；对两条关闭重试、双引擎各重复十次 **40/40 通过**，保留波动记录，不声称全量零 flaky。audit / smoke / typecheck / diff 检查通过，v93 原文归档，规范表保持最近八版。已发布上线：main `fedba48` + tag [`v1.4.2`](https://github.com/wowayou/time-logger/releases/tag/v1.4.2) + Release + publish-site 绿灯 + 线上复核 CACHE `timelog-v1.4.2`、manifest `1.4.2`。
-- **v1.4.1 标签高级设置修复已发布上线**：局部动作使用打开设置页时的配置快照检查并发写入，成功后推进基线；「设为当前」「添加默认标签」等局部重渲保留未保存的改名、改桶、longOk、待删除状态和草稿行；标签合并增加「先不合并」并在取消后归还焦点。新增 `tests/tag_config_staging.spec.js` 七条双引擎回归；全量 `npm run test:ui` **510 passed / 0 failed / 0 flaky**（255+255，6.2 分钟），audit / smoke / typecheck / diff 检查通过。验收时定位并释放 Windows WPS 后台进程占用的 4173 端口，按原测试配置完成全量回归；未更改端口或放宽 `reuseExistingServer: false`。同批将 v92–v88 原文归档，`CLAUDE.md` 恢复最近八版。已发布上线：main `579271f` + tag [`v1.4.1`](https://github.com/wowayou/time-logger/releases/tag/v1.4.1) + Release + publish-site 绿灯 + 线上复核 CACHE `timelog-v1.4.1`、manifest `1.4.1`。
-- **v1.4.0 日视图「现在」条已发布上线**：R2 方案 1（应用内「当前段」计时）的最小落地，gate 由维护者裁定解锁。调研确认计时能力早已在（时长由下一条派生、时间轴尾段用 `dur.ongoing`＝「已 Ymin」标进行中、FAB 副文案也报「续 X 起 · 已 Ymin」），真正缺口只是**在做什么**这一眼要滚到长列表底部才看得到。本版在 hero 结论与时间轴之间加只读状态条 `#now-strip`：**仅**日视图看今天、且尾段是**非空 what 的已发生段**时显示「正在做：X · 已 Ymin」；未记录尾段沿用 FAB「续 X 起」入口不重复；切周/月/年或非今天即隐藏（`renderNowStrip([], false)`）。**纯展示**：把 `day.timeline` 里 `isOngoing` 那条的 what/mins/桶色前置，不新增数据字段、不加真计时器、不碰统计与写路径；点整条＝编辑该段（复用 `start-edit`+`data-id`），左侧桶色竖脊沿用 `.entry` 的 `data-b→--rail`。新增 i18n `nowStrip.label`/`nowStrip.doingAria`（zh/en 对等），英文 "Now doing"、桶名沿用 Drift 不触禁词。零新增运行时资产（`FILES` 不变）。判据＝`tests/v1_4_0_now_strip.spec.js` 4 条双引擎全绿 + 四道闸全绿 + 全量 496 passed。已发布上线：main `156101c` + tag [`v1.4.0`](https://github.com/wowayou/time-logger/releases/tag/v1.4.0) + Release + publish-site 绿灯 + 线上复核 CACHE `timelog-v1.4.0`、manifest `1.4.0`。
-- **v1.1.0 自愿支持入口的落地页/README 链接已随 v1.4.0 上线**：`site/` 中英两页 footer + `README.md`「支持作者（自愿）」小节各加一条指向 `https://eigentime.org/support?from=time-logger`（逐字复用已登记 `from`、不分 locale）。线上已复核 zh footer「支持作者」、en footer "Support the author" 可见。**死链窗口已闭合**（2026-09-23 实测：网站侧对无前缀 `/support` 设了 301 → `/zh/support/`，且**保留 `?from=time-logger` query**：`curl -sIL https://eigentime.org/support?from=time-logger` 终态 `https://eigentime.org/zh/support/?from=time-logger` 200，归因参数完整跟随）。
-
-- **v1.3.0 时间拨号盘分析页已发布上线**：「更多」下新增只读可视化页（`mode:'analytics'` 走既有 `openFormSheet` 二级页与返回栈，非新视图，不动 day/week/月/年 主视图与 native-contract selector）。顶部结论区 + 3 列圆盘拨号键（前 4 键＝四桶、其余按时长降序续排标签）+「接通」键复制本期摘要。**纯逻辑层**（`stats.js` +164 / `time.js` +33，config 由调用方注入、不碰 DOM/localStorage）：`comparePeriods`（同步进度对比、覆盖率按已历天数）、`periodTrend`（只用已完成周期、可比 <3 判 insufficient、flat 死区 max(30min,10%)、runLength 仅 up/down 计数）、`tagMinutes`、`elapsedMatchedRange`/`previousPeriodRange`。**自查出并修了一个真 bug**：`elapsedMatchedRange` 早期只对周视图正确，月/年已完成且短于上期时会漏上期尾几天——改为整期对整期，加月/年回归断言。UI 只读：不写记录、不改 config、无支付/埋点/网络；零新增运行时资产（`FILES` 不变）。判据＝`tests/v1_3_0_analytics_dialpad.spec.js` 5 条双引擎全绿 + `confirm_logic_smoke.py` 周期/趋势断言 + 月/年回归；`v84_polish` 行数 10→11。已发布上线：main `e2c301d` + tag [`v1.3.0`](https://github.com/wowayou/time-logger/releases/tag/v1.3.0) + Release + publish-site 绿灯 + 线上复核 CACHE `timelog-v1.3.0`、manifest `1.3.0`。
-- **v1.2.1 导入预览新增组弱化呈现（B）已发布上线**：纯 UI/文案改动。新增项**不需逐条确认**（从未需要，导入按钮只被冲突拦），本版把新增组前置安心文案（随导入一次性全部加入、展开仅供核对）、去主线色边框、标题降为 muted 小字，消除“像待办勾选表”错觉。冲突逐条决策、CAS 写入、字段全部不改。判据＝`tests/v1_2_0_import_preview.spec.js` 加安心文案断言；四闸全绿 + 全量 478 passed；main `f135db4` + tag `v1.2.1` + Release + publish-site 绿灯 + 线上复核 CACHE `timelog-v1.2.1`。
-- **v1.2.0 导入预览逐条化已发布上线**（D13 ③ 透明度硬化）：main `d4fc7cf` + tag `v1.2.0` + Release + publish-site 绿灯 + 线上复核 CACHE `timelog-v1.2.0`。内容＝导入检查把新增/已跳过从一行计数升级为可展开逐条清单；`preflightImportedEntries` 新暴 `additions`/`skippedEntries`。顺手修了 v1.1.0 遗留的 v84 静默破缺（「更多」9→0 行）。
-- **v1.1.0 已发布上线**（D30，修订 D28）：main `860898d` + tag [`v1.1.0`](https://github.com/wowayou/time-logger/releases/tag/v1.1.0) + [Release](https://github.com/wowayou/time-logger/releases/tag/v1.1.0) + publish-site 绿灯 + 线上复核（cache-bust 后线上 `const CACHE = 'timelog-v1.1.0'`、manifest `1.1.0`）。内容＝「更多」sheet 里排在「高级」之后的一条外链（`a.cell-btn`，`target=_blank rel=noopener`），指向 `https://eigentime.org/support?from=time-logger` 的**中转页**（不直连收款平台），旁附三句事实声明（自愿 / 功能始终免费 / 支持不购买任何东西）。应用内零支付界面、零埋点、零分析 SDK。判据＝`tests/v1_1_0_support_entry.spec.js` 6 条双引擎 10/10；四道闸全绿。**死链窗口已于 2026-09-23 闭合**（网站侧 301 无前缀 `/support` → `/zh/support/`，`?from=` 完整保留；D30 附带约束满足，本仓无需再发版改 URL）。
-- **v1.0.0 已发布上线**：tag + [Release](https://github.com/wowayou/time-logger/releases/tag/v1.0.0) + publish-site 绿灯 + 线上复核（CACHE `timelog-v1.0.0`）。内容＝版本格式三段式 + Web→Android 显式契约（两仓 audit 双向咬合）+ 发布防护 + digit-only 第八处修复。发布闸：双引擎全量 463 passed / 0 failed / 1 flaky（webkit 既有时序类）。
-- **v1.0.0 预写计划的未实施项已全部补齐**（2026-09-12，本批）：
-  - 安卓 release 签名 **fail-closed**（缺 `keystore.properties` 时 Release 任务直接失败，不再产 debug 签名假产物）＋ `sync_runtime.py --release` 发版预检（clean/commit/版本/契约全过才动资产）＋ **versionCode 方案定案**：web semver 派生（`release.properties` 计数器方案否决）——安卓仓 `fec5a23`，判据与红灯见其提交说明；
-  - site 四页 **favicon**（按部署镜像逐页相对深度，`audit_site_favicon` 锁「目标必须是真实运行时资产」）＋ 首屏文案（「不用记得先按开始，做完再补记」，en 对应）；
-  - **`STATUS.md` 状态治理 + `docs/HANDOFF.md` 收缩为交接入口**（历史原文迁 `docs/handoff-archive-2026-09.md`）。
+- **Web v1.4.2 已发布上线**：main `fedba48`、tag [v1.4.2 / Release](https://github.com/wowayou/time-logger/releases/tag/v1.4.2)、`publish-site` 成功；已复核线上 CACHE `timelog-v1.4.2` 与 manifest `1.4.2`。本版修复标签合并提示样式隔离、草稿局部重渲保留原组与顺序。
+- **发布验证已有记录**：audit、逻辑 smoke、typecheck、diff 检查通过；全量 UI **512 passed / 2 flaky / 0 failed**。两条重试用例另行关闭重试，双引擎各重复十次 **40/40 通过**；保留波动记录，不称为零 flaky。
+- **已交付能力**：记录、编辑、切分、撤销、四桶统计、备份与逐条冲突导入、中英文界面、时间拨号盘（v1.3.0）、「正在做」状态条（v1.4.0）、标签设置暂存与并发写保护（v1.4.1–1.4.2）。细节见 [CLAUDE.md 的版本表](CLAUDE.md#changelog) 与 [历史版本](docs/CHANGELOG.md)。
+- **Web 发布链路已就绪**：主站 `time.eigentime.org/app/` 正常发布，旧地址自 v76 起只读；版本使用三段式，Web→Android 接口约定由 `native-contract.json` 和两仓审计守护。
+- **自愿支持入口已闭环**：应用、主页与 README 指向 `https://eigentime.org/support?from=time-logger`；2026-09-23 已核验其跳转至 `/zh/support/` 且保留来源参数。应用内无支付界面，所有功能免费。
+- **安卓代码侧发版防护已就绪**：独立仓库已实现内嵌运行时、签名缺失即拒绝 Release、`sync_runtime.py --release` 预检及从 Web 三段式版本派生版本号；不代表已上架。
 
 ## OPEN
 
-- `- [ ] E`（runbook Phase E，首轮推广）——**唯一非 gated 的产品未完成项**，底稿在 `docs/promo/`。
-- runbook `- [ ] A3 / C / D` 的勾选动作（AI 无法验证，维护者自查）；SPEC-008 已 park；技术债与裁定详单见 `docs/HANDOFF.md`「还没做的」。
+- **首轮推广尚未开始**：当前已放行但未完成的产品行动。按 [推广清单](docs/promo/checklist.md) 和 [runbook Phase E](docs/launch-runbook.md#phase-e--首轮推广spec-003-合并后) 执行，底稿不等于已发布。
+- **维护者确认未闭合**：runbook A3（账号级域名验证）、C（真机迁移）、D（迁移后使用确认）仍未勾选，B 的 Enforce HTTPS 设置也未核验；不能因站点已上线而代填通过。
+- **真机验收缺口**：标签合并缺真机验收结果；长段提醒的旧验收项需按 v89 起「默认关闭、开启后不改桶」的规则核对。见 [真机验收单](docs/device-acceptance.md)，自动化通过不代替真机结论。
 
 ## BLOCKED
 
-- **安卓发版**（tag `a1.0.0.1` + Release + Play 上传）：上传密钥、开发者账号、真机复验——全在维护者侧，清单见安卓仓 `docs/release-checklist.md`。代码侧已就绪：`bundleRelease` 走 fail-closed 守卫，密钥配好即可出包。
+- **安卓正式发版与 Play 上传**：缺上传密钥、开发者账号和真机复验；最近登记的待发 tag 为 `a1.0.0.1`。清单在安卓仓 `docs/release-checklist.md`，实际发版前须重新核对其 Web 来源与版本。
+
+## 未放行的方向与证据边界
+
+- SPEC-008 着陆页演示仍暂停；iOS 原生载体、其它功能扩张按 [候选路线图](docs/roadmap.md) 与现行规范逐项评审，不因安卓或某一功能放行而整体解锁。
+- 28 天真实记录门槛已有记录支持；求职进展仍由维护者判断。外部用户验证已延期、尚未开始，不能声称市场需求已验证。
+- 2026-07 的冻结已提前结束，不再执行旧复盘日历或已停用的多模型协作流程。

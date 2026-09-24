@@ -4,7 +4,7 @@
 > The posting action is the maintainer's — nothing here is auto-published.
 > Channel discipline: `docs/launch-runbook.md` Phase E. Verifiable-claims rule: `docs/decisions.md` D3.
 >
-> ⚠️ **One claim needs your decision before posting** — see "五秒问题" at the bottom of this file.
+> The five-second tagline is a design goal, not a measured result; this draft makes no timing claim.
 
 ---
 
@@ -44,10 +44,10 @@ So Eigentime logs the sentence, not just the stopwatch. Every span gets a few wo
 
 ### Honest limitations
 
-- **Built by one person, used daily by that person for 40+ days. It has not been validated with anyone else.** I have no idea yet whether it's useful to you.
-- Service Worker cache is best-effort browser storage, not a permanent install. If you clear site data or the OS reclaims storage, it's gone — which is why the export button is one tap from the main screen and why I keep saying "export a backup."
+- **Built and used by its maintainer. It has not been validated with anyone else.** I have no idea yet whether it's useful to you.
+- Service Worker cache is best-effort browser storage, not a permanent install. If you clear site data or the OS reclaims storage, it's gone — which is why backup export is available under More → Backup & import and why I keep saying "export a backup."
 - No sync, no accounts, no cloud, and none are planned. Two devices means two datasets plus an export/import.
-- The UI was Chinese-only until a few days ago. The English translation is new; if something reads badly, that's on me and I'd like to hear about it.
+- The interface and public pages support Chinese and English. If something reads badly, I would like to hear about it.
 
 Site: https://time.eigentime.org/en/
 App: https://time.eigentime.org/app/
@@ -74,18 +74,6 @@ Source: https://github.com/wowayou/time-logger
 
 ---
 
-## 五秒问题（发帖前必须自己决定）
+## 耗时声明
 
-对外文案（landing、README）用的定位句是 **"Log what you actually did, in five seconds."**
-
-但 `CLAUDE.md` 的产品硬约束里写得很清楚：第五条「约 5 秒完成一次记录」**当前未达标，是军令状而非现状**。
-
-也就是说：如果这句话在 HN 上被当成**已实现的性能声明**，它现在还站不住。而 HN 的读者一定会实测。
-
-三个出口，你选一个：
-
-1. **改成目标句**（本草稿采用的口径）：正文里不出现"五秒"，标题也不用它。上面的标题/正文已经按这个写好了，可以直接用。
-2. **明确标成目标**：写 "the goal is to make one entry take about five seconds — it's not there yet"。这在 HN 是加分项，那里的人喜欢诚实的未达标。
-3. **先实测再决定**：自己掐表记 10 条，拿到中位耗时。如果确实接近 5 秒，那就可以说；如果是 15 秒，就别说。
-
-**我不替你决定这一条**——它取决于你愿不愿意先花十分钟测一次。但「landing 上写着、发帖时被追问却答不出」是最差的那种结果。
+「5 秒」是设计目标，尚无实测证明已达标；本稿不将它写成已实现的性能声明。未来若引用耗时，应先记录测量方法、样本和中位数。对外文案统一遵守 `CLAUDE.md` 的证据边界。
