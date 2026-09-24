@@ -985,6 +985,7 @@ import {
       if (action === 'toggle-long-review') sheetController.toggleLongReview();
       if (action === 'save-tag-config') sheetController.saveTagConfig();
       if (action === 'confirm-tag-merge') sheetController.saveTagConfig({ confirmMerge: el.dataset.signature || '' });
+      if (action === 'dismiss-tag-merge') sheetController.dismissTagMerge();
       if (action === 'set-current-mainline') sheetController.setCurrentMainline(el.dataset.name || '');
       if (action === 'cfg-pick-bucket') sheetController.pickConfigBucket(el);
       if (action === 'cfg-toggle-delete') sheetController.toggleConfigRowDelete(el);

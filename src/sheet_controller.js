@@ -79,6 +79,9 @@ export function createSheetController(deps) {
   let editEndMode = 'fixed';
   let configDefaultsPreview = null;
   let configRawAtOpen = '';
+  // 合并提示的源行输入框：「先不合并」用 replaceChildren() 删掉正聚焦的按钮后，
+  // 把焦点还给出问题那一行的输入框，避免焦点掉到 body、下一次 Tab 跳出模态层。
+  let mergeSourceInput = null;
   // 导航栈：二级页若从容器 sheet（更多 / 备份与导入 / 高级）下钻进入，取消/保存回到
   // 上一层而非整层关闭。v84 从单个布尔升级为**栈**——「更多 → 备份与导入 → 导入检查」
   // 现在有两层，布尔只记得住一层，关掉导入检查会一路关到底。
@@ -641,7 +644,6 @@ export function createSheetController(deps) {
       // SPEC-007/D18：默认标签预览是一次性的——每次重开 config sheet 都清掉，
       // 只有显式点「添加本语言的默认标签」那一次才带着它重开。
       configDefaultsPreview = (opts && opts.defaultsPreview) || null;
-      configRawAtOpen = deps.readConfigRaw();
     }
     const sheet = document.getElementById('form-sheet');
     const panel = sheet.querySelector('.form-sheet-panel');
@@ -650,6 +652,13 @@ export function createSheetController(deps) {
       : (opts && opts.ts) || (formOvernightContext && formOvernightContext.startTs)
         || (formRecordMode === 'plan' ? defaultPlanTimestamp() : deps.defaultFormTs());
     const prevMode = sheet.hidden ? '' : (panel.dataset.mode || '');
+    // 配置页 CAS 基线（v93）只在真正新开时刷新：“设为当前”/“添加默认标签”
+    // 等局部动作会原地重渲整张 sheet（prevMode === 'config'），若这时也把基线刷成
+    // 现读值，就会把另一标签页期间的写入当成自己的基线，保存时的并发预检失效。
+    // 只有 prevMode !== 'config' （从「更多/高级」下钻新开）才重取基线；与下面抓取
+    // 暂存的条件严格互补：要回填暂存（重渲染）就不动基线。必须在渲染用的
+    // loadConfig() 之前。
+    if (mode === 'config' && prevMode !== 'config') configRawAtOpen = deps.readConfigRaw();
     if (opts && opts.restore) {
       // 从返回栈恢复：这一层已经在关闭时弹出，别再压回去。
     } else if (prevMode === mode) {
@@ -669,6 +678,12 @@ export function createSheetController(deps) {
     panel.classList.toggle('tall', mode === 'new' || mode === 'edit' || mode === 'config' || mode === 'motto');
     if (mode === 'edit') panel.dataset.id = id;
     else delete panel.dataset.id;
+    // v83 原则：标签设置的未保存编辑（改名/改桶/longOk/待删除/草稿行）全部等
+    // 到「保存」才落库。但「设为当前」/「添加默认标签」等局部动作会原地重渲整张
+    // sheet（prevMode === 'config'），若不先抓下再回填，那些编辑会被静默抹掉——这就是
+    // 「保存暂存」要堵的丢失。新开（从「更多」下钻）时 prevMode !== 'config'，不抓。
+    const preservedConfigEdits = mode === 'config' && prevMode === 'config'
+      ? captureConfigEdits(panel) : null;
     panel.innerHTML = renderFormSheet({
       mode,
       entry,
@@ -701,6 +716,7 @@ export function createSheetController(deps) {
       defaultsPreview: configDefaultsPreview,
       analytics: mode === 'analytics' ? buildAnalyticsModel() : null
     });
+    if (preservedConfigEdits) restoreConfigEdits(panel, preservedConfigEdits);
     // v43: 面板几何恒定，开合键盘不再改 sheet 尺寸；lockBodyForSheet 锁滚动 + 起初
     // 写一次 --kb 供正文 scroll-padding。
     lockBodyForSheet();
@@ -1852,6 +1868,98 @@ export function createSheetController(deps) {
     });
   }
 
+  // 「保存暂存」：把当前 DOM 里的全部未保存编辑抓成快照，供原地重渲染（设为当前 /
+  // 添加默认标签 / 取消默认预览）后回填——本身不落库，只防这些局部动作把长表单里
+  // 别处还没保存的改名/改桶/勾选/待删除/草稿静默清空。name 抓原始值（不 trim），
+  // 回填要逐字还原用户敲到一半的内容。
+  function captureConfigEdits(panel) {
+    if (!panel) return null;
+    const rows = Array.from(panel.querySelectorAll('.cfg-row')).map(row => {
+      const nameEl = row.querySelector('.cfg-name');
+      const seg = row.querySelector('.cfg-bucket-seg button.active');
+      const longEl = row.querySelector('.cfg-long-ok');
+      return {
+        kind: row.dataset.kind === 'mainline' ? 'mainline' : 'chip',
+        originalName: row.dataset.originalName || '',
+        isNew: row.dataset.new === '1',
+        name: nameEl ? nameEl.value : '',
+        bucket: seg ? seg.dataset.bucket : (row.dataset.b || ''),
+        longOk: longEl ? longEl.checked : false,
+        pendingDelete: row.dataset.pendingDelete === '1'
+      };
+    });
+    return rows.length ? { rows } : null;
+  }
+
+  // 找回填草稿行要插在哪个「＋ 新建标签」之前：主线组认 kind，chip 组还要认桶。
+  function findConfigAddButton(panel, kind, bucket) {
+    return Array.from(panel.querySelectorAll('.cfg-add')).find(btn =>
+      (btn.dataset.kind || 'chip') === kind
+      && (kind === 'mainline' || (btn.dataset.bucket || 'maintain') === bucket)
+    ) || null;
+  }
+
+  // 把某一行的桶分段控件与竖脊设成指定桶（回填用；与 pickConfigBucket 同构）。
+  function applyConfigRowBucket(row, bucket) {
+    const seg = row.querySelector('.cfg-bucket-seg');
+    if (!seg) return;
+    seg.querySelectorAll('button').forEach(item => {
+      const on = item.dataset.bucket === bucket;
+      item.classList.toggle('active', on);
+      item.setAttribute('aria-pressed', String(on));
+    });
+    row.dataset.b = bucket;
+  }
+
+  // 把某一行置回「待删除」中间态（回填用；与 toggleConfigRowDelete 的置入分支同构）。
+  // 重渲染后只有仍是零记录的行才带删除按钮；此刻已经有记录（另一标签页新增）的行没
+  // 有删除按钮、也删不掉，直接跳过，不留一个撤不掉的悬空待删态。
+  function markConfigRowPendingDelete(row) {
+    const btn = row.querySelector('[data-action="cfg-toggle-delete"]');
+    if (!btn) return;
+    const name = row.dataset.originalName || '';
+    row.dataset.pendingDelete = '1';
+    btn.textContent = t('cfg.undoDelete');
+    btn.setAttribute('aria-label', t('cfg.undoDeleteAria', { name }));
+    row.querySelectorAll('input, .cfg-bucket-seg button, .cfg-set-current')
+      .forEach(el => { el.disabled = true; });
+  }
+
+  // 把快照回填到刚重渲染出的行上：已有行按 originalName **逐字**匹配（存量可能同时
+  // 存 sleep 与 Sleep，tagKey 折叠会撞行，必须逐字），草稿行重新插回对应组末尾。
+  function restoreConfigEdits(panel, snap) {
+    if (!panel || !snap || !snap.rows) return;
+    const longReview = deps.loadConfig().longReview === true;
+    const edited = new Map();
+    snap.rows.forEach(r => {
+      if (r.originalName) edited.set(`${r.kind}\u0000${r.originalName}`, r);
+    });
+    panel.querySelectorAll('.cfg-row[data-original-name]').forEach(row => {
+      const kind = row.dataset.kind === 'mainline' ? 'mainline' : 'chip';
+      const r = edited.get(`${kind}\u0000${row.dataset.originalName || ''}`);
+      if (!r) return;
+      const nameEl = row.querySelector('.cfg-name');
+      if (nameEl) nameEl.value = r.name;
+      if (kind === 'chip' && r.bucket) applyConfigRowBucket(row, r.bucket);
+      const longEl = row.querySelector('.cfg-long-ok');
+      if (longEl) longEl.checked = r.longOk;
+      if (r.pendingDelete) markConfigRowPendingDelete(row);
+    });
+    snap.rows.filter(r => r.isNew).forEach(r => {
+      const bucket = r.kind === 'mainline' ? 'job' : (r.bucket === 'leak' ? 'leak' : 'maintain');
+      const addBtn = findConfigAddButton(panel, r.kind, bucket);
+      if (!addBtn) return;
+      addBtn.insertAdjacentHTML('beforebegin', renderConfigRowDraft(r.kind, bucket, longReview));
+      const row = addBtn.previousElementSibling;
+      if (!row) return;
+      const nameEl = row.querySelector('.cfg-name');
+      if (nameEl) nameEl.value = r.name;
+      if (r.kind === 'chip' && r.bucket) applyConfigRowBucket(row, r.bucket);
+      const longEl = row.querySelector('.cfg-long-ok');
+      if (longEl) longEl.checked = r.longOk;
+    });
+  }
+
   // v85：两个名字只差大小写就是同一个标签，所以重名判定按 tagKey 折叠。返回第一组
   // 冲突（一次只处理一组——两组同时冲突时，解完一组再看下一组，比一次弹两个问题清楚）。
   function findNameClash(rows) {
@@ -1901,27 +2009,49 @@ export function createSheetController(deps) {
   }
 
   // 合并是**破坏性**动作（源标签消失、它的记录改归属），所以不能像普通校验那样只报
-  // 一句话就算完：这里给出确切结果与一个显式的「合并」按钮，点了才执行。
+  // 一句就算完：这里给出确切结果与两个显式按钮——取消在左、破坏性在右，沿用
+  // iOS 双按钮提示框的惯例；两键有 gap 隔开，避免单一裸按钮被误点。
   function showMergePrompt(panel, plan) {
     const box = panel.querySelector('[data-role="config-error"]');
     if (!box) return;
+    mergeSourceInput = plan.source.input || null;
     box.replaceChildren();
     const text = document.createElement('div');
     text.textContent = t('config.mergePrompt', { from: plan.from, to: plan.to, n: plan.count });
     const actions = document.createElement('div');
     actions.className = 'cfg-defaults-actions';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'cell-action';
+    cancel.dataset.action = 'dismiss-tag-merge';
+    cancel.textContent = t('config.mergeCancel');
     const confirm = document.createElement('button');
     confirm.type = 'button';
-    confirm.className = 'cell-action';
+    confirm.className = 'cell-danger';
     confirm.dataset.action = 'confirm-tag-merge';
     confirm.dataset.signature = plan.signature;
     confirm.textContent = t('config.mergeConfirm');
-    actions.appendChild(confirm);
+    actions.append(cancel, confirm);
     box.append(text, actions);
     box.hidden = false;
     if (plan.source.el && typeof plan.source.el.scrollIntoView === 'function') {
       plan.source.el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
+  }
+
+  // 「先不合并」：只收起合并提示，不动任何数据。行的同名仍在，用户可以改回名字
+  // 或直接取消整单——给一个不造成后果的可退出口，而不是只能硬碰破坏性按钮。
+  function dismissTagMerge() {
+    const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    if (!panel) return;
+    const box = panel.querySelector('[data-role="config-error"]');
+    if (!box) return;
+    box.replaceChildren();
+    box.hidden = true;
+    // 把焦点还给出问题那一行的输入框（若它仍在 panel 内），避免焦点掉到 body、
+    // 键盘用户下一次 Tab 跳出模态层。
+    if (mergeSourceInput && panel.contains(mergeSourceInput)) mergeSourceInput.focus();
+    mergeSourceInput = null;
   }
 
   function saveTagConfig(opts = {}) {
@@ -2058,12 +2188,15 @@ export function createSheetController(deps) {
   // 的成败牵连；重开是为了让置顶顺序与徽章即时反映新状态。
   function setCurrentMainline(name) {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
-    const { config, raw } = deps.loadConfigSnapshot();
-    const write = deps.saveConfigChecked(storageSetCurrentMainline(config, name), raw);
+    // 用打开时的 CAS 基线，而不是现读的 raw：否则另一标签页在本 sheet 打开期间
+    // 的写入会被当成自己的基线，静默覆盖。
+    const write = deps.saveConfigChecked(storageSetCurrentMainline(deps.loadConfig(), name), configRawAtOpen);
     if (!write.ok) {
+      // 失败不重渲染，暂存在 DOM 里的未保存编辑留住。
       showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'config-error');
       return;
     }
+    configRawAtOpen = write.raw;
     openFormSheet({ mode: 'config' });
     deps.render();
   }
@@ -2132,12 +2265,13 @@ export function createSheetController(deps) {
 
   function applyLocaleDefaults() {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
-    const { config, raw } = deps.loadConfigSnapshot();
-    const write = deps.saveConfigChecked(appendLocaleDefaultTags(config), raw);
+    // 同 setCurrentMainline：用打开时的 CAS 基线，不用现读的 raw。
+    const write = deps.saveConfigChecked(appendLocaleDefaultTags(deps.loadConfig()), configRawAtOpen);
     if (!write.ok) {
       showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'config-error');
       return;
     }
+    configRawAtOpen = write.raw;
     openFormSheet({ mode: 'config' });
     deps.render();
   }
@@ -2209,6 +2343,7 @@ export function createSheetController(deps) {
     pickEditEndMode,
     handleFormInput,
     saveTagConfig,
+    dismissTagMerge,
     setCurrentMainline,
     pickConfigBucket,
     toggleConfigRowDelete,

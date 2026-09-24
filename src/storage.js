@@ -318,12 +318,15 @@ export function saveConfig(config) {
 
 /**
  * 配置侧 compare-and-swap。长表单必须把打开时的 raw 传进来，避免用旧行状态
- * 覆盖另一标签页在表单打开期间做的改动。
- * @returns {{ ok: true } | { ok: false, reason: 'concurrent' | 'quota' }}
+ * 覆盖另一标签页在表单打开期间做的改动。成功时回传落库后的 normalized raw，
+ * 供调用方把「打开时快照」推进到这次写入后的值——否则接着的局部动作会拿旧
+ * 基线再比一次，误判成并发冲突。
+ * @returns {{ ok: true, raw: string } | { ok: false, reason: 'concurrent' | 'quota' }}
  */
 export function saveConfigChecked(config, expectedRaw) {
   if (readConfigRaw() !== expectedRaw) return { ok: false, reason: 'concurrent' };
-  return saveConfig(config) ? { ok: true } : { ok: false, reason: 'quota' };
+  const saved = saveConfig(config);
+  return saved ? { ok: true, raw: JSON.stringify(saved) } : { ok: false, reason: 'quota' };
 }
 
 function addMainlineTag(tag) {

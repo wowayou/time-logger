@@ -242,6 +242,7 @@ export default {
   'config.deleteHasEntries': '"{name}" already has entries and cannot be deleted. Rename it instead — that migrates its history.',
   'config.mergePrompt': '"{from}" and "{to}" are the same tag name. Merging moves {n} entries from "{from}" to "{to}", and the "{from}" row goes away.',
   'config.mergeConfirm': 'Merge',
+  'config.mergeCancel': 'Not now',
   'config.duplicateName': '"{name}" is duplicated; merge it into one tag name.',
   'config.quota': 'Local storage is full; the settings page content is kept. Export a backup and free up space first.',
 
