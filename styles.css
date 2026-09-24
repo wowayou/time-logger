@@ -2096,14 +2096,14 @@
     .cfg-defaults-preview {
       margin-top: 8px;
     }
-    .cfg-defaults-actions {
+    .cfg-defaults-actions,
+    .cfg-merge-actions {
       display: flex;
       gap: 8px;
       margin-top: 6px;
     }
-    /* cell-action 自带 margin-bottom:10px（为编辑 sheet 竖排设计）；放进这一行 flex
-       （默认 stretch）后，会让 danger 键被拉高 10px。在此抹平。 */
-    .cfg-defaults-actions .cell-action { margin-bottom: 0; }
+    /* 合并提示里的 cell-action 下边距会把 danger 键拉高 10px，只在这里抹平。 */
+    .cfg-merge-actions .cell-action { margin-bottom: 0; }
     .cfg-line {
       display: flex;
       align-items: center;

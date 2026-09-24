@@ -1883,6 +1883,8 @@ export function createSheetController(deps) {
         originalName: row.dataset.originalName || '',
         isNew: row.dataset.new === '1',
         name: nameEl ? nameEl.value : '',
+        // 所在分组与当前选桶独立：保存前改桶只改控件，不应在局部重渲时跳组。
+        groupBucket: row.closest('.cfg-list').querySelector('.cfg-add').dataset.bucket,
         bucket: seg ? seg.dataset.bucket : (row.dataset.b || ''),
         longOk: longEl ? longEl.checked : false,
         pendingDelete: row.dataset.pendingDelete === '1'
@@ -1926,7 +1928,7 @@ export function createSheetController(deps) {
   }
 
   // 把快照回填到刚重渲染出的行上：已有行按 originalName **逐字**匹配（存量可能同时
-  // 存 sleep 与 Sleep，tagKey 折叠会撞行，必须逐字），草稿行重新插回对应组末尾。
+  // 存 sleep 与 Sleep，tagKey 折叠会撞行，必须逐字），草稿按原组和原顺序回填。
   function restoreConfigEdits(panel, snap) {
     if (!panel || !snap || !snap.rows) return;
     const longReview = deps.loadConfig().longReview === true;
@@ -1947,7 +1949,7 @@ export function createSheetController(deps) {
     });
     snap.rows.filter(r => r.isNew).forEach(r => {
       const bucket = r.kind === 'mainline' ? 'job' : (r.bucket === 'leak' ? 'leak' : 'maintain');
-      const addBtn = findConfigAddButton(panel, r.kind, bucket);
+      const addBtn = findConfigAddButton(panel, r.kind, r.groupBucket);
       if (!addBtn) return;
       addBtn.insertAdjacentHTML('beforebegin', renderConfigRowDraft(r.kind, bucket, longReview));
       const row = addBtn.previousElementSibling;
@@ -2019,7 +2021,7 @@ export function createSheetController(deps) {
     const text = document.createElement('div');
     text.textContent = t('config.mergePrompt', { from: plan.from, to: plan.to, n: plan.count });
     const actions = document.createElement('div');
-    actions.className = 'cfg-defaults-actions';
+    actions.className = 'cfg-merge-actions';
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'cell-action';

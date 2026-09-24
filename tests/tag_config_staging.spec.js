@@ -66,7 +66,61 @@ test('previewing default tags does not wipe an in-progress rename', async ({ pag
   // 预览框出现，且未保存的改名还在。
   await expect(page.locator('[data-role="defaults-preview"]')).toBeVisible();
   await expect(page.locator('.cfg-row[data-original-name="刷手机"] .cfg-name')).toHaveValue('短视频');
+  // 合并提示的等高修正不得清掉默认标签预览原有的按钮下边距。
+  await expect(page.locator('[data-action="apply-locale-defaults"]')).toHaveCSS('margin-bottom', '10px');
+  await expect(page.locator('[data-action="cancel-locale-defaults"]')).toHaveCSS('margin-bottom', '10px');
 });
+
+for (const [originBucket, selectedBucket] of [['maintain', 'leak'], ['leak', 'maintain']]) {
+  test(`draft rows stay in their original group across local actions (${originBucket} → ${selectedBucket})`, async ({ page }) => {
+    await bootLocale(page, { locale: 'zh', config: { ...CONFIG, longReview: true } });
+    await openConfig(page);
+    const group = page.locator('.cfg-section').filter({
+      has: page.locator(`.cfg-add[data-bucket="${originBucket}"]`)
+    });
+    const drafts = group.locator('.cfg-row[data-new="1"]');
+    const existingName = originBucket === 'maintain' ? '睡觉' : '刷手机';
+    const existing = group.locator(`.cfg-row[data-original-name="${existingName}"]`);
+    await existing.locator(`[data-action="cfg-pick-bucket"][data-bucket="${selectedBucket}"]`).click();
+    for (const name of ['草稿甲', '草稿乙']) {
+      await group.locator('.cfg-add').click();
+      await drafts.last().locator('.cfg-name').fill(name);
+    }
+    await drafts.nth(0).locator(`[data-action="cfg-pick-bucket"][data-bucket="${selectedBucket}"]`).click();
+    await drafts.nth(0).locator('.cfg-long-ok').check();
+
+    // 改桶后先留在原组；所有局部重渲都应保留两条草稿的组、顺序和控件值。
+    for (const action of [
+      '[data-action="set-current-mainline"][data-name="杂"]',
+      '[data-action="preview-locale-defaults"]',
+      '[data-action="cancel-locale-defaults"]',
+      '[data-action="preview-locale-defaults"]',
+      '[data-action="apply-locale-defaults"]'
+    ]) {
+      await page.locator(action).click();
+      await expect(existing).toHaveAttribute('data-b', selectedBucket);
+      await expect(drafts).toHaveCount(2);
+      await expect(drafts.nth(0).locator('.cfg-name')).toHaveValue('草稿甲');
+      await expect(drafts.nth(1).locator('.cfg-name')).toHaveValue('草稿乙');
+      await expect(drafts.nth(0)).toHaveAttribute('data-b', selectedBucket);
+      await expect(drafts.nth(0).locator(`[data-bucket="${selectedBucket}"]`)).toHaveAttribute('aria-pressed', 'true');
+      await expect(drafts.nth(0).locator('.cfg-long-ok')).toBeChecked();
+    }
+
+    // 局部动作不能提前保存草稿；最终保存仍读所选桶，重新打开后才按桶归组。
+    expect((await readConfig(page)).chips.some(chip => chip.name.startsWith('草稿'))).toBe(false);
+    await page.getByRole('button', { name: '保存标签配置' }).click();
+    const config = await readConfig(page);
+    expect(config.chips.find(chip => chip.name === '草稿甲')).toMatchObject({ bucket: selectedBucket, longOk: true });
+    expect(config.chips.find(chip => chip.name === '草稿乙')).toMatchObject({ bucket: originBucket });
+    await page.getByRole('button', { name: '配置标签' }).click();
+    const targetGroup = page.locator('.cfg-section').filter({
+      has: page.locator(`.cfg-add[data-bucket="${selectedBucket}"]`)
+    });
+    await expect(targetGroup.locator('.cfg-row[data-original-name="草稿甲"]')).toHaveCount(1);
+    await expect(group.locator('.cfg-row[data-original-name="草稿乙"]')).toHaveCount(1);
+  });
+}
 
 test('the merge prompt offers an explicit 先不合并 exit and a danger-styled 合并', async ({ page }) => {
   await bootLocale(page, {
