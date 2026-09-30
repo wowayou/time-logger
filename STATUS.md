@@ -3,22 +3,25 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**状态整理：2026-09-30。最近发布核验：2026-09-30，Web `v1.5.0`；安卓 `aab025d` 已推送、未发版。** 跨仓结论沿用已有核验记录，不代表安卓侧已重新验收。
+**状态整理：2026-10-01。最近发布核验：2026-10-01，Web `v1.5.1`；安卓 `aab025d` 已推送、未发版。** 跨仓结论沿用已有核验记录，不代表安卓侧已重新验收。
 
 ## DONE
 
-- **Web v1.5.0 已发布上线**：main `5ba3461`、tag [v1.5.0 / Release](https://github.com/wowayou/time-logger/releases/tag/v1.5.0)、`publish-site` 与镜像 Pages 部署成功；已复核线上 CACHE `timelog-v1.5.0`、manifest `1.5.0` 及新代码在线。本版三项：标签跨桶同名归属提醒、切一刀/补一下「先看结果再选时刻」的段内区间选择器、格言位置文字轮播（D31 显式修订 D11）。
-- **发布验证已有记录**：audit、逻辑 smoke、typecheck、diff 检查通过；全量 UI **557 passed / 3 flaky / 0 failed**，三条 WebKit 重试关闭重试后重复十次 **50/50 通过**；保留波动记录，不称为零 flaky。同批修正一条既有测试缺陷：v1.0.0 迁移用例此前只在 UTC+8 机器上通过（已做对照，未改动的 v1.4.2 同样红），现已钉时区。
-- **已交付能力**：记录、编辑、切分、撤销、四桶统计、备份与逐条冲突导入、中英文界面、时间分析（v1.3.0，v1.5.1 前名「时间拨号盘」）、「正在做」状态条（v1.4.0）、标签设置暂存与并发写保护（v1.4.1–1.4.2）、标签归属提醒 / 切一刀区间选择 / 文字轮播（v1.5.0）。细节见 [CLAUDE.md 的版本表](CLAUDE.md#changelog) 与 [历史版本](docs/CHANGELOG.md)。
+- **Web v1.5.1 已发布上线**：main `782928c`、tag [v1.5.1 / Release](https://github.com/wowayou/time-logger/releases/tag/v1.5.1)、`publish-site` 与镜像 Pages 部署成功；已复核线上 CACHE `timelog-v1.5.1`、manifest `1.5.1`、「时间分析」文案、隐私政策完整键表（中英，更新日期 2026-10-01）与主页新段落。本版修复 v1.5.0 验收（另一台机器）发现的**句库静默清空**缺陷，并落地维护者裁定的轮播进度规则、句库 CAS、区间滚轮间距、「时间分析」改名、默认标签入口按需出现，以及「对外口径同步」规则与两条 audit 硬判据。
+- **发布验证已有记录**：audit、逻辑 smoke（含 3000 例固定种子模糊测试）、typecheck、diff 检查通过；全量 UI **578 passed / 0 flaky / 0 failed**（双引擎、无重试）。首轮全量因一条既有断言与新入口冲突 2 failed，已按不变量收窄后重跑全绿（细节见 CHANGELOG v1.5.1）。v1.5.0 的发布记录保留在 CHANGELOG。
+- **已交付能力**：记录、编辑、切分、撤销、四桶统计、备份与逐条冲突导入、中英文界面、时间分析（v1.3.0，v1.5.1 前名「时间拨号盘」）、「正在做」状态条（v1.4.0）、标签设置暂存与并发写保护（v1.4.1–1.4.2）、标签归属提醒 / 切一刀区间选择 / 文字轮播（v1.5.0–1.5.1）。细节见 [CLAUDE.md 的版本表](CLAUDE.md#changelog) 与 [历史版本](docs/CHANGELOG.md)。
 - **Web 发布链路已就绪**：主站 `time.eigentime.org/app/` 正常发布，旧地址自 v76 起只读；版本使用三段式，Web→Android 接口约定由 `native-contract.json` 和两仓审计守护。
 - **自愿支持入口已闭环**：应用、主页与 README 指向 `https://eigentime.org/support?from=time-logger`；2026-09-23 已核验其跳转至 `/zh/support/` 且保留来源参数。应用内无支付界面，所有功能免费。
 - **安卓代码侧发版防护已就绪**：独立仓库已实现内嵌运行时、签名缺失即拒绝 Release、`sync_runtime.py --release` 预检及从 Web 三段式版本派生版本号；不代表已上架。
 
 ## OPEN
 
-- **首轮推广尚未开始**：当前已放行但未完成的产品行动。按 [推广清单](docs/promo/checklist.md) 和 [runbook Phase E](docs/launch-runbook.md#phase-e--首轮推广spec-003-合并后) 执行，底稿不等于已发布。
+- **首轮推广尚未开始**：LINUX DO 底稿已备（`docs/promo/linuxdo.md`，分类与版规须发帖前人工核对）；当前已放行但未完成的产品行动。按 [推广清单](docs/promo/checklist.md) 和 [runbook Phase E](docs/launch-runbook.md#phase-e--首轮推广spec-003-合并后) 执行，底稿不等于已发布。
 - **维护者确认未闭合**：runbook A3（账号级域名验证）、C（真机迁移）、D（迁移后使用确认）仍未勾选，B 的 Enforce HTTPS 设置也未核验；不能因站点已上线而代填通过。
-- **真机验收缺口**：v1.5.0 三项（标签归属提醒、切一刀区间滚轮手感、文字轮播文件导入）待真机确认；标签合并缺真机验收结果；长段提醒的旧验收项需按 v89 起「默认关闭、开启后不改桶」的规则核对。见 [真机验收单](docs/device-acceptance.md)，自动化通过不代替真机结论。
+- **真机验收缺口**：v1.5.0 三项与 v1.5.1 修正待真机确认（维护者 2026-09-30 反馈「切一刀确实挺好的」，其余无结论）；标签合并缺真机验收结果；长段提醒的旧验收项需按 v89 起「默认关闭、开启后不改桶」的规则核对。见 [真机验收单](docs/device-acceptance.md)，自动化通过不代替真机结论。
+
+- **设计系统（SPEC-016）待执行**：审计与 A–E 分期计划已写好，维护者选择执行另开新 session；建议从 A 期（令牌收敛）开始，每期单独发版。
+- **访问统计（roadmap R4）未放行**：不必迁移托管，但需先改主页与隐私政策的「零追踪」承诺并另立决策；维护者尚未决定是否需要。
 
 ## BLOCKED
 
