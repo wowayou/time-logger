@@ -18,7 +18,7 @@ test('v84: the more sheet keeps 9 rows; backup and ops move one level down', asy
   await bootLocale(page, { locale: 'zh' });
   await page.locator('[data-action="open-more"]').click();
   // v1.1.0 起「更多」多了一条自愿支持外链（a.cell-btn），9→10。v1.3.0 又多了一条
-  // 「时间拨号盘」分析页入口，10→11。v84 的「面板别太长」约束仍在：备份四项与运维
+  // 「时间分析」页入口（v1.5.1 前名「时间拨号盘」），10→11。v84 的「面板别太长」约束仍在：备份四项与运维
   // 两项依旧下钻到二级页，主面板只多这两条只读入口。
   await expect(page.locator('.more-body .cell-btn, .more-body .cell-row')).toHaveCount(11);
   await expect(page.locator('.more-body a[href*="eigentime.org/support"]')).toHaveCount(1);

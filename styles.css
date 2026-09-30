@@ -1934,7 +1934,9 @@
       font-weight: 600;
       user-select: none;
     }
-    .range-wheel > .wheel-sep:nth-of-type(2) { padding: 0 6px; }
+    /* 开始与结束之间的「–」要比时:分之间的「:」宽。用专属 class：v1.5.0 的
+       `.wheel-sep:nth-of-type(2)` 按元素类型（div）计数，实际命中了第一个「:」（v1.5.1 修）。 */
+    .wheel-sep-dash { padding: 0 6px; }
     .range-snaps {
       display: flex;
       justify-content: space-between;

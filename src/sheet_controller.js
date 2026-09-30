@@ -31,6 +31,7 @@ import {
   countEntriesNeedingRetag,
   QUOTE_MAX_ITEMS,
   quoteForDay,
+  rebaseQuoteAnchor,
   splitQuoteText,
   appendLocaleDefaultTags,
   previewLocaleDefaultTags,
@@ -62,6 +63,7 @@ export function createSheetController(deps) {
   let sheetScrollY = 0;
   let sheetTimeMounted = false;
   let sheetLastFocus = null;
+  let quotesRawAtOpen = null;
   let sheetTrapController = null;
   let sheetResizeTimer = null;
   let formTag = '';
@@ -744,6 +746,8 @@ export function createSheetController(deps) {
     // 暂存的条件严格互补：要回填暂存（重渲染）就不动基线。必须在渲染用的
     // loadConfig() 之前。
     if (mode === 'config' && prevMode !== 'config') configRawAtOpen = deps.readConfigRaw();
+    // v1.5.1：句库 CAS 基线，同一纪律——只在真正新开格言 sheet 时取。
+    if (mode === 'motto' && prevMode !== 'motto') quotesRawAtOpen = deps.readQuotesRaw();
     if (opts && opts.restore) {
       // 从返回栈恢复：这一层已经在关闭时弹出，别再压回去。
     } else if (prevMode === mode) {
@@ -1200,7 +1204,7 @@ export function createSheetController(deps) {
     refreshAnalytics();
   }
 
-  // 接通摘要：本期四桶占比 + Top 标签，纯文本 markdown。
+  // 本期摘要（「复制本期摘要」键）：本期四桶占比 + Top 标签，纯文本 markdown。
   function copyAnalyticsSummary() {
     const text = analyticsSummaryText(buildAnalyticsModel());
     const label = document.querySelector('#form-sheet [data-role="an-call-label"]');
@@ -2437,6 +2441,13 @@ export function createSheetController(deps) {
     const input = panel ? panel.querySelector('[data-role="motto-input"]') : null;
     if (!input) { closeForm(); return; }
     if (mottoMode(panel) === 'quote') { saveQuotesMode(panel); return; }
+    // 切回单句格言会顺带关掉轮播（写句库）；先确认句库在 sheet 打开期间没被别处改过，
+    // 再动任何一个键，避免只写成一半。
+    const lib = deps.loadQuotes();
+    if (lib.enabled && deps.readQuotesRaw() !== quotesRawAtOpen) {
+      showInlineError(panel, t('toast.concurrentWrite'), 'motto-error');
+      return;
+    }
     const { config, raw } = deps.loadConfigSnapshot();
     config.motto = input.value;
     const write = deps.saveConfigChecked(config, raw);
@@ -2445,30 +2456,46 @@ export function createSheetController(deps) {
       return;
     }
     // 切回单句格言：句库保留（再切回来不用重新导入），只关掉轮播。
-    const lib = deps.loadQuotes();
     if (lib.enabled) {
-      const off = deps.saveQuotes({ ...lib, enabled: false });
+      const off = deps.saveQuotesChecked({ ...lib, enabled: false }, quotesRawAtOpen);
       if (!off.ok) { showInlineError(panel, t('config.quota'), 'motto-error'); return; }
     }
     closeForm();
     deps.render();
   }
 
-  // v1.5.0（D31）：文字轮播保存。文本框按 splitQuoteText 规则拆句；与已存句子逐句相同
-  // 时保留起始日（接着往下读），否则从今天的第一句重新开始。清空后保存＝删除句库并
-  // 回到单句格言——显式清空是明确意图，不当作输入错误拦下。
+  // v1.5.0（D31）：文字轮播保存。文本框按 splitQuoteText 规则拆句；起始日由
+  // rebaseQuoteAnchor 重算，让「今天」接着原来读到的地方（v1.5.1 维护者裁定）。文本框
+  // 清空后保存＝删除句库并回到单句格言——显式清空是明确意图，不当作输入错误拦下。
   function saveQuotesMode(panel) {
     const textarea = panel.querySelector('[data-role="quotes-input"]');
-    const { items } = splitQuoteText(textarea ? textarea.value : '');
+    const value = textarea ? textarea.value : '';
     const current = deps.loadQuotes();
-    const same = current.items.length === items.length && current.items.every((item, i) => item === items[i]);
-    const write = deps.saveQuotes({ enabled: items.length > 0, items, anchor: same && current.anchor ? current.anchor : todayStr() });
+    const items = quotesFromInput(value, current);
+    // v1.5.1：只有文本框**确实空了**才表示「删除句库」。有字却拆不出任何一句（全是
+    // 标题/分隔线/代码块）时拦下说明原因——绝不静默整键删除（v1.5.0 验收发现的丢数据路径）。
+    if (!items.length && value.trim()) {
+      showInlineError(panel, t('quotes.nothingUsable'), 'motto-error', textarea);
+      return;
+    }
+    const write = deps.saveQuotesChecked({
+      enabled: items.length > 0,
+      items,
+      anchor: rebaseQuoteAnchor(current, items, todayStr())
+    }, quotesRawAtOpen);
     if (!write.ok) {
-      showInlineError(panel, t('quotes.quota'), 'motto-error');
+      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('quotes.quota'), 'motto-error');
       return;
     }
     closeForm();
     deps.render();
+  }
+
+  // 文本框没动过（与已存句子逐字相同）就原样沿用已存句子，不再过一遍拆句——「打开设置、
+  // 什么都不改、点完成」在任何情况下都不得改动句库。拆句规则幂等是第一道保证，这是第二道。
+  function quotesFromInput(value, current) {
+    if (current.items.length && value === current.items.join('\n')) return current.items;
+    return splitQuoteText(value).items;
   }
 
   function pickMottoMode(el) {
@@ -2496,14 +2523,14 @@ export function createSheetController(deps) {
     const textarea = panel ? panel.querySelector('[data-role="quotes-input"]') : null;
     const out = panel ? panel.querySelector('[data-role="quotes-count"]') : null;
     if (!textarea || !out) return;
-    const { items, total } = splitQuoteText(textarea.value);
+    const current = deps.loadQuotes();
+    const { total } = splitQuoteText(textarea.value);
+    const items = quotesFromInput(textarea.value, current);
     if (!items.length) {
-      out.textContent = t('quotes.countEmpty');
+      out.textContent = textarea.value.trim() ? t('quotes.nothingUsable') : t('quotes.countEmpty');
       return;
     }
-    const current = deps.loadQuotes();
-    const same = current.items.length === items.length && current.items.every((item, i) => item === items[i]);
-    const today = same && current.anchor ? quoteForDay(current, todayStr()) : items[0];
+    const today = quoteForDay({ items, anchor: rebaseQuoteAnchor(current, items, todayStr()) }, todayStr());
     out.textContent = t('quotes.count', { n: items.length, today })
       + (total > items.length ? t('quotes.truncated', { max: QUOTE_MAX_ITEMS }) : '');
   }

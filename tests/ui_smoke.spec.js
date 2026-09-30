@@ -1602,7 +1602,13 @@ test('renamed defaults stay renamed and mainline/chip duplicates are rejected sa
   // SPEC-007：sheet 里现在还有主线分组，.cfg-name 不再唯一——按行显式定位。
   const chipName = page.locator('.cfg-row[data-kind="chip"] .cfg-name');
   await expect(chipName).toHaveValue('休息');
-  await expect(page.locator('.config-body')).not.toContainText('睡觉');
+  // 改过名的默认标签不会被自动种回：任何一行的名字都不是「睡觉」。v1.5.1 起，缺默认
+  // 标签时底部会出现一个需要预览+确认的「补回默认标签（N 个：睡觉…）」入口——它是
+  // 唯一允许提到「睡觉」的地方，且不写入任何东西（旧断言「整页不含睡觉」因此收窄）。
+  const rowNames = await page.locator('.cfg-row .cfg-name').evaluateAll(inputs => inputs.map(input => input.value));
+  expect(rowNames).not.toContain('睡觉');
+  await expect(page.locator('.config-body .cfg-row', { hasText: '睡觉' })).toHaveCount(0);
+  await expect(page.locator('[data-action="preview-locale-defaults"] [data-role="cell-label"]')).toContainText('补回默认标签');
   await chipName.fill('求职推进');
   await page.getByRole('button', { name: '保存标签配置' }).click();
   // v85：把一个已有标签改成另一个已有标签的名字，不再是死路一条的「重复」，而是

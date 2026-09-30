@@ -125,7 +125,7 @@
 
     <header class="doc-head">
       <h1>隐私政策</h1>
-      <p class="updated">最后更新：2026-08-22</p>
+      <p class="updated">最后更新：2026-10-01</p>
     </header>
 
     <article>
@@ -135,7 +135,14 @@
       </section>
       <section>
         <h2>2. 你的数据存在哪里。</h2>
-        <p>全部记录只存在你浏览器的 <code>localStorage</code>（键 <code>timelog.v1</code>、<code>timelog.config</code>、<code>timelog.locale</code> 等），只在你这台设备上。清除站点数据或卸载 PWA 会删除记录——请定期导出备份。</p>
+        <p>全部记录只存在你浏览器的 <code>localStorage</code>，只在你这台设备上。清除站点数据或卸载 PWA 会删除记录——请定期导出备份。应用用到的全部键如下（完整列出，不是举例）：</p>
+        <ul>
+          <li>记录与设置：<code>timelog.v1</code>（时间记录）、<code>timelog.config</code>（标签设置与阶段格言）、<code>timelog.quotes</code>（文字轮播的句子，用过才有）。这三项会进入你导出的完整备份。</li>
+          <li>界面状态：<code>timelog.view</code>、<code>timelog.selectedDate</code>、<code>timelog.openDate</code>、<code>timelog.recordMode</code>、<code>timelog.theme</code>、<code>timelog.locale</code>、<code>timelog.localeMigrated.v1</code>、<code>timelog.helpSeen.v16</code>——记住你上次看的视图、日期、主题和语言。</li>
+          <li>诊断：<code>timelog.firstUsedDate</code>（本机首次使用日，只用于诊断，随备份导出）；<code>timelog.bootDiag.v1</code>（只有你在「高级」里开启启动诊断时才写，只含计时数字，不含记录内容）。</li>
+          <li>同一标签页刷新时的画面快照：<code>sessionStorage</code> 里的 <code>timelog.bootSnapshot.v1</code>，关掉标签页即清除，不进备份。</li>
+        </ul>
+        <p>你导入的备份 JSON 和文字轮播用的 .txt / .md 文件都只在本机读取，不会上传。</p>
       </section>
       <section>
         <h2>3. 托管。</h2>

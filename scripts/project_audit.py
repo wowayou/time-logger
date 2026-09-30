@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # v1.0.0 起是三段式（此前是单整数，v1–v93）。判据必须**只认三段式**：写回单整数
 # 会让 android 仓的 versionCode 派生与 publish-site 的 tag 校验重新分叉，那两处
 # 现在都按三段式解析。历史 tag 与 docs/CHANGELOG.md 的单整数条目不受影响。
-EXPECTED_VERSION = "1.5.0"
+EXPECTED_VERSION = "1.5.1"
 VERSION_PATTERN = r"\d+\.\d+\.\d+"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
@@ -1005,6 +1005,58 @@ def audit_i18n_keys_referenced(errors: list[str]) -> None:
         fail(errors, f"dead i18n key (never referenced): {key}")
 
 
+# v1.5.1「对外口径一致」规则（CLAUDE.md「对外口径同步」）：两条机械判据，只查「有没有
+# 漏」，写得对不对仍靠人。
+#
+# ① 隐私政策必须**完整列出**运行时用到的全部存储键。v1.5.0 新增 timelog.quotes 时，
+#    政策里还写着「timelog.v1、timelog.config、timelog.locale 等」——「等」字让漏写
+#    永远不会被发现。键名从运行时源码里的 'timelog.*' 字面量收集，新增一个键而不更新
+#    中英两份政策，这里就红。
+PRIVACY_PAGES = ("site/privacy/index.html", "site/en/privacy/index.html")
+
+
+def audit_privacy_lists_storage_keys(errors: list[str]) -> None:
+    sources = [ROOT / "index.html", *sorted((ROOT / "src").glob("*.js"))]
+    keys = set()
+    for path in sources:
+        keys |= set(re.findall(r"'(timelog\.[A-Za-z0-9.]+)'", path.read_text(encoding="utf-8")))
+    if not keys:
+        fail(errors, "no timelog.* storage keys found in runtime sources — the privacy key audit has lost its input")
+        return
+    for rel in PRIVACY_PAGES:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        for key in sorted(keys):
+            if f"<code>{key}</code>" not in text:
+                fail(errors, f"{rel} does not list runtime storage key {key} (privacy policy must enumerate every key)")
+
+
+# ② 改过名的对外叫法不得回流到任何对外表面（应用文案、说明、主页、隐私页、README、
+#    使用文档、推广底稿）。改名的正确做法是一次改齐，这里保证不会只改一半。
+#    行内出现「前名」/「formerly」表示在记录改名历史，豁免。
+RETIRED_PUBLIC_TERMS = {
+    "时间拨号盘": "时间分析（v1.5.1）",
+    "Time dial pad": "Time analysis (v1.5.1)",
+    "接通 ·": "复制本期摘要（v1.5.1）",
+    "添加本语言的默认标签": "补回默认标签（v1.5.1）",
+}
+PUBLIC_COPY_SURFACES = ("README.md", "使用与理念.md", "CONTRIBUTING.md", "src/locales/zh.js", "src/locales/en.js")
+
+
+def audit_retired_public_terms(errors: list[str]) -> None:
+    paths = [ROOT / rel for rel in PUBLIC_COPY_SURFACES]
+    paths += sorted((ROOT / "site").rglob("*.html"))
+    paths += sorted((ROOT / "docs" / "promo").glob("*.md"))
+    for path in paths:
+        if not path.exists():
+            continue
+        for no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if line.lstrip().startswith("//") or "前名" in line or "formerly" in line:
+                continue
+            for term, replacement in RETIRED_PUBLIC_TERMS.items():
+                if term in line:
+                    fail(errors, f"{path.relative_to(ROOT)}:{no} uses retired public term {term!r} — use {replacement}")
+
+
 def main() -> int:
     errors: list[str] = []
     audit_manifest(errors)
@@ -1022,6 +1074,8 @@ def main() -> int:
     audit_site_en_terminology_guard(errors)
     audit_site_hreflang(errors)
     audit_site_favicon(errors)
+    audit_privacy_lists_storage_keys(errors)
+    audit_retired_public_terms(errors)
     # Web → Android 契约：audit 静态预检（export 真实导入 + selector 文本搜索），
     # 真实 DOM 验证由 tests/native_contract.spec.js 覆盖（class/层级/链接完整性）
     audit_native_contract(errors)

@@ -1,4 +1,4 @@
-// v1.3.0 · 时间拨号盘分析页（「更多」下的只读可视化）。
+// v1.3.0 · 时间分析页（「更多」下的只读可视化；v1.5.1 前名「时间拨号盘」，版式仍是拨号盘式圆键）。
 //
 // 锁的是「纯逻辑接进了 UI 且真能用」这条链，而不是像素：
 // ① 入口在「更多」里，点开渲出拨号盘（四桶 + 标签键）；
@@ -6,7 +6,7 @@
 //    delta、上升趋势文案（本夹具主线逐周 +30min，已完成周应判「走高」）；
 // ③ 区间切换（周/月/年）就地重渲，不整层关；
 // ④ 点某个拨号键切换结论区，再点一次回主线；
-// ⑤「接通」把本期摘要复制到剪贴板（含期标题与桶占比）；
+// ⑤「复制本期摘要」把本期摘要复制到剪贴板（含期标题与桶占比；v1.5.1 前叫「接通」）；
 // ⑥ 全程零 pageerror——运行时崩溃（缺 import、坏引用）在这里现形，node --check 抓不到。
 import { expect, test } from '@playwright/test';
 import { boot, openBackupMenu } from './ui_fixture.js';
@@ -23,11 +23,11 @@ function trackPageErrors(page) {
 async function openAnalytics(page) {
   await openBackupMenu(page);
   await page.locator('[data-action="open-analytics"]').click();
-  await expect(page.locator('#form-sheet-title')).toHaveText('时间拨号盘');
+  await expect(page.locator('#form-sheet-title')).toHaveText('时间分析');
 }
 
 // ① + ⑥：入口打开、拨号盘渲染、无运行时崩溃。
-test('「更多」里打开时间拨号盘，渲出四桶键与标签键，零 pageerror', async ({ page }) => {
+test('「更多」里打开时间分析，渲出四桶键与标签键，零 pageerror', async ({ page }) => {
   const errors = trackPageErrors(page);
   await boot(page, 390, 'analytics-weeks', false, WED_NOW);
   await openAnalytics(page);
@@ -67,8 +67,8 @@ test('切到「年」就地重渲，sheet 不关、标题不变', async ({ page 
   await openAnalytics(page);
 
   await page.locator('#form-sheet [data-action="analytics-period"][data-period="year"]').click();
-  // 还在拨号盘 sheet 里。
-  await expect(page.locator('#form-sheet-title')).toHaveText('时间拨号盘');
+  // 还在时间分析 sheet 里。
+  await expect(page.locator('#form-sheet-title')).toHaveText('时间分析');
   // 年按钮进入选中态。
   await expect(page.locator('#form-sheet [data-action="analytics-period"][data-period="year"]'))
     .toHaveAttribute('aria-pressed', 'true');
@@ -92,8 +92,8 @@ test('点某个键切换结论区，再点一次返回主线', async ({ page }) 
   await expect(page.locator('#form-sheet .an-subline')).not.toContainText('再点一次返回');
 });
 
-// ⑤：「接通」复制本期摘要到剪贴板。
-test('接通把本期摘要复制到剪贴板，含期标题与桶占比', async ({ page }) => {
+// ⑤：「复制本期摘要」复制到剪贴板。
+test('复制本期摘要到剪贴板，含期标题与桶占比', async ({ page }) => {
   await page.addInitScript(() => {
     window.__copiedAnalytics = '';
     Object.defineProperty(navigator, 'clipboard', {

@@ -17,6 +17,7 @@ import {
   loadConfig,
   loadLocalePref,
   loadQuotes,
+  previewLocaleDefaultTags,
   readBootDiag
 } from './storage.js';
 
@@ -369,7 +370,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.5.1';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -544,7 +545,7 @@ function renderMottoSheet(opts = {}) {
     </div>`;
 }
 
-// ── v1.3.0 时间拨号盘分析页 ────────────────────────────────
+// ── v1.3.0 时间分析页（v1.5.1 前名「时间拨号盘」，版式仍是拨号盘式圆键）────────────────────────────────
 // 纯渲染：model 由 sheet_controller.buildAnalyticsModel 用 stats.js 的
 // comparePeriods / periodTrend / tagMinutes / summarizeEntries 算好后注入，
 // 这里只把数字/百分比/趋势排进拨号盘 DOM。不碰事件（走 app.js 委托）、
@@ -552,7 +553,7 @@ function renderMottoSheet(opts = {}) {
 const ANALYTICS_PAGE = 12;
 const analyticsDiscClass = { job: 'job', maintain: 'maintain', leak: 'leak', unrecorded: 'unrec' };
 
-// 圆内数字：短、同质。>=1h 用 h（四舍五入），否则分钟——精度留给「接通」摘要。
+// 圆内数字：短、同质。>=1h 用 h（四舍五入），否则分钟——精度留给「复制本期摘要」摘要。
 function analyticsDiscNum(mins) {
   const h = Math.round(mins / 60);
   if (h >= 1000) return `${(h / 1000).toFixed(1)}<span class="u">kh</span>`;
@@ -983,6 +984,8 @@ function renderHelpSheet() {
       <section><h2>${t('help.h6')}</h2><p>${t('help.p6')}</p></section>
       <section><h2>${t('help.h7')}</h2><p>${t('help.p7')}</p></section>
       <section><h2>${t('help.h8')}</h2><p>${t('help.p8')}</p></section>
+      <section><h2>${t('help.h9')}</h2><p>${t('help.p9')}</p></section>
+      <section><h2>${t('help.h10')}</h2><p>${t('help.p10')}</p></section>
     </div>`;
 }
 
@@ -1106,6 +1109,9 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
 
   const chipsOf = bucket => config.chips.filter(chip => chip.bucket === bucket).map(chipRow).join('');
   const preview = opts.defaultsPreview;
+  // v1.5.1：只有确实缺默认标签（删过、或切过界面语言）时才给入口，并直接说出缺哪几个。
+  // 旧版常驻一个「添加本语言的默认标签」，平时点进去只会说「都已存在」——像个僵尸按钮。
+  const missingDefaults = previewLocaleDefaultTags(config).additions;
 
   return `
     ${sheetHead({ title: t('cfg.title'), cancelText: t('cfg.cancel'), cancelAction: 'close-form', cancelAria: t('cfg.cancelAria'), doneText: t('cfg.done'), doneAction: 'save-tag-config', doneAria: t('cfg.doneAria') })}
@@ -1114,9 +1120,9 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
       ${section(t('cfg.sectionMainline'), config.mainline.map(mainlineRow).join(''), 'mainline', 'job', t('cfg.mainlineHint'))}
       ${section(t('cfg.sectionMaintain'), chipsOf('maintain'), 'chip', 'maintain')}
       ${section(t('cfg.sectionLeak'), chipsOf('leak'), 'chip', 'leak')}
-      <div class="cell-group">
-        <button class="cell-btn" type="button" data-action="preview-locale-defaults" aria-label="${esc(t('cfg.addDefaultsAria'))}"><span data-role="cell-label">${t('cfg.addDefaults')}</span>${cellChevron}</button>
-      </div>
+      ${missingDefaults.length && !preview ? `<div class="cell-group">
+        <button class="cell-btn" type="button" data-action="preview-locale-defaults" aria-label="${esc(t('cfg.addDefaultsAria', { list: missingDefaults.map(chip => chip.name).join(t('cfg.listJoin')) }))}"><span data-role="cell-label">${esc(t('cfg.addDefaults', { n: missingDefaults.length, list: missingDefaults.slice(0, 3).map(chip => chip.name).join(t('cfg.listJoin')) + (missingDefaults.length > 3 ? t('cfg.listMore') : '') }))}</span>${cellChevron}</button>
+      </div>` : ''}
       ${preview ? `<div class="cfg-defaults-preview" data-role="defaults-preview">
         ${preview.additions.length ? `<div class="form-hint" data-role="defaults-additions">${t('cfg.addDefaultsPreview', { n: preview.additions.length, list: preview.additions.map(chip => esc(chip.name)).join(t('cfg.listJoin')) })}</div>` : `<div class="form-hint" data-role="defaults-none">${t('cfg.addDefaultsNone')}</div>`}
         ${preview.skipped.length ? `<div class="form-hint" data-role="defaults-skipped">${t('cfg.addDefaultsSkipped', { n: preview.skipped.length, list: preview.skipped.map(esc).join(t('cfg.listJoin')) })}</div>` : ''}

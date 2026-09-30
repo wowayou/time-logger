@@ -444,6 +444,7 @@ import {
   splitQuoteText,
   normalizeQuotes,
   quoteForDay,
+  rebaseQuoteAnchor,
   resolveMottoLine,
   CONFIG_KEY
 } from './src/storage.js';
@@ -980,6 +981,49 @@ assert(['2026-06-28', '2026-06-29', '2026-06-30', '2026-07-02'].map(day => quote
 assert(normalizeQuotes({ enabled: true, items: [] }).enabled === false, 'rotation cannot be enabled without lines');
 assert(resolveMottoLine(ownerConfig, rot, '2026-06-30').text === 'b', 'enabled rotation wins the motto spot');
 assert(resolveMottoLine(ownerConfig, { ...rot, enabled: false }, '2026-06-30').kind === 'motto', 'disabled rotation falls back to the motto');
+
+// v1.5.1：幂等必须覆盖组合记号（v1.5.0 的断言只测单层，漏掉了会清空句库的那条路径）。
+const roundTrip = text => {
+  const once = splitQuoteText(text).items;
+  const twice = splitQuoteText(once.join('\n')).items;
+  return { once, stable: JSON.stringify(once) === JSON.stringify(twice) && JSON.stringify(once) === JSON.stringify(normalizeQuotes({ items: once }).items) };
+};
+for (const [text, expected] of [
+  ['> ```\n第一句。\n第二句。', ['第一句。', '第二句。']],
+  ['> # 标题\n一句', ['一句']],
+  ['> ---\n一句', ['一句']],
+  ['- - 双层', ['双层']],
+  ['1. - 混合', ['混合']],
+  ['> - 1. 深嵌套', ['深嵌套']],
+  ['```\n代码\n```\n正文。', ['正文。']],
+  ['甲'.repeat(95) + '。# 中段井号。```中段围栏。- 中段列表。', ['甲'.repeat(95) + '。', '中段井号。', '中段围栏。', '中段列表。']]
+]) {
+  const { once, stable } = roundTrip(text);
+  assert(stable, `split must be idempotent for ${JSON.stringify(text)}, got ${JSON.stringify(once)}`);
+  assert(JSON.stringify(once) === JSON.stringify(expected), `split(${JSON.stringify(text)}) = ${JSON.stringify(once)}, expected ${JSON.stringify(expected)}`);
+}
+// 固定种子的小模糊测试：随机拼接记号与正文，逐次断言幂等（不依赖随机数，失败可复现）。
+const fuzzParts = ['> ', '- ', '* ', '1. ', '1、 ', '# ', '```', '~~~', '---', ' ', '甲乙丙。', 'Hello. ', 'x'.repeat(50), '。', '」', '\n', '\n\n', '3.14'];
+let fuzzSeed = 7;
+const fuzzNext = () => (fuzzSeed = (fuzzSeed * 1103515245 + 12345) % 2147483648) / 2147483648;
+for (let k = 0; k < 3000; k++) {
+  let text = '';
+  const len = 1 + Math.floor(fuzzNext() * 30);
+  for (let j = 0; j < len; j++) text += fuzzParts[Math.floor(fuzzNext() * fuzzParts.length)];
+  assert(roundTrip(text).stable, `fuzz case ${k} not idempotent: ${JSON.stringify(text)}`);
+}
+// v1.5.0 存下的坏句逐句清掉，不会整体重拆时把后文吞掉。
+assert(JSON.stringify(normalizeQuotes({ items: ['```', '第二句。', '# 标题', '- 双层'] }).items) === JSON.stringify(['第二句。', '双层']), 'stored v1.5.0 junk lines are cleaned item by item');
+// 轮播进度（维护者裁定「接着今天这一句」）：前天起始 → 今天第 3 句 c。
+const rebasePrev = normalizeQuotes({ enabled: true, items: ['a', 'b', 'c', 'd'], anchor: '2026-09-28' });
+const rebaseToday = '2026-09-30';
+const todayAfter = next => quoteForDay({ items: next, anchor: rebaseQuoteAnchor(rebasePrev, next, rebaseToday) }, rebaseToday);
+assert(todayAfter(['a', 'b', 'c', 'd', 'e']) === 'c', 'appending keeps today\'s line');
+assert(todayAfter(['c', 'd']) === 'c', 'deleting earlier lines keeps today\'s line');
+assert(todayAfter(['a', 'b', 'C', 'd']) === 'C', 'editing today\'s line stays on the same index');
+assert(todayAfter(['x', 'y']) === 'x', 'a full replacement starts from the first line');
+assert(rebaseQuoteAnchor(rebasePrev, ['a', 'b', 'c', 'd'], rebaseToday) === '2026-09-28', 'unchanged lines keep the anchor');
+assert(rebaseQuoteAnchor({ items: [] }, ['a'], rebaseToday) === rebaseToday, 'a new library starts today');
 
 console.log('confirm_logic_smoke passed');
 '''

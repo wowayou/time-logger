@@ -46,6 +46,9 @@ Python 3.12+ 会对每个未知转义发 SyntaxWarning——而本脚本由 PreT
    （CHANGELOG 行 + 当前版本行），二者必然同批。
 2. **提醒**：动了运行时或对外文案，却没动 `docs/HANDOFF.md`。
 3. **提醒**：动了对外文案，而 README 的 `Updated:` 还停在今天之前。
+4. **提醒**（v1.5.1）：动了应用文案（`src/locales/`），却没动 `site/`——主页与隐私页
+   的口径可能已经落后。机械可查的部分（隐私页列全存储键、改过名的叫法不回流）由
+   `project_audit.py` 硬拦，这里只提醒「过一眼主页」。
 
 **逃生开关**：命令前缀 `SKIP_DOC_CHECK=1`（本仓用 `git commit -F -`，提交信息压根
 不出现在 hook 能看到的命令字符串里，所以逃生开关不能是消息里的标记）。`--amend`
@@ -194,6 +197,8 @@ def run() -> None:
         notes.append("提醒：动了运行时/对外文案，但 docs/HANDOFF.md 没跟着改——接手须知会立刻过期。")
     if public and not readme_updated_is_today():
         notes.append("提醒：动了对外文案，但 README 的 `Updated:` 还停在今天之前。")
+    if any(p.startswith("src/locales/") for p in paths) and not any(p.startswith("site/") for p in paths):
+        notes.append("提醒：动了应用文案（src/locales/），但 site/ 没跟着改——过一眼主页与隐私页口径是否仍一致。")
     emit(notes=notes)
 
 

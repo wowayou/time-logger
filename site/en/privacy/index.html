@@ -128,7 +128,7 @@
 
     <header class="doc-head">
       <h1>Privacy Policy</h1>
-      <p class="updated">Last updated: 2026-08-22</p>
+      <p class="updated">Last updated: 2026-10-01</p>
     </header>
 
     <article>
@@ -138,7 +138,14 @@
       </section>
       <section>
         <h2>2. Where your data lives.</h2>
-        <p>All records live only in your browser's <code>localStorage</code> (keys such as <code>timelog.v1</code>, <code>timelog.config</code>, and <code>timelog.locale</code>), on this one device only. Clearing your browser's site data or uninstalling the PWA deletes your records — export a backup regularly.</p>
+        <p>All records live only in your browser's <code>localStorage</code>, on this one device only. Clearing your browser's site data or uninstalling the PWA deletes your records — export a backup regularly. These are all the keys the app uses (a complete list, not examples):</p>
+        <ul>
+          <li>Records and settings: <code>timelog.v1</code> (time records), <code>timelog.config</code> (tag settings and motto), <code>timelog.quotes</code> (rotating lines, only if you use them). These three go into the full backup you export.</li>
+          <li>Interface state: <code>timelog.view</code>, <code>timelog.selectedDate</code>, <code>timelog.openDate</code>, <code>timelog.recordMode</code>, <code>timelog.theme</code>, <code>timelog.locale</code>, <code>timelog.localeMigrated.v1</code>, <code>timelog.helpSeen.v16</code> — remembering the view, date, theme and language you last used.</li>
+          <li>Diagnostics: <code>timelog.firstUsedDate</code> (the first day this device used the app, for diagnostics only; included in backups); <code>timelog.bootDiag.v1</code> (written only if you turn on startup diagnostics under Advanced; timing numbers only, never record content).</li>
+          <li>A same-tab refresh snapshot: <code>timelog.bootSnapshot.v1</code> in <code>sessionStorage</code>, cleared when the tab closes and never included in backups.</li>
+        </ul>
+        <p>Backup JSON files you import and the .txt / .md files you use for rotating lines are read on this device only and never uploaded.</p>
       </section>
       <section>
         <h2>3. Hosting.</h2>

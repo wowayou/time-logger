@@ -272,9 +272,9 @@ export function mountRangePicker(mountEl, range, onChangeCb) {
     picker.setAttribute('aria-label', t('picker.rangeAria'));
     const minuteItems = Array.from({ length: 60 }, (_, i) => ({ val: i, label: p2(i) }));
     const cols = {};
-    const sep = text => {
+    const sep = (text, extraClass = '') => {
       const el = document.createElement('div');
-      el.className = 'wheel-sep';
+      el.className = `wheel-sep${extraClass ? ` ${extraClass}` : ''}`;
       el.setAttribute('aria-hidden', 'true');
       el.textContent = text;
       return el;
@@ -295,7 +295,7 @@ export function mountRangePicker(mountEl, range, onChangeCb) {
       const mCol = makeWheelCol(minuteItems, value[which] % 60,
         idx => pick('m', idx), 'wheel-col-range', labels[which].minute, RANGE_PAD);
       cols[which] = { hCol, mCol, hours };
-      if (which === 'end') picker.appendChild(sep('–'));
+      if (which === 'end') picker.appendChild(sep('–', 'wheel-sep-dash'));
       picker.append(hCol, sep(':'), mCol);
     });
     const highlight = document.createElement('div');

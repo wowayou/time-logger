@@ -9,7 +9,7 @@
 
 - **Web v1.5.0 已发布上线**：main `5ba3461`、tag [v1.5.0 / Release](https://github.com/wowayou/time-logger/releases/tag/v1.5.0)、`publish-site` 与镜像 Pages 部署成功；已复核线上 CACHE `timelog-v1.5.0`、manifest `1.5.0` 及新代码在线。本版三项：标签跨桶同名归属提醒、切一刀/补一下「先看结果再选时刻」的段内区间选择器、格言位置文字轮播（D31 显式修订 D11）。
 - **发布验证已有记录**：audit、逻辑 smoke、typecheck、diff 检查通过；全量 UI **557 passed / 3 flaky / 0 failed**，三条 WebKit 重试关闭重试后重复十次 **50/50 通过**；保留波动记录，不称为零 flaky。同批修正一条既有测试缺陷：v1.0.0 迁移用例此前只在 UTC+8 机器上通过（已做对照，未改动的 v1.4.2 同样红），现已钉时区。
-- **已交付能力**：记录、编辑、切分、撤销、四桶统计、备份与逐条冲突导入、中英文界面、时间拨号盘（v1.3.0）、「正在做」状态条（v1.4.0）、标签设置暂存与并发写保护（v1.4.1–1.4.2）、标签归属提醒 / 切一刀区间选择 / 文字轮播（v1.5.0）。细节见 [CLAUDE.md 的版本表](CLAUDE.md#changelog) 与 [历史版本](docs/CHANGELOG.md)。
+- **已交付能力**：记录、编辑、切分、撤销、四桶统计、备份与逐条冲突导入、中英文界面、时间分析（v1.3.0，v1.5.1 前名「时间拨号盘」）、「正在做」状态条（v1.4.0）、标签设置暂存与并发写保护（v1.4.1–1.4.2）、标签归属提醒 / 切一刀区间选择 / 文字轮播（v1.5.0）。细节见 [CLAUDE.md 的版本表](CLAUDE.md#changelog) 与 [历史版本](docs/CHANGELOG.md)。
 - **Web 发布链路已就绪**：主站 `time.eigentime.org/app/` 正常发布，旧地址自 v76 起只读；版本使用三段式，Web→Android 接口约定由 `native-contract.json` 和两仓审计守护。
 - **自愿支持入口已闭环**：应用、主页与 README 指向 `https://eigentime.org/support?from=time-logger`；2026-09-23 已核验其跳转至 `/zh/support/` 且保留来源参数。应用内无支付界面，所有功能免费。
 - **安卓代码侧发版防护已就绪**：独立仓库已实现内嵌运行时、签名缺失即拒绝 Release、`sync_runtime.py --release` 预检及从 Web 三段式版本派生版本号；不代表已上架。

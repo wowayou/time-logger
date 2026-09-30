@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-import { normalizeTimestamp, parseDateKey } from './time.js';
+import { addDays, localDateKey, normalizeTimestamp, parseDateKey } from './time.js';
 import { getLocale, t, tAll } from './i18n.js';
 
 const KEY = 'timelog.v1';
@@ -146,10 +146,18 @@ const QUOTE_TRAILERS = `${QUOTE_TERMINATORS}\u300D\u300F\u201D\u2019"'\uFF09)]`;
  */
 
 // 长行按句末标点切开：连续的句末标点与紧随的收尾引号/括号归入本句；英文句点须后接
-// 空白或行尾才算句末，避免把 3.14、e.g 这类切断。切出来不足 4 个字的碎片并回上一句。
+// 空白或行尾才算句末，避免把 3.14、e.g 这类切断。切出来不足 4 个字的碎片并回上一句——
+// 并回时**保留它前面的空白**：v1.5.1 模糊测试发现「1. # 。」并成「1.# 。」后，重拆时
+// 句点不再后接空白、边界随之改变，幂等被打破。原样保留子串，重拆才切得一模一样。
 function splitSentences(line) {
   const out = [];
   let buf = '';
+  const flush = () => {
+    const piece = buf.trim();
+    if (piece && piece.length < 4 && out.length) out[out.length - 1] += buf.trimEnd();
+    else if (piece) out.push(piece);
+    buf = '';
+  };
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     buf += ch;
@@ -157,50 +165,88 @@ function splitSentences(line) {
     const isEnd = QUOTE_TERMINATORS.includes(ch) || (ch === '.' && (next === '' || /\s/.test(next)));
     if (!isEnd) continue;
     while (i + 1 < line.length && QUOTE_TRAILERS.includes(line[i + 1])) buf += line[++i];
-    const piece = buf.trim();
-    buf = '';
-    if (!piece) continue;
-    if (piece.length < 4 && out.length) out[out.length - 1] += piece;
-    else out.push(piece);
+    flush();
   }
-  const rest = buf.trim();
-  if (rest) {
-    if (rest.length < 4 && out.length) out[out.length - 1] += rest;
-    else out.push(rest);
-  }
+  flush();
   return out;
+}
+
+// v1.5.1：行首记号**反复**剥到不再变化（`> - 1. 句子` 这类嵌套一次剥干净），而且
+// 代码块/标题/分隔线的判断放在剥完**之后**。v1.5.0 只剥一层、且先判断后剥：`> ```` 第一
+// 次保存回填成 ```，第二次保存就被当成代码块开头，后面所有句子被吞掉、句库被整键
+// 删除（另一台机器验收时真页面复现）。
+function stripQuoteMarkers(line) {
+  let prev;
+  let cur = line;
+  do {
+    prev = cur;
+    cur = cur.replace(/^(> ?)+/, '').replace(/^([-*+]|\d{1,3}[.)\u3001]) /, '').trim();
+  } while (cur !== prev);
+  return cur;
+}
+
+const isQuoteFence = line => /^(```|~~~)/.test(line);
+const isQuoteRule = line => /^([-*_] ?){3,}$/.test(line);
+const isQuoteHeading = line => /^#{1,6} /.test(line);
+
+// 长行切出来的**中段**句子若恰好以 `#`/``` 开头，它不是标题也不是代码块，只是文字——
+// 去掉这些记号保留文字；但保存后它会独占一行，不去掉的话下次就会被当成标题/代码块。
+function stripChunkLead(chunk) {
+  let prev;
+  let cur = chunk;
+  do {
+    prev = cur;
+    cur = stripQuoteMarkers(cur).replace(/^#{1,6} /, '').replace(/^(`{3,}|~{3,})/, '').trim();
+  } while (cur !== prev);
+  return cur;
 }
 
 /**
  * 把粘贴或导入的文本拆成轮播句。规则（格言设置里有同义说明）：
- * - 一行一句；空行、Markdown 标题行、分隔线与代码块跳过；引用 `>` 与列表记号去掉；
+ * - 一行一句；空行、Markdown 标题行、分隔线与代码块跳过；引用 `>` 与列表记号（可嵌套）去掉；
  * - 超过 100 字的行按句末标点（。！？!?… 与后接空白的英文句点）切开；
- * - 切完仍超过 160 字（整段没有句末标点）的硬切；最多保留 1000 句。
+ * - 切完仍超过 160 字（整段没有句末标点）的硬切；没有任何文字或数字的碎片丢弃；最多 1000 句。
+ *
+ * **幂等是硬约束**：保存后文本框回填为每行一句，再存一次必须逐句不变——所以每一句
+ * 产出之前都要再过一遍同样的剥记号与跳过判断，确保它自己再被拆一次还是它自己。
  * @param {string} text
  * @returns {{ items: string[], total: number }} total 为截断前的句数
  */
 export function splitQuoteText(text) {
   const lines = String(text || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').split('\n');
   const items = [];
+  const emit = chunk => {
+    const clean = stripChunkLead(chunk.replace(/\s+/g, ' ').trim());
+    if (!clean || isQuoteRule(clean) || !/[\p{L}\p{N}]/u.test(clean)) return;
+    items.push(clean);
+  };
+  const flats = lines.map(rawLine => rawLine.replace(/\s+/g, ' ').trim());
+  // 只有**成对**的代码块记号才开合代码块：粘贴的书摘里落单一个 ```，不该把后文全吞掉。
+  const fenceAt = flats.map((flat, i) => (!isQuoteRule(flat) && isQuoteFence(stripQuoteMarkers(flat)) ? i : -1)).filter(i => i >= 0);
+  const togglers = new Set(fenceAt.length % 2 ? fenceAt.slice(0, -1) : fenceAt);
   let fenced = false;
-  for (const rawLine of lines) {
-    let line = rawLine.replace(/\s+/g, ' ').trim();
-    if (/^(```|~~~)/.test(line)) { fenced = !fenced; continue; }
-    if (fenced || /^([-*_] ?){3,}$/.test(line) || /^#{1,6} /.test(line)) continue;
-    line = line.replace(/^(> ?)+/, '').replace(/^([-*+]|\d{1,3}[.)\u3001]) /, '').trim();
-    if (!line) continue;
+  for (let index = 0; index < flats.length; index++) {
+    const flat = flats[index];
+    if (isQuoteRule(flat)) continue;
+    const line = stripQuoteMarkers(flat);
+    if (isQuoteFence(line)) {
+      if (togglers.has(index)) fenced = !fenced;
+      continue;
+    }
+    if (fenced || !line || isQuoteRule(line) || isQuoteHeading(line)) continue;
     const pieces = line.length > QUOTE_SPLIT_OVER ? splitSentences(line) : [line];
     pieces.forEach(piece => {
-      for (let i = 0; i < piece.length; i += QUOTE_MAX_LEN) {
-        const chunk = piece.slice(i, i + QUOTE_MAX_LEN).trim();
-        if (chunk) items.push(chunk);
-      }
+      const clean = stripQuoteMarkers(piece);
+      for (let i = 0; i < clean.length; i += QUOTE_MAX_LEN) emit(clean.slice(i, i + QUOTE_MAX_LEN));
     });
   }
   return { items: items.slice(0, QUOTE_MAX_ITEMS), total: items.length };
 }
 
 /**
+ * 句库的唯一规范形：每一句都是拆句规则的不动点。**逐句**重拆（不是拼起来整体重拆）——
+ * v1.5.0 存下的坏句（例如单独一行三个反引号）逐句拆时只会丢掉它自己，整体重拆则会把它
+ * 当成代码块开头、吞掉后面所有句子。
  * @param {unknown} raw
  * @returns {QuoteLibrary}
  */
@@ -208,9 +254,7 @@ export function normalizeQuotes(raw) {
   const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? /** @type {Record<string, unknown>} */ (raw) : {};
   const items = Array.isArray(src.items)
     ? src.items
-      .filter(item => typeof item === 'string')
-      .map(item => item.replace(/\s+/g, ' ').trim().slice(0, QUOTE_MAX_LEN).trim())
-      .filter(Boolean)
+      .flatMap(item => (typeof item === 'string' ? splitQuoteText(item).items : []))
       .slice(0, QUOTE_MAX_ITEMS)
     : [];
   const anchor = typeof src.anchor === 'string' && parseDateKey(src.anchor) ? src.anchor : '';
@@ -226,15 +270,25 @@ export function readQuotesRaw() {
   }
 }
 
+// 每次渲染都会读句库；规范化要逐句重拆（最多 1000 句），按原始字符串记一份，字符串
+// 不变就不重算。返回副本，调用方改了也污染不到缓存。
+let quotesCache = { raw: /** @type {string | null} */ (null), lib: /** @type {QuoteLibrary | null} */ (null) };
+
 /** @returns {QuoteLibrary} */
 export function loadQuotes() {
   const raw = readQuotesRaw();
   if (!raw) return normalizeQuotes(null);
-  try {
-    return normalizeQuotes(JSON.parse(raw));
-  } catch {
-    return normalizeQuotes(null);
+  if (quotesCache.raw !== raw || !quotesCache.lib) {
+    let lib;
+    try {
+      lib = normalizeQuotes(JSON.parse(raw));
+    } catch {
+      lib = normalizeQuotes(null);
+    }
+    quotesCache = { raw, lib };
   }
+  const cached = /** @type {QuoteLibrary} */ (quotesCache.lib);
+  return { version: 1, enabled: cached.enabled, items: cached.items.slice(), anchor: cached.anchor };
 }
 
 /**
@@ -254,6 +308,18 @@ export function saveQuotes(lib) {
   }
 }
 
+/**
+ * v1.5.1：句库侧的 compare-and-swap，与标签配置同一纪律——格言 sheet 打开时记下原始
+ * 字符串，保存前比一次；期间另一标签页改过句库就拦下，不让后保存的静默覆盖先保存的。
+ * @param {unknown} lib
+ * @param {string | null} expectedRaw
+ * @returns {{ ok: true } | { ok: false, reason: 'concurrent' | 'quota' }}
+ */
+export function saveQuotesChecked(lib, expectedRaw) {
+  if (readQuotesRaw() !== expectedRaw) return { ok: false, reason: 'concurrent' };
+  return saveQuotes(lib);
+}
+
 function dayOrdinal(dayKey) {
   const d = parseDateKey(dayKey);
   return d ? Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000) : 0;
@@ -268,9 +334,46 @@ function dayOrdinal(dayKey) {
  */
 export function quoteForDay(lib, dayKey) {
   const items = (lib && lib.items) || [];
-  if (!items.length) return '';
+  return items.length ? items[quoteIndexForDay(lib, dayKey)] : '';
+}
+
+function quoteIndexForDay(lib, dayKey) {
+  const n = lib.items.length;
   const offset = dayOrdinal(dayKey) - dayOrdinal(lib.anchor || '1970-01-01');
-  return items[((offset % items.length) + items.length) % items.length];
+  return ((offset % n) + n) % n;
+}
+
+/**
+ * v1.5.1（维护者裁定「接着今天这一句」）：句库改动后，新起始日让「今天」仍落在原来读到
+ * 的地方，而不是一律打回第一句——
+ * - 句子逐句没变：起始日不动；
+ * - 今天这句还在：从它接着往下（重复出现时取离原序号最近的那一处）；
+ * - 今天这句被删改了、但新旧还有共同的句子（改错字、删几句）：停在同一个序号上；
+ * - 新旧毫无交集（整本换掉）或原来没有句库：从第一句开始。
+ * @param {QuoteLibrary} prev 改动前的句库
+ * @param {string[]} nextItems 改动后的句子（已规范化）
+ * @param {string} todayKey
+ * @returns {string} 新的 anchor；nextItems 为空时返回 ''
+ */
+export function rebaseQuoteAnchor(prev, nextItems, todayKey) {
+  const n = nextItems.length;
+  if (!n) return '';
+  const prevItems = (prev && prev.items) || [];
+  if (!prevItems.length) return todayKey;
+  const same = prevItems.length === n && prevItems.every((item, i) => item === nextItems[i]);
+  if (same && prev.anchor) return prev.anchor;
+  const prevIdx = quoteIndexForDay(prev, todayKey);
+  const todayLine = prevItems[prevIdx];
+  let idx = -1;
+  nextItems.forEach((item, i) => {
+    if (item === todayLine && (idx < 0 || Math.abs(i - prevIdx) < Math.abs(idx - prevIdx))) idx = i;
+  });
+  if (idx < 0) {
+    const prevSet = new Set(prevItems);
+    idx = nextItems.some(item => prevSet.has(item)) ? Math.min(prevIdx, n - 1) : 0;
+  }
+  const today = parseDateKey(todayKey);
+  return today ? localDateKey(addDays(today, -idx)) : todayKey;
 }
 
 /**
