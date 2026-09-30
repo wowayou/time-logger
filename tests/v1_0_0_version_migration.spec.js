@@ -35,7 +35,11 @@ const LEGACY_BACKUP = {
 test('v1.0.0: a backup exported by the single-integer era imports unchanged', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
-  await boot(page, 375, 'empty', false, FIXED_NOW);
+  // 本机时区钉成与备份 meta 相同的 UTC+8（-480）。不钉的话，这条用例只在 UTC+8 的
+  // 机器上绿：导入检查会按两边时区差建议「整体平移 ±N 小时」，东京机器上就平移 +1h，
+  // 断言的「原样导入」随之失败（2026-09-30 在 Asia/Tokyo 实测；未改动的 v1.4.2 同样红，
+  // TZ=Asia/Shanghai 下绿）。本用例测的是版本迁移，不是时区平移。
+  await boot(page, 375, 'empty', false, FIXED_NOW, null, -480);
 
   const chooserPromise = page.waitForEvent('filechooser');
   await openBackupSheet(page);
