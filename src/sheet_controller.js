@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-import { mountTimePicker, setTimeInputError, useCompactTimePicker } from './pickers.js';
+import { mountRangePicker, mountTimePicker, setTimeInputError, useCompactTimePicker } from './pickers.js';
 import {
   addOneMinute,
   cloneEntries,
@@ -15,7 +15,7 @@ import {
   planOvernightContinuation,
   planSegmentSplit
 } from './entry_model.js';
-import { isPlaceholderEntry, comparePeriods, periodTrend, tagMinutes, formatPercent } from './stats.js';
+import { isPlaceholderEntry, comparePeriods, periodTrend, primaryTag, tagMinutes, formatPercent } from './stats.js';
 import { t } from './i18n.js';
 import {
   BUCKETS,
@@ -25,9 +25,13 @@ import {
   RESERVED_UNKNOWN_TAG,
   bucketForTag,
   canonicalTagName,
+  configuredBucketForTag,
   countEntriesWithTag,
   countEntriesWithExactTag,
   countEntriesNeedingRetag,
+  QUOTE_MAX_ITEMS,
+  quoteForDay,
+  splitQuoteText,
   appendLocaleDefaultTags,
   previewLocaleDefaultTags,
   renameMainlineTag,
@@ -42,6 +46,7 @@ import {
   fmtMins,
   fmtPlainMins,
   hhmm,
+  localDateTimeKey,
   minsBetweenDates,
   normalizeTimestamp,
   nowStr,
@@ -51,7 +56,7 @@ import {
   validateTs,
   validateTsForMode
 } from './time.js';
-import { bucketHint, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderTagPicker } from './ui.js';
+import { bucketHint, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderTagPicker, renderTagSuggestions } from './ui.js';
 
 export function createSheetController(deps) {
   let sheetScrollY = 0;
@@ -185,39 +190,108 @@ export function createSheetController(deps) {
     }
   }
 
-  function paintBackfillDuration(panel) {
-    const startTsEl = panel ? panel.querySelector('#form-ts') : null;
-    const endTsEl = panel ? panel.querySelector('#form-end-ts') : null;
-    const durLabel = panel ? panel.querySelector('[data-role="backfill-duration"]') : null;
-    if (!startTsEl || !endTsEl || !durLabel) return;
-    const s = normalizeTimestamp(startTsEl.value);
-    const e = normalizeTimestamp(endTsEl.value);
-    if (s && e && e > s) durLabel.textContent = t('form.durTotal', { dur: fmtMins(minsBetweenDates(new Date(s), new Date(e))) });
-    else durLabel.textContent = s && e && e <= s ? t('form.endBeforeStart') : '';
+  // v1.5.0：切一刀 / 补一下的开箱选区。原段是一条真实的已发生记录（切一刀）时默认切出
+  // 中间三分之一（贴整 5 分钟）：一打开就看见「切成三段」长什么样；旧版默认整段选区，
+  // 效果等于「整段改标签」，用户得先把两端都滚一遍才开始像在切。原段本来就是未记录
+  // （缺口、占位、未知标签段）时，整段补满才是常见意图，保持整段。
+  function defaultCutRange(startTs, endTs) {
+    const s = normalizeTimestamp(startTs);
+    const e = normalizeTimestamp(endTs);
+    const whole = { startTs, endTs };
+    if (!s || !e || e <= s) return whole;
+    const source = formSourceId ? formBaseEntries.find(entry => entry.id === formSourceId) : null;
+    if (!source || source.planned || isPlaceholderEntry(source)
+      || bucketForTag(primaryTag(source), deps.loadConfig()) === 'unrecorded') return whole;
+    const total = minsBetweenDates(new Date(s), new Date(e));
+    if (total < 3) return whole;
+    const at = fraction => {
+      const d = new Date(new Date(s).getTime() + Math.round(total * fraction) * 60000);
+      if (total >= 30) d.setMinutes(Math.round(d.getMinutes() / 5) * 5, 0, 0);
+      return localDateTimeKey(d);
+    };
+    const a = at(1 / 3);
+    const b = at(2 / 3);
+    return a > s && b < e && a < b ? { startTs: a, endTs: b } : whole;
   }
 
   function mountBackfillPickers(panel, startTs, endTs) {
     const startTsEl = panel ? panel.querySelector('#form-ts') : null;
     const endTsEl = panel ? panel.querySelector('#form-end-ts') : null;
-    const startMount = panel ? panel.querySelector('[data-role="backfill-start-mount"]') : null;
-    const endMount = panel ? panel.querySelector('[data-role="backfill-end-mount"]') : null;
+    const mount = panel ? panel.querySelector('[data-role="backfill-range-mount"]') : null;
     if (!startTsEl || !endTsEl) return;
     const s = normalizeTimestamp(startTs) || deps.defaultFormTs();
     const e = normalizeTimestamp(endTs) || s;
     startTsEl.value = s;
     endTsEl.value = e;
-    paintBackfillDuration(panel);
-    if (startMount) mountTimePicker(startMount, s, v => {
-      startTsEl.value = v;
-      paintBackfillDuration(panel);
-      refreshSplitPreview(panel);
-    });
-    if (endMount) mountTimePicker(endMount, e, v => {
-      endTsEl.value = v;
-      paintBackfillDuration(panel);
+    if (mount) mountRangePicker(mount, { minTs: formFrozenStart || s, maxTs: formFrozenEnd || e, startTs: s, endTs: e }, value => {
+      startTsEl.value = value.startTs;
+      endTsEl.value = value.endTs;
       refreshSplitPreview(panel);
     });
     refreshSplitPreview(panel);
+  }
+
+  // 预览行 / 切分条用的桶：新段按「保存时真正会记进的桶」（已登记名随它原来的桶，否则
+  // 随所选桶），还没选标签时是 pending；其余各段按它现有的标签。
+  function previewPartBucket(part, panel) {
+    const unknown = !part.tag || part.tag === RESERVED_UNKNOWN_TAG;
+    if (part.role === 'new' || part.role === 'current') {
+      const isEdit = part.role === 'current';
+      const tag = selectedTag(panel, isEdit ? 'edit' : 'form');
+      if (!tag || tag === RESERVED_UNKNOWN_TAG) return unknown ? 'pending' : bucketForTag(part.tag, deps.loadConfig());
+      return configuredBucketForTag(tag, deps.loadConfig()) || safeBucket(isEdit ? editBucket : formBucket);
+    }
+    return unknown ? 'unrecorded' : bucketForTag(part.tag, deps.loadConfig());
+  }
+
+  // v1.5.0：切分总览＝原段一行 + 按时长比例的切分条 + 两端刻度。条只是文字预览行的图示，
+  // 计划不成立时整条灰掉、中间刻度改报原因，逐段文字仍由 paintTransactionPreview 负责。
+  function paintCutOverview(panel, plan) {
+    const overview = panel ? panel.querySelector('[data-role="cut-overview"]') : null;
+    if (!overview || !formFrozenStart || !formFrozenEnd) return;
+    const edgeLabel = ts => (ts.slice(0, 10) !== formFrozenStart.slice(0, 10) ? '24:00' : hhmm(ts));
+    const source = formSourceId ? formBaseEntries.find(entry => entry.id === formSourceId) : null;
+    const sourceIsReal = source && !isPlaceholderEntry(source);
+    const sourceTag = sourceIsReal ? primaryTag(source) : '';
+    const sourceBucket = sourceIsReal && sourceTag && sourceTag !== RESERVED_UNKNOWN_TAG
+      ? bucketForTag(sourceTag, deps.loadConfig()) : 'unrecorded';
+    const total = minsBetweenDates(new Date(formFrozenStart), new Date(formFrozenEnd));
+    const sourceEl = overview.querySelector('[data-role="cut-source"]');
+    sourceEl.replaceChildren();
+    sourceEl.dataset.b = sourceBucket;
+    const what = document.createElement('span');
+    what.className = 'cut-source-what';
+    what.textContent = sourceIsReal ? (source.what || sourceTag) : t('entry.unrecordedLabel');
+    sourceEl.appendChild(what);
+    if (sourceIsReal && sourceTag && sourceTag !== RESERVED_UNKNOWN_TAG && sourceTag !== what.textContent) {
+      const tag = document.createElement('span');
+      tag.className = 'cut-source-tag';
+      tag.textContent = `#${sourceTag}`;
+      sourceEl.appendChild(tag);
+    }
+    const meta = document.createElement('span');
+    meta.className = 'cut-source-meta';
+    meta.textContent = t('form.cutSourceMeta', { start: hhmm(formFrozenStart), end: edgeLabel(formFrozenEnd), dur: fmtMins(total) });
+    sourceEl.appendChild(meta);
+
+    const bar = overview.querySelector('[data-role="cut-bar"]');
+    bar.replaceChildren();
+    const parts = plan && plan.ok ? (plan.preview || []) : [{ role: 'invalid', startTs: formFrozenStart, endTs: formFrozenEnd }];
+    parts.forEach(part => {
+      const seg = document.createElement('span');
+      seg.className = `cut-part cut-${part.role}`;
+      seg.dataset.b = part.role === 'invalid' ? 'unrecorded' : previewPartBucket(part, panel);
+      seg.style.flexGrow = String(Math.max(1, minsBetweenDates(new Date(part.startTs), new Date(part.endTs))));
+      bar.appendChild(seg);
+    });
+    overview.querySelector('[data-role="cut-scale-start"]').textContent = hhmm(formFrozenStart);
+    overview.querySelector('[data-role="cut-scale-end"]').textContent = edgeLabel(formFrozenEnd);
+    const dur = overview.querySelector('[data-role="backfill-duration"]');
+    const cut = plan && plan.ok ? (plan.preview || []).find(part => part.role === 'new') : null;
+    dur.classList.toggle('is-error', !cut);
+    dur.textContent = cut
+      ? t('form.cutNewDur', { dur: fmtMins(minsBetweenDates(new Date(cut.startTs), new Date(cut.endTs))) })
+      : (plan && plan.message) || t('form.needValidRange');
   }
 
   function resetPlanIds() {
@@ -238,7 +312,7 @@ export function createSheetController(deps) {
 
   function paintTransactionPreview(panel, plan) {
     const preview = panel ? panel.querySelector('[data-role="interval-preview"]') : null;
-    const limits = panel ? panel.querySelector('[data-role="edit-limits"], [data-role="backfill-limits"], [data-role="overnight-limits"]') : null;
+    const limits = panel ? panel.querySelector('[data-role="edit-limits"], [data-role="overnight-limits"]') : null;
     if (limits) {
       const c = plan && (plan.context || plan.constraints);
       if (c && plan && (plan.kind === 'overnight-continuation' || plan.kind === 'overnight-day-end')) {
@@ -246,8 +320,6 @@ export function createSheetController(deps) {
       } else if (c) {
         const timeLabel = value => value && c.dayEndTs && value === c.dayEndTs ? '24:00' : hhmm(value);
         limits.textContent = t('form.intervalLimits', { startMin: timeLabel(c.startMin), startMax: timeLabel(c.startMax), startReason: c.startReason, endMin: timeLabel(c.endMin), endMax: timeLabel(c.endMax), endReason: c.endReason });
-      } else if (formFrozenStart && formFrozenEnd) {
-        limits.textContent = t('form.splitLimits', { start: hhmm(formFrozenStart), end: hhmm(formFrozenEnd) });
       }
     }
     if (!preview) return;
@@ -280,6 +352,7 @@ export function createSheetController(deps) {
     (plan.preview || []).forEach(part => {
       const row = document.createElement('div');
       row.className = `preview-row preview-${part.role}`;
+      row.dataset.b = previewPartBucket(part, panel);
       const role = document.createElement('span');
       role.className = 'preview-role';
       role.textContent = roleNames[part.role] || part.role;
@@ -291,7 +364,18 @@ export function createSheetController(deps) {
       time.textContent = `${hhmm(part.startTs)}-${endLabel}`;
       const label = document.createElement('span');
       label.className = 'preview-label';
-      label.textContent = part.label || t('entry.unrecordedLabel');
+      const unknownTag = !part.tag || part.tag === RESERVED_UNKNOWN_TAG;
+      // v1.5.0：新段还没填内容也没选标签时，旧版显示保留名「未知」，像是要存成未知；
+      // 实际上保存会先要求填「做了什么」。改为明说「待填写」。
+      label.textContent = part.role === 'new' && unknownTag && (!part.label || part.label === RESERVED_UNKNOWN_TAG)
+        ? t('part.newPending')
+        : (part.label || t('entry.unrecordedLabel'));
+      if (!unknownTag && part.tag !== part.label) {
+        const tag = document.createElement('span');
+        tag.className = 'preview-tag';
+        tag.textContent = ` #${part.tag}`;
+        label.appendChild(tag);
+      }
       row.append(role, time, label);
       preview.appendChild(row);
     });
@@ -347,6 +431,7 @@ export function createSheetController(deps) {
   function refreshSplitPreview(panel, entries = formBaseEntries, remember = true) {
     const plan = buildSplitPlan(panel, entries);
     if (!plan) return null;
+    paintCutOverview(panel, plan);
     paintTransactionPreview(panel, plan);
     if (remember && plan.ok) lastPreviewSignature = plan.resultSignature;
     return plan;
@@ -574,8 +659,8 @@ export function createSheetController(deps) {
     if (chipWrap) {
       chipWrap.innerHTML = renderTagPicker('form', formTag, deps.loadConfig(), formBucket);
     }
-    const hint = panel.querySelector('[data-role="mainline-hint"]');
-    if (hint) hint.textContent = bucketHint(formBucket);
+    paintTagHint(panel);
+    paintTagSuggestions(panel);
     panel.querySelectorAll('[data-role="form-bucket-seg"] button').forEach(btn => {
       const selected = btn.dataset.bucket === formBucket;
       btn.classList.toggle('active', selected);
@@ -744,7 +829,10 @@ export function createSheetController(deps) {
         sheetTimeMounted = false;
       }
     } else if (mode === 'new') {
-      if (formBackfill) mountBackfillPickers(panel, ts, formBackfillEnd);
+      if (formBackfill) {
+        const cut = defaultCutRange(ts, formBackfillEnd);
+        mountBackfillPickers(panel, cut.startTs, cut.endTs);
+      }
       else {
         mountNewTimePicker(panel, ts);
         if (formOvernightContext) refreshOvernightPreview(panel);
@@ -755,6 +843,7 @@ export function createSheetController(deps) {
       if (ctagEl) ctagEl.value = '';
       deps.renderChrome();
     }
+    if (mode === 'motto') paintQuotesCount(panel);
     autosizeTextareas(panel);
     trapFocus(sheet);
     requestAnimationFrame(() => {
@@ -866,8 +955,8 @@ export function createSheetController(deps) {
     const compact = useCompactTimePicker() ? '1' : '0';
     const mode = panel.dataset.mode || '';
     if (mode === 'new' && formBackfill) {
-      const startMount = panel.querySelector('[data-role="backfill-start-mount"]');
-      if (!startMount || startMount.dataset.pickerCompact === compact) return;
+      const rangeMount = panel.querySelector('[data-role="backfill-range-mount"]');
+      if (!rangeMount || rangeMount.dataset.pickerCompact === compact) return;
       mountBackfillPickers(panel, panel.querySelector('#form-ts').value, panel.querySelector('#form-end-ts').value);
       return;
     }
@@ -1237,6 +1326,8 @@ export function createSheetController(deps) {
     }
     const custom = panel ? panel.querySelector('#form-ctag, [data-role="edit-custom-tag"]') : null;
     if (custom) custom.value = '';
+    paintTagHint(panel);
+    paintTagSuggestions(panel);
     if (panel && panel.dataset.mode === 'edit') refreshEditPreview(panel);
     if (panel && panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
     if (panel && panel.dataset.mode === 'new' && formOvernightContext) refreshOvernightPreview(panel);
@@ -1264,10 +1355,10 @@ export function createSheetController(deps) {
         btn.classList.toggle('active', selected);
         btn.setAttribute('aria-pressed', String(selected));
       });
-      const hint = panel.querySelector('[data-role="mainline-hint"]');
-      if (hint) hint.textContent = bucketHint(bucket);
       const custom = panel.querySelector('#form-ctag, [data-role="edit-custom-tag"]');
       if (custom) custom.value = '';
+      paintTagHint(panel);
+      paintTagSuggestions(panel);
     }
     if (panel && panel.dataset.mode === 'edit') refreshEditPreview(panel);
     if (panel && panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
@@ -1403,24 +1494,74 @@ export function createSheetController(deps) {
   }
 
   function updateMainlineHint(input) {
-    const box = input.closest('.form-sheet-panel');
-    const hint = box ? box.querySelector('[data-role="mainline-hint"]') : null;
+    paintTagHint(input.closest('.form-sheet-panel'));
+  }
+
+  // 标签区提示的唯一出口：自定义输入、切桶、选 chip 后都走这里重算。
+  // v1.5.0：输入的名字已登记在**别的桶**（主线或 chip，按 tagKey 大小写不敏感）时，
+  // 灰字提示换成醒目的归属提醒 + 一键「改选 X」。旧判据只查 chip 且逐字相等，于是
+  // 「主线已有阅读、在维持里又敲阅读」完全无提示，保存后静默记进主线——已登记标签
+  // 从不因录入改桶（v30），这条规则不变，变的是让用户在保存前看见它。
+  function paintTagHint(panel) {
+    const hint = panel ? panel.querySelector('[data-role="mainline-hint"]') : null;
     if (!hint) return;
-    const value = input.value.trim();
-    const compact = compactTagText(value);
+    const isEdit = panel.dataset.mode === 'edit';
+    const input = panel.querySelector(isEdit ? '[data-role="edit-custom-tag"]' : '#form-ctag');
+    const value = input ? input.value.trim() : '';
+    const bucket = isEdit ? editBucket : formBucket;
     const config = deps.loadConfig();
-    const bucket = box && box.dataset.mode === 'edit' ? editBucket : formBucket;
-    const sameName = value ? config.chips.find(chip => chip.name === value) : null;
-    if (sameName && sameName.bucket !== bucket) {
-      // Recording never re-buckets an existing chip; tell the user their bucket
-      // pick won't move it (matches the storage.addChipTag fix).
-      hint.textContent = t('form.tagSameBucket', { name: value, bucket: BUCKETS[sameName.bucket] });
-      return;
+    const owner = value ? configuredBucketForTag(value, config) : '';
+    const warn = panel.querySelector('[data-role="tag-bucket-warn"]');
+    const clash = Boolean(owner && owner !== safeBucket(bucket));
+    if (warn) {
+      warn.hidden = !clash;
+      if (clash) {
+        const name = canonicalTagName(value, config);
+        warn.dataset.b = owner;
+        warn.dataset.bucket = owner;
+        warn.querySelector('[data-role="tag-bucket-warn-text"]').textContent = t('form.tagOwnedBy', {
+          name, owner: BUCKETS[owner], picked: BUCKETS[safeBucket(bucket)]
+        });
+        const adopt = warn.querySelector('[data-action="adopt-tag-bucket"]');
+        adopt.textContent = t('form.tagAdoptOwner', { owner: BUCKETS[owner] });
+        adopt.setAttribute('aria-label', t('form.tagAdoptOwnerAria', { name, owner: BUCKETS[owner] }));
+      }
     }
+    hint.hidden = clash;
+    if (clash) return;
+    const compact = compactTagText(value);
     const near = compact ? config.mainline.find(name => compactTagText(name) === compact && name !== value) : '';
     hint.textContent = near
       ? t('form.tagNear', { name: near })
       : bucketHint(bucket);
+  }
+
+  // 「改选 X」：把所选桶切到这个名字真正归属的桶，并直接选中那个已登记的 chip。
+  // 输入框清空——此后这条记录走「选已有 chip」的正常路径，不再是自定义新标签。
+  function adoptTagBucket(el) {
+    const panel = el.closest('.form-sheet-panel');
+    if (!panel) return;
+    const isEdit = panel.dataset.mode === 'edit';
+    const input = panel.querySelector(isEdit ? '[data-role="edit-custom-tag"]' : '#form-ctag');
+    const config = deps.loadConfig();
+    const value = input ? input.value.trim() : '';
+    const owner = value ? configuredBucketForTag(value, config) : '';
+    if (!owner) { paintTagHint(panel); return; }
+    const name = canonicalTagName(value, config);
+    const seg = panel.querySelector(isEdit ? '[data-role="edit-bucket-seg"]' : '[data-role="form-bucket-seg"]');
+    const segBtn = seg ? seg.querySelector(`button[data-bucket="${owner}"]`) : null;
+    if (segBtn) pickBucket(segBtn);
+    const chip = Array.from(panel.querySelectorAll('#form-chips .chip[data-tag], [data-role="edit-chips"] .chip[data-tag]'))
+      .find(item => item.dataset.tag === name);
+    if (chip) pickTag(chip);
+    const target = chip || segBtn;
+    if (target) target.focus();
+  }
+
+  function paintTagSuggestions(panel) {
+    const list = panel ? panel.querySelector('#tag-suggestions') : null;
+    if (!list) return;
+    list.innerHTML = renderTagSuggestions(deps.loadConfig(), panel.dataset.mode === 'edit' ? editBucket : formBucket);
   }
 
   function syncCustomDraft(input) {
@@ -1594,8 +1735,8 @@ export function createSheetController(deps) {
   // Bounded backfill into a segment: plan [start, end) as the new label and
   // restore the segment's original label at end through planSegmentSplit.
   function saveBackfill(panel) {
-    const startScope = (panel && panel.querySelector('[data-role="backfill-start-mount"]')) || panel;
-    const endScope = (panel && panel.querySelector('[data-role="backfill-end-mount"]')) || panel;
+    const startScope = (panel && panel.querySelector('[data-role="backfill-range-mount"]')) || panel;
+    const endScope = startScope;
     const startChecked = validateTs(document.getElementById('form-ts').value);
     if (!startChecked.ok) { setTimeInputError(startScope, startChecked.msg); return; }
     setTimeInputError(startScope, '');
@@ -1839,6 +1980,7 @@ export function createSheetController(deps) {
   function handleFormInput(target) {
     const panel = target && target.closest && target.closest('.form-sheet-panel');
     if (!panel) return;
+    if (panel.dataset.mode === 'motto' && target.dataset.role === 'quotes-input') paintQuotesCount(panel);
     if (panel.dataset.mode === 'edit') refreshEditPreview(panel);
     if (panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
     if (panel.dataset.mode === 'new' && formOvernightContext) refreshOvernightPreview(panel);
@@ -2285,19 +2427,137 @@ export function createSheetController(deps) {
   // 阶段格言（v69，C13）：三态归一化在 storage.normalizeConfig 里做（trim/60 字上限/
   // 恰等于默认→未设置），这里只负责把输入原样交给 saveConfig。空串会被保留为
   // 「显式隐藏」。
+  function mottoMode(panel) {
+    const active = panel ? panel.querySelector('[data-role="motto-mode-seg"] button.active') : null;
+    return active && active.dataset.mode === 'quote' ? 'quote' : 'motto';
+  }
+
   function saveMotto() {
-    const input = document.querySelector('#form-sheet [data-role="motto-input"]');
+    const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    const input = panel ? panel.querySelector('[data-role="motto-input"]') : null;
     if (!input) { closeForm(); return; }
+    if (mottoMode(panel) === 'quote') { saveQuotesMode(panel); return; }
     const { config, raw } = deps.loadConfigSnapshot();
     config.motto = input.value;
-    const panel = input.closest('.form-sheet-panel');
     const write = deps.saveConfigChecked(config, raw);
     if (!write.ok) {
       showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'motto-error');
       return;
     }
+    // 切回单句格言：句库保留（再切回来不用重新导入），只关掉轮播。
+    const lib = deps.loadQuotes();
+    if (lib.enabled) {
+      const off = deps.saveQuotes({ ...lib, enabled: false });
+      if (!off.ok) { showInlineError(panel, t('config.quota'), 'motto-error'); return; }
+    }
     closeForm();
     deps.render();
+  }
+
+  // v1.5.0（D31）：文字轮播保存。文本框按 splitQuoteText 规则拆句；与已存句子逐句相同
+  // 时保留起始日（接着往下读），否则从今天的第一句重新开始。清空后保存＝删除句库并
+  // 回到单句格言——显式清空是明确意图，不当作输入错误拦下。
+  function saveQuotesMode(panel) {
+    const textarea = panel.querySelector('[data-role="quotes-input"]');
+    const { items } = splitQuoteText(textarea ? textarea.value : '');
+    const current = deps.loadQuotes();
+    const same = current.items.length === items.length && current.items.every((item, i) => item === items[i]);
+    const write = deps.saveQuotes({ enabled: items.length > 0, items, anchor: same && current.anchor ? current.anchor : todayStr() });
+    if (!write.ok) {
+      showInlineError(panel, t('quotes.quota'), 'motto-error');
+      return;
+    }
+    closeForm();
+    deps.render();
+  }
+
+  function pickMottoMode(el) {
+    const panel = el.closest('.form-sheet-panel');
+    if (!panel) return;
+    const mode = el.dataset.mode === 'quote' ? 'quote' : 'motto';
+    panel.querySelectorAll('[data-role="motto-mode-seg"] button').forEach(btn => {
+      const selected = btn.dataset.mode === mode;
+      btn.classList.toggle('active', selected);
+      btn.setAttribute('aria-pressed', String(selected));
+    });
+    const single = panel.querySelector('[data-role="motto-single"]');
+    const quotes = panel.querySelector('[data-role="motto-quotes"]');
+    if (single) single.hidden = mode !== 'motto';
+    if (quotes) quotes.hidden = mode !== 'quote';
+    clearInlineError(panel, 'motto-error');
+    if (mode === 'quote') {
+      autosizeTextareas(panel);
+      paintQuotesCount(panel);
+    }
+  }
+
+  // 实时告诉用户「存下去会是几句、今天显示哪一句」——拆句规则不必读说明也看得见。
+  function paintQuotesCount(panel) {
+    const textarea = panel ? panel.querySelector('[data-role="quotes-input"]') : null;
+    const out = panel ? panel.querySelector('[data-role="quotes-count"]') : null;
+    if (!textarea || !out) return;
+    const { items, total } = splitQuoteText(textarea.value);
+    if (!items.length) {
+      out.textContent = t('quotes.countEmpty');
+      return;
+    }
+    const current = deps.loadQuotes();
+    const same = current.items.length === items.length && current.items.every((item, i) => item === items[i]);
+    const today = same && current.anchor ? quoteForDay(current, todayStr()) : items[0];
+    out.textContent = t('quotes.count', { n: items.length, today })
+      + (total > items.length ? t('quotes.truncated', { max: QUOTE_MAX_ITEMS }) : '');
+  }
+
+  function pickQuotesFile(el) {
+    const panel = el.closest('.form-sheet-panel');
+    const input = panel ? panel.querySelector('[data-role="quotes-file"]') : null;
+    if (input) input.click();
+  }
+
+  // 本地读文件，不上传。先按 UTF-8 严格解码，失败再按 GB18030——老的中文 .txt 电子书
+  // 多是 GBK 编码，直接当 UTF-8 读会整篇乱码。带 BOM 的 UTF-16 按 BOM 解。
+  const QUOTES_FILE_MAX_BYTES = 2 * 1024 * 1024;
+  function decodeQuotesFile(buffer) {
+    const bytes = new Uint8Array(buffer);
+    if (bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(bytes);
+    if (bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(bytes);
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch {
+      return new TextDecoder('gb18030').decode(bytes);
+    }
+  }
+
+  async function loadQuotesFile(input) {
+    const panel = input.closest('.form-sheet-panel');
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!panel || !file) return;
+    if (file.size > QUOTES_FILE_MAX_BYTES) {
+      showInlineError(panel, t('quotes.fileTooLarge'), 'motto-error');
+      return;
+    }
+    let text = '';
+    try {
+      text = decodeQuotesFile(await file.arrayBuffer());
+    } catch {
+      showInlineError(panel, t('quotes.fileUnreadable'), 'motto-error');
+      return;
+    }
+    const textarea = panel.querySelector('[data-role="quotes-input"]');
+    if (!textarea) return;
+    // 追加而不是覆盖：已有的句子不会因为导入第二本书而静默消失；要换掉就先清空文本框。
+    // 追加的是**已拆好**的句子——用户在框里看见的就是将要轮播的样子。
+    const incoming = splitQuoteText(text).items;
+    if (!incoming.length) {
+      showInlineError(panel, t('quotes.fileEmpty'), 'motto-error');
+      return;
+    }
+    clearInlineError(panel, 'motto-error');
+    const existing = textarea.value.replace(/\s+$/, '');
+    textarea.value = (existing ? `${existing}\n` : '') + incoming.join('\n');
+    autosizeTextareas(panel);
+    paintQuotesCount(panel);
   }
 
   function resetMottoInput() {
@@ -2339,6 +2599,7 @@ export function createSheetController(deps) {
     saveEntry,
     autosizeTextareas,
     updateMainlineHint,
+    adoptTagBucket,
     syncCustomDraft,
     toggleStartTime,
     toggleEditStartTime,
@@ -2356,6 +2617,9 @@ export function createSheetController(deps) {
     cancelLocaleDefaults,
     saveMotto,
     resetMottoInput,
+    pickMottoMode,
+    pickQuotesFile,
+    loadQuotesFile,
     handleResponsiveResize
   };
 }

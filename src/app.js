@@ -27,11 +27,15 @@ import {
   mergeImportedConfig,
   mergeImportedEntries,
   mergeImportedFirstUsedDate,
+  adoptImportedQuotes,
+  loadQuotes,
   readBootDiag,
+  readQuotesRaw,
+  resolveMottoLine,
+  saveQuotes,
   readConfigRaw,
   readFirstUsedDate,
   rememberCustomTagForBucket,
-  resolveMotto,
   setBootDiagEnabled,
   save,
   saveChecked,
@@ -375,6 +379,8 @@ import {
         fadeHidden: listFade ? listFade.hidden : true,
         dataRaw: localStorage.getItem('timelog.v1'),
         configRaw: localStorage.getItem('timelog.config'),
+        // v1.5.0：文字轮播在独立键里；换了句库的快照不得接回旧句子（index.html 同一门）。
+        quotesRaw: readQuotesRaw(),
         view: localStorage.getItem(VIEW_KEY),
         selectedDate: localStorage.getItem(SELECTED_DATE_KEY),
         recordMode: localStorage.getItem(RECORD_MODE_KEY),
@@ -445,14 +451,18 @@ import {
     }
     // 阶段格言（v69，C13）：只在日视图显示；textContent 填充（用户/导入文案不进
     // innerHTML）。'' ＝显式隐藏——此时唯一入口是「···」更多里的「阶段格言」。
+    // v1.5.0（D31）：文字轮播开启时同一位置显示当天那一句，只由日期决定。
     const mottoEl = document.getElementById('motto-line');
     if (mottoEl) {
-      const motto = resolveMotto(loadConfig());
-      const showMotto = isDay && Boolean(motto);
+      const line = resolveMottoLine(loadConfig(), loadQuotes(), todayStr());
+      const showMotto = isDay && Boolean(line.text);
       mottoEl.hidden = !showMotto;
+      mottoEl.classList.toggle('is-quote', line.kind === 'quote');
       if (showMotto) {
-        mottoEl.textContent = motto;
-        mottoEl.setAttribute('aria-label', t('chrome.mottoAria', { motto }));
+        mottoEl.textContent = line.text;
+        mottoEl.setAttribute('aria-label', line.kind === 'quote'
+          ? t('chrome.quoteAria', { motto: line.text })
+          : t('chrome.mottoAria', { motto: line.text }));
       }
     }
     const periodNames = { day: t('period.day'), week: t('period.week'), month: t('period.month'), year: t('period.year') };
@@ -752,6 +762,8 @@ import {
     saveConfigChecked,
     readConfigRaw,
     rememberCustomTagForBucket,
+    loadQuotes,
+    saveQuotes,
     uid,
     defaultFormTs,
     settlementEndFor,
@@ -786,6 +798,8 @@ import {
     adoptImportedFirstUsedDate: value => {
       mergeImportedFirstUsedDate(value, todayStr());
     },
+    loadQuotes,
+    adoptImportedQuotes,
     periodRange,
     periodFullLabel,
     computeDay,
@@ -955,11 +969,14 @@ import {
       if (action === 'open-motto') sheetController.openFormSheet({ mode: 'motto' });
       if (action === 'save-motto') sheetController.saveMotto();
       if (action === 'reset-motto-input') sheetController.resetMottoInput();
+      if (action === 'pick-motto-mode') sheetController.pickMottoMode(el);
+      if (action === 'pick-quotes-file') sheetController.pickQuotesFile(el);
       if (action === 'toggle-start-time') sheetController.toggleStartTime(el);
       if (action === 'toggle-edit-start-time') sheetController.toggleEditStartTime(el);
       if (action === 'pick-edit-end-mode') sheetController.pickEditEndMode(el);
       if (action === 'pick-form-tag') sheetController.pickTag(el);
       if (action === 'pick-form-bucket') sheetController.pickBucket(el);
+      if (action === 'adopt-tag-bucket') sheetController.adoptTagBucket(el);
       if (action === 'pick-record-mode') sheetController.pickRecordMode(el);
       if (action === 'pick-overnight-end-mode') sheetController.pickOvernightEndMode(el);
       if (action === 'save-entry') sheetController.saveEntry();
@@ -1025,6 +1042,9 @@ import {
       }
     });
     document.getElementById('import-file').addEventListener('change', ioActions.handleImport);
+    document.addEventListener('change', e => {
+      if (e.target instanceof HTMLInputElement && e.target.matches('[data-role="quotes-file"]')) sheetController.loadQuotesFile(e.target);
+    });
     document.addEventListener('input', e => {
       if (e.target instanceof HTMLTextAreaElement && e.target.classList.contains('ta')) {
         sheetController.autosizeTextareas(e.target.parentElement || document);

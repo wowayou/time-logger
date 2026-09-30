@@ -12,9 +12,11 @@ import {
   THEME_KEY,
   bucketForTag,
   chipGroups,
+  configuredBucketForTag,
   countEntriesWithTag,
   loadConfig,
   loadLocalePref,
+  loadQuotes,
   readBootDiag
 } from './storage.js';
 
@@ -367,7 +369,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.4.2';
+export const APP_VERSION = '1.5.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -502,19 +504,42 @@ function renderMoreSheet(opts = {}) {
 
 // 阶段格言编辑（v69，C13）：input 预填当前生效文案（未设置＝默认），清空保存＝隐藏，
 // 「恢复默认」回填默认句（保存时 storage 会把恰等于默认的值归一化回「未设置」）。
+// v1.5.0（D31）：格言位置二选一——单句格言（v69 原样保留）或文字轮播（导入的句子
+// 每天按顺序显示一句）。两块面板都常驻 DOM，切换只动 hidden，未保存的输入互不丢失；
+// 「完成」按当前选中的模式保存，另一模式的已存内容保持不动。
 function renderMottoSheet(opts = {}) {
   const config = opts.config || loadConfig();
   const value = config.motto === undefined ? defaultMotto() : config.motto;
+  const lib = loadQuotes();
+  const mode = lib.enabled ? 'quote' : 'motto';
+  const modeBtn = (key, label) => `<button type="button" data-action="pick-motto-mode" data-mode="${key}" class="${mode === key ? 'active' : ''}" aria-pressed="${mode === key}">${label}</button>`;
   return `
     ${sheetHead({ title: t('motto.title'), cancelText: t('motto.cancel'), cancelAction: 'close-form', cancelAria: t('motto.cancelAria'), doneText: t('motto.done'), doneAction: 'save-motto', doneAria: t('motto.doneAria') })}
     <div class="form-sheet-body motto-body">
-      <div class="form-hint">${t('motto.hint')}</div>
-      <div class="fl">
-        <div class="fl-label">${t('motto.fieldLabel')}</div>
-        <input type="text" class="inp" data-role="motto-input" maxlength="60" value="${esc(value)}" placeholder="${t('motto.placeholder')}" aria-label="${t('motto.inputAria')}">
+      <div class="seg motto-mode-seg" data-role="motto-mode-seg" role="group" aria-label="${t('motto.modeAria')}">
+        ${modeBtn('motto', t('motto.modeSingle'))}
+        ${modeBtn('quote', t('motto.modeQuotes'))}
       </div>
-      <div class="form-hint">${t('motto.clearHint')}</div>
-      <button class="cell-action" type="button" data-action="reset-motto-input" aria-label="${t('motto.resetAria')}">${t('motto.reset')}</button>
+      <div class="motto-pane" data-role="motto-single"${mode === 'motto' ? '' : ' hidden'}>
+        <div class="form-hint">${t('motto.hint')}</div>
+        <div class="fl">
+          <div class="fl-label">${t('motto.fieldLabel')}</div>
+          <input type="text" class="inp" data-role="motto-input" maxlength="60" value="${esc(value)}" placeholder="${t('motto.placeholder')}" aria-label="${t('motto.inputAria')}">
+        </div>
+        <div class="form-hint">${t('motto.clearHint')}</div>
+        <button class="cell-action" type="button" data-action="reset-motto-input" aria-label="${t('motto.resetAria')}">${t('motto.reset')}</button>
+      </div>
+      <div class="motto-pane" data-role="motto-quotes"${mode === 'quote' ? '' : ' hidden'}>
+        <div class="form-hint">${t('quotes.hint')}</div>
+        <div class="fl">
+          <div class="fl-label">${t('quotes.fieldLabel')}</div>
+          <textarea class="inp ta quotes-input" data-role="quotes-input" rows="6" placeholder="${esc(t('quotes.placeholder'))}" aria-label="${t('quotes.inputAria')}">${esc(lib.items.join('\n'))}</textarea>
+          <div class="form-hint quotes-count" data-role="quotes-count" aria-live="polite"></div>
+        </div>
+        <button class="cell-action" type="button" data-action="pick-quotes-file">${t('quotes.importFile')}</button>
+        <input type="file" data-role="quotes-file" accept=".txt,.md,.markdown,text/plain,text/markdown" hidden>
+        <div class="form-hint">${t('quotes.rules')}</div>
+      </div>
       <div class="form-inline-error" data-role="motto-error" hidden></div>
     </div>`;
 }
@@ -740,9 +765,11 @@ export function renderFormSheet(opts) {
     ? `<div data-role="edit-chips">${chips}</div>`
     : `<div id="form-chips">${chips}</div>`;
   const customInput = isEdit
-    ? `<input type="text" class="inp edit-tag-input" data-role="edit-custom-tag" list="mainline-tags" value="${isKnownPickerTag ? '' : esc(tag)}" placeholder="${t('form.customTagPlaceholder')}">`
-    : `<input type="text" class="inp" id="form-ctag" list="mainline-tags" placeholder="${t('form.customTagOptional')}">`;
-  const datalist = `<datalist id="mainline-tags">${config.mainline.map(name => `<option value="${esc(name)}"></option>`).join('')}</datalist>`;
+    ? `<input type="text" class="inp edit-tag-input" data-role="edit-custom-tag" list="tag-suggestions" value="${isKnownPickerTag ? '' : esc(tag)}" placeholder="${t('form.customTagPlaceholder')}">`
+    : `<input type="text" class="inp" id="form-ctag" list="tag-suggestions" placeholder="${t('form.customTagOptional')}">`;
+  // v1.5.0：联想只列**所选桶**的标签。旧版无论选哪个桶都联想主线名——在「维持」下
+  // 顺手点中一个主线名，记录会静默记进主线（已登记标签从不改桶），联想本身就在引路。
+  const datalist = `<datalist id="tag-suggestions">${renderTagSuggestions(config, bucket)}</datalist>`;
   const tagBlock = `
       <div class="fl">
         <div class="fl-label">${t('form.labelBucket')}</div>
@@ -757,6 +784,10 @@ export function renderFormSheet(opts) {
         ${customInput}
         ${datalist}
         <div class="form-hint" data-role="mainline-hint">${bucketHint(bucket)}</div>
+        <div class="tag-owner-warn" data-role="tag-bucket-warn" role="status" hidden>
+          <span data-role="tag-bucket-warn-text"></span>
+          <button class="mini-btn" type="button" data-action="adopt-tag-bucket"></button>
+        </div>
       </div>`;
   // R3：常规编辑（非计划）的时间滚轮默认折叠为触发行——多数编辑只改文字/标签，
   // 常驻展开的滚轮是噪音；点触发行才展开，与新建态「开始时间」触发行形态一致。
@@ -821,20 +852,24 @@ export function renderFormSheet(opts) {
         ? `<button class="cell-action" type="button" data-action="backfill-seg" data-kind="split" data-source-id="${esc(e.id)}" data-ts="${esc(e.ts)}" data-end="${esc(intervalContext.endTs)}" aria-label="${t('form.splitAria')}">${t('form.split')}</button>`
         : ''}
       ${isEdit && !isEditPlaceholder ? `<button class="cell-danger" type="button" data-action="request-delete" data-id="${esc(e.id)}" aria-label="${t('form.deleteThisAria', { kind: isEditPlanned ? t('form.kindPlan') : t('form.kindEntry') })}">${t('form.deleteThis', { kind: isEditPlanned ? t('form.kindPlan') : t('form.kindEntry') })}</button>` : ''}`;
+  // v1.5.0：切一刀 / 补一下先给「结果」再给「选择」——原段一行 + 按时长比例的切分条 +
+  // 逐段文字行在上，一行四列的段内区间选择器在下。旧版是两整块带日期列的滚轮（各带一
+  // 个对段内切分毫无意义的「现在」）占掉大半屏，切完长什么样只剩一段文字。比例条是
+  // 文字行的图示（aria-hidden），可读信息仍以文字行为准。
   const backfillTimeSection = `
       <input type="hidden" id="form-ts">
       <input type="hidden" id="form-end-ts">
-      <div class="fl backfill-time">
-        <div class="fl-label">${t('form.labelStart')}</div>
-        <div data-role="backfill-start-mount"></div>
+      <div class="cut-overview" data-role="cut-overview">
+        <div class="cut-source" data-role="cut-source"></div>
+        <div class="cut-bar" data-role="cut-bar" aria-hidden="true"></div>
+        <div class="cut-scale" aria-hidden="true">
+          <span data-role="cut-scale-start"></span>
+          <span class="cut-scale-dur" data-role="backfill-duration"></span>
+          <span data-role="cut-scale-end"></span>
+        </div>
       </div>
-      <div class="fl backfill-time">
-        <div class="fl-label">${t('form.labelEnd')}</div>
-        <div data-role="backfill-end-mount"></div>
-        <div class="form-hint" data-role="backfill-duration"></div>
-      </div>
-      <div class="boundary-limits" data-role="backfill-limits"></div>
       <div class="interval-preview" data-role="interval-preview" aria-live="polite"></div>
+      <div class="fl backfill-time" data-role="backfill-range-mount"></div>
       <div class="form-inline-error" data-role="conflict-error" hidden></div>`;
   const logTimeSection = `
       ${recordModeSeg}
@@ -895,14 +930,29 @@ export function renderFormSheet(opts) {
     </div>`;
 }
 
+export function renderTagSuggestions(config, bucket) {
+  const names = bucket === 'maintain' || bucket === 'leak'
+    ? config.chips.filter(chip => chip.bucket === bucket).map(chip => chip.name)
+    : config.mainline;
+  return names.map(name => `<option value="${esc(name)}"></option>`).join('');
+}
+
 export function renderTagPicker(prefix, selectedTag, config = loadConfig(), bucketFilter = '') {
   const action = prefix === 'edit' ? 'pick-edit-tag' : 'pick-form-tag';
   const groups = chipGroups(config);
   const mainline = config.mainline.map(name => ({ name, bucket: 'job' }));
   const chipBtn = item => `<button class="chip chip-${item.bucket}${item.name === selectedTag ? ' sel' : ''}" type="button" data-action="${action}" data-tag="${esc(item.name)}" data-bucket="${item.bucket}" aria-pressed="${item.name === selectedTag}" aria-label="${esc(t('chip.selectAria', { name: item.name }))}">${esc(item.name)}</button>`;
   const draftName = String(selectedTag || '').trim();
-  const known = !draftName || config.mainline.includes(draftName) || config.chips.some(chip => chip.name === draftName);
-  const draftBucket = bucketFilter === 'maintain' || bucketFilter === 'leak' ? bucketFilter : 'job';
+  // 「已知」＝本栏（所选桶）里就有这个 chip，会直接高亮它、不另画草稿。v1.5.0 前是「任
+  // 意桶里有」，于是在「维持」里敲一个主线名时本栏什么都不显示。
+  const listed = name => (bucketFilter === 'job' ? config.mainline.includes(name)
+    : bucketFilter ? config.chips.some(chip => chip.name === name && chip.bucket === bucketFilter)
+      : config.mainline.includes(name) || config.chips.some(chip => chip.name === name));
+  const known = !draftName || listed(draftName);
+  // v1.5.0：输入的名字已是**别的桶**的标签（大小写不敏感）时，草稿 chip 用它真正归属
+  // 的桶色——在「维持」一栏里冒出一个主线色的 chip，与下方的归属提醒互相印证。
+  const owner = known ? '' : configuredBucketForTag(draftName, config);
+  const draftBucket = owner || (bucketFilter === 'maintain' || bucketFilter === 'leak' ? bucketFilter : 'job');
   const draftChip = !known
     ? `<button class="chip chip-${draftBucket} sel chip-draft" type="button" tabindex="-1" data-tag="${esc(draftName)}" aria-label="${esc(t('chip.draftAria', { name: draftName }))}">${esc(draftName)}</button>`
     : '';

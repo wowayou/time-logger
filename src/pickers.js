@@ -3,11 +3,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
 import { t, tList } from './i18n.js';
-import { normalizeTimestamp, nowStr, p2, parseDateKey, todayStr } from './time.js';
+import { addDays, localDateKey, normalizeTimestamp, nowStr, p2, parseDateKey, todayStr } from './time.js';
 import { setButtonTip } from './ui.js';
 
 const ITEM_H = 40;
 const PAD = 80;
+// 区间滚轮比单点滚轮矮一截（160 vs 200px，上下各露一行半）：一个选择器同时摆两端，
+// 高度省下来留给上方的切分条与逐段预览。pad＝(容器高 − 行高) / 2，须与 .range-wheel 同步。
+const RANGE_PAD = 60;
 const DAYS_BACK = 90;
 const DAYS_FWD = 7;
 const MAX_WINDOW_DAYS = 800;
@@ -84,6 +87,71 @@ export function mountTimePicker(mountEl, initialValue, onChangeCb) {
   else mountDesktopTimePicker(mountEl, initialValue, onChangeCb);
 }
 
+function makeWheelCol(items, initIdx, onSelect, extraClass, ariaLabel, pad = PAD) {
+  const col = document.createElement('div');
+  col.className = 'wheel-col' + (extraClass ? ' ' + extraClass : '');
+  col.tabIndex = 0;
+  col.setAttribute('role', 'listbox');
+  col.setAttribute('aria-label', ariaLabel);
+  const colId = `wheel-${wheelSequence += 1}`;
+
+  const inner = document.createElement('div');
+  inner.style.paddingTop = pad + 'px';
+  inner.style.paddingBottom = pad + 'px';
+
+  items.forEach((item, idx) => {
+    const el = document.createElement('div');
+    el.className = 'wheel-item';
+    el.id = `${colId}-${idx}`;
+    el.setAttribute('role', 'option');
+    el.setAttribute('aria-selected', String(idx === initIdx));
+    el.tabIndex = -1;
+    el.textContent = item.label;
+    el.addEventListener('click', () => col.scrollTo({ top: idx * ITEM_H, behavior: 'smooth' }));
+    inner.appendChild(el);
+  });
+  col.appendChild(inner);
+
+  function getIdx() {
+    return Math.min(Math.max(Math.round(col.scrollTop / ITEM_H), 0), items.length - 1);
+  }
+  function paintSelection(index) {
+    Array.from(inner.children).forEach((item, itemIndex) => {
+      const selected = itemIndex === index;
+      item.classList.toggle('is-selected', selected);
+      item.setAttribute('aria-selected', String(selected));
+    });
+    col.setAttribute('aria-activedescendant', `${colId}-${index}`);
+  }
+  function onSnap() {
+    const index = getIdx();
+    paintSelection(index);
+    onSelect(index);
+  }
+
+  if ('onscrollend' in window) {
+    col.addEventListener('scrollend', onSnap);
+  } else {
+    let t;
+    col.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(onSnap, 150); });
+  }
+
+  col.addEventListener('keydown', e => {
+    const cur = getIdx();
+    if (e.key === 'ArrowUp' && cur > 0) {
+      e.preventDefault();
+      col.scrollTo({ top: (cur - 1) * ITEM_H, behavior: 'smooth' });
+    } else if (e.key === 'ArrowDown' && cur < items.length - 1) {
+      e.preventDefault();
+      col.scrollTo({ top: (cur + 1) * ITEM_H, behavior: 'smooth' });
+    }
+  });
+
+  paintSelection(initIdx);
+  requestAnimationFrame(() => { col.scrollTop = initIdx * ITEM_H; });
+  return col;
+}
+
 function mountWheel(mountEl, initialValue, onChangeCb) {
   const [datePart, timePart] = (initialValue || nowStr()).split('T');
   const [initH, initM] = (timePart || '00:00').split(':').map(Number);
@@ -102,71 +170,6 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
     onChangeCb(`${dateItems[selDate].val}T${p2(selH)}:${p2(selM)}`);
   }
 
-  function makeCol(items, initIdx, onSelect, extraClass, ariaLabel) {
-    const col = document.createElement('div');
-    col.className = 'wheel-col' + (extraClass ? ' ' + extraClass : '');
-    col.tabIndex = 0;
-    col.setAttribute('role', 'listbox');
-    col.setAttribute('aria-label', ariaLabel);
-    const colId = `wheel-${wheelSequence += 1}`;
-
-    const inner = document.createElement('div');
-    inner.style.paddingTop = PAD + 'px';
-    inner.style.paddingBottom = PAD + 'px';
-
-    items.forEach((item, idx) => {
-      const el = document.createElement('div');
-      el.className = 'wheel-item';
-      el.id = `${colId}-${idx}`;
-      el.setAttribute('role', 'option');
-      el.setAttribute('aria-selected', String(idx === initIdx));
-      el.tabIndex = -1;
-      el.textContent = item.label;
-      el.addEventListener('click', () => col.scrollTo({ top: idx * ITEM_H, behavior: 'smooth' }));
-      inner.appendChild(el);
-    });
-    col.appendChild(inner);
-
-    function getIdx() {
-      return Math.min(Math.max(Math.round(col.scrollTop / ITEM_H), 0), items.length - 1);
-    }
-    function paintSelection(index) {
-      Array.from(inner.children).forEach((item, itemIndex) => {
-        const selected = itemIndex === index;
-        item.classList.toggle('is-selected', selected);
-        item.setAttribute('aria-selected', String(selected));
-      });
-      col.setAttribute('aria-activedescendant', `${colId}-${index}`);
-    }
-    function onSnap() {
-      const index = getIdx();
-      paintSelection(index);
-      onSelect(index);
-    }
-
-    if ('onscrollend' in window) {
-      col.addEventListener('scrollend', onSnap);
-    } else {
-      let t;
-      col.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(onSnap, 150); });
-    }
-
-    col.addEventListener('keydown', e => {
-      const cur = getIdx();
-      if (e.key === 'ArrowUp' && cur > 0) {
-        e.preventDefault();
-        col.scrollTo({ top: (cur - 1) * ITEM_H, behavior: 'smooth' });
-      } else if (e.key === 'ArrowDown' && cur < items.length - 1) {
-        e.preventDefault();
-        col.scrollTo({ top: (cur + 1) * ITEM_H, behavior: 'smooth' });
-      }
-    });
-
-    paintSelection(initIdx);
-    requestAnimationFrame(() => { col.scrollTop = initIdx * ITEM_H; });
-    return col;
-  }
-
   mountEl.innerHTML = '';
 
   const picker = document.createElement('div');
@@ -174,11 +177,11 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
   picker.setAttribute('role', 'group');
   picker.setAttribute('aria-label', t('picker.wheelAria'));
 
-  const dateCol = makeCol(dateItems, initDateIdx, idx => { selDate = idx; emit(); }, 'wheel-col-date', t('picker.colDate'));
+  const dateCol = makeWheelCol(dateItems, initDateIdx, idx => { selDate = idx; emit(); }, 'wheel-col-date', t('picker.colDate'));
   const div1 = document.createElement('div'); div1.className = 'wheel-divider'; div1.setAttribute('aria-hidden', 'true');
-  const hCol = makeCol(hourItems, initH, idx => { selH = idx; emit(); }, '', t('picker.colHour'));
+  const hCol = makeWheelCol(hourItems, initH, idx => { selH = idx; emit(); }, '', t('picker.colHour'));
   const div2 = document.createElement('div'); div2.className = 'wheel-divider'; div2.setAttribute('aria-hidden', 'true');
-  const mCol = makeCol(minItems, initM, idx => { selM = idx; emit(); }, '', t('picker.colMinute'));
+  const mCol = makeWheelCol(minItems, initM, idx => { selM = idx; emit(); }, '', t('picker.colMinute'));
 
   const highlight = document.createElement('div');
   highlight.className = 'wheel-highlight';
@@ -207,6 +210,171 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
   actions.appendChild(nowBtn);
   mountEl.appendChild(picker);
   mountEl.appendChild(actions);
+}
+
+// v1.5.0：段内区间选择器（切一刀 / 补一下共用）。原段落在一个自然日内，日期列只会引人
+// 选出非法值，所以这里只选时刻：两端各自夹在原段 [minTs, maxTs] 里（开始 ≤ 段尾−1 分、
+// 结束 ≥ 段首+1 分），滚到段外的值回弹到最近的合法时刻。「开始 < 结束」刻意不在这里
+// 强制——一端推着另一端跑会让人找不到自己刚设的值；交给事务 planner 在预览里报错。
+// 窄屏（<720）一行四列「时:分 – 时:分」替代原来两整块带日期列的滚轮，高度减半；宽屏
+// 两枚 HH:MM 文本框（↑↓ 步进 1 分钟，Shift 步进 10 分钟）。两种形态都带贴边捷径。
+export function mountRangePicker(mountEl, range, onChangeCb) {
+  const minTs = normalizeTimestamp(range && range.minTs);
+  const maxTs = normalizeTimestamp(range && range.maxTs);
+  if (!mountEl || !minTs || !maxTs || maxTs <= minTs) return null;
+  const day = minTs.slice(0, 10);
+  const nextDay = localDateKey(addDays(parseDateKey(day), 1));
+  const toMin = ts => {
+    const value = normalizeTimestamp(ts);
+    if (!value) return null;
+    if (value.slice(0, 10) !== day) return value > minTs ? 1440 : 0;
+    return Number(value.slice(11, 13)) * 60 + Number(value.slice(14, 16));
+  };
+  const toTs = m => (m >= 1440 ? `${nextDay}T00:00` : `${day}T${p2(Math.floor(m / 60))}:${p2(m % 60)}`);
+  const label = m => (m >= 1440 ? '24:00' : `${p2(Math.floor(m / 60))}:${p2(m % 60)}`);
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  const lo = toMin(minTs);
+  const hi = toMin(maxTs);
+  const bounds = { start: [lo, hi - 1], end: [lo + 1, hi] };
+  const value = {
+    start: clamp(toMin(range.startTs) ?? lo, ...bounds.start),
+    end: clamp(toMin(range.endTs) ?? hi, ...bounds.end)
+  };
+  const emit = () => onChangeCb({ startTs: toTs(value.start), endTs: toTs(value.end) });
+  const labels = {
+    start: { name: t('picker.rangeStart'), hour: t('picker.rangeStartHour'), minute: t('picker.rangeStartMinute'), text: t('picker.rangeStartTextAria') },
+    end: { name: t('picker.rangeEnd'), hour: t('picker.rangeEndHour'), minute: t('picker.rangeEndMinute'), text: t('picker.rangeEndTextAria') }
+  };
+
+  const coarse = useCompactTimePicker();
+  mountEl.dataset.pickerCompact = coarse ? '1' : '0';
+  mountEl.innerHTML = '';
+  const view = coarse ? buildRangeWheel() : buildRangeFields();
+
+  function set(which, next) {
+    const clamped = clamp(next, ...bounds[which]);
+    view.show(which, clamped);
+    if (clamped === value[which]) return;
+    value[which] = clamped;
+    emit();
+  }
+
+  function buildRangeWheel() {
+    const head = document.createElement('div');
+    head.className = 'range-wheel-head';
+    head.setAttribute('aria-hidden', 'true');
+    head.innerHTML = '<span></span><span></span>';
+    head.children[0].textContent = labels.start.name;
+    head.children[1].textContent = labels.end.name;
+    const picker = document.createElement('div');
+    picker.className = 'wheel-picker range-wheel';
+    picker.setAttribute('role', 'group');
+    picker.setAttribute('aria-label', t('picker.rangeAria'));
+    const minuteItems = Array.from({ length: 60 }, (_, i) => ({ val: i, label: p2(i) }));
+    const cols = {};
+    const sep = text => {
+      const el = document.createElement('div');
+      el.className = 'wheel-sep';
+      el.setAttribute('aria-hidden', 'true');
+      el.textContent = text;
+      return el;
+    };
+    ['start', 'end'].forEach(which => {
+      const [a, b] = bounds[which];
+      const hours = Array.from({ length: Math.floor(b / 60) - Math.floor(a / 60) + 1 }, (_, i) => Math.floor(a / 60) + i);
+      const pick = (part, v) => {
+        const cur = value[which];
+        const raw = part === 'h' ? v * 60 + (cur % 60) : Math.floor(cur / 60) * 60 + v;
+        const next = clamp(raw, a, b);
+        // 停在段外 → 滚回最近的合法值；那次程序滚动的 scrollend 回到这里时 raw===next===cur，自然收敛。
+        if (next !== raw) show(which, next);
+        if (next !== cur) { value[which] = next; emit(); }
+      };
+      const hCol = makeWheelCol(hours.map(h => ({ val: h, label: p2(h) })), Math.max(0, hours.indexOf(Math.floor(value[which] / 60))),
+        idx => pick('h', hours[idx]), 'wheel-col-range', labels[which].hour, RANGE_PAD);
+      const mCol = makeWheelCol(minuteItems, value[which] % 60,
+        idx => pick('m', idx), 'wheel-col-range', labels[which].minute, RANGE_PAD);
+      cols[which] = { hCol, mCol, hours };
+      if (which === 'end') picker.appendChild(sep('–'));
+      picker.append(hCol, sep(':'), mCol);
+    });
+    const highlight = document.createElement('div');
+    highlight.className = 'wheel-highlight';
+    picker.appendChild(highlight);
+    mountEl.append(head, picker);
+    function show(which, m) {
+      const { hCol, mCol, hours } = cols[which];
+      hCol.scrollTo({ top: Math.max(0, hours.indexOf(Math.floor(m / 60))) * ITEM_H, behavior: 'smooth' });
+      mCol.scrollTo({ top: (m % 60) * ITEM_H, behavior: 'smooth' });
+    }
+    return { show };
+  }
+
+  function buildRangeFields() {
+    const row = document.createElement('div');
+    row.className = 'range-fields';
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', t('picker.rangeAria'));
+    const inputs = {};
+    ['start', 'end'].forEach(which => {
+      if (which === 'end') {
+        const dash = document.createElement('span');
+        dash.className = 'range-dash';
+        dash.setAttribute('aria-hidden', 'true');
+        dash.textContent = '–';
+        row.appendChild(dash);
+      }
+      const field = document.createElement('label');
+      field.className = 'range-field';
+      const name = document.createElement('span');
+      name.textContent = labels[which].name;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'inp range-inp';
+      input.dataset.role = `range-${which}-text`;
+      input.setAttribute('inputmode', 'numeric');
+      input.setAttribute('aria-label', labels[which].text);
+      input.value = label(value[which]);
+      const commit = () => {
+        // 全角冒号 \uFF1A 也认：中文输入法下敲「9：20」是常态。
+        const match = /^(\d{1,2})\s*[:\uFF1A.]?\s*(\d{2})$/.exec(input.value.trim());
+        const typed = match && Number(match[2]) < 60 ? Number(match[1]) * 60 + Number(match[2]) : null;
+        if (typed === null || typed > 1440) { input.value = label(value[which]); return; }
+        set(which, typed);
+      };
+      input.addEventListener('change', commit);
+      input.addEventListener('keydown', e => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+        e.preventDefault();
+        const step = (e.shiftKey ? 10 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
+        set(which, value[which] + step);
+      });
+      field.append(name, input);
+      row.appendChild(field);
+      inputs[which] = input;
+    });
+    mountEl.appendChild(row);
+    return { show: (which, m) => { inputs[which].value = label(m); } };
+  }
+
+  const snaps = document.createElement('div');
+  snaps.className = 'range-snaps';
+  [
+    ['start', lo, t('picker.rangeSnapStart', { time: label(lo) }), t('picker.rangeSnapStartAria', { time: label(lo) })],
+    ['end', hi, t('picker.rangeSnapEnd', { time: label(hi) }), t('picker.rangeSnapEndAria', { time: label(hi) })]
+  ]
+    .forEach(([which, target, text, aria]) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'range-snap';
+      btn.dataset.snap = which;
+      btn.textContent = text;
+      btn.setAttribute('aria-label', aria);
+      btn.addEventListener('click', () => set(which, target));
+      snaps.appendChild(btn);
+    });
+  mountEl.appendChild(snaps);
+  return { set: (which, ts) => set(which, toMin(ts) ?? value[which]) };
 }
 
 function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {

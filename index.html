@@ -314,7 +314,8 @@
       const now = new Date();
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       if (snapshot.dataRaw !== localStorage.getItem('timelog.v1')
-        || snapshot.configRaw !== localStorage.getItem('timelog.config')) {
+        || snapshot.configRaw !== localStorage.getItem('timelog.config')
+        || snapshot.quotesRaw !== localStorage.getItem('timelog.quotes')) {
         setSnapshotState('rejected:data');
         return;
       }

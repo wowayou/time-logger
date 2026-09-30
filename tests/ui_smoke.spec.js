@@ -1105,10 +1105,11 @@ test('splitting a labeled segment makes three parts and leaves neighbors intact'
   // v56：切一刀入口在编辑 sheet 里（行内不再逐行常显）。
   await page.locator('.entry[data-id="today-1"] .e-what').click();
   await page.getByRole('button', { name: '在这条记录内部切一刀' }).click();
-  await page.locator('[data-role="backfill-start-mount"] [data-role="text"]').fill('2026-06-29 09:20');
-  await page.locator('[data-role="backfill-start-mount"] [data-role="text"]').blur();
-  await page.locator('[data-role="backfill-end-mount"] [data-role="text"]').fill('2026-06-29 09:40');
-  await page.locator('[data-role="backfill-end-mount"] [data-role="text"]').blur();
+  // v1.5.0：段内区间选择器——宽屏是两枚 HH:MM 文本框，日期恒为原段所在日。
+  await page.locator('[data-role="range-start-text"]').fill('09:20');
+  await page.locator('[data-role="range-start-text"]').blur();
+  await page.locator('[data-role="range-end-text"]').fill('09:40');
+  await page.locator('[data-role="range-end-text"]').blur();
   await page.locator('#form-what').fill('刷会手机');
   await page.locator('#form-ctag').fill('刷手机');
   await page.getByRole('button', { name: '保存时间记录' }).click();
@@ -1357,16 +1358,23 @@ test('split sheet freezes bounds and labels whole, edge, and internal previews',
   await page.locator('.entry[data-id="today-1"] .e-what').click();
   await page.getByRole('button', { name: '在这条记录内部切一刀' }).click();
   await expect(page.locator('#form-sheet-title')).toContainText('切一刀');
-  await expect(page.locator('[data-role="backfill-limits"]')).toContainText('09:00');
-  await expect(page.locator('[data-role="backfill-limits"]')).toContainText('10:00');
+  await expect(page.locator('[data-role="cut-source"]')).toContainText('09:00–10:00');
+  // v1.5.0：真实原段默认切出中间三分之一，一打开就是三段；整段/贴边靠贴边捷径一键到位。
+  await expect(page.locator('.preview-head')).toHaveText('切分后为三段');
+  await page.getByRole('button', { name: '开始时刻贴到原段起点 09:00' }).click();
+  await page.getByRole('button', { name: '结束时刻贴到原段终点 10:00' }).click();
   await expect(page.locator('.preview-head')).toHaveText('整段改为');
 
-  const start = page.locator('[data-role="backfill-start-mount"] [data-role="text"]');
-  const end = page.locator('[data-role="backfill-end-mount"] [data-role="text"]');
-  await start.fill('2026-06-29 09:20');
+  const start = page.locator('[data-role="range-start-text"]');
+  const end = page.locator('[data-role="range-end-text"]');
+  // 段外的值夹回原段边界（冻结边界仍由 planner 兜底）。
+  await start.fill('08:30');
+  await start.blur();
+  await expect(start).toHaveValue('09:00');
+  await start.fill('09:20');
   await start.blur();
   await expect(page.locator('.preview-head')).toHaveText('贴边后为两段');
-  await end.fill('2026-06-29 09:40');
+  await end.fill('09:40');
   await end.blur();
   await expect(page.locator('.preview-head')).toHaveText('切分后为三段');
   await expect(page.locator('[data-role="interval-preview"] .preview-row')).toHaveCount(3);

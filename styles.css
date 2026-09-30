@@ -619,6 +619,28 @@
       line-height: 1.35;
     }
     .form-inline-error[hidden] { display: none; }
+    /* v1.5.0：自定义标签撞上别的桶已有的同名标签——醒目的归属提醒，色相＝它真正会记入
+       的桶（与草稿 chip 同色），一键「改选 X」。不拦保存：规则本身没变，只是必须看得见。 */
+    .tag-owner-warn {
+      --warn-fg: var(--accent);
+      --warn-bg: var(--accent-bg);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 6px 12px;
+      margin-top: 6px;
+      padding: 9px 10px;
+      border-left: 3px solid var(--warn-fg);
+      border-radius: var(--r-ctl);
+      background: var(--warn-bg);
+      color: var(--text);
+      font-size: var(--fs-ui);
+      line-height: 1.4;
+    }
+    .tag-owner-warn[data-b="maintain"] { --warn-fg: var(--maintain); --warn-bg: var(--maintain-bg); }
+    .tag-owner-warn[data-b="leak"] { --warn-fg: var(--leak); --warn-bg: var(--leak-bg); }
+    .tag-owner-warn[hidden] { display: none; }
+    .tag-owner-warn .mini-btn { font-size: var(--fs-ui); }
 
     .form-time-row {
       display: flex;
@@ -1819,6 +1841,124 @@
     .preview-role { color: var(--muted); }
     .preview-time { color: var(--text); font-variant-numeric: tabular-nums; }
     .preview-label { min-width: 0; color: var(--text); overflow-wrap: anywhere; }
+    .preview-tag { color: var(--muted); font-weight: 400; }
+
+    /* v1.5.0 切一刀 / 补一下：先看结果（原段 + 比例切分条 + 逐段行），再选时刻。
+       颜色沿用时间轴 data-b→--rail 语法；新段满色，前后原段压暗，没选标签的新段是
+       accent 斜纹描边（「待填写」）。条只是逐段文字行的图示，aria-hidden。 */
+    .cut-overview { display: grid; gap: 6px; }
+    .cut-source {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 2px 8px;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .cut-source-what { font-weight: 650; color: var(--text); overflow-wrap: anywhere; }
+    .cut-source-tag { color: var(--muted); }
+    .cut-source-meta { margin-left: auto; color: var(--muted); font-size: var(--fs-ui); font-variant-numeric: tabular-nums; }
+    .cut-bar {
+      display: flex;
+      gap: 2px;
+      height: 14px;
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .cut-part {
+      flex-basis: 0;
+      min-width: 3px;
+      background: var(--rail, var(--track));
+      transition: flex-grow var(--t-fast);
+    }
+    .cut-before, .cut-after { opacity: 0.38; }
+    .cut-part[data-b="unrecorded"] { opacity: 1; }
+    .cut-part[data-b="pending"] {
+      background: repeating-linear-gradient(-45deg, var(--accent-bg) 0 5px, transparent 5px 10px);
+      box-shadow: inset 0 0 0 1.5px var(--accent);
+      border-radius: 7px;
+    }
+    .cut-part[data-b="job"], .preview-row[data-b="job"] { --rail: var(--accent); }
+    .cut-part[data-b="maintain"], .preview-row[data-b="maintain"] { --rail: var(--maintain); }
+    .cut-part[data-b="leak"], .preview-row[data-b="leak"] { --rail: var(--leak); }
+    .cut-part[data-b="unrecorded"], .preview-row[data-b="unrecorded"] { --rail: var(--track); }
+    .cut-scale {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--muted);
+      font-size: var(--fs-cap);
+      font-variant-numeric: tabular-nums;
+    }
+    .cut-scale-dur { color: var(--text); font-weight: 600; text-align: center; }
+    .cut-scale-dur.is-error { color: var(--danger); }
+    .cut-overview + .interval-preview .preview-role::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 6px;
+      border-radius: 50%;
+      background: var(--rail, var(--track));
+      vertical-align: 1px;
+    }
+    .cut-overview + .interval-preview .preview-before .preview-role::before,
+    .cut-overview + .interval-preview .preview-after .preview-role::before { opacity: 0.45; }
+    .cut-overview + .interval-preview .preview-row[data-b="unrecorded"] .preview-role::before { opacity: 1; }
+    .cut-overview + .interval-preview .preview-row[data-b="pending"] .preview-role::before {
+      background: transparent;
+      box-shadow: inset 0 0 0 1.5px var(--accent);
+    }
+    .cut-overview + .interval-preview .preview-new .preview-label { font-weight: 600; }
+
+    /* v1.5.0 段内区间选择器：一行四列「时:分 – 时:分」，比单点滚轮矮（160px，须与
+       pickers.js RANGE_PAD 同步）；宽屏为两枚 HH:MM 文本框。 */
+    .range-wheel-head {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: var(--fs-cap);
+      text-align: center;
+    }
+    .wheel-picker.range-wheel { height: 160px; }
+    .wheel-col-range .wheel-item { font-size: 17px; font-variant-numeric: tabular-nums; }
+    .wheel-sep {
+      position: relative;
+      z-index: 1;
+      flex: 0 0 auto;
+      align-self: center;
+      padding: 0 1px;
+      color: var(--muted);
+      font-size: 17px;
+      font-weight: 600;
+      user-select: none;
+    }
+    .range-wheel > .wheel-sep:nth-of-type(2) { padding: 0 6px; }
+    .range-snaps {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 2px;
+    }
+    .range-snap {
+      min-height: 44px;
+      padding: 0 2px;
+      border: none;
+      background: none;
+      color: var(--accent);
+      font-family: inherit;
+      font-size: var(--fs-ui);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+    }
+    .range-snap:active { opacity: 0.75; }
+    .range-snap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+    .range-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+    .range-field { display: grid; gap: 4px; color: var(--muted); font-size: var(--fs-cap); }
+    .range-inp { width: 7.5em; text-align: center; font-variant-numeric: tabular-nums; }
+    .range-dash { padding-bottom: 12px; color: var(--muted); }
     .delete-confirm-body { gap: 14px; }
     .delete-target {
       display: grid;
@@ -1948,6 +2088,13 @@
     /* 块级流里按钮缩到内容宽；补回 grid 轨道下的整行形态（与编辑 sheet 的
        cell-action 一致）。 */
     .motto-body .cell-action { display: block; width: 100%; }
+    /* v1.5.0（D31）：单句格言 / 文字轮播二选一。面板内同样走块级流（P34：承载表单的
+       正文不放进会被压缩的 grid 轨道）。 */
+    .motto-mode-seg { display: flex; }
+    .motto-mode-seg button { flex: 1; }
+    .motto-pane > * + * { margin-top: 12px; }
+    .quotes-input { font-size: 16px; line-height: 1.55; }
+    .quotes-count { overflow-wrap: anywhere; }
     .app-version {
       text-align: center;
       color: var(--faint);

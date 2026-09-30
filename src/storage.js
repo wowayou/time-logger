@@ -121,6 +121,185 @@ export function resolveMotto(config = loadConfig()) {
   return config.motto === undefined ? defaultMotto() : config.motto;
 }
 
+// ── v1.5.0 文字轮播（D31 显式修订 D11「格言不做多条轮换」）──────────────
+// 用户导入一段喜欢的文字（书摘等），格言位置每天按顺序显示其中一句；单句格言保留，
+// 二者在格言设置里二选一。**独立键**而非 config 字段：一本书的摘录可达几十 KB，
+// config 在一次渲染里会被读很多次（年视图有读取次数守卫），不该为它背这个解析成本。
+// 边界（D31）：不做收藏、出处、逐句编辑界面、历史、按阶段切换——文本框里的「每行
+// 一句」就是全部管理界面。
+export const QUOTES_KEY = 'timelog.quotes';
+export const QUOTE_MAX_ITEMS = 1000;
+// 规则须幂等：保存后文本框回填为每行一句，再存一次不得再变。≤100 字的行原样保留
+// （用户刻意放在一行的两句话不会被拆开），>100 字才按句末标点切，切完仍 >160 硬切。
+const QUOTE_SPLIT_OVER = 100;
+const QUOTE_MAX_LEN = 160;
+// 句末标点：。！？!?…；收尾标点另加 」』”’"'）)]。写成转义——运行时代码不放 CJK 字面量（audit）。
+const QUOTE_TERMINATORS = '\u3002\uFF01\uFF1F!?\u2026';
+const QUOTE_TRAILERS = `${QUOTE_TERMINATORS}\u300D\u300F\u201D\u2019"'\uFF09)]`;
+
+/**
+ * @typedef {Object} QuoteLibrary
+ * @property {1} version
+ * @property {boolean} enabled 格言位置是否用文字轮播替代单句格言（无句子时恒 false）
+ * @property {string[]} items 每项一句，顺序即轮播顺序
+ * @property {string} anchor YYYY-MM-DD：句子上次变更的那天，这天显示第一句；'' 表示未知
+ */
+
+// 长行按句末标点切开：连续的句末标点与紧随的收尾引号/括号归入本句；英文句点须后接
+// 空白或行尾才算句末，避免把 3.14、e.g 这类切断。切出来不足 4 个字的碎片并回上一句。
+function splitSentences(line) {
+  const out = [];
+  let buf = '';
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    buf += ch;
+    const next = line[i + 1] || '';
+    const isEnd = QUOTE_TERMINATORS.includes(ch) || (ch === '.' && (next === '' || /\s/.test(next)));
+    if (!isEnd) continue;
+    while (i + 1 < line.length && QUOTE_TRAILERS.includes(line[i + 1])) buf += line[++i];
+    const piece = buf.trim();
+    buf = '';
+    if (!piece) continue;
+    if (piece.length < 4 && out.length) out[out.length - 1] += piece;
+    else out.push(piece);
+  }
+  const rest = buf.trim();
+  if (rest) {
+    if (rest.length < 4 && out.length) out[out.length - 1] += rest;
+    else out.push(rest);
+  }
+  return out;
+}
+
+/**
+ * 把粘贴或导入的文本拆成轮播句。规则（格言设置里有同义说明）：
+ * - 一行一句；空行、Markdown 标题行、分隔线与代码块跳过；引用 `>` 与列表记号去掉；
+ * - 超过 100 字的行按句末标点（。！？!?… 与后接空白的英文句点）切开；
+ * - 切完仍超过 160 字（整段没有句末标点）的硬切；最多保留 1000 句。
+ * @param {string} text
+ * @returns {{ items: string[], total: number }} total 为截断前的句数
+ */
+export function splitQuoteText(text) {
+  const lines = String(text || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').split('\n');
+  const items = [];
+  let fenced = false;
+  for (const rawLine of lines) {
+    let line = rawLine.replace(/\s+/g, ' ').trim();
+    if (/^(```|~~~)/.test(line)) { fenced = !fenced; continue; }
+    if (fenced || /^([-*_] ?){3,}$/.test(line) || /^#{1,6} /.test(line)) continue;
+    line = line.replace(/^(> ?)+/, '').replace(/^([-*+]|\d{1,3}[.)\u3001]) /, '').trim();
+    if (!line) continue;
+    const pieces = line.length > QUOTE_SPLIT_OVER ? splitSentences(line) : [line];
+    pieces.forEach(piece => {
+      for (let i = 0; i < piece.length; i += QUOTE_MAX_LEN) {
+        const chunk = piece.slice(i, i + QUOTE_MAX_LEN).trim();
+        if (chunk) items.push(chunk);
+      }
+    });
+  }
+  return { items: items.slice(0, QUOTE_MAX_ITEMS), total: items.length };
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {QuoteLibrary}
+ */
+export function normalizeQuotes(raw) {
+  const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? /** @type {Record<string, unknown>} */ (raw) : {};
+  const items = Array.isArray(src.items)
+    ? src.items
+      .filter(item => typeof item === 'string')
+      .map(item => item.replace(/\s+/g, ' ').trim().slice(0, QUOTE_MAX_LEN).trim())
+      .filter(Boolean)
+      .slice(0, QUOTE_MAX_ITEMS)
+    : [];
+  const anchor = typeof src.anchor === 'string' && parseDateKey(src.anchor) ? src.anchor : '';
+  return { version: 1, enabled: src.enabled === true && items.length > 0, items, anchor };
+}
+
+/** @returns {string | null} */
+export function readQuotesRaw() {
+  try {
+    return localStorage.getItem(QUOTES_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** @returns {QuoteLibrary} */
+export function loadQuotes() {
+  const raw = readQuotesRaw();
+  if (!raw) return normalizeQuotes(null);
+  try {
+    return normalizeQuotes(JSON.parse(raw));
+  } catch {
+    return normalizeQuotes(null);
+  }
+}
+
+/**
+ * 没有句子时整键删除（不留空壳，与 config 的「空集不写键」同一精神）。
+ * @param {unknown} lib
+ * @returns {{ ok: true } | { ok: false, reason: 'quota' }}
+ */
+export function saveQuotes(lib) {
+  const normalized = normalizeQuotes(lib);
+  try {
+    if (!normalized.items.length) localStorage.removeItem(QUOTES_KEY);
+    else localStorage.setItem(QUOTES_KEY, JSON.stringify(normalized));
+    return { ok: true };
+  } catch (e) {
+    if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) return { ok: false, reason: 'quota' };
+    throw e;
+  }
+}
+
+function dayOrdinal(dayKey) {
+  const d = parseDateKey(dayKey);
+  return d ? Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000) : 0;
+}
+
+/**
+ * 某一天轮到的那一句：从 anchor 那天的第一句起，每过一个自然日往下一句，读完回到开头。
+ * 只由日期决定——同一天里刷新、启动快照、分钟 tick 都不会换句。
+ * @param {QuoteLibrary} lib
+ * @param {string} dayKey
+ * @returns {string}
+ */
+export function quoteForDay(lib, dayKey) {
+  const items = (lib && lib.items) || [];
+  if (!items.length) return '';
+  const offset = dayOrdinal(dayKey) - dayOrdinal(lib.anchor || '1970-01-01');
+  return items[((offset % items.length) + items.length) % items.length];
+}
+
+/**
+ * 格言位置的展示唯一入口：文字轮播开启且有句子时显示当天那句，否则回落到单句格言
+ * 的三态（'' 表示隐藏）。
+ * @param {TagConfig} config
+ * @param {QuoteLibrary} lib
+ * @param {string} dayKey
+ * @returns {{ text: string, kind: 'quote' | 'motto' }}
+ */
+export function resolveMottoLine(config, lib, dayKey) {
+  if (lib && lib.enabled && lib.items.length) return { text: quoteForDay(lib, dayKey), kind: 'quote' };
+  return { text: resolveMotto(config), kind: 'motto' };
+}
+
+/**
+ * 导入备份里的句库：与格言同一精神——本机优先。本机已有句子就保留本机，只有本机
+ * 从未设置过时才采用备份（含它的开关与起始日，换机恢复时原样接回）。
+ * @param {unknown} raw 备份里的 `quotes` 字段（已过 validateImportData）
+ * @returns {{ ok: boolean, adopted: boolean }}
+ */
+export function adoptImportedQuotes(raw) {
+  if (raw === undefined) return { ok: true, adopted: false };
+  const incoming = normalizeQuotes(raw);
+  if (!incoming.items.length || loadQuotes().items.length) return { ok: true, adopted: false };
+  const write = saveQuotes(incoming);
+  return { ok: write.ok, adopted: write.ok };
+}
+
 // SPEC-014 §1.5（维护者拍板方案 B，2026-07-31）：默认标签种子按当前 locale 分流，
 // 但**只在首次初始化**生效——见下面 normalizeConfig 的 `!raw` 分支，那是唯一
 // 读这张表的地方。已有 config 的用户切换语言**不会**触发重新种子：这里只
@@ -526,6 +705,25 @@ export function bucketForTag(tag, config = loadConfig()) {
 }
 
 /**
+ * v1.5.0：一个名字**已在 config 里登记**时归哪个桶；未登记返回 ''。录入表单用它判断
+ * 「所选桶」与「已有同名标签的桶」是否打架——`rememberCustomTagForBucket` 从不改动已
+ * 登记标签的桶（v30），所以打架时记录会静默记进已有的桶。与 `bucketForTag` 不同，这里
+ * 不走 LEGACY_ALIASES 兜底：未登记的名字会按用户所选的桶新建，旧别名管不到它。
+ * @param {string} tag
+ * @param {TagConfig} [config]
+ * @returns {'' | 'job' | 'maintain' | 'leak'}
+ */
+export function configuredBucketForTag(tag, config = loadConfig()) {
+  const name = cleanName(tag);
+  if (!name || name === RESERVED_UNKNOWN_TAG) return '';
+  const key = tagKey(name);
+  if (config.mainline.some(item => tagKey(item) === key)) return 'job';
+  const chip = config.chips.find(item => tagKey(item.name) === key);
+  // normalizeConfig 保证 chip.bucket ∈ maintain/leak。
+  return chip ? /** @type {'maintain' | 'leak'} */ (chip.bucket) : '';
+}
+
+/**
  * v85：把一个用户输入的标签名折成 config 里的**权威拼写**（若存在）。录入时敲
  * `sleep` 而 config 里是 `Sleep`，记录应当存 `Sleep`——否则时间轴显示 `#sleep`、
  * 设置页显示 `Sleep`，同一个标签两副面孔。找不到就原样返回。
@@ -784,6 +982,16 @@ export function validateImportData(imported) {
   if (imported.firstUsedDate !== undefined
     && (typeof imported.firstUsedDate !== 'string' || !parseDateKey(imported.firstUsedDate))) {
     errors.push(t('import.errFirstUsedDate'));
+  }
+  // v1.5.0：文字轮播句库。整批预检同一纪律——形状不对就拦下整批，不静默丢。
+  if (imported.quotes !== undefined) {
+    const q = imported.quotes;
+    if (!q || typeof q !== 'object' || Array.isArray(q)
+      || !Array.isArray(q.items) || q.items.some(item => typeof item !== 'string')
+      || (q.enabled !== undefined && typeof q.enabled !== 'boolean')
+      || (q.anchor !== undefined && q.anchor !== '' && (typeof q.anchor !== 'string' || !parseDateKey(q.anchor)))) {
+      errors.push(t('import.errQuotes'));
+    }
   }
   if (errors.length) {
     return {

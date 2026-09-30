@@ -440,6 +440,11 @@ import {
   rememberCustomTagForBucket,
   loadConfig,
   validateImportData,
+  configuredBucketForTag,
+  splitQuoteText,
+  normalizeQuotes,
+  quoteForDay,
+  resolveMottoLine,
   CONFIG_KEY
 } from './src/storage.js';
 
@@ -953,6 +958,28 @@ assert(+y2025.end === +y2024.end, 'completed non-leap year matches whole prior l
 // 进行中的当期仍走同步进度裁剪（不受上面修复影响）：2月过到 15 号，matched 落在 1 月中旬。
 const febInProgress = elapsedMatchedRange('month', '2026-02-15', new Date(2026, 1, 15, 12, 0));
 assert(+febInProgress.end < +janRange.end, 'in-progress current month still clips prior month to elapsed progress');
+
+// v1.5.0：录入表单的归属判据——名字已登记在哪个桶（大小写不敏感），未登记返回 ''。
+const ownerConfig = normalizeConfig({ version: 1, mainline: ['求职推进', '阅读'], chips: [{ name: 'Reading', bucket: 'leak', longOk: false }] });
+assert(configuredBucketForTag('阅读', ownerConfig) === 'job', 'a mainline name is owned by job');
+assert(configuredBucketForTag('reading', ownerConfig) === 'leak', 'owner lookup is case-insensitive (tagKey)');
+assert(configuredBucketForTag('冥想', ownerConfig) === '', 'an unregistered name has no owner');
+assert(configuredBucketForTag('未知', ownerConfig) === '', 'the reserved unknown tag never has an owner');
+
+// v1.5.0（D31）：文字轮播拆句与按日轮换。
+const split = splitQuoteText('# 标题\n\n> 引用一句。\n- 列表一句\n---\n' + '甲乙丙丁戊己庚辛。'.repeat(12) + '\n```\n代码\n```\n');
+assert(split.items[0] === '引用一句。' && split.items[1] === '列表一句', `markdown structure stripped, got ${JSON.stringify(split.items.slice(0, 2))}`);
+assert(!split.items.some(item => item.includes('标题') || item.includes('代码')), 'headings and code fences are skipped');
+assert(split.items.length === 14 && split.items.slice(2).every(item => item === '甲乙丙丁戊己庚辛。'), `a >100-char line splits at sentence ends, got ${split.items.length}`);
+const resplit = splitQuoteText(split.items.join('\n'));
+assert(JSON.stringify(resplit.items) === JSON.stringify(split.items), 'splitting is idempotent (saved text re-splits to itself)');
+assert(splitQuoteText('x'.repeat(400)).items.every(item => item.length <= 160), 'unpunctuated text is hard-cut at 160');
+assert(splitQuoteText(Array.from({ length: 1200 }, (_, i) => `第${i}句`).join('\n')).items.length === 1000, 'at most 1000 lines are kept');
+const rot = normalizeQuotes({ enabled: true, items: ['a', 'b', 'c'], anchor: '2026-06-29' });
+assert(['2026-06-28', '2026-06-29', '2026-06-30', '2026-07-02'].map(day => quoteForDay(rot, day)).join('') === 'caba', 'one line a day from the anchor, wrapping both ways');
+assert(normalizeQuotes({ enabled: true, items: [] }).enabled === false, 'rotation cannot be enabled without lines');
+assert(resolveMottoLine(ownerConfig, rot, '2026-06-30').text === 'b', 'enabled rotation wins the motto spot');
+assert(resolveMottoLine(ownerConfig, { ...rot, enabled: false }, '2026-06-30').kind === 'motto', 'disabled rotation falls back to the motto');
 
 console.log('confirm_logic_smoke passed');
 '''

@@ -182,6 +182,7 @@ export function createIoActions(deps) {
   function exportData() {
     const d = deps.load();
     const firstUsedDate = deps.readFirstUsedDate();
+    const quotes = deps.loadQuotes();
     return {
       ...d,
       version: 1,
@@ -189,6 +190,8 @@ export function createIoActions(deps) {
       config: deps.loadConfig(),
       // 起始日只在存在时写入：空串会被 validateImportData 判为非法日期。
       ...(firstUsedDate ? { firstUsedDate } : {}),
+      // v1.5.0：文字轮播句库随完整备份走（可选顶层字段，旧版本导入时忽略未知键）。
+      ...(quotes.items.length ? { quotes } : {}),
       entries: sortedEntriesFrom(d.entries).map(entry => ({ ...entry }))
     };
   }
@@ -587,13 +590,17 @@ export function createIoActions(deps) {
     }
     // 记录与 config 都已落库后才接起始日：它单调不减且纯展示，失败不需要回滚。
     deps.adoptImportedFirstUsedDate(imported.firstUsedDate);
+    // 句库同样排在记录与 config 之后、本机优先；写不下（配额）不回滚已导入的记录，
+    // 但必须在完成提示里说出来，不能静默丢。
+    const quotes = deps.adoptImportedQuotes(imported.quotes);
     deps.render();
     // SPEC-012：不在这里亮 toast——调用方（confirmImportShift）先关表单 sheet，
     // 等关闭动画收尾之后再显示，避免正在滑出的 sheet（z-index 更高）盖住 toast。
     return {
       imported: plan.imported,
       skipped: plan.skipped,
-      resolvedConflicts: plan.resolvedConflicts || 0
+      resolvedConflicts: plan.resolvedConflicts || 0,
+      quotesFailed: !quotes.ok
     };
   }
 
@@ -607,7 +614,8 @@ export function createIoActions(deps) {
     pendingImport = null;
     importResolutions = {};
     deps.closeForm();
-    const message = t('io.importDone', { imported: result.imported, skipped: result.skipped, conflicts: result.resolvedConflicts });
+    const message = t('io.importDone', { imported: result.imported, skipped: result.skipped, conflicts: result.resolvedConflicts })
+      + (result.quotesFailed ? t('io.quotesNotImported') : '');
     // SPEC-012：sheet 关闭动画播完（或 reduced-motion 下没有动画）之后才亮 toast，
     // 让它出现在一个干净的、没有 sheet 遮挡的屏幕上；而不是和 v73 一样在 sheet
     // 还在滑出时就亮起、被半透明遮罩盖过去。
