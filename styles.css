@@ -2405,14 +2405,44 @@
     .cfg-defaults-preview {
       margin-top: var(--sp-2);
     }
-    .cfg-defaults-actions,
-    .cfg-merge-actions {
+    .cfg-defaults-actions {
       display: flex;
       gap: var(--sp-2);
       margin-top: 6px;
     }
-    /* 合并提示里的 cell-action 下边距会把 danger 键拉高 10px，只在这里抹平。 */
-    .cfg-merge-actions .cell-action { margin-bottom: 0; }
+    /* 合并提示两键（v1.5.4，真机反馈「显示一般」）：原来直接沿用 cell-action / cell-danger——
+       没有水平内边距，缩成两颗贴字、宽窄不一、靠左的小胶囊；10% 色调底放在同样是 danger
+       色调的提示框里，「合并」的红底几乎融进框里，「先不合并」的紫底又和粉框打架。
+       改成等宽两键撑满一行、卡片底把按钮从提示框里托出来：左「先不合并」中性，右「合并」
+       danger 字 + danger 描边——仿 iOS 双按钮提示框，破坏性动作靠颜色与位置区分。
+       不用实心红底白字：暗色 --danger 上白字对比度约 3.6:1，不到正文 4.5:1。
+       只作用于这一处；整行按钮的全局收敛归 SPEC-016 B 期。 */
+    .cfg-merge-actions {
+      display: flex;
+      flex: 1 1 100%;
+      gap: var(--sp-2);
+      margin-top: var(--sp-1);
+    }
+    .cfg-merge-actions > button {
+      flex: 1 1 0;
+      min-width: 0;
+      min-height: var(--control-h);
+      margin: 0;
+      padding: 0 var(--sp-3);
+      background: var(--card);
+    }
+    .cfg-merge-actions > .cell-action {
+      color: var(--text);
+      box-shadow: inset 0 0 0 1px var(--border);
+    }
+    .cfg-merge-actions > .cell-danger {
+      color: var(--danger);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 55%, transparent);
+    }
+    .cfg-merge-actions > button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
     .cfg-line {
       display: flex;
       align-items: center;
