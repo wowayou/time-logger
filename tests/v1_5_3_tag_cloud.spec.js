@@ -257,6 +257,6 @@ test('English: the chip label, fold and search read naturally', async ({ page })
   await page.getByRole('button', { name: 'Configure tags' }).click();
   await expect(page.locator('.cfg-fold')).toHaveText(/Past focuses · 12/);
   await expect(page.locator('[data-role="cfg-search"]')).toHaveAttribute('placeholder', 'Filter tags');
-  await expect(cfgRow(page, '睡觉').locator(':scope > .cfg-chip')).toHaveAttribute('aria-label', '睡觉, 1 entries');
+  await expect(cfgRow(page, '睡觉').locator(':scope > .cfg-chip')).toHaveAttribute('aria-label', '睡觉, 1 entry');
   await expect(cfgRow(page, '冥想').locator(':scope > .cfg-chip')).toHaveAttribute('aria-label', '冥想, no entries');
 });

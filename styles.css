@@ -2405,10 +2405,29 @@
     .cfg-defaults-preview {
       margin-top: var(--sp-2);
     }
+    /* 默认标签预览两键（v1.5.5）：与合并提示同一病——两个都是 cell-action、无水平内边距，
+       缩成两颗一模一样的贴字小胶囊，主次不分。改为等宽撑满、左「取消」中性（壳面底）、
+       右「添加」保留 accent 浅底作主按钮，顺序与合并提示一致。不用 accent 实心底白字：
+       暗色 --accent（#a99fff）上白字对比度约 2.4:1。cell-action 自带的 10px 下边距保留
+       （v1.4.2 起由用例守着）。 */
     .cfg-defaults-actions {
       display: flex;
       gap: var(--sp-2);
       margin-top: 6px;
+    }
+    .cfg-defaults-actions > button {
+      flex: 1 1 0;
+      min-width: 0;
+      min-height: var(--control-h);
+      padding: 0 var(--sp-3);
+    }
+    .cfg-defaults-actions > [data-action="cancel-locale-defaults"] {
+      background: var(--chrome);
+      color: var(--text);
+    }
+    .cfg-defaults-actions > button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
     /* 合并提示两键（v1.5.4，真机反馈「显示一般」）：原来直接沿用 cell-action / cell-danger——
        没有水平内边距，缩成两颗贴字、宽窄不一、靠左的小胶囊；10% 色调底放在同样是 danger

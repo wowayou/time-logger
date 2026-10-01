@@ -4,7 +4,7 @@
 // Commercial licensing available on request; contact via the repository above.
 import { fmtMins, hhmm, localDateTimeKey, minsBetweenDates, normalizeTimestamp } from './time.js';
 import { formatPercent } from './stats.js';
-import { getLocale, t } from './i18n.js';
+import { getLocale, plural, t } from './i18n.js';
 import {
   BUCKETS,
   BUCKET_ORDER,
@@ -370,7 +370,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.5.4';
+export const APP_VERSION = '1.5.5';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -1040,6 +1040,15 @@ export const CFG_SEARCH_MIN_TAGS = 12;
 export const CFG_HISTORY_FOLD_MIN = 3;
 
 /**
+ * 「N 条记录 / N entries」：英文按单复数换词尾（1 entry），中文两形同值。标签设置的
+ * 条数、chip 读屏名称与合并提示共用这一处。
+ * @param {number} n
+ */
+export function entriesCountLabel(n) {
+  return plural(n, { one: t('cfg.countOne', { n }), other: t('cfg.countOther', { n }) });
+}
+
+/**
  * SPEC-017：chip 面的读屏名称。模板首渲与 sheet_controller 的即时同步共用这一处，
  * 免得两边各拼一套、说法渐渐不一致。
  */
@@ -1047,7 +1056,7 @@ export function configChipLabel({ name, was = '', count = 0, isNew = false, curr
   const parts = [name];
   if (was) parts.push(t('cfg.wasName', { name: was }));
   if (current) parts.push(t('cfg.currentBadge'));
-  parts.push(isNew ? t('cfg.stateNew') : (count ? t('cfg.count', { n: count }) : t('cfg.noEntries')));
+  parts.push(isNew ? t('cfg.stateNew') : (count ? entriesCountLabel(count) : t('cfg.noEntries')));
   if (pendingDelete) parts.push(t('cfg.statePendingDelete'));
   else if (dirty) parts.push(t('cfg.stateEdited'));
   return parts.join(t('cfg.ariaJoin'));
@@ -1102,7 +1111,7 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
   // 就知道这行属于哪个桶。data-b 与时间轴同源（styles.css 按它上色）。
   const countLine = name => {
     const count = countEntriesWithTag(entries, name);
-    return count ? `<span class="cfg-count">${t('cfg.count', { n: count })}</span>` : '';
+    return count ? `<span class="cfg-count">${entriesCountLabel(count)}</span>` : '';
   };
   // v82：删除只对**零记录**的标签开放——SPEC-007 当初不做删除的理由是「历史记录
   // 会变成孤儿标签」，这个理由在没有任何记录引用它时并不成立（试错建出来的标签
@@ -1197,8 +1206,8 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
         ${preview.additions.length ? `<div class="form-hint" data-role="defaults-additions">${t('cfg.addDefaultsPreview', { n: preview.additions.length, list: preview.additions.map(chip => esc(chip.name)).join(t('cfg.listJoin')) })}</div>` : `<div class="form-hint" data-role="defaults-none">${t('cfg.addDefaultsNone')}</div>`}
         ${preview.skipped.length ? `<div class="form-hint" data-role="defaults-skipped">${t('cfg.addDefaultsSkipped', { n: preview.skipped.length, list: preview.skipped.map(esc).join(t('cfg.listJoin')) })}</div>` : ''}
         ${preview.additions.length ? `<div class="cfg-defaults-actions">
-          <button class="cell-action" type="button" data-action="apply-locale-defaults">${t('cfg.addDefaultsApply')}</button>
           <button class="cell-action" type="button" data-action="cancel-locale-defaults">${t('cfg.addDefaultsCancel')}</button>
+          <button class="cell-action" type="button" data-action="apply-locale-defaults">${t('cfg.addDefaultsApply')}</button>
         </div>` : ''}
       </div>` : ''}
       <div class="form-inline-error" data-role="config-error" hidden></div>

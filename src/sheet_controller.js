@@ -57,7 +57,7 @@ import {
   validateTs,
   validateTsForMode
 } from './time.js';
-import { bucketHint, configChipLabel, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderTagPicker, renderTagSuggestions } from './ui.js';
+import { bucketHint, configChipLabel, entriesCountLabel, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderTagPicker, renderTagSuggestions } from './ui.js';
 
 export function createSheetController(deps) {
   let sheetScrollY = 0;
@@ -2331,7 +2331,7 @@ export function createSheetController(deps) {
     const text = document.createElement('div');
     // 用户把一个标签改成了另一个的名字时，说「你把 A 改成了 B」——「A 与 B 是同一个
     // 标签名」那句是给存量 sleep/Sleep 并存写的，套在改名上会让人看不懂。
-    const vars = { from: plan.from, to: plan.to, n: plan.count };
+    const vars = { from: plan.from, to: plan.to, entries: entriesCountLabel(plan.count) };
     text.textContent = plan.renamed ? t('config.mergePromptRenamed', vars) : t('config.mergePrompt', vars);
     const actions = document.createElement('div');
     actions.className = 'cfg-merge-actions';
