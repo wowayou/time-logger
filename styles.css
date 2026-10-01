@@ -10,18 +10,41 @@
   - v72（推翻 D11 折中，SPEC-004）：亮色整体回归冷白——--bg/--input/--track/--border/--shadow-1/2/3
     全部去暖（`rgba(48,42,30,…)`→`rgba(28,32,44,…)`）；--card 与三桶彩色本体/tint、--text/--muted/--faint
     不动；WCAG 对比度只升不降（新 bg 更亮）
-  - 结构令牌全站唯一：圆角 12/16/22、动效 140/280ms、字阶 12/13/15/17
+  - 结构令牌全站唯一：圆角 12/16/22、动效 140/280ms、字阶 12/13/15/17（v1.5.2 SPEC-016 A 期扩充，见下方结构令牌块）
   - 海拔用阴影（亮）/ 阴影+顶光（暗），描边整体降级为 hairline 或透明占位
   - 行为零变更：选择器、布局机制（P13-P16 护栏）与 v32 完全一致
 */
-    /* === 结构令牌（不随主题变） === */
+    /* === 结构令牌（不随主题变） ===
+       SPEC-016 A 期（v1.5.2）收敛：令牌块以外的 font-size / border-radius 一律引用令牌
+       （或 inherit / 0 / 50%）；确属例外的裸值必须在同一行附一条以「raw:」开头、
+       写明理由的注释，project_audit.py 的 audit_css_tokens 按行检查并封顶例外数量。
+       - 圆角：sm 8 小控件（36px 级按钮、日历格、提示气泡）/ ctl 12 输入与 sheet 内分组 /
+         card 16 页面卡片 / sheet 22 / pill 胶囊与「高度一半」的条形端。
+       - 字号：cap 12 / ui 13 / ui-strong 14 / body 15 / input 16 / title 17。
+         --fs-input 是输入控件的下限（iOS 聚焦放大红线，不得调小），body 基准、sheet
+         头部文字按钮、FAB 主文案同值共用。展示用大数字（hero、时间分析）按版式单定，
+         走 raw 例外，不进字阶。
+       - 间距：4px 刻度 --sp-1…--sp-6（4/8/12/16/24/32），A 期只把恰好落在刻度上的值
+         换成令牌；2/6/10/14 等半档与奇数值暂保留原值，留待 B 期按组件收敛（见 SPEC-016）。
+       - 字重：600 / 700 两档为主（A 期把 650 并入 600），500/400 各有零星用处。 */
     :root {
+      --r-sm: 8px;
       --r-ctl: 12px;
       --r-card: 16px;
       --r-sheet: 22px;
+      --r-pill: 999px;
       --fs-cap: 12px;
       --fs-ui: 13px;
+      --fs-ui-strong: 14px;
       --fs-body: 15px;
+      --fs-input: 16px;
+      --fs-title: 17px;
+      --sp-1: 4px;
+      --sp-2: 8px;
+      --sp-3: 12px;
+      --sp-4: 16px;
+      --sp-5: 24px;
+      --sp-6: 32px;
       --t-fast: 140ms ease-out;
       --control-h: 44px;
     }
@@ -156,7 +179,7 @@
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', system-ui, sans-serif;
-      font-size: 16px;
+      font-size: var(--fs-input);
       line-height: 1.5;
       min-height: 100%;
       min-height: -webkit-fill-available;
@@ -187,24 +210,24 @@
       flex: 1 0 auto;
       max-width: 600px;
       margin: 0 auto;
-      padding: env(safe-area-inset-top) clamp(12px, 4vw, 16px) 18px;
+      padding: env(safe-area-inset-top) clamp(var(--sp-3), 4vw, var(--sp-4)) 18px;
       container-type: inline-size;
     }
 
     /* Header */
     .hdr {
-      padding: 12px 0 10px;
+      padding: var(--sp-3) 0 10px;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
-      gap: 8px;
+      gap: var(--sp-2);
       min-width: 0;
     }
     .hdr-brand {
       min-width: 0;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--sp-2);
     }
     .hdr-icon-link,
     .hdr-action-btn {
@@ -222,7 +245,7 @@
       border: none;
       background: transparent;
       color: var(--text);
-      font-size: 17px;
+      font-size: var(--fs-title);
       font-family: inherit;
     }
     /* header「···」沿用 stroke 图标渲染约定（app.js 注入 iconSvg('more')）。 */
@@ -241,13 +264,13 @@
       display: block;
       width: 32px;
       height: 32px;
-      border-radius: 8px;
+      border-radius: var(--r-sm);
     }
     .hdr-title {
       flex: 0 0 auto;
       color: var(--text);
-      font-size: 17px;
-      font-weight: 650;
+      font-size: var(--fs-title);
+      font-weight: 600;
       line-height: 1.15;
       letter-spacing: 0.01em;
       white-space: nowrap;
@@ -256,7 +279,7 @@
       min-width: 0;
       display: flex;
       align-items: baseline;
-      gap: 8px;
+      gap: var(--sp-2);
     }
     /* v61：里程碑文案比旧「使用第 N 天」长一倍，且天数会涨到三、四位数。
        允许收缩并省略号收尾（`0 1 auto` + `min-width:0`），宁可截断也不撞上
@@ -292,7 +315,7 @@
       background: transparent;
       border: none;
       color: var(--muted);
-      border-radius: 10px;
+      border-radius: calc(var(--r-ctl) - 2px);
       font-size: var(--fs-cap);
       line-height: 1;
       font-family: inherit;
@@ -311,7 +334,7 @@
       flex: 0 0 auto;
       min-width: 0;
     }
-    .theme-seg button { padding: 7px 8px; }
+    .theme-seg button { padding: 7px var(--sp-2); }
     @container (max-width: 390px) {
       .hdr-title { display: none; }
     }
@@ -332,13 +355,13 @@
       background: var(--accent);
       color: #fff;
       border: none;
-      border-radius: 999px;
+      border-radius: var(--r-pill);
       font-family: inherit;
       cursor: pointer;
       box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 22%, transparent);
       transition: transform var(--t-fast), box-shadow var(--t-fast);
     }
-    .fab-main { font-size: 16px; font-weight: 650; line-height: 1.15; }
+    .fab-main { font-size: var(--fs-input); font-weight: 600; line-height: 1.15; }
     .fab-sub {
       font-size: var(--fs-cap);
       color: rgba(255,255,255,0.78);
@@ -377,7 +400,7 @@
       max-width: 0;
       padding: 0;
       overflow: hidden;
-      border-radius: 10px;
+      border-radius: var(--r-sm);
       background: var(--text);
       color: var(--bg);
       font-size: var(--fs-cap);
@@ -452,7 +475,7 @@
     .view-box {
       display: grid;
       gap: 10px;
-      margin-bottom: 12px;
+      margin-bottom: var(--sp-3);
     }
     .view-tabs {
       width: 100%;
@@ -472,7 +495,7 @@
       width: 100%;
       display: grid;
       grid-template-columns: 44px minmax(0, 1fr) 44px;
-      gap: 8px;
+      gap: var(--sp-2);
       align-items: center;
     }
     #today-btn {
@@ -501,7 +524,7 @@
       color: var(--text);
       border: 1px solid transparent;
       border-radius: var(--r-ctl);
-      font-size: 14px;
+      font-size: var(--fs-ui-strong);
       font-family: inherit;
       cursor: pointer;
       white-space: nowrap;
@@ -523,7 +546,7 @@
       border: 1px solid transparent;
       border-radius: var(--r-ctl);
       color: var(--text);
-      font-size: 14px;
+      font-size: var(--fs-ui-strong);
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
       overflow: hidden;
@@ -541,16 +564,16 @@
 
     /* Form */
     .fl { margin-bottom: 11px; min-width: 0; }
-    .fl-label { font-size: var(--fs-cap); color: var(--muted); margin-bottom: 4px; }
+    .fl-label { font-size: var(--fs-cap); color: var(--muted); margin-bottom: var(--sp-1); }
     .inp {
       width: 100%;
       background: var(--input);
       border: 1px solid transparent;
       border-radius: var(--r-ctl);
       color: var(--text);
-      font-size: 16px;
+      font-size: var(--fs-input);
       font-family: inherit;
-      padding: 10px 12px;
+      padding: 10px var(--sp-3);
       min-height: var(--control-h);
       line-height: 1.25;
       outline: none;
@@ -568,20 +591,20 @@
        keyboard shrinking visualViewport), autosize adds this so it scrolls
        internally instead of pushing the save ✓ off-screen. */
     .ta.ta-capped { overflow-y: auto; -webkit-overflow-scrolling: touch; }
-    .edit-what-input { margin-bottom: 8px; }
+    .edit-what-input { margin-bottom: var(--sp-2); }
     .edit-tag-input { margin-bottom: 10px; }
 
     /* Chips */
     .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 7px; }
-    .chip-group { display: grid; gap: 4px; margin-bottom: 8px; }
+    .chip-group { display: grid; gap: var(--sp-1); margin-bottom: var(--sp-2); }
     .chip-group-label {
       color: var(--muted);
       font-size: var(--fs-cap);
     }
     .chip {
       min-height: 44px;
-      padding: 8px 15px;
-      border-radius: 999px;
+      padding: var(--sp-2) 15px;
+      border-radius: var(--r-pill);
       border: 1px solid var(--border);
       background: transparent;
       color: var(--muted);
@@ -627,7 +650,7 @@
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
-      gap: 6px 12px;
+      gap: 6px var(--sp-3);
       margin-top: 6px;
       padding: 9px 10px;
       border-left: 3px solid var(--warn-fg);
@@ -645,7 +668,7 @@
     .form-time-row {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--sp-2);
       min-height: var(--control-h);
       padding: 9px 10px;
       border: 1px solid transparent;
@@ -658,13 +681,13 @@
       padding: 0;
       cursor: pointer;
       font-family: inherit;
-      font-size: 15px;
+      font-size: var(--fs-body);
       font-variant-numeric: tabular-nums;
-      font-weight: 650;
+      font-weight: 600;
       color: var(--accent);
       text-decoration: underline;
       text-underline-offset: 3px;
-      border-radius: 4px;
+      border-radius: var(--r-sm);
       flex-shrink: 0;
     }
     .start-time-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -711,12 +734,12 @@
       align-items: center;
       justify-content: center;
       scroll-snap-align: center;
-      font-size: 14px;
+      font-size: var(--fs-ui-strong);
       color: var(--text);
       cursor: pointer;
       user-select: none;
       white-space: nowrap;
-      padding: 0 4px;
+      padding: 0 var(--sp-1);
     }
     .wheel-item.is-selected {
       color: var(--text);
@@ -755,7 +778,7 @@
       font-size: var(--fs-ui);
       font-family: inherit;
       cursor: pointer;
-      padding: 4px 0;
+      padding: var(--sp-1) 0;
     }
     /* Desktop datetime picker */
     .dt-picker {
@@ -766,16 +789,16 @@
     .dt-trigger {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--sp-2);
       height: var(--control-h);
       background: var(--input);
       color: var(--text);
       border: 1px solid transparent;
       border-radius: var(--r-ctl);
-      font-size: 15px;
+      font-size: var(--fs-body);
       font-family: inherit;
       cursor: pointer;
-      padding: 0 12px;
+      padding: 0 var(--sp-3);
       width: 100%;
       text-align: left;
       white-space: nowrap;
@@ -797,7 +820,7 @@
       border: 1px solid var(--border);
       border-radius: var(--r-card);
       box-shadow: var(--shadow-2), var(--top-light);
-      padding: 12px;
+      padding: var(--sp-3);
       width: 280px;
       max-width: calc(100vw - 24px);
     }
@@ -809,8 +832,8 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 8px;
-      font-size: 14px;
+      margin-bottom: var(--sp-2);
+      font-size: var(--fs-ui-strong);
       font-weight: 600;
       color: var(--text);
     }
@@ -818,20 +841,20 @@
       background: transparent;
       border: none;
       color: var(--text);
-      font-size: 18px;
+      font-size: var(--fs-title);
       font-family: inherit;
       cursor: pointer;
-      padding: 2px 8px;
-      border-radius: 8px;
+      padding: 2px var(--sp-2);
+      border-radius: var(--r-sm);
     }
     .dt-nav:hover { background: var(--input); }
     .dt-cal-dow {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
       text-align: center;
-      font-size: 11px;
+      font-size: var(--fs-cap);
       color: var(--muted);
-      margin-bottom: 4px;
+      margin-bottom: var(--sp-1);
     }
     .dt-cal-grid {
       display: grid;
@@ -842,7 +865,7 @@
       aspect-ratio: 1;
       background: transparent;
       border: none;
-      border-radius: 8px;
+      border-radius: var(--r-sm);
       font-size: var(--fs-ui);
       font-family: inherit;
       cursor: pointer;
@@ -861,7 +884,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: var(--sp-2);
       margin-top: 10px;
       padding-top: 10px;
       border-top: 1px solid var(--border);
@@ -875,40 +898,40 @@
     .dt-step-btn {
       background: transparent;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: var(--r-sm);
       color: var(--text);
-      font-size: 11px;
+      font-size: var(--fs-cap);
       font-family: inherit;
       cursor: pointer;
-      padding: 2px 8px;
+      padding: 2px var(--sp-2);
       line-height: 1;
     }
     .dt-step-btn:hover { background: var(--input); }
     .dt-step-inp {
       width: 44px;
       text-align: center;
-      font-size: 16px;
+      font-size: var(--fs-input);
       font-family: inherit;
       background: var(--input);
       color: var(--text);
       border: 1px solid transparent;
-      border-radius: 8px;
+      border-radius: var(--r-sm);
       padding: 2px 0;
       -moz-appearance: textfield;
     }
     .dt-step-inp::-webkit-outer-spin-button,
     .dt-step-inp::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     .dt-colon {
-      font-size: 18px;
+      font-size: var(--fs-title);
       font-weight: 600;
       color: var(--text);
       padding-bottom: 2px;
     }
     .dt-now {
-      margin-left: 4px;
+      margin-left: var(--sp-1);
       background: transparent;
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--r-sm);
       color: var(--accent);
       font-size: var(--fs-ui);
       font-family: inherit;
@@ -916,8 +939,8 @@
       padding: 3px 10px;
     }
     .dt-now:hover { background: var(--accent-bg); }
-    .dt-precise { display: grid; gap: 4px; }
-    .dt-precise-label { font-size: 11px; color: var(--muted); }
+    .dt-precise { display: grid; gap: var(--sp-1); }
+    .dt-precise-label { font-size: var(--fs-cap); color: var(--muted); }
     .dt-error {
       color: var(--danger);
       font-size: var(--fs-cap);
@@ -932,14 +955,14 @@
     .ruler {
       background: var(--card);
       border-radius: var(--r-card);
-      padding: 14px 16px;
-      margin-bottom: 12px;
+      padding: 14px var(--sp-4);
+      margin-bottom: var(--sp-3);
       min-height: 82px;
       box-shadow: var(--shadow-1);
     }
     .ruler-bar {
       height: 9px;
-      border-radius: 5px;
+      border-radius: var(--r-pill);
       /* 新发现：分段缝原为 transparent，实际颜色由父级 --card 透出——亮色下 --card
          接近白（缝极淡）、暗色下 --card 是深石墨（缝显重），两主题分段视觉重量不一致。
          改用已经按主题配平过的 --border（既有 hairline 令牌），缝的视觉重量主题间一致。 */
@@ -950,8 +973,8 @@
       gap: 2px;
     }
     .ruler-bar div { transition: flex 0.3s; }
-    .ruler-bar div:first-child { border-radius: 5px 0 0 5px; }
-    .ruler-bar div:last-child { border-radius: 0 5px 5px 0; }
+    .ruler-bar div:first-child { border-radius: var(--r-pill) 0 0 var(--r-pill); }
+    .ruler-bar div:last-child { border-radius: 0 var(--r-pill) var(--r-pill) 0; }
     .ruler-text {
       font-size: var(--fs-ui);
       color: var(--muted);
@@ -974,7 +997,7 @@
     }
     .dot {
       width: 7px; height: 7px;
-      border-radius: 3px;
+      border-radius: 50%;
       flex-shrink: 0;
     }
 
@@ -988,7 +1011,7 @@
     .hero-nums {
       display: flex;
       align-items: flex-end;
-      gap: 24px;
+      gap: var(--sp-5);
       flex-wrap: wrap;
       min-width: 0;
     }
@@ -1001,29 +1024,29 @@
     .hero-big {
       /* v56：32→36px——大数字保持墨色（v55 决策：FAB 是唯一饱和 CTA），用字号
          补偿去色后的层级。 */
-      font-size: 36px;
+      font-size: 36px; /* raw: 展示数字（v56 定 36px），不进字阶 */
       font-weight: 700;
       line-height: 1.05;
       color: var(--text);
       font-variant-numeric: tabular-nums;
     }
     .hero-leak {
-      font-size: 19px;
-      font-weight: 650;
+      font-size: 19px; /* raw: 展示数字，按版式单定、不进字阶 */
+      font-weight: 600;
       line-height: 1.1;
       color: var(--leak);
       font-variant-numeric: tabular-nums;
     }
     .hero-bar {
       height: 6px;
-      border-radius: 3px;
+      border-radius: var(--r-pill);
       background: var(--border);
       display: flex;
       overflow: hidden;
       gap: 2px;
     }
-    .hero-bar div:first-child { border-radius: 3px 0 0 3px; }
-    .hero-bar div:last-child { border-radius: 0 3px 3px 0; }
+    .hero-bar div:first-child { border-radius: var(--r-pill) 0 0 var(--r-pill); }
+    .hero-bar div:last-child { border-radius: 0 var(--r-pill) var(--r-pill) 0; }
     .hero-aux {
       font-size: var(--fs-cap);
       color: var(--faint);
@@ -1037,7 +1060,7 @@
       color: var(--faint);
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      margin-bottom: 8px;
+      margin-bottom: var(--sp-2);
     }
     /* v69 阶段格言（C13）：hero 结论卡与时间轴之间的一行安静小字。真按钮（点击
        编辑）但视觉上是文本行；44px 最小高度守触控红线，引号用 CSS 生成内容（读屏
@@ -1047,7 +1070,7 @@
       width: 100%;
       min-height: var(--control-h);
       margin: -4px 0 2px;
-      padding: 6px 16px;
+      padding: 6px var(--sp-4);
       background: transparent;
       border: 0;
       border-radius: var(--r-ctl);
@@ -1076,11 +1099,11 @@
     .now-strip {
       display: flex;
       align-items: baseline;
-      gap: 8px;
+      gap: var(--sp-2);
       width: 100%;
       min-height: var(--control-h);
       margin: -2px 0 6px;
-      padding: 9px 14px 9px 16px;
+      padding: 9px 14px 9px var(--sp-4);
       position: relative;
       background: var(--card);
       border: 1px solid var(--border);
@@ -1133,7 +1156,7 @@
     .tl-head {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--sp-2);
       min-height: 30px;
     }
     #timeline { min-height: 160px; }
@@ -1175,8 +1198,8 @@
     .tl-now {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 7px 14px 7px 16px;
+      gap: var(--sp-2);
+      padding: 7px 14px 7px var(--sp-4);
     }
     .tl-now-dot {
       width: 6px;
@@ -1235,7 +1258,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 4px;
+      gap: var(--sp-1);
       color: #fff;
       font-family: inherit;
       font-size: var(--fs-ui);
@@ -1252,7 +1275,7 @@
       position: relative;
       background: var(--card);
       border-radius: 0;
-      padding: 11px 14px 11px 16px;
+      padding: 11px 14px 11px var(--sp-4);
       margin: 0;
       display: grid;
       grid-template-columns: 44px minmax(0, 1fr) auto;
@@ -1311,7 +1334,7 @@
     .e-time { font-size: var(--fs-ui); color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
     .e-what { font-size: var(--fs-body); color: var(--text); word-break: break-word; white-space: pre-wrap; margin-bottom: 3px; }
     .entry.placeholder .e-what { color: var(--muted); }
-    .e-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .e-meta { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
     .e-meta > * { min-width: 0; }
     /* v56：tag 降为素色小字——桶的颜色职责整体移交竖脊，列表只保留一个彩色通道。 */
     .e-tag {
@@ -1412,8 +1435,8 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 8px 12px;
-      padding: 10px clamp(12px, 4vw, 16px);
+      gap: var(--sp-2) var(--sp-3);
+      padding: 10px clamp(var(--sp-3), 4vw, var(--sp-4));
       background: var(--accent-bg);
       border-bottom: 1px solid var(--border);
     }
@@ -1428,7 +1451,7 @@
     .migration-notice-actions {
       display: flex;
       flex: 0 0 auto;
-      gap: 8px;
+      gap: var(--sp-2);
     }
     .migration-btn {
       min-width: 44px;
@@ -1438,10 +1461,10 @@
       align-items: center;
       justify-content: center;
       border: none;
-      border-radius: 10px;
+      border-radius: var(--r-sm);
       background: var(--accent);
       color: #fff;
-      font-size: 14px;
+      font-size: var(--fs-ui-strong);
       font-weight: 600;
       font-family: inherit;
       text-decoration: none;
@@ -1463,9 +1486,9 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 10px 12px;
+      padding: 10px var(--sp-3);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: var(--r-ctl);
       background: var(--card);
       color: var(--text);
       box-shadow: var(--shadow-3);
@@ -1483,12 +1506,12 @@
     }
     .update-btn {
       min-height: 36px;
-      padding: 0 12px;
+      padding: 0 var(--sp-3);
       border: none;
-      border-radius: 10px;
+      border-radius: var(--r-sm);
       background: var(--accent);
       color: #fff;
-      font-size: 14px;
+      font-size: var(--fs-ui-strong);
       font-weight: 600;
       font-family: inherit;
       cursor: pointer;
@@ -1505,7 +1528,7 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 10px 16px;
+      padding: 10px var(--sp-4);
       background: var(--card);
       border-bottom: 1px solid var(--border);
       box-shadow: var(--shadow-1);
@@ -1527,15 +1550,15 @@
       transform: translateX(-50%);
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: var(--sp-3);
       padding: 9px 10px 9px 14px;
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: var(--r-ctl);
       background: var(--card);
       box-shadow: var(--shadow-3);
     }
     .undo-toast[hidden] { display: none; }
-    .undo-toast span { flex: 1; min-width: 0; color: var(--text); font-size: 14px; }
+    .undo-toast span { flex: 1; min-width: 0; color: var(--text); font-size: var(--fs-ui-strong); }
     /* SPEC-006 B：#undo-toast 与 #info-toast 共用同一 fixed 位置；两者理论上可能
        同时可见（例如撤销窗口内触发一条普通提示），此时把 info-toast 挪到上方，
        避免两条 toast 视觉重叠。 */
@@ -1569,12 +1592,12 @@
       min-width: 64px;
       min-height: 36px;
       border: 0;
-      border-radius: 9px;
+      border-radius: var(--r-sm);
       background: var(--accent-bg);
       color: var(--accent);
       font-family: inherit;
-      font-size: 14px;
-      font-weight: 650;
+      font-size: var(--fs-ui-strong);
+      font-weight: 600;
     }
     .undo-btn[hidden] { display: none; }
 
@@ -1614,7 +1637,7 @@
       border-bottom: none;
       border-radius: var(--r-sheet) var(--r-sheet) 0 0;
       background: var(--card);
-      padding: 0 16px;
+      padding: 0 var(--sp-4);
       box-shadow: var(--shadow-3);
       transition: transform 0.25s ease-out, opacity 0.2s ease;
     }
@@ -1663,7 +1686,7 @@
       width: 40px;
       height: 5px;
       margin: 9px auto 0;
-      border-radius: 3px;
+      border-radius: var(--r-pill);
       background: var(--track);
     }
     .form-sheet.sheet-dragging .sh-grab { cursor: grabbing; }
@@ -1677,8 +1700,8 @@
       align-items: center;
       gap: 10px;
       min-height: 52px;
-      margin: 0 -16px;
-      padding: calc(4px + env(safe-area-inset-top)) 16px 6px;
+      margin: 0 calc(-1 * var(--sp-4));
+      padding: calc(var(--sp-1) + env(safe-area-inset-top)) var(--sp-4) 6px;
       background: var(--card);
       border-radius: var(--r-sheet) var(--r-sheet) 0 0;
       border-bottom: 1px solid var(--border);
@@ -1688,12 +1711,12 @@
       background: none;
       border: none;
       font-family: inherit;
-      font-size: 16px;
-      padding: 8px 2px;
+      font-size: var(--fs-input);
+      padding: var(--sp-2) 2px;
       min-height: 44px;
       cursor: pointer;
       flex: 0 0 auto;
-      border-radius: 8px;
+      border-radius: var(--r-sm);
     }
     .sh-cancel { color: var(--muted); }
     .sh-done { color: var(--accent); font-weight: 700; }
@@ -1705,7 +1728,7 @@
       min-width: 0;
       text-align: center;
       font-size: var(--fs-body);
-      font-weight: 650;
+      font-weight: 600;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -1726,7 +1749,7 @@
          承载的文字还重；而暗色一直是对的（分组比面板亮＝浮起）。同一处倒挂，
          v76 只修了 view-tabs/date-nav 两处，这里是补齐。 */
       background: var(--chrome);
-      border-radius: 14px;
+      border-radius: var(--r-ctl);
       overflow: hidden;
       /* P21：块级流，不用 grid——iOS WebKit 对 grid auto 轨道内 <button> 的
          min-height 计量有缺陷（轨道按内容高算、条目按 min-height 绘），四行
@@ -1738,7 +1761,7 @@
       position: relative;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--sp-2);
       width: 100%;
       min-height: 48px;
       padding: 10px 14px;
@@ -1766,14 +1789,14 @@
       height: 1px;
       background: var(--border);
     }
-    .cell-chevron { color: var(--faint); font-size: 16px; flex: 0 0 auto; }
+    .cell-chevron { color: var(--faint); font-size: var(--fs-input); flex: 0 0 auto; }
     .cell-row .theme-seg { margin-left: auto; }
     /* v56：编辑 sheet 内的「切一刀」——切分入口从时间轴行内迁到这里（行内逐行常显
        的动作词是列表噪音）。与 cell-danger 同形态、accent 色。 */
     .cell-action {
       min-height: 48px;
       border: none;
-      border-radius: 14px;
+      border-radius: var(--r-ctl);
       background: color-mix(in srgb, var(--accent) 10%, transparent);
       color: var(--accent);
       font-size: var(--fs-body);
@@ -1786,7 +1809,7 @@
     .cell-danger {
       min-height: 48px;
       border: none;
-      border-radius: 14px;
+      border-radius: var(--r-ctl);
       background: color-mix(in srgb, var(--danger) 10%, transparent);
       color: var(--danger);
       font-size: var(--fs-body);
@@ -1795,26 +1818,26 @@
       cursor: pointer;
     }
     .cell-danger:active { opacity: 0.75; }
-    .interval-editor { display: grid; gap: 12px; }
+    .interval-editor { display: grid; gap: var(--sp-3); }
     .boundary-picker { display: grid; gap: 6px; min-width: 0; }
     .boundary-limits {
       color: var(--muted);
-      font-size: 13px;
+      font-size: var(--fs-ui);
       line-height: 1.45;
       overflow-wrap: anywhere;
     }
     .end-mode-seg { margin: 0; }
     .overnight-summary {
-      padding: 10px 12px;
+      padding: 10px var(--sp-3);
       border-radius: var(--r-ctl);
       background: var(--accent-bg);
       color: var(--text);
-      font-size: 14px;
-      font-weight: 650;
+      font-size: var(--fs-ui-strong);
+      font-weight: 600;
       line-height: 1.45;
       font-variant-numeric: tabular-nums;
     }
-    .overnight-end-seg button { min-width: 0; padding-inline: 8px; font-size: 13px; }
+    .overnight-end-seg button { min-width: 0; padding-inline: var(--sp-2); font-size: var(--fs-ui); }
     .plan-expired-hint { margin-top: -2px; }
     .interval-preview {
       display: grid;
@@ -1825,8 +1848,8 @@
     .preview-head {
       padding: 9px 0 7px;
       color: var(--text);
-      font-size: 14px;
-      font-weight: 650;
+      font-size: var(--fs-ui-strong);
+      font-weight: 600;
     }
     .preview-head.is-error { color: var(--danger); }
     .preview-row {
@@ -1834,9 +1857,9 @@
       display: grid;
       grid-template-columns: 52px 92px minmax(0, 1fr);
       align-items: center;
-      gap: 8px;
+      gap: var(--sp-2);
       border-top: 1px solid var(--border);
-      font-size: 13px;
+      font-size: var(--fs-ui);
     }
     .preview-role { color: var(--muted); }
     .preview-time { color: var(--text); font-variant-numeric: tabular-nums; }
@@ -1851,18 +1874,18 @@
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
-      gap: 2px 8px;
-      font-size: 14px;
+      gap: 2px var(--sp-2);
+      font-size: var(--fs-ui-strong);
       line-height: 1.4;
     }
-    .cut-source-what { font-weight: 650; color: var(--text); overflow-wrap: anywhere; }
+    .cut-source-what { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
     .cut-source-tag { color: var(--muted); }
     .cut-source-meta { margin-left: auto; color: var(--muted); font-size: var(--fs-ui); font-variant-numeric: tabular-nums; }
     .cut-bar {
       display: flex;
       gap: 2px;
       height: 14px;
-      border-radius: 7px;
+      border-radius: var(--r-pill);
       overflow: hidden;
     }
     .cut-part {
@@ -1876,7 +1899,7 @@
     .cut-part[data-b="pending"] {
       background: repeating-linear-gradient(-45deg, var(--accent-bg) 0 5px, transparent 5px 10px);
       box-shadow: inset 0 0 0 1.5px var(--accent);
-      border-radius: 7px;
+      border-radius: var(--r-pill);
     }
     .cut-part[data-b="job"], .preview-row[data-b="job"] { --rail: var(--accent); }
     .cut-part[data-b="maintain"], .preview-row[data-b="maintain"] { --rail: var(--maintain); }
@@ -1885,7 +1908,7 @@
     .cut-scale {
       display: flex;
       justify-content: space-between;
-      gap: 8px;
+      gap: var(--sp-2);
       color: var(--muted);
       font-size: var(--fs-cap);
       font-variant-numeric: tabular-nums;
@@ -1916,13 +1939,13 @@
     .range-wheel-head {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      margin-bottom: 4px;
+      margin-bottom: var(--sp-1);
       color: var(--muted);
       font-size: var(--fs-cap);
       text-align: center;
     }
     .wheel-picker.range-wheel { height: 160px; }
-    .wheel-col-range .wheel-item { font-size: 17px; font-variant-numeric: tabular-nums; }
+    .wheel-col-range .wheel-item { font-size: var(--fs-title); font-variant-numeric: tabular-nums; }
     .wheel-sep {
       position: relative;
       z-index: 1;
@@ -1930,7 +1953,7 @@
       align-self: center;
       padding: 0 1px;
       color: var(--muted);
-      font-size: 17px;
+      font-size: var(--fs-title);
       font-weight: 600;
       user-select: none;
     }
@@ -1940,7 +1963,7 @@
     .range-snaps {
       display: flex;
       justify-content: space-between;
-      gap: 8px;
+      gap: var(--sp-2);
       margin-top: 2px;
     }
     .range-snap {
@@ -1956,33 +1979,33 @@
       cursor: pointer;
     }
     .range-snap:active { opacity: 0.75; }
-    .range-snap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+    .range-snap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
     .range-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
-    .range-field { display: grid; gap: 4px; color: var(--muted); font-size: var(--fs-cap); }
+    .range-field { display: grid; gap: var(--sp-1); color: var(--muted); font-size: var(--fs-cap); }
     .range-inp { width: 7.5em; text-align: center; font-variant-numeric: tabular-nums; }
-    .range-dash { padding-bottom: 12px; color: var(--muted); }
+    .range-dash { padding-bottom: var(--sp-3); color: var(--muted); }
     .delete-confirm-body { gap: 14px; }
     .delete-target {
       display: grid;
       grid-template-columns: auto minmax(0, 1fr);
-      gap: 3px 12px;
-      padding-bottom: 12px;
+      gap: 3px var(--sp-3);
+      padding-bottom: var(--sp-3);
       border-bottom: 1px solid var(--border);
     }
-    .delete-range { grid-row: 1 / span 2; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
-    .delete-what { min-width: 0; color: var(--text); font-size: 15px; overflow-wrap: anywhere; }
-    .delete-tag { color: var(--muted); font-size: 13px; }
+    .delete-range { grid-row: 1 / span 2; color: var(--muted); font-size: var(--fs-ui-strong); font-variant-numeric: tabular-nums; }
+    .delete-what { min-width: 0; color: var(--text); font-size: var(--fs-body); overflow-wrap: anywhere; }
+    .delete-tag { color: var(--muted); font-size: var(--fs-ui); }
     .delete-result { padding: 2px 0; }
-    .delete-result p { color: var(--text); font-size: 14px; line-height: 1.55; }
+    .delete-result p { color: var(--text); font-size: var(--fs-ui-strong); line-height: 1.55; }
     .delete-result.is-unrecorded p { color: var(--danger); }
-    .import-summary { color: var(--text); font-size: 14px; line-height: 1.5; font-weight: 600; }
+    .import-summary { color: var(--text); font-size: var(--fs-ui-strong); line-height: 1.5; font-weight: 600; }
     .import-summary.is-error { color: var(--danger); }
     /* v1.2.0：导入预览逐条清单——新增/已跳过分组。折叠在 details 里。
        v1.2.1（B）：弱化呈现——新增不需逐条确认，清单只是可选核对，故去掉主线色强调
        边框、标题一律 muted，让上方那行汇总当主角，消除“像待办勾选表”的错觉。 */
-    .import-detail { display: grid; gap: 8px; }
+    .import-detail { display: grid; gap: var(--sp-2); }
     .import-detail:empty { display: none; }
-    .import-detail-note { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .import-detail-note { color: var(--muted); font-size: var(--fs-cap); line-height: 1.5; }
     .import-group {
       border: 1px solid var(--border);
       border-radius: var(--r-ctl);
@@ -1992,8 +2015,8 @@
     .import-group-head {
       list-style: none;
       cursor: pointer;
-      padding: 8px 11px;
-      font-size: 12px;
+      padding: var(--sp-2) 11px;
+      font-size: var(--fs-cap);
       font-weight: 500;
       color: var(--muted);
     }
@@ -2004,12 +2027,12 @@
     .import-item {
       display: grid;
       gap: 1px;
-      padding: 8px 11px;
+      padding: var(--sp-2) 11px;
       min-width: 0;
     }
     .import-item + .import-item { border-top: 1px solid var(--border); }
-    .import-item-meta { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-    .import-item-what { color: var(--text); font-size: 14px; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .import-item-meta { color: var(--faint); font-size: var(--fs-cap); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .import-item-what { color: var(--text); font-size: var(--fs-ui-strong); overflow-wrap: anywhere; white-space: pre-wrap; }
     .import-group-skip .import-item-what { color: var(--muted); }
     .import-conflicts {
       display: grid;
@@ -2020,26 +2043,26 @@
       background: color-mix(in srgb, var(--danger) 8%, transparent);
     }
     .import-conflicts[hidden] { display: none; }
-    .import-conflict-intro { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .import-conflict-intro { color: var(--muted); font-size: var(--fs-ui); line-height: 1.5; }
     .import-conflict-list { display: grid; gap: 10px; }
     .import-conflict-card {
       overflow: hidden;
-      border-radius: 12px;
+      border-radius: var(--r-ctl);
       background: var(--input);
       box-shadow: var(--shadow-1), var(--top-light);
     }
     .import-conflict-title {
-      padding: 8px 11px;
+      padding: var(--sp-2) 11px;
       color: var(--danger);
-      font-size: 13px;
-      font-weight: 650;
+      font-size: var(--fs-ui);
+      font-weight: 600;
       border-bottom: 1px solid var(--border);
     }
     .import-conflict-side { padding: 9px 11px; min-width: 0; }
     .import-conflict-side + .import-conflict-side { border-top: 1px solid var(--border); }
-    .import-conflict-role { color: var(--muted); font-size: 12px; margin-bottom: 2px; }
-    .import-conflict-what { color: var(--text); font-size: 14px; overflow-wrap: anywhere; white-space: pre-wrap; }
-    .import-conflict-meta { color: var(--faint); font-size: 12px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+    .import-conflict-role { color: var(--muted); font-size: var(--fs-cap); margin-bottom: 2px; }
+    .import-conflict-what { color: var(--text); font-size: var(--fs-ui-strong); overflow-wrap: anywhere; white-space: pre-wrap; }
+    .import-conflict-meta { color: var(--faint); font-size: var(--fs-cap); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
     .import-conflict-actions {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2052,13 +2075,13 @@
       min-height: 38px;
       padding: 5px 7px;
       border: 1px solid var(--border);
-      border-radius: 9px;
+      border-radius: var(--r-sm);
       background: transparent;
       color: var(--muted);
       /* 原写法 `font: 600 12px/1.25 inherit` 整条无效（inherit 等全局关键字不能出现在
          简写的分量里），浏览器整条丢弃，按钮一直落回 UA 默认按钮字体。拆成长写。 */
       font-family: inherit;
-      font-size: 12px;
+      font-size: var(--fs-cap);
       font-weight: 600;
       line-height: 1.25;
       cursor: pointer;
@@ -2071,14 +2094,14 @@
     .import-conflict-merge-note {
       padding: 0 11px 10px;
       color: var(--muted);
-      font-size: 12px;
+      font-size: var(--fs-cap);
       line-height: 1.45;
     }
     .import-resolution-error {
-      padding-bottom: 8px;
+      padding-bottom: var(--sp-2);
       color: var(--danger);
-      font-size: 13px;
-      font-weight: 650;
+      font-size: var(--fs-ui);
+      font-weight: 600;
     }
     /* P34（v63）：更多正文脱离 .form-sheet-body 的 grid auto 轨道——v62 内容首次
        超过面板可用高度后，grid（min-height:0 的 flex 子项）把各分组轨道压到低于
@@ -2091,7 +2114,7 @@
     /* v69 阶段格言 sheet：内容极少，grid 拉伸轨道会把元素撑出大空隙；同走 P34 的
        块级流判例（复合选择器必须写在下方 .form-sheet-body 的 grid 定义之前）。 */
     .form-sheet-body.motto-body { display: block; }
-    .motto-body > * + * { margin-top: 12px; }
+    .motto-body > * + * { margin-top: var(--sp-3); }
     /* 块级流里按钮缩到内容宽；补回 grid 轨道下的整行形态（与编辑 sheet 的
        cell-action 一致）。 */
     .motto-body .cell-action { display: block; width: 100%; }
@@ -2099,8 +2122,8 @@
        正文不放进会被压缩的 grid 轨道）。 */
     .motto-mode-seg { display: flex; }
     .motto-mode-seg button { flex: 1; }
-    .motto-pane > * + * { margin-top: 12px; }
-    .quotes-input { font-size: 16px; line-height: 1.55; }
+    .motto-pane > * + * { margin-top: var(--sp-3); }
+    .quotes-input { font-size: var(--fs-input); line-height: 1.55; }
     .quotes-count { overflow-wrap: anywhere; }
     .app-version {
       text-align: center;
@@ -2113,12 +2136,12 @@
       /* Pin the single column to the container so tall/long content scrolls
          instead of widening the panel past the screen (see .form-sheet-panel). */
       grid-template-columns: minmax(0, 1fr);
-      gap: 12px;
+      gap: var(--sp-3);
       padding-top: 14px;
       /* v43: 底部预留键盘遮挡高度 --kb，让最后一个字段能滚到键盘上方；键盘落下时
          --kb→0，多出的内边距收回。--kb 由 sheet_controller 从 visualViewport 写，
          只影响这个滚动内边距、不移动面板（迟到也只是晚一拍滚，不跳）。 */
-      padding-bottom: calc(16px + env(safe-area-inset-bottom) + var(--kb, 0px));
+      padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom) + var(--kb, 0px));
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       scroll-padding-top: 84px;
@@ -2128,7 +2151,7 @@
     }
     .help-body section {
       display: grid;
-      gap: 4px;
+      gap: var(--sp-1);
       padding-bottom: 10px;
       border-bottom: 1px solid var(--border);
     }
@@ -2189,12 +2212,12 @@
     .cfg-row.is-history::before { opacity: 0.55; }
     .cfg-badge {
       flex: 0 0 auto;
-      padding: 3px 8px;
-      border-radius: 999px;
+      padding: 3px var(--sp-2);
+      border-radius: var(--r-pill);
       background: var(--accent-bg);
       color: var(--accent);
       font-size: var(--fs-cap);
-      font-weight: 650;
+      font-weight: 600;
     }
     .cfg-set-current { flex: 0 0 auto; }
     /* 两段式分段控件替换原生 <select>：只有两个选项时它更直接，且不引入 iOS
@@ -2218,7 +2241,7 @@
       height: 20px;
       margin: 0;
       border: 1.5px solid var(--border);
-      border-radius: 6px;
+      border-radius: 6px; /* raw: 20px 勾选框；--r-sm 会接近圆形、读成单选框 */
       background: var(--card);
       cursor: pointer;
       flex: 0 0 auto;
@@ -2248,12 +2271,12 @@
       outline-offset: 2px;
     }
     .cfg-defaults-preview {
-      margin-top: 8px;
+      margin-top: var(--sp-2);
     }
     .cfg-defaults-actions,
     .cfg-merge-actions {
       display: flex;
-      gap: 8px;
+      gap: var(--sp-2);
       margin-top: 6px;
     }
     /* 合并提示里的 cell-action 下边距会把 danger 键拉高 10px，只在这里抹平。 */
@@ -2261,7 +2284,7 @@
     .cfg-line {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--sp-2);
       min-width: 0;
     }
     .cfg-line .cfg-name {
@@ -2282,7 +2305,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
+      gap: var(--sp-2);
       margin-top: 6px;
       min-width: 0;
     }
@@ -2323,7 +2346,7 @@
     @media (min-width: 720px) {
       .form-sheet {
         align-items: center;
-        padding: 24px;
+        padding: var(--sp-5);
       }
       .form-sheet-panel {
         max-width: 520px;
@@ -2332,7 +2355,7 @@
         box-shadow: var(--shadow-3);
       }
       .form-sheet-body {
-        padding-bottom: 16px;
+        padding-bottom: var(--sp-4);
       }
       /* 居中 dialog 无软键盘：定高 .tall 收回，按内容自适应。 */
       .form-sheet-panel.tall { height: auto; }
@@ -2346,13 +2369,13 @@
       text-align: center;
       color: var(--muted);
       padding: 36px 0;
-      font-size: 14px;
+      font-size: var(--fs-ui-strong);
     }
 
     /* Summary */
     .summary-list {
       display: grid;
-      gap: 8px;
+      gap: var(--sp-2);
     }
     .sum-row {
       width: 100%;
@@ -2360,7 +2383,7 @@
       border: 1px solid transparent;
       border-radius: var(--r-card);
       color: var(--text);
-      padding: 12px 14px;
+      padding: var(--sp-3) 14px;
       font-family: inherit;
       text-align: left;
       cursor: pointer;
@@ -2373,7 +2396,7 @@
       justify-content: space-between;
       align-items: baseline;
       gap: 10px;
-      margin-bottom: 8px;
+      margin-bottom: var(--sp-2);
       min-width: 0;
     }
     .sum-name {
@@ -2392,7 +2415,7 @@
     }
     .sum-meta {
       display: flex;
-      gap: 12px;
+      gap: var(--sp-3);
       flex-wrap: wrap;
       color: var(--muted);
       font-size: var(--fs-cap);
@@ -2405,11 +2428,11 @@
     }
 
     @container (max-width: 420px) {
-      .entry { padding: 11px 12px 11px 16px; gap: 8px; }
+      .entry { padding: 11px var(--sp-3) 11px var(--sp-4); gap: var(--sp-2); }
     }
 
     .bucket-seg { margin-bottom: 10px; }
-    .record-mode-seg { margin-bottom: 12px; }
+    .record-mode-seg { margin-bottom: var(--sp-3); }
     .cell-btn[aria-disabled="true"] {
       opacity: 0.45;
       cursor: not-allowed;
@@ -2422,21 +2445,21 @@
        四桶脊色用 --accent/--maintain/--leak/--track，「接通」键用 --maintain（本站无
        独立 green 令牌，维持键的绿即连接色）。无新令牌、无新运行时资产。 */
     .analytics-body { display: flex; flex-direction: column; gap: 6px; }
-    .an-period { align-self: center; margin: 2px 0 4px; }
+    .an-period { align-self: center; margin: 2px 0 var(--sp-1); }
     .an-period-label { text-align: center; color: var(--muted); font-size: var(--fs-cap); }
 
-    .an-display { text-align: center; padding: 6px 4px 2px; }
+    .an-display { text-align: center; padding: 6px var(--sp-1) 2px; }
     .an-headline {
-      font-size: 40px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05;
+      font-size: 40px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; /* raw: 展示数字，按版式单定、不进字阶 */
       font-variant-numeric: tabular-nums; color: var(--text);
     }
-    .an-headline .u { font-size: 20px; font-weight: 600; color: var(--muted); margin-left: 2px; }
+    .an-headline .u { font-size: 20px; font-weight: 600; color: var(--muted); margin-left: 2px; } /* raw: 展示数字，按版式单定、不进字阶 */
     .an-subline { color: var(--muted); font-size: var(--fs-ui); margin-top: 6px; }
     .an-subline b { color: var(--text); }
     .an-delta { color: var(--faint); font-size: var(--fs-cap); margin-top: 3px; min-height: 16px; }
     .an-trend { color: var(--accent); font-size: var(--fs-cap); margin-top: 2px; }
-    .an-coverage { color: var(--faint); font-size: var(--fs-cap); margin-top: 4px; }
-    .an-spark { height: 40px; margin: 8px 6px 0; }
+    .an-coverage { color: var(--faint); font-size: var(--fs-cap); margin-top: var(--sp-1); }
+    .an-spark { height: 40px; margin: var(--sp-2) 6px 0; }
     .an-spark svg { width: 100%; height: 40px; overflow: visible; }
     .an-spark rect { fill: var(--accent); }
     .an-spark-maintain rect { fill: var(--maintain); }
@@ -2445,8 +2468,8 @@
 
     .an-padwrap { display: flex; justify-content: center; }
     .an-pad {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 8px;
-      padding: 12px 2px 6px; width: 100%; max-width: 340px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px var(--sp-2);
+      padding: var(--sp-3) 2px 6px; width: 100%; max-width: 340px;
     }
     .an-tile {
       display: flex; flex-direction: column; align-items: center; gap: 7px;
@@ -2460,11 +2483,11 @@
     .an-tile:active .an-disc { transform: scale(0.93); }
     .an-tile.sel .an-disc { outline: 2px solid var(--accent); outline-offset: 3px; }
     .an-tile:focus-visible .an-disc { outline: 2px solid var(--accent); outline-offset: 3px; }
-    .an-big { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
-    .an-big .u { font-size: 11px; font-weight: 600; color: var(--muted); margin-left: 1px; }
+    .an-big { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); } /* raw: 展示数字，按版式单定、不进字阶 */
+    .an-big .u { font-size: var(--fs-cap); font-weight: 600; color: var(--muted); margin-left: 1px; }
     .an-disc::after {
       content: ""; position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
-      width: 15px; height: 3px; border-radius: 2px; background: var(--track);
+      width: 15px; height: 3px; border-radius: var(--r-pill); background: var(--track);
     }
     .an-disc.job::after { background: var(--accent); }
     .an-disc.maintain::after { background: var(--maintain); }
@@ -2476,10 +2499,10 @@
     .an-dots { display: flex; gap: 7px; }
     .an-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--track); border: 0; padding: 0; cursor: pointer; }
     .an-dot.on { background: var(--accent); }
-    .an-arrow { background: none; border: 0; color: var(--muted); font-size: 18px; cursor: pointer; padding: 2px 8px; line-height: 1; }
+    .an-arrow { background: none; border: 0; color: var(--muted); font-size: var(--fs-title); cursor: pointer; padding: 2px var(--sp-2); line-height: 1; }
     .an-arrow[disabled] { opacity: 0.3; cursor: default; }
 
-    .an-call-wrap { display: grid; place-items: center; padding: 10px 0 4px; }
+    .an-call-wrap { display: grid; place-items: center; padding: 10px 0 var(--sp-1); }
     .an-call {
       width: 60px; height: 60px; border-radius: 50%; background: var(--maintain); border: 0; cursor: pointer;
       display: grid; place-items: center; box-shadow: var(--shadow-2);

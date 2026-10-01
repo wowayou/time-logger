@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # v1.0.0 起是三段式（此前是单整数，v1–v93）。判据必须**只认三段式**：写回单整数
 # 会让 android 仓的 versionCode 派生与 publish-site 的 tag 校验重新分叉，那两处
 # 现在都按三段式解析。历史 tag 与 docs/CHANGELOG.md 的单整数条目不受影响。
-EXPECTED_VERSION = "1.5.1"
+EXPECTED_VERSION = "1.5.2"
 VERSION_PATTERN = r"\d+\.\d+\.\d+"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
@@ -341,8 +341,27 @@ def audit_index(errors: list[str]) -> None:
     if 'id="backup-send-btn"' not in runtime or 'data-action="send-backup"' not in runtime:
         fail(errors, "share backup cell must stay unconditionally renderable")
 
-    if ".inp" not in css or "font-size: 16px" not in css:
-        fail(errors, "text inputs must keep a 16px font-size floor for mobile")
+    # 输入字号下限（iOS 聚焦放大）。v1.5.2（SPEC-016 A）起经由 --fs-input 令牌：令牌值
+    # ≥16px；`.inp`（全部文本输入共用）与 `.dt-step-inp` 必须引用它；任何输入类选择器
+    # 设字号时都只能用它（旧判据只查全文出现过 `font-size: 16px`，令牌化后形同虚设）。
+    fs_input = re.search(r"--fs-input:\s*(\d+)px;", css)
+    if not fs_input or int(fs_input.group(1)) < 16:
+        fail(errors, "text inputs must keep a 16px font-size floor for mobile (--fs-input must be >= 16px)")
+    input_rules = 0
+    css_code = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
+    for rule in re.finditer(r"(?P<sel>[^{}]+)\{(?P<body>[^{}]*)\}", css_code):
+        selector = rule.group("sel").strip()
+        if not re.search(r"\.(?:inp|ta|[\w-]+-inp|[\w-]+-input)(?![\w-])", selector):
+            continue
+        size = re.search(r"font-size:\s*([^;]+);", rule.group("body"))
+        if selector in (".inp", ".dt-step-inp"):
+            input_rules += 1
+            if not size:
+                fail(errors, f"{selector} must set font-size: var(--fs-input) (mobile 16px floor)")
+        if size and size.group(1).strip() != "var(--fs-input)":
+            fail(errors, f"input selector {selector!r} sets font-size {size.group(1).strip()} — inputs must use var(--fs-input)")
+    if input_rules != 2:
+        fail(errors, f"expected the .inp and .dt-step-inp rules for the input font-size floor, found {input_rules}")
     open_form = re.search(r"function\s+openForm\(\)\s*\{(?P<body>.*?)\n\s*\}", runtime, re.DOTALL)
     if open_form and "openFormSheet({ mode: 'new' })" not in open_form.group("body"):
         fail(errors, "opening the add form must use the unified form sheet")
@@ -553,6 +572,64 @@ def audit_chrome_surface_layering(errors: list[str]) -> None:
             f"light --chrome ({tokens['--chrome']}, luminance {chrome_lum:.4f}) is not brighter than "
             f"--bg ({tokens['--bg']}, luminance {bg_lum:.4f}) — control-surface layering inverted again",
         )
+
+
+# SPEC-016 A 期（v1.5.2）：字号与圆角收敛到 styles.css 的结构令牌后，防止裸值回流。
+# 令牌块以外的 font-size / font 简写 / border-radius 必须引用 --fs-* / --r-* 令牌
+# （或 inherit / 0 / 50%）。确属例外的裸值在**同一行**附 `raw: 理由` 注释，并且
+# 例外条数**精确**等于下面的上限：新增例外要来这里改数字（diff 里看得见），
+# 消掉例外也要把上限下调，免得空出来的名额被悄悄占用。
+CSS_RAW_EXCEPTION_COUNTS = {"font-size": 5, "border-radius": 1}
+_CSS_SIZE_DECL = re.compile(
+    r"(?<![-\w])(?P<prop>font-size|font|border(?:-(?:top|bottom)-(?:left|right))?-radius)\s*:\s*(?P<value>[^;{}]+)"
+)
+_CSS_RAW_MARKER = re.compile(r"/\*\s*raw:\s*\S")
+
+
+def _css_value_uses_tokens(prop: str, value: str) -> bool:
+    value = value.strip()
+    if prop == "font":
+        # 简写只允许整体继承，或字号分量走令牌；其余带长度单位的写法都算裸值。
+        stripped = re.sub(r"var\(--fs-[a-z-]+\)", "", value)
+        return value == "inherit" or not re.search(r"\d(?:px|rem|em|pt)\b", stripped)
+    prefix = "--fs-" if prop == "font-size" else "--r-"
+    value = re.sub(r"calc\([^()]*var\(" + prefix + r"[a-z-]+\)[^()]*\)", "T", value)
+    value = re.sub(r"var\(" + prefix + r"[a-z-]+\)", "T", value)
+    allowed = {"T", "inherit"} if prop == "font-size" else {"T", "0", "50%", "inherit"}
+    return all(part in allowed for part in value.split())
+
+
+def audit_css_tokens(errors: list[str]) -> None:
+    css = read_text("styles.css")
+    # 注释替换成等长空白（保留换行），行号不变；raw 标记从原始行里认。
+    code = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), css, flags=re.DOTALL)
+    raw_lines = css.splitlines()
+    counts = {family: 0 for family in CSS_RAW_EXCEPTION_COUNTS}
+    seen = 0
+    for no, line in enumerate(code.splitlines(), 1):
+        for match in _CSS_SIZE_DECL.finditer(line):
+            seen += 1
+            prop = match.group("prop")
+            if _css_value_uses_tokens(prop, match.group("value")):
+                continue
+            family = "border-radius" if prop.endswith("radius") else "font-size"
+            if _CSS_RAW_MARKER.search(raw_lines[no - 1]):
+                counts[family] += 1
+                continue
+            fail(
+                errors,
+                f"styles.css:{no} uses raw {prop}: {match.group('value').strip()} — use a --fs-*/--r-* token, "
+                "or mark a justified exception with a same-line `raw:` comment (SPEC-016)",
+            )
+    if seen < 50:
+        fail(errors, f"CSS token audit only saw {seen} font-size/border-radius declarations — its parser has lost its input")
+    for family, expected in CSS_RAW_EXCEPTION_COUNTS.items():
+        if counts[family] != expected:
+            fail(
+                errors,
+                f"styles.css has {counts[family]} raw {family} exceptions, expected exactly {expected} "
+                "(update CSS_RAW_EXCEPTION_COUNTS deliberately, SPEC-016)",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1070,6 +1147,7 @@ def main() -> int:
     audit_docs(errors)
     audit_wcag_contrast(errors)
     audit_chrome_surface_layering(errors)
+    audit_css_tokens(errors)
     audit_site_honesty_guard(errors)
     audit_site_en_terminology_guard(errors)
     audit_site_hreflang(errors)
