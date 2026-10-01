@@ -3,10 +3,11 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**状态整理：2026-10-01。最近发布核验：2026-10-01，Web `v1.5.5`；安卓 `aab025d` 已推送、未发版。** 跨仓结论沿用已有核验记录，不代表安卓侧已重新验收。
+**状态整理：2026-10-01。最近发布核验：2026-10-01，Web `v1.5.6`；安卓 `aab025d` 已推送、未发版。** 跨仓结论沿用已有核验记录，不代表安卓侧已重新验收。
 
 ## DONE
 
+- **Web v1.5.6 已发布上线**：main `e04f9e1`、tag [v1.5.6 / Release](https://github.com/wowayou/time-logger/releases/tag/v1.5.6)，已复核线上 CACHE `timelog-v1.5.6`、manifest `1.5.6` 与新文案。本版处理 v1.5.5 登记的两条风险：英文其余计数文案区分单复数（导入冲突、平移建议、时间分析覆盖天数、启动诊断）；计时压测超预算时换新页重量、最多三轮合并取最小，预算不动（交替对照旧 8/80 失败、新 1/80，注入回归四条全红）。顺带修趋势行「连续 0 期走高」（连续不足 2 期改说「近期走高 / 走低」）。全量 UI **628 passed / 0 failed**（双引擎、关闭重试）。机器持续变慢数倍时固定预算仍可能超线，判读方法见 `tests/stress.spec.js` 注释。
 - **Web v1.5.5 已发布上线**：main `23046a7`、tag [v1.5.5 / Release](https://github.com/wowayou/time-logger/releases/tag/v1.5.5)，已复核线上 CACHE `timelog-v1.5.5`、manifest `1.5.5` 与新文案。本版收尾 v1.5.3/v1.5.4 时发现的两处：默认标签预览「添加 / 取消」改为等宽、主次分明（与合并提示同序）；英文标签设置的条数与合并提示区分单复数（1 entry）。全量 UI **606 passed / 0 failed**（双引擎、关闭重试）。
 - **Web v1.5.4 已发布上线**：main `4bfb0bf`、tag [v1.5.4 / Release](https://github.com/wowayou/time-logger/releases/tag/v1.5.4)，已复核线上 CACHE `timelog-v1.5.4`、manifest `1.5.4` 与新样式。本版只改合并提示「先不合并 / 合并」两键的观感（真机反馈「显示一般」）：等宽撑满、卡片底、「合并」danger 字 + 描边，仅作用于 `.cfg-merge-actions`。全量 UI 598/2（均为 WebKit 负载下的计时或关闭超时，与 main 交替对照均通过，不称零失败，细节见 CHANGELOG v1.5.4）。
 - **Web v1.5.3 已发布上线**：main `2d2cb4e`、tag [v1.5.3 / Release](https://github.com/wowayou/time-logger/releases/tag/v1.5.3)、`publish-site` 部署成功；已复核线上 CACHE `timelog-v1.5.3`、manifest `1.5.3` 与新代码、新文案。本版把标签高级设置改成标签云 + 点开就地编辑（SPEC-017，35 个标签 3301px → 738px），加历史主线折叠与筛选；修复「补回默认标签」预览落在视口外（另一台机器真机验收发现）；合并提示在改名撞名时说「你把 A 改成了 B」。保存 / 合并 / 并发语义不变。
@@ -20,10 +21,9 @@
 
 - **首轮推广尚未开始**：LINUX DO 底稿已备（`docs/promo/linuxdo.md`，分类与版规须发帖前人工核对）；当前已放行但未完成的产品行动。按 [推广清单](docs/promo/checklist.md) 和 [runbook Phase E](docs/launch-runbook.md#phase-e--首轮推广spec-003-合并后) 执行，底稿不等于已发布。
 - **维护者确认未闭合**：runbook A3（账号级域名验证）、C（真机迁移）、D（迁移后使用确认）仍未勾选，B 的 Enforce HTTPS 设置也未核验；不能因站点已上线而代填通过。
-- **真机验收缺口**：2026-10-01 另一台机器确认 v1.5.0 三项与 v1.5.1 修正通过（「补回默认标签没补回」已在 v1.5.3 修复，待复验）；**v1.5.3 标签云、v1.5.4 合并两键、v1.5.5 预览两键与英文单复数**与 v1.5.2 令牌收敛（字重 650→600 只能真机看）待真机确认；标签设置与暂存「暂时通过」，验收单已把当时不清楚怎么测的四行改写成具体步骤；标签合并缺真机验收结果；长段提醒的旧验收项需按 v89 起「默认关闭、开启后不改桶」的规则核对。见 [真机验收单](docs/device-acceptance.md)，自动化通过不代替真机结论。
+- **真机验收缺口**：2026-10-01 另一台机器确认 v1.5.0 三项与 v1.5.1 修正通过（「补回默认标签没补回」已在 v1.5.3 修复，待复验）；**v1.5.3 标签云、v1.5.4 合并两键、v1.5.5 预览两键与英文单复数、v1.5.6 英文计数**与 v1.5.2 令牌收敛（字重 650→600 只能真机看）待真机确认；标签设置与暂存「暂时通过」，验收单已把当时不清楚怎么测的四行改写成具体步骤；标签合并缺真机验收结果；长段提醒的旧验收项需按 v89 起「默认关闭、开启后不改桶」的规则核对。见 [真机验收单](docs/device-acceptance.md)，自动化通过不代替真机结论。
 
 - **设计系统（SPEC-016）B–D 未开始**：A 期已随 v1.5.2 发布（执行记录与偏差见 SPEC-016 §7，含顺延到 B 期的 169 处间距值）。真机反馈的「先不合并 / 合并」两键已在 v1.5.4 以局部样式先行修复，B 期收敛整行按钮时并入基类并删掉局部覆盖（SPEC-016 B 行已注明）。是否继续由维护者按首轮推广反馈决定——按 D9 的精神，求职与推广没有进展时先停在 A。
-- **英文界面其余计数文案不分单复数**（v1.5.5 只修了标签设置一块）：`diag.cache`、`diag.cacheSets`、`diag.title`、`io.shiftSuggested`、`io.conflictProgress`、`io.importDone`、`analytics.coverage`、`analytics.trendUp` / `trendDown`、`analytics.summaryCoverage` 在数量为 1 时读作「1 conflicts」「1 periods」之类。按 `ui.entriesCountLabel` 的同法拆 one/other 键、用 `plural()` 现算即可；低优先级，等下一次动到英文文案时一并处理。
 - **访问统计（roadmap R4）未放行**：不必迁移托管，但需先改主页与隐私政策的「零追踪」承诺并另立决策；维护者尚未决定是否需要。
 
 ## BLOCKED
