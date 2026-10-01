@@ -3,6 +3,7 @@
 // config.mainline），缺的是改名 / 设为当前 / longOk / 清理——这组用例锁住那些。
 import { expect, test } from '@playwright/test';
 import { bootLocale, TODAY_KEY } from './i18n_fixture.js';
+import { openCfgRow } from './cfg_fixture.js';
 
 const CONFIG = {
   version: 1,
@@ -29,9 +30,11 @@ test('mainline rows render with the job spine and the current one is badged, his
   await expect(rows).toHaveCount(2);
   // 竖脊颜色由 data-b 驱动，与时间轴同源；主线是整张 sheet 里唯一的 job 紫。
   await expect(rows.first()).toHaveAttribute('data-b', 'job');
+  await openCfgRow(page, '求职推进');
   await expect(rows.first().locator('.cfg-badge')).toBeVisible();
   await expect(rows.first().locator('[data-action="set-current-mainline"]')).toHaveCount(0);
   await expect(rows.nth(1)).toHaveClass(/is-history/);
+  await openCfgRow(page, '杂');
   await expect(rows.nth(1).locator('[data-action="set-current-mainline"]')).toBeVisible();
   // v82：这份 fixture 一条记录都没有，所以两行都提供删除入口（SPEC-007 当初
   // 「主线无删除」的理由是孤儿标签，零记录时该理由不成立）。
@@ -48,6 +51,7 @@ test('renaming a mainline tag migrates its history in the same save', async ({ p
     ]
   });
   await openConfig(page);
+  await openCfgRow(page, '求职推进');
   await page.locator('.cfg-row[data-original-name="求职推进"] .cfg-name').fill('Job search');
   await page.getByRole('button', { name: '保存标签配置' }).click();
 
@@ -69,6 +73,7 @@ test('设为当前 moves a history name to the head of mainline without touching
     entries: [{ id: 'a', ts: `${TODAY_KEY}T09:00`, what: '投简历', tags: ['求职推进'] }]
   });
   await openConfig(page);
+  await openCfgRow(page, '杂');
   await page.locator('.cfg-row[data-original-name="杂"] [data-action="set-current-mainline"]').click();
   const config = await readConfig(page);
   expect(config.mainline).toEqual(['杂', '求职推进']);
@@ -89,6 +94,7 @@ test('mainline longOk persists and exempts a >3h mainline span from reminders', 
   await expect(page.locator('#timeline')).toContainText('确认');
 
   await openConfig(page);
+  await openCfgRow(page, '求职推进');
   await page.locator('.cfg-row[data-original-name="求职推进"] .cfg-long-ok').check();
   await page.getByRole('button', { name: '保存标签配置' }).click();
 
@@ -106,6 +112,7 @@ test('the bucket segmented control replaces the native select and repaints the s
   await expect(page.locator('.cfg-bucket')).toHaveCount(0);
   const row = page.locator('.cfg-row[data-original-name="睡觉"]');
   await expect(row).toHaveAttribute('data-b', 'maintain');
+  await openCfgRow(page, '睡觉');
   await row.locator('[data-action="cfg-pick-bucket"][data-bucket="leak"]').click();
   // 结构与控件说同一件事：切桶后竖脊即时跟随，不等保存。
   await expect(row).toHaveAttribute('data-b', 'leak');
@@ -117,6 +124,7 @@ test('the bucket segmented control replaces the native select and repaints the s
 test('a name that collides across groups is blocked inline instead of saved', async ({ page }) => {
   await bootLocale(page, { locale: 'zh', config: CONFIG });
   await openConfig(page);
+  await openCfgRow(page, '睡觉');
   await page.locator('.cfg-row[data-original-name="睡觉"] .cfg-name').fill('求职推进');
   await page.getByRole('button', { name: '保存标签配置' }).click();
   await expect(page.locator('[data-role="config-error"]')).toBeVisible();
@@ -171,7 +179,8 @@ test('P34: the redesigned sheet does not clip its last row at 375x600 with maxim
   // 从 2 个加到 4 个后 P34 确实复发了，而那版断言全绿。
   const clipped = await page.evaluate(() => {
     const out = [];
-    document.querySelectorAll('.config-body .cell-group').forEach(group => {
+    // SPEC-017：标签分组改成 .cfg-list（标签云），不再是 .cell-group；两类容器一起查。
+    document.querySelectorAll('.config-body .cell-group, .config-body .cfg-list').forEach(group => {
       if (group.scrollHeight > group.clientHeight + 1) out.push(group.textContent.trim().slice(0, 10));
     });
     return out;
@@ -204,10 +213,12 @@ test('v82: a zero-entry mainline tag can be deleted, and the entry-bearing one s
   const testRow = page.locator('.cfg-row[data-original-name="測試主線"]');
   const usedRow = page.locator('.cfg-row[data-original-name="求职推进"]');
   // 右槽二选一：有记录→条数（不可删）；零记录→删除。
+  await openCfgRow(page, '求职推进');
   await expect(usedRow.locator('.cfg-count')).toBeVisible();
   await expect(usedRow.locator('[data-action="cfg-toggle-delete"]')).toHaveCount(0);
   await expect(testRow.locator('.cfg-count')).toHaveCount(0);
 
+  await openCfgRow(page, '測試主線');
   await testRow.locator('[data-action="cfg-toggle-delete"]').click();
   // 待删除是可见的中间态，不是当场消失。
   await expect(testRow).toHaveAttribute('data-pending-delete', '1');
@@ -227,6 +238,7 @@ test('v82: pending delete is reversible by 撤销 and by 取消', async ({ page 
   await bootLocale(page, { locale: 'zh', config: CONFIG_WITH_TEST_TAG });
   await openConfig(page);
   const row = page.locator('.cfg-row[data-original-name="測試主線"]');
+  await openCfgRow(page, '測試主線');
   await row.locator('[data-action="cfg-toggle-delete"]').click();
   await row.locator('[data-action="cfg-toggle-delete"]').click();
   await expect(row).not.toHaveAttribute('data-pending-delete', '1');
@@ -237,6 +249,7 @@ test('v82: pending delete is reversible by 撤销 and by 取消', async ({ page 
   // 标记删除后走「取消」：整单作废，配置一个字不变。
   // （保存后 sheet 按 v41 导航栈退回「更多」，这里直接下钻，不重开「更多」。）
   await page.getByRole('button', { name: '配置标签' }).click();
+  await openCfgRow(page, '測試主線');
   await page.locator('.cfg-row[data-original-name="測試主線"] [data-action="cfg-toggle-delete"]').click();
   await page.getByRole('button', { name: '取消配置' }).click();
   expect((await readConfig(page)).mainline).toEqual(['測試主線', '求职推进']);
@@ -251,6 +264,7 @@ test('v82: clearing a name is an inline error instead of silently deleting the c
     entries: [{ id: 'a', ts: `${TODAY_KEY}T09:00`, what: '午睡', tags: ['睡觉'] }]
   });
   await openConfig(page);
+  await openCfgRow(page, '睡觉');
   await page.locator('.cfg-row[data-original-name="睡觉"] .cfg-name').fill('');
   await page.getByRole('button', { name: '保存标签配置' }).click();
   await expect(page.locator('[data-role="config-error"]')).toBeVisible();
@@ -261,6 +275,7 @@ test('v82: clearing a name is an inline error instead of silently deleting the c
 test('v82: a tag that gained entries in another tab is refused at save time', async ({ page }) => {
   await bootLocale(page, { locale: 'zh', config: CONFIG_WITH_TEST_TAG });
   await openConfig(page);
+  await openCfgRow(page, '測試主線');
   await page.locator('.cfg-row[data-original-name="測試主線"] [data-action="cfg-toggle-delete"]').click();
   // 渲染时的「零记录」判据在 sheet 打开期间可能过期——保存必须按最新 load() 复算。
   await page.evaluate(todayKey => {
@@ -276,6 +291,7 @@ test('v82: a tag that gained entries in another tab is refused at save time', as
 test('v82: emptying a whole group is allowed and renders an empty-state line', async ({ page }) => {
   await bootLocale(page, { locale: 'zh', config: CONFIG_WITH_TEST_TAG });
   await openConfig(page);
+  await openCfgRow(page, '刷手机');
   await page.locator('.cfg-row[data-original-name="刷手机"] [data-action="cfg-toggle-delete"]').click();
   await page.getByRole('button', { name: '保存标签配置' }).click();
   expect((await readConfig(page)).chips.map(c => c.name)).toEqual(['睡觉']);
@@ -306,6 +322,7 @@ test('v84: opening the more sheet already ends the undo window (v82 guard is now
   await page.waitForTimeout(400);
   await openConfig(page);
   await expect(page.locator('#undo-toast')).toBeHidden();
+  await openCfgRow(page, '測試主線');
   await page.locator('.cfg-row[data-original-name="測試主線"] [data-action="cfg-toggle-delete"]').click();
   await page.getByRole('button', { name: '保存标签配置' }).click();
   expect((await readConfig(page)).mainline).toEqual(['求职推进']);

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { openCfgRow } from './cfg_fixture.js';
 import { FIXED_NOW, STATES, VIEWPORTS, boot, expectNoHorizontalOverflow, openAdvancedSheet, openBackupMenu, openBackupSheet, routeStaticOrigin, trackDialogs } from './ui_fixture.js';
 
 async function setFormTimestamp(page, selector, value) {
@@ -772,6 +773,7 @@ test('config rename migrates existing tags and removes replacement UI', async ({
   // SPEC-007 起 sheet 里多了主线分组且排在最前，`.first()` 会命中主线行而不是
   // 目标 chip。按行的 data-original-name 显式定位——本仓库已经被 `.first()`
   // 掩盖真实定位坑过一次（v73）。
+  await openCfgRow(page, '拉伸');
   await page.locator('.cfg-row[data-original-name="拉伸"] .cfg-name').fill('活动拉伸');
   await page.getByRole('button', { name: '保存标签配置' }).click();
 
@@ -1609,11 +1611,14 @@ test('renamed defaults stay renamed and mainline/chip duplicates are rejected sa
   expect(rowNames).not.toContain('睡觉');
   await expect(page.locator('.config-body .cfg-row', { hasText: '睡觉' })).toHaveCount(0);
   await expect(page.locator('[data-action="preview-locale-defaults"] [data-role="cell-label"]')).toContainText('补回默认标签');
+  await page.locator('.cfg-row[data-kind="chip"] > .cfg-chip').click();
   await chipName.fill('求职推进');
   await page.getByRole('button', { name: '保存标签配置' }).click();
   // v85：把一个已有标签改成另一个已有标签的名字，不再是死路一条的「重复」，而是
   // 问「要不要合并」。**保护的不变量没变**：没点确认之前一个字都不写入。
-  await expect(page.locator('[data-role="config-error"]')).toContainText('是同一个标签名');
+  // v1.5.3：这是「把休息改成了求职推进」的改名撞名，提示改说「你把 A 改成了 B」
+  // （「是同一个标签名」只留给存量大小写变体并存，见 v1_5_3_tag_cloud.spec.js）。
+  await expect(page.locator('[data-role="config-error"]')).toContainText('你把「休息」改成了「求职推进」');
   await expect(page.locator('[data-action="confirm-tag-merge"]')).toBeVisible();
   const config = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.config')));
   expect(config.chips).toEqual([expect.objectContaining({ name: '休息' })]);

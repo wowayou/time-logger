@@ -75,6 +75,10 @@ test('v89: per-tag reminder exemptions stay hidden while the global option is of
   await boot(page, 768, 'one-record', false, FIXED_NOW);
   await page.locator('[data-action="open-more"]').click();
   await page.getByRole('button', { name: '配置标签' }).click();
+  // v1.5.3（SPEC-017）：免确认框在每个标签的编辑卡里，先点开一张——否则卡片收起时
+  // 「看不见」恒成立，这条断言就没有牙了。
+  await page.locator('.cfg-row > .cfg-chip').first().click();
+  await expect(page.locator('.cfg-row.is-open .cfg-name')).toBeVisible();
   await expect(page.locator('.cfg-long:visible')).toHaveCount(0);
 
   await page.keyboard.press('Escape');
@@ -85,6 +89,7 @@ test('v89: per-tag reminder exemptions stay hidden while the global option is of
   await page.keyboard.press('Escape');
   await page.locator('[data-action="open-more"]').click();
   await page.getByRole('button', { name: '配置标签' }).click();
+  await page.locator('.cfg-row > .cfg-chip').first().click();
   await expect(page.locator('.cfg-long:visible').first()).toBeVisible();
 });
 

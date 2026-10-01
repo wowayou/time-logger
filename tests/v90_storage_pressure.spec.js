@@ -2,6 +2,7 @@
 import { expect, test } from '@playwright/test';
 import { bootLocale, TODAY_KEY } from './i18n_fixture.js';
 import { boot, FIXED_NOW } from './ui_fixture.js';
+import { openCfgRow } from './cfg_fixture.js';
 
 const CONFIG = {
   version: 1,
@@ -34,6 +35,7 @@ test('v90: tag rename rolls entries back when config storage is full', async ({ 
 
   await page.locator('[data-action="open-more"]').click();
   await page.getByRole('button', { name: '配置标签' }).click();
+  await openCfgRow(page, '求职推进');
   await page.locator('.cfg-row[data-original-name="求职推进"] .cfg-name').fill('Job search');
   await rejectConfigWrites(page);
   await page.getByRole('button', { name: '保存标签配置' }).click();

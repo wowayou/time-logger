@@ -4,6 +4,7 @@
 // ② 合并是破坏性动作，提示必须给显式「先不合并」出口 + danger 色「合并」，防单一裸按钮误触。
 import { expect, test } from '@playwright/test';
 import { bootLocale, TODAY_KEY } from './i18n_fixture.js';
+import { openCfgRow } from './cfg_fixture.js';
 
 const CONFIG = {
   version: 1,
@@ -28,16 +29,19 @@ test('设为当前 preserves unsaved renames, bucket flips and draft rows across
 
   // 别处的三种未保存改动：改名一个 chip、把它的桶从维持翻到偏航、再加一行草稿。
   const sleepRow = page.locator('.cfg-row[data-original-name="睡觉"]');
+  await openCfgRow(page, '睡觉');
   await sleepRow.locator('.cfg-name').fill('午睡');
   await sleepRow.locator('[data-action="cfg-pick-bucket"][data-bucket="leak"]').click();
   await page.locator('.cfg-section').filter({ hasText: '维持标签' }).locator('[data-action="cfg-add-row"]').click();
   await page.locator('.cfg-row[data-new="1"] .cfg-name').fill('冥想');
   // 再把另一个零记录 chip 点成待删除（CONFIG 无 entries，刷手机 是零记录行）。
   const phoneRow = page.locator('.cfg-row[data-original-name="刷手机"]');
+  await openCfgRow(page, '刷手机');
   await phoneRow.locator('[data-action="cfg-toggle-delete"]').click();
   await expect(phoneRow.locator('[data-action="cfg-toggle-delete"]')).toHaveText('撤销');
 
   // 触发局部重渲染：把历史主线设为当前。
+  await openCfgRow(page, '杂');
   await page.locator('.cfg-row[data-original-name="杂"] [data-action="set-current-mainline"]').click();
 
   // 立即落库的只有主线顺序……
@@ -61,6 +65,7 @@ test('设为当前 preserves unsaved renames, bucket flips and draft rows across
 test('previewing default tags does not wipe an in-progress rename', async ({ page }) => {
   await bootLocale(page, { locale: 'zh', config: CONFIG });
   await openConfig(page);
+  await openCfgRow(page, '刷手机');
   await page.locator('.cfg-row[data-original-name="刷手机"] .cfg-name').fill('短视频');
   await page.locator('[data-action="preview-locale-defaults"]').click();
   // 预览框出现，且未保存的改名还在。
@@ -81,11 +86,14 @@ for (const [originBucket, selectedBucket] of [['maintain', 'leak'], ['leak', 'ma
     const drafts = group.locator('.cfg-row[data-new="1"]');
     const existingName = originBucket === 'maintain' ? '睡觉' : '刷手机';
     const existing = group.locator(`.cfg-row[data-original-name="${existingName}"]`);
+    await openCfgRow(page, existingName);
     await existing.locator(`[data-action="cfg-pick-bucket"][data-bucket="${selectedBucket}"]`).click();
     for (const name of ['草稿甲', '草稿乙']) {
       await group.locator('.cfg-add').click();
       await drafts.last().locator('.cfg-name').fill(name);
     }
+    // SPEC-017：一次只展开一张，建第二条草稿时第一条已收起成 chip，先点开它。
+    await drafts.nth(0).locator(':scope > .cfg-chip').click();
     await drafts.nth(0).locator(`[data-action="cfg-pick-bucket"][data-bucket="${selectedBucket}"]`).click();
     await drafts.nth(0).locator('.cfg-long-ok').check();
 
@@ -97,6 +105,7 @@ for (const [originBucket, selectedBucket] of [['maintain', 'leak'], ['leak', 'ma
       '[data-action="preview-locale-defaults"]',
       '[data-action="apply-locale-defaults"]'
     ]) {
+      if (action.includes('set-current-mainline')) await openCfgRow(page, '杂');
       await page.locator(action).click();
       await expect(existing).toHaveAttribute('data-b', selectedBucket);
       await expect(drafts).toHaveCount(2);
@@ -132,6 +141,7 @@ test('the merge prompt offers an explicit 先不合并 exit and a danger-styled 
     ]
   });
   await openConfig(page);
+  await openCfgRow(page, '刷手机');
   await page.locator('.cfg-row[data-original-name="刷手机"] .cfg-name').fill('睡觉');
   await page.getByRole('button', { name: '保存标签配置' }).click();
 
@@ -186,12 +196,15 @@ test('④ set-current is blocked by CAS when another tab wrote, and staged edits
   const { pageA, pageB } = await openTwoConfigPages(context);
 
   // B 把「睡觉」从维持改成偏航（leak）并保存：现在 config raw 变了，A 的基线变陈。
+  await openCfgRow(pageB, '睡觉');
   await pageB.locator('.cfg-row[data-original-name="睡觉"] [data-action="cfg-pick-bucket"][data-bucket="leak"]').click();
   await pageB.getByRole('button', { name: '保存标签配置' }).click();
   await expect(pageB.locator('#form-sheet-title')).toHaveText('更多');
 
   // A 先暂存一个改名，再点「杂」的「设为当前」。
+  await openCfgRow(pageA, '刷手机');
   await pageA.locator('.cfg-row[data-original-name="刷手机"] .cfg-name').fill('短视频');
+  await openCfgRow(pageA, '杂');
   await pageA.locator('.cfg-row[data-original-name="杂"] [data-action="set-current-mainline"]').click();
 
   // 报「另一个标签页」；暂存的改名仍在；timelog.config 未被写入（一次性读取）。
@@ -209,6 +222,7 @@ test('④ set-current is blocked by CAS when another tab wrote, and staged edits
 test('⑤ preview-then-save is blocked by CAS when another tab wrote', async ({ context }) => {
   const { pageA, pageB } = await openTwoConfigPages(context);
 
+  await openCfgRow(pageB, '睡觉');
   await pageB.locator('.cfg-row[data-original-name="睡觉"] [data-action="cfg-pick-bucket"][data-bucket="leak"]').click();
   await pageB.getByRole('button', { name: '保存标签配置' }).click();
   await expect(pageB.locator('#form-sheet-title')).toHaveText('更多');
@@ -229,6 +243,7 @@ test('⑥ single page: staged rename survives preview+apply and both land on sav
 
   // 暂存一个改名 → 预览默认标签 → 应用。zh 默认标签里除了 睡觉/刷手机（CONFIG 已有）
   // 还有吃饭等 CONFIG 之外的项，会真正新增。
+  await openCfgRow(page, '刷手机');
   await page.locator('.cfg-row[data-original-name="刷手机"] .cfg-name').fill('短视频');
   await page.locator('[data-action="preview-locale-defaults"]').click();
   await expect(page.locator('.cfg-row[data-original-name="刷手机"] .cfg-name')).toHaveValue('短视频');
@@ -249,6 +264,7 @@ test('⑦ apply-locale-defaults is blocked by CAS when another tab wrote (应用
   const { pageA, pageB } = await openTwoConfigPages(context);
 
   // B 把「睡觉」从维持改成偏航（leak）并保存：A 的 CAS 基线变陈。
+  await openCfgRow(pageB, '睡觉');
   await pageB.locator('.cfg-row[data-original-name="睡觉"] [data-action="cfg-pick-bucket"][data-bucket="leak"]').click();
   await pageB.getByRole('button', { name: '保存标签配置' }).click();
   await expect(pageB.locator('#form-sheet-title')).toHaveText('更多');

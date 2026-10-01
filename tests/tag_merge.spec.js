@@ -3,6 +3,7 @@
 // 并存的那张截图（`睡觉` 与 `Sleep` 是同一件事却是两个标签，而且**合不了**）。
 import { expect, test } from '@playwright/test';
 import { bootLocale, TODAY_KEY } from './i18n_fixture.js';
+import { openCfgRow } from './cfg_fixture.js';
 
 const CONFIG = {
   version: 1,
@@ -34,6 +35,7 @@ test('v85: renaming a tag onto an existing one offers a merge instead of a dead 
     ]
   });
   await openConfig(page);
+  await openCfgRow(page, 'Sleep');
   await page.locator('.cfg-row[data-original-name="Sleep"] .cfg-name').fill('睡觉');
   await page.getByRole('button', { name: '保存标签配置' }).click();
 
@@ -96,6 +98,7 @@ test('v85: a merge confirmed against stale counts asks again', async ({ page }) 
     entries: [{ id: 'a', ts: `${TODAY_KEY}T08:00`, what: '午睡', tags: ['Sleep'] }]
   });
   await openConfig(page);
+  await openCfgRow(page, 'Sleep');
   await page.locator('.cfg-row[data-original-name="Sleep"] .cfg-name').fill('睡觉');
   await page.getByRole('button', { name: '保存标签配置' }).click();
   await expect(page.locator('[data-role="config-error"]')).toContainText('1 条记录');

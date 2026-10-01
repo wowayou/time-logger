@@ -3,6 +3,7 @@
 import { expect, test } from '@playwright/test';
 import { bootLocale, TODAY_KEY } from './i18n_fixture.js';
 import { FIXED_NOW, boot, openBackupMenu } from './ui_fixture.js';
+import { openCfgRow } from './cfg_fixture.js';
 
 const MANY_CHIPS = {
   version: 1,
@@ -97,7 +98,7 @@ test('v84: a blocked save scrolls to the offending row, not to the bottom of the
   await bootLocale(page, { locale: 'zh', config: MANY_CHIPS, width: 390, height: 700 });
   await page.locator('[data-action="open-more"]').click();
   await page.getByRole('button', { name: '配置标签' }).click();
-  const row = page.locator('.cfg-row[data-original-name="标签1"]');
+  const row = await openCfgRow(page, '标签1');
   await row.locator('.cfg-name').fill('');
   await page.getByRole('button', { name: '保存标签配置' }).click();
   await expect(page.locator('[data-role="config-error"]')).toBeVisible();

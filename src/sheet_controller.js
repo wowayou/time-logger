@@ -57,7 +57,7 @@ import {
   validateTs,
   validateTsForMode
 } from './time.js';
-import { bucketHint, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderTagPicker, renderTagSuggestions } from './ui.js';
+import { bucketHint, configChipLabel, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderTagPicker, renderTagSuggestions } from './ui.js';
 
 export function createSheetController(deps) {
   let sheetScrollY = 0;
@@ -1985,6 +1985,10 @@ export function createSheetController(deps) {
     const panel = target && target.closest && target.closest('.form-sheet-panel');
     if (!panel) return;
     if (panel.dataset.mode === 'motto' && target.dataset.role === 'quotes-input') paintQuotesCount(panel);
+    if (panel.dataset.mode === 'config') {
+      if (target.dataset.role === 'cfg-search') filterConfigRows(panel);
+      else if (target.closest('.cfg-row')) syncConfigRowFace(target.closest('.cfg-row'));
+    }
     if (panel.dataset.mode === 'edit') refreshEditPreview(panel);
     if (panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
     if (panel.dataset.mode === 'new' && formOvernightContext) refreshOvernightPreview(panel);
@@ -2033,10 +2037,19 @@ export function createSheetController(deps) {
         groupBucket: row.closest('.cfg-list').querySelector('.cfg-add').dataset.bucket,
         bucket: seg ? seg.dataset.bucket : (row.dataset.b || ''),
         longOk: longEl ? longEl.checked : false,
-        pendingDelete: row.dataset.pendingDelete === '1'
+        pendingDelete: row.dataset.pendingDelete === '1',
+        // SPEC-017：展开着的那张卡、历史折叠与筛选词也是「用户正在看的东西」，
+        // 局部重渲后原样还原，不让「设为当前」把人甩回一片收起的标签云。
+        open: row.classList.contains('is-open')
       };
     });
-    return rows.length ? { rows } : null;
+    const fold = panel.querySelector('.cfg-fold');
+    const search = panel.querySelector('[data-role="cfg-search"]');
+    return rows.length ? {
+      rows,
+      historyOpen: Boolean(fold && fold.getAttribute('aria-expanded') === 'true'),
+      query: search ? search.value : ''
+    } : null;
   }
 
   // 找回填草稿行要插在哪个「＋ 新建标签」之前：主线组认 kind，chip 组还要认桶。
@@ -2071,6 +2084,7 @@ export function createSheetController(deps) {
     btn.setAttribute('aria-label', t('cfg.undoDeleteAria', { name }));
     row.querySelectorAll('input, .cfg-bucket-seg button, .cfg-set-current')
       .forEach(el => { el.disabled = true; });
+    syncConfigRowFace(row);
   }
 
   // 把快照回填到刚重渲染出的行上：已有行按 originalName **逐字**匹配（存量可能同时
@@ -2092,6 +2106,7 @@ export function createSheetController(deps) {
       const longEl = row.querySelector('.cfg-long-ok');
       if (longEl) longEl.checked = r.longOk;
       if (r.pendingDelete) markConfigRowPendingDelete(row);
+      setConfigRowOpen(row, r.open);
     });
     snap.rows.filter(r => r.isNew).forEach(r => {
       const bucket = r.kind === 'mainline' ? 'job' : (r.bucket === 'leak' ? 'leak' : 'maintain');
@@ -2105,7 +2120,155 @@ export function createSheetController(deps) {
       if (r.kind === 'chip' && r.bucket) applyConfigRowBucket(row, r.bucket);
       const longEl = row.querySelector('.cfg-long-ok');
       if (longEl) longEl.checked = r.longOk;
+      setConfigRowOpen(row, r.open);
     });
+    panel.querySelectorAll('.cfg-row').forEach(syncConfigRowFace);
+    const fold = panel.querySelector('.cfg-fold');
+    if (fold && snap.historyOpen) setConfigHistoryOpen(fold, true);
+    const search = panel.querySelector('[data-role="cfg-search"]');
+    if (search && snap.query) {
+      search.value = snap.query;
+      filterConfigRows(panel);
+    }
+  }
+
+  // ── SPEC-017：标签云的展开、chip 面同步、历史折叠与筛选 ──────────────────────
+  // 这些全是「呈现状态」：不落库、不参与 saveTagConfig 的判据（被收起、被折叠、被
+  // 筛掉的行照样在 DOM 里、照样保存）。唯一的硬要求是出错时把行亮出来（revealConfigRow）。
+
+  function setConfigRowOpen(row, open) {
+    if (!row) return;
+    row.classList.toggle('is-open', Boolean(open));
+    const editor = row.querySelector('.cfg-editor');
+    if (editor) editor.hidden = !open;
+    const face = row.querySelector('.cfg-chip');
+    if (face) face.setAttribute('aria-expanded', String(Boolean(open)));
+  }
+
+  // 收起一张卡。空名草稿收起即移除——空草稿保存时本来就视同未创建，留一个没名字的
+  // chip 在云里只会让人以为建了什么。
+  function collapseConfigRow(row) {
+    if (!row) return;
+    const nameEl = row.querySelector('.cfg-name');
+    if (row.dataset.new === '1' && nameEl && !nameEl.value.trim()) {
+      row.remove();
+      return;
+    }
+    setConfigRowOpen(row, false);
+    syncConfigRowFace(row);
+  }
+
+  // 一次只展开一张：标签云里同时摊开几张整宽卡，就又回到了「一墙表单」。
+  function openConfigRow(row) {
+    const panel = row && row.closest('.form-sheet-panel');
+    if (!panel) return;
+    panel.querySelectorAll('.cfg-row.is-open').forEach(other => {
+      if (other !== row) collapseConfigRow(other);
+    });
+    setConfigRowOpen(row, true);
+  }
+
+  function toggleConfigRow(btn) {
+    const row = btn.closest('.cfg-row');
+    if (!row) return;
+    if (row.classList.contains('is-open')) collapseConfigRow(row);
+    else openConfigRow(row);
+    // 收起后 chip 面是唯一的焦点落点（空草稿被移除时它也不在了，就不强求）。
+    if (row.isConnected) btn.focus({ preventScroll: true });
+  }
+
+  // chip 面跟着控件现值走：原名→新名、改桶/免确认的小点、待删除的删除线、读屏名称。
+  function syncConfigRowFace(row) {
+    if (!row) return;
+    const face = row.querySelector('.cfg-chip');
+    if (!face) return;
+    const nameEl = row.querySelector('.cfg-name');
+    const longEl = row.querySelector('.cfg-long-ok');
+    const original = row.dataset.originalName || '';
+    const isNew = row.dataset.new === '1';
+    const typed = nameEl ? nameEl.value.trim() : original;
+    const renamed = Boolean(original) && typed !== original;
+    const bucketChanged = !isNew && row.dataset.kind === 'chip' && (row.dataset.b || '') !== (row.dataset.originalBucket || '');
+    const longChanged = !isNew && Boolean(longEl) && longEl.checked !== (row.dataset.originalLongOk === '1');
+    const pendingDelete = row.dataset.pendingDelete === '1';
+    const dirty = !isNew && (renamed || bucketChanged || longChanged);
+    const shown = typed || t('cfg.newNamePlaceholder');
+    row.classList.toggle('is-dirty', dirty);
+    const nameSpan = face.querySelector('.cfg-chip-name');
+    if (nameSpan) {
+      nameSpan.textContent = shown;
+      nameSpan.classList.toggle('is-empty', !typed);
+    }
+    const wasSpan = face.querySelector('.cfg-chip-was');
+    if (wasSpan) {
+      wasSpan.textContent = renamed ? original : '';
+      wasSpan.hidden = !renamed;
+    }
+    const wasLine = row.querySelector('[data-role="cfg-was"]');
+    if (wasLine) {
+      wasLine.textContent = renamed ? t('cfg.wasName', { name: original }) : '';
+      wasLine.hidden = !renamed;
+    }
+    face.setAttribute('aria-label', configChipLabel({
+      name: shown,
+      was: renamed ? original : '',
+      count: Number(row.dataset.count || 0),
+      isNew,
+      current: row.classList.contains('is-current'),
+      dirty,
+      pendingDelete
+    }));
+  }
+
+  function setConfigHistoryOpen(fold, open) {
+    const list = fold.closest('.cfg-list');
+    if (list) list.classList.toggle('is-folded', !open);
+    fold.setAttribute('aria-expanded', String(open));
+  }
+
+  function toggleConfigHistory(btn) {
+    setConfigHistoryOpen(btn, btn.getAttribute('aria-expanded') !== 'true');
+  }
+
+  // 筛选只管显示：按 tagKey 包含匹配原名或当前输入值；草稿与展开着的卡始终显示
+  // （不把正在编辑的东西从用户手底下抽走）。搜索期间历史折叠让位，没命中的分组整组藏起。
+  function filterConfigRows(panel) {
+    const search = panel && panel.querySelector('[data-role="cfg-search"]');
+    if (!search) return;
+    const query = tagKey(search.value);
+    const body = panel.querySelector('.config-body');
+    if (body) body.classList.toggle('is-searching', Boolean(query));
+    let matched = 0;
+    panel.querySelectorAll('.cfg-section').forEach(section => {
+      let sectionMatched = 0;
+      section.querySelectorAll('.cfg-row').forEach(row => {
+        const nameEl = row.querySelector('.cfg-name');
+        const hit = !query
+          || row.dataset.new === '1'
+          || row.classList.contains('is-open')
+          || tagKey(row.dataset.originalName || '').includes(query)
+          || Boolean(nameEl && tagKey(nameEl.value).includes(query));
+        row.classList.toggle('is-filtered', !hit);
+        if (hit) sectionMatched += 1;
+      });
+      section.classList.toggle('is-filtered', Boolean(query) && !sectionMatched);
+      matched += sectionMatched;
+    });
+    const none = panel.querySelector('[data-role="cfg-no-match"]');
+    if (none) none.hidden = !query || matched > 0;
+  }
+
+  // 出错时把行亮出来：被筛掉就清空筛选，再展开它（展开的行不受历史折叠影响）。
+  // 报错指向一个看不见的输入框，等于没报。
+  function revealConfigRow(row) {
+    if (!row) return;
+    const panel = row.closest('.form-sheet-panel');
+    if (row.classList.contains('is-filtered') && panel) {
+      const search = panel.querySelector('[data-role="cfg-search"]');
+      if (search) search.value = '';
+      filterConfigRows(panel);
+    }
+    openConfigRow(row);
   }
 
   // v85：两个名字只差大小写就是同一个标签，所以重名判定按 tagKey 折叠。返回第一组
@@ -2152,6 +2315,7 @@ export function createSheetController(deps) {
       count,
       from: source.originalName,
       to: target.name,
+      renamed: renamed.length === 1,
       signature: `${source.originalName}→${target.name}#${count}`
     };
   }
@@ -2165,7 +2329,10 @@ export function createSheetController(deps) {
     mergeSourceInput = plan.source.input || null;
     box.replaceChildren();
     const text = document.createElement('div');
-    text.textContent = t('config.mergePrompt', { from: plan.from, to: plan.to, n: plan.count });
+    // 用户把一个标签改成了另一个的名字时，说「你把 A 改成了 B」——「A 与 B 是同一个
+    // 标签名」那句是给存量 sleep/Sleep 并存写的，套在改名上会让人看不懂。
+    const vars = { from: plan.from, to: plan.to, n: plan.count };
+    text.textContent = plan.renamed ? t('config.mergePromptRenamed', vars) : t('config.mergePrompt', vars);
     const actions = document.createElement('div');
     actions.className = 'cfg-merge-actions';
     const cancel = document.createElement('button');
@@ -2182,6 +2349,7 @@ export function createSheetController(deps) {
     actions.append(cancel, confirm);
     box.append(text, actions);
     box.hidden = false;
+    revealConfigRow(plan.source.el);
     if (plan.source.el && typeof plan.source.el.scrollIntoView === 'function') {
       plan.source.el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
@@ -2219,6 +2387,7 @@ export function createSheetController(deps) {
     const all = [...mainlineRows, ...chipRows];
     const blank = all.find(row => !row.name);
     if (blank) {
+      revealConfigRow(blank.el);
       showInlineError(panel, t('config.emptyName'), 'config-error', blank.input);
       return;
     }
@@ -2226,6 +2395,7 @@ export function createSheetController(deps) {
     // 的标签会显示在某个桶的分组里、却按未记录统计。新建与改名同一处拦下。
     const reserved = all.find(row => row.name === RESERVED_UNKNOWN_TAG);
     if (reserved) {
+      revealConfigRow(reserved.el);
       showInlineError(panel, t('config.reservedName', { name: RESERVED_UNKNOWN_TAG }), 'config-error', reserved.input);
       return;
     }
@@ -2238,6 +2408,7 @@ export function createSheetController(deps) {
     if (clash) {
       const plan = planTagMerge(clash, d.entries);
       if (!plan) {
+        revealConfigRow(clash.rows[1].el);
         showInlineError(panel, t('config.duplicateName', { name: clash.rows[1].name }), 'config-error', clash.rows[1].input);
         return;
       }
@@ -2259,6 +2430,7 @@ export function createSheetController(deps) {
       // 不能拼进选择器（引号/反斜杠会把它拆掉），按属性值逐个比对更稳。
       const row = Array.from(panel.querySelectorAll('.cfg-row[data-pending-delete="1"]'))
         .find(item => item.dataset.originalName === stillUsed);
+      if (row) revealConfigRow(row);
       showInlineError(panel, t('config.deleteHasEntries', { name: stillUsed }), 'config-error');
       if (row && typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
@@ -2366,13 +2538,17 @@ export function createSheetController(deps) {
     // 待删除行的输入全部禁用：既是视觉状态，也让 Tab 跳过一行已经不算数的控件。
     row.querySelectorAll('input, .cfg-bucket-seg button, .cfg-set-current')
       .forEach(el => { el.disabled = !wasPending; });
+    syncConfigRowFace(row);
   }
 
   // v83：新建一行草稿标签。整张 sheet 不重渲染——重渲染会丢掉用户在别的行里
   // 还没保存的改名/勾选（同 v82 的待删除态，全部改动一起在「保存」落库）。
   function addConfigRow(btn) {
-    const group = btn.closest('.cell-group');
+    const group = btn.closest('.cfg-list');
     if (!group) return;
+    // 新草稿出生即展开；先收起别的卡，守住「一次只展开一张」。
+    const panel = btn.closest('.form-sheet-panel');
+    if (panel) panel.querySelectorAll('.cfg-row.is-open').forEach(collapseConfigRow);
     btn.insertAdjacentHTML('beforebegin', renderConfigRowDraft(
       btn.dataset.kind || 'chip',
       btn.dataset.bucket || 'maintain',
@@ -2403,16 +2579,31 @@ export function createSheetController(deps) {
     });
     // 竖脊即时跟随：结构与控件说同一件事。
     row.dataset.b = btn.dataset.bucket;
+    syncConfigRowFace(row);
   }
 
   // D18 新增范围：给存量 config 一个拿到本语言默认标签的出口。只追加、同名跳过、
   // 先预览再落库；绝不做成自动行为或切语言时的弹窗（那会违反 SPEC-014 §1.5）。
+  // v1.5.3：这三个局部动作都会原地重渲整张 sheet，正文随之滚回顶部；而入口与预览
+  // 挂在最底部、新增的标签在中段。不把结果拉进视口，用户点完只会看到一片没变化的
+  // 主线——真机验收「显示了、但实际没补回」就是这么来的：预览在屏幕外，于是去点了
+  // 头部「保存」，而「保存」不应用预览（维护者知情保留这个流程）。
+  function configPanel() {
+    return document.querySelector('#form-sheet .form-sheet-panel');
+  }
+
   function previewLocaleDefaults() {
     openFormSheet({ mode: 'config', defaultsPreview: previewLocaleDefaultTags(deps.loadConfig()) });
+    const preview = configPanel() && configPanel().querySelector('[data-role="defaults-preview"]');
+    if (!preview) return;
+    preview.scrollIntoView({ block: 'nearest' });
+    const apply = preview.querySelector('[data-action="apply-locale-defaults"]');
+    if (apply) apply.focus({ preventScroll: true });
   }
 
   function applyLocaleDefaults() {
-    const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    const panel = configPanel();
+    const added = configDefaultsPreview ? configDefaultsPreview.additions.map(chip => chip.name) : [];
     // 同 setCurrentMainline：用打开时的 CAS 基线，不用现读的 raw。
     const write = deps.saveConfigChecked(appendLocaleDefaultTags(deps.loadConfig()), configRawAtOpen);
     if (!write.ok) {
@@ -2422,10 +2613,27 @@ export function createSheetController(deps) {
     configRawAtOpen = write.raw;
     openFormSheet({ mode: 'config' });
     deps.render();
+    // 标签名是用户数据，不拼进选择器，逐个比对属性值。
+    const after = configPanel();
+    const first = after && Array.from(after.querySelectorAll('.cfg-row[data-original-name]'))
+      .find(row => added.includes(row.dataset.originalName || ''));
+    if (!first) return;
+    if (first.classList.contains('is-filtered')) {
+      const search = after.querySelector('[data-role="cfg-search"]');
+      if (search) search.value = '';
+      filterConfigRows(after);
+    }
+    first.scrollIntoView({ block: 'center' });
+    const face = first.querySelector('.cfg-chip');
+    if (face) face.focus({ preventScroll: true });
   }
 
   function cancelLocaleDefaults() {
     openFormSheet({ mode: 'config' });
+    const entry = configPanel() && configPanel().querySelector('[data-action="preview-locale-defaults"]');
+    if (!entry) return;
+    entry.scrollIntoView({ block: 'nearest' });
+    entry.focus({ preventScroll: true });
   }
 
   // 阶段格言（v69，C13）：三态归一化在 storage.normalizeConfig 里做（trim/60 字上限/
@@ -2637,6 +2845,8 @@ export function createSheetController(deps) {
     setCurrentMainline,
     pickConfigBucket,
     toggleConfigRowDelete,
+    toggleConfigRow,
+    toggleConfigHistory,
     addConfigRow,
     removeConfigDraftRow,
     previewLocaleDefaults,

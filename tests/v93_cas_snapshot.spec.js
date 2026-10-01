@@ -3,6 +3,7 @@
 // 配上新 raw，saveChecked 反而放行，静默覆盖对方数据。
 import { expect, test } from '@playwright/test';
 import { FIXED_NOW, boot } from './ui_fixture.js';
+import { openCfgRow } from './cfg_fixture.js';
 
 test('v93: CAS snapshot cannot pair stale data with another tab\'s newer raw value', async ({ page }) => {
   await boot(page, 768, 'planned-expired', false, FIXED_NOW);
@@ -61,11 +62,13 @@ test('v93: a stale tag-config sheet cannot overwrite another tab\'s saved rename
   }
 
   const row = page => page.locator('.cfg-row[data-original-name="求职推进"] .cfg-name');
+  await openCfgRow(pageA, '求职推进');
   await row(pageA).fill('先保存的主线');
   await pageA.getByRole('button', { name: '保存标签配置' }).click();
   // 配置页从「更多」下钻，保存成功后按导航栈返回「更多」，而不是直接退出整张 sheet。
   await expect(pageA.locator('#form-sheet-title')).toHaveText('更多');
 
+  await openCfgRow(pageB, '求职推进');
   await row(pageB).fill('后保存的旧草稿');
   await pageB.getByRole('button', { name: '保存标签配置' }).click();
 
@@ -80,6 +83,7 @@ test('v93: a failed config rollback cannot erase a newer data write', async ({ p
   await boot(page, 768, 'one-record', false, FIXED_NOW);
   await page.locator('[data-action="open-more"]').click();
   await page.getByRole('button', { name: '配置标签' }).click();
+  await openCfgRow(page, '求职推进');
   await page.locator('.cfg-row[data-original-name="求职推进"] .cfg-name').fill('本次改名');
 
   await page.evaluate(() => {

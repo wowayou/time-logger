@@ -1007,6 +1007,8 @@ import {
       if (action === 'set-current-mainline') sheetController.setCurrentMainline(el.dataset.name || '');
       if (action === 'cfg-pick-bucket') sheetController.pickConfigBucket(el);
       if (action === 'cfg-toggle-delete') sheetController.toggleConfigRowDelete(el);
+      if (action === 'cfg-toggle-row') sheetController.toggleConfigRow(el);
+      if (action === 'cfg-toggle-history') sheetController.toggleConfigHistory(el);
       if (action === 'cfg-add-row') sheetController.addConfigRow(el);
       if (action === 'cfg-remove-draft') sheetController.removeConfigDraftRow(el);
       if (action === 'preview-locale-defaults') sheetController.previewLocaleDefaults();

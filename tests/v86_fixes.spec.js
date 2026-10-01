@@ -1,6 +1,7 @@
 // v86：v84/v85 真机验收第二轮的反馈（`docs/device-acceptance.md`）。
 import { expect, test } from '@playwright/test';
 import { bootLocale } from './i18n_fixture.js';
+import { openCfgRow } from './cfg_fixture.js';
 
 const MANY_CHIPS = {
   version: 1,
@@ -30,7 +31,7 @@ async function expectInViewport(locator) {
 test('v86: a blocked save shows the message on screen, not below the fold', async ({ page }) => {
   await bootLocale(page, { locale: 'zh', config: MANY_CHIPS, width: 390, height: 700 });
   await openConfig(page);
-  const row = page.locator('.cfg-row[data-original-name="标签1"]');
+  const row = await openCfgRow(page, '标签1');
   await row.locator('.cfg-name').fill('');
   await page.getByRole('button', { name: '保存标签配置' }).click();
 

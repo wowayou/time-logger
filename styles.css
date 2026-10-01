@@ -2185,31 +2185,163 @@
       box-shadow: var(--shadow-1);
     }
     .cfg-section .chip-group-label { margin-bottom: 6px; }
-    /* v37：chip 行改两行式 cell（第一行名称+桶，第二行 longOk+条数），密度翻倍；
-       分组底/分隔线来自 .cell-group，行内输入用 --card 底与 inset 底区分。 */
-    /* SPEC-007：把日视图的桶色竖脊带进设置行——结构即信息，不用读控件就知道这
-       行属于哪个桶；主线行是整张 sheet 里唯一的 job 紫，天然成为视觉锚点。
-       data-b 与时间轴同源（同一组 --rail 令牌）。 */
+    /* SPEC-017：标签云。每个标签收起时是一个 chip（与「记一条」的标签同族：胶囊、
+       44px 命中），点开原地变成整宽编辑卡；编辑控件始终留在行内（hidden），保存事务
+       读到的仍是每行自己的控件。用 flex-wrap 不用 grid（P21：iOS WebKit 对 grid auto
+       轨道内 <button> 的 min-height 计量有缺陷）。取代 v37 的两行式 cell 与 SPEC-007
+       的通高竖脊——竖脊只在展开的卡上保留，收起时由桶色圆点承担同一职责。 */
+    .cfg-list {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 8px;
+    }
     .cfg-row {
       position: relative;
-      padding: 10px 14px 10px 18px;
       min-width: 0;
+      max-width: 100%;
     }
     .cfg-row[data-b="job"] { --rail: var(--accent); }
     .cfg-row[data-b="maintain"] { --rail: var(--maintain); }
     .cfg-row[data-b="leak"] { --rail: var(--leak); }
-    .cfg-row::before {
+    .cfg-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      min-height: 44px;
+      padding: 8px 14px 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      background: transparent;
+      color: var(--text);
+      font-size: var(--fs-ui);
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: background var(--t-fast), border-color var(--t-fast);
+    }
+    .cfg-chip:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    /* 桶色圆点：与时间轴同一组 --rail 令牌；保存前改桶只变点的颜色，chip 不跳组。 */
+    .cfg-chip-dot {
+      flex: 0 0 auto;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--rail, var(--track));
+    }
+    .cfg-row.is-history:not(.is-open) .cfg-chip-dot { opacity: 0.55; }
+    .cfg-chip-name,
+    .cfg-chip-was {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cfg-chip-name.is-empty { color: var(--faint); }
+    /* 改过名：原名在前并划掉，箭头挂在新名前面（不在被划掉的元素里）。 */
+    .cfg-chip-was {
+      color: var(--faint);
+      text-decoration: line-through;
+    }
+    .cfg-chip-was:not([hidden]) + .cfg-chip-name::before {
+      content: "→ ";
+      color: var(--faint);
+    }
+    .cfg-chip-meta {
+      flex: 0 0 auto;
+      color: var(--faint);
+      font-size: var(--fs-cap);
+      font-variant-numeric: tabular-nums;
+    }
+    .cfg-chip-meta:empty { display: none; }
+    .cfg-chip .cell-chevron { display: none; }
+    /* 零记录：虚线边——一眼看出哪些可以清理。 */
+    .cfg-row[data-count="0"]:not(.is-new) > .cfg-chip { border-style: dashed; }
+    .cfg-row.is-current > .cfg-chip {
+      background: var(--accent-bg);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .cfg-row.is-new > .cfg-chip {
+      border-style: dashed;
+      border-color: var(--accent);
+    }
+    .cfg-row.is-new .cfg-chip-meta {
+      color: var(--accent);
+      font-weight: 600;
+    }
+    /* 有暂存改动（改名 / 改桶 / 免确认）：chip 尾部一个 accent 小点。 */
+    .cfg-row.is-dirty > .cfg-chip::after {
+      content: "";
+      flex: 0 0 auto;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    /* 展开：整宽编辑卡（--chrome 壳面，同 .cell-group），左缘桶色竖脊回来，chip 面成为卡头。 */
+    .cfg-row.is-open {
+      flex: 1 1 100%;
+      padding: 2px 12px 12px 16px;
+      border-radius: var(--r-ctl);
+      background: var(--chrome);
+    }
+    .cfg-row.is-open::before {
       content: "";
       position: absolute;
       left: 0;
       top: 0;
       bottom: 0;
       width: 4px;
+      border-radius: var(--r-ctl) 0 0 var(--r-ctl);
       background: var(--rail, var(--track));
     }
-    /* 主线历史（非当前）脊淡化——与 hero 比例条「维持段」同一手法：同色不同权重，
-       而不是换一种颜色。 */
-    .cfg-row.is-history::before { opacity: 0.55; }
+    .cfg-row.is-open > .cfg-chip {
+      width: 100%;
+      padding-left: 0;
+      padding-right: 0;
+      border-color: transparent;
+      background: transparent;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .cfg-row.is-open > .cfg-chip .cfg-chip-dot { display: none; }
+    /* 卡头：暂存小点（::after）紧跟条数，展开箭头推到最右。 */
+    .cfg-row.is-open > .cfg-chip .cell-chevron {
+      display: inline;
+      order: 1;
+      margin-left: auto;
+      transform: rotate(90deg);
+    }
+    /* 历史主线折叠：只藏「没动过、没展开、没待删除」的历史行——折叠不得把暂存改动
+       藏起来。搜索期间折叠让位（由筛选决定显示什么）。 */
+    .cfg-fold {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 44px;
+      padding: 8px 12px 8px 14px;
+      border: none;
+      border-radius: var(--r-pill);
+      background: var(--chrome);
+      color: var(--muted);
+      font-size: var(--fs-ui);
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .cfg-fold .cell-chevron { transition: transform var(--t-fast); }
+    .cfg-fold[aria-expanded="true"] .cell-chevron { transform: rotate(90deg); }
+    .config-body:not(.is-searching) .cfg-list.is-folded > .cfg-row.is-history:not(.is-open):not(.is-dirty):not([data-pending-delete="1"]) {
+      display: none;
+    }
+    .config-body.is-searching .cfg-fold,
+    .cfg-row.is-filtered,
+    .cfg-section.is-filtered { display: none; }
     .cfg-badge {
       flex: 0 0 auto;
       padding: 3px var(--sp-2);
@@ -2332,16 +2464,25 @@
     /* 待删除是**可撤销的中间态**，不是已经消失：行留在原地变灰，按钮翻成「撤销」，
        真正生效要按 sheet 头部的「保存」。 */
     .cfg-row[data-pending-delete="1"] { opacity: 0.5; }
-    .cfg-row[data-pending-delete="1"] .cfg-name { text-decoration: line-through; }
+    .cfg-row[data-pending-delete="1"] .cfg-name,
+    .cfg-row[data-pending-delete="1"] .cfg-chip-name { text-decoration: line-through; }
     .cfg-row[data-pending-delete="1"] .cfg-delete { color: var(--accent); }
     .cfg-empty { margin-top: 0; }
-    /* v83：组内最后一行是「＋ 新建标签」。左内距对齐 .cfg-row（竖脊占掉的 4px 之后），
-       accent 文字表明它是动作而不是又一条标签；分隔线由 .cell-group 通用规则给。 */
+    /* v83：组内最后一个是「＋ 新建标签」。SPEC-017 起它是标签云末尾的虚线 chip，
+       accent 文字表明它是动作而不是又一个标签。 */
     .cfg-add {
-      justify-content: flex-start;
-      padding-left: 18px;
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 8px 14px;
+      border: 1px dashed var(--border);
+      border-radius: var(--r-pill);
+      background: transparent;
       color: var(--accent);
+      font-size: var(--fs-ui);
       font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
     }
     @media (min-width: 720px) {
       .form-sheet {

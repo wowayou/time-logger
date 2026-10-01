@@ -370,7 +370,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.5.2';
+export const APP_VERSION = '1.5.3';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -1034,22 +1034,65 @@ function cfgBucketSeg(bucket) {
     </div>`;
 }
 
+// SPEC-017：标签总数达到这个数才给筛选框；历史主线达到这个数才折叠。少的时候
+// 一眼就能看全，多一个控件只是噪音。
+export const CFG_SEARCH_MIN_TAGS = 12;
+export const CFG_HISTORY_FOLD_MIN = 3;
+
+/**
+ * SPEC-017：chip 面的读屏名称。模板首渲与 sheet_controller 的即时同步共用这一处，
+ * 免得两边各拼一套、说法渐渐不一致。
+ */
+export function configChipLabel({ name, was = '', count = 0, isNew = false, current = false, dirty = false, pendingDelete = false }) {
+  const parts = [name];
+  if (was) parts.push(t('cfg.wasName', { name: was }));
+  if (current) parts.push(t('cfg.currentBadge'));
+  parts.push(isNew ? t('cfg.stateNew') : (count ? t('cfg.count', { n: count }) : t('cfg.noEntries')));
+  if (pendingDelete) parts.push(t('cfg.statePendingDelete'));
+  else if (dirty) parts.push(t('cfg.stateEdited'));
+  return parts.join(t('cfg.ariaJoin'));
+}
+
+// SPEC-017：标签云里的一个标签＝一个 chip 面 + 一张就地展开的编辑卡。收起时只有
+// chip 面可见；编辑控件始终留在这一行的 DOM 里（hidden），所以 saveTagConfig /
+// 暂存抓取回填读到的仍是每行自己的控件，保存事务一个字都不用改。chip 面上的
+// 暂存状态（原名→新名、小点、删除线）由 sheet_controller.syncConfigRowFace 按控件
+// 现值即时改写，这里只给初始态。
+function cfgChipFace({ name, count = 0, isNew = false, current = false, open = false }) {
+  const label = configChipLabel({ name: name || t('cfg.newNamePlaceholder'), count, isNew, current });
+  return `<button class="cfg-chip" type="button" data-action="cfg-toggle-row" aria-expanded="${open}" aria-label="${esc(label)}">
+      <span class="cfg-chip-dot" aria-hidden="true"></span>
+      <span class="cfg-chip-was" aria-hidden="true" hidden></span>
+      <span class="cfg-chip-name${name ? '' : ' is-empty'}" aria-hidden="true">${esc(name || t('cfg.newNamePlaceholder'))}</span>
+      <span class="cfg-chip-meta" aria-hidden="true">${isNew ? esc(t('cfg.newShort')) : (count ? count : '')}</span>
+      ${cellChevron}
+    </button>`;
+}
+
+function cfgWasLine() {
+  return '<div class="form-hint cfg-was" data-role="cfg-was" hidden></div>';
+}
+
 /**
  * v83：一行「待新建」的标签。没有 data-original-name（＝还不存在于 config），
  * 因此保存时空名直接当作没建过，而不是像已有行那样报错。右槽是「移除」而不是
  * v82 的待删除态——从未落库的东西没有「撤销」可言，直接把行拿掉即可。
+ * SPEC-017：草稿一出生就是展开的（它要被命名），收起时若仍是空名就直接移除。
  * @param {string} kind 'mainline' | 'chip'
  * @param {string} bucket 'job' | 'maintain' | 'leak'
  */
 export function renderConfigRowDraft(kind, bucket, longReview = false) {
   const isMainline = kind === 'mainline';
   const chipBucket = bucket === 'leak' ? 'leak' : 'maintain';
-  return `<div class="cfg-row is-new" data-b="${isMainline ? 'job' : chipBucket}" data-kind="${isMainline ? 'mainline' : 'chip'}" data-new="1">
-    <div class="cfg-line">
-      <input class="inp cfg-name" type="text" value="" placeholder="${esc(t('cfg.newNamePlaceholder'))}" aria-label="${esc(t('cfg.nameAria'))}">
-      ${isMainline ? '' : cfgBucketSeg(chipBucket)}
+  return `<div class="cfg-row is-new is-open" data-b="${isMainline ? 'job' : chipBucket}" data-kind="${isMainline ? 'mainline' : 'chip'}" data-new="1" data-count="0">
+    ${cfgChipFace({ name: '', isNew: true, open: true })}
+    <div class="cfg-editor">
+      <div class="cfg-line">
+        <input class="inp cfg-name" type="text" value="" placeholder="${esc(t('cfg.newNamePlaceholder'))}" aria-label="${esc(t('cfg.nameAria'))}">
+        ${isMainline ? '' : cfgBucketSeg(chipBucket)}
+      </div>
+      <div class="cfg-sub">${cfgLongOkBox(false, longReview)}<button class="mini-btn cfg-delete" type="button" data-action="cfg-remove-draft" aria-label="${esc(t('cfg.removeDraftAria'))}">${t('cfg.removeDraft')}</button></div>
     </div>
-    <div class="cfg-sub">${cfgLongOkBox(false, longReview)}<button class="mini-btn cfg-delete" type="button" data-action="cfg-remove-draft" aria-label="${esc(t('cfg.removeDraftAria'))}">${t('cfg.removeDraft')}</button></div>
   </div>`;
 }
 
@@ -1072,42 +1115,67 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
     return `<button class="mini-btn cfg-delete" type="button" data-action="cfg-toggle-delete" aria-label="${esc(t('cfg.deleteAria', { name }))}">${t('cfg.delete')}</button>`;
   };
 
-  // 主线：当前主线置顶（实色脊），历史名脊淡化；行尾「设为当前」。
+  // 主线：当前主线排第一（accent 浅底 chip），其余是历史；历史的编辑卡里给「设为当前」。
+  // data-original-* 记下打开时的值，chip 面据此判断「改过没有」。
   const mainlineRow = (name, index) => {
     const isCurrent = index === 0;
-    return `<div class="cfg-row${isCurrent ? ' is-current' : ' is-history'}" data-b="job" data-kind="mainline" data-original-name="${esc(name)}">
-      <div class="cfg-line">
-        <input class="inp cfg-name" type="text" value="${esc(name)}" aria-label="${esc(t('cfg.nameAria'))}">
-        ${isCurrent ? `<span class="cfg-badge">${t('cfg.currentBadge')}</span>`
-          : `<button class="mini-btn cfg-set-current" type="button" data-action="set-current-mainline" data-name="${esc(name)}" aria-label="${esc(t('cfg.setCurrentAria', { name }))}">${t('cfg.setCurrent')}</button>`}
+    const longOk = (config.mainlineLongOk || []).includes(name);
+    const count = countEntriesWithTag(entries, name);
+    return `<div class="cfg-row${isCurrent ? ' is-current' : ' is-history'}" data-b="job" data-kind="mainline" data-original-name="${esc(name)}" data-original-long-ok="${longOk ? 1 : 0}" data-count="${count}">
+      ${cfgChipFace({ name, count, current: isCurrent })}
+      <div class="cfg-editor" hidden>
+        <div class="cfg-line">
+          <input class="inp cfg-name" type="text" value="${esc(name)}" aria-label="${esc(t('cfg.nameAria'))}">
+          ${isCurrent ? `<span class="cfg-badge">${t('cfg.currentBadge')}</span>`
+            : `<button class="mini-btn cfg-set-current" type="button" data-action="set-current-mainline" data-name="${esc(name)}" aria-label="${esc(t('cfg.setCurrentAria', { name }))}">${t('cfg.setCurrent')}</button>`}
+        </div>
+        ${cfgWasLine()}
+        <div class="cfg-sub">${cfgLongOkBox(longOk, config.longReview === true)}${countOrDelete(name)}</div>
       </div>
-      <div class="cfg-sub">${cfgLongOkBox((config.mainlineLongOk || []).includes(name), config.longReview === true)}${countOrDelete(name)}</div>
     </div>`;
   };
 
   // 维持/偏航：两段式分段控件替换原生 <select>——只有两个选项，segmented control
   // 比弹出式 select 更直接，且消灭 iOS 原生弹层的语言断裂（v78 之后尤其要紧：
   // 原生弹层不跟随应用语言，英文界面下会弹中文选项）。
-  const chipRow = chip => `<div class="cfg-row" data-b="${chip.bucket}" data-kind="chip" data-original-name="${esc(chip.name)}">
-    <div class="cfg-line">
-      <input class="inp cfg-name" type="text" value="${esc(chip.name)}" aria-label="${esc(t('cfg.nameAria'))}">
-      ${cfgBucketSeg(chip.bucket)}
-    </div>
-    <div class="cfg-sub">${cfgLongOkBox(chip.longOk, config.longReview === true)}${countOrDelete(chip.name)}</div>
-  </div>`;
+  const chipRow = chip => {
+    const count = countEntriesWithTag(entries, chip.name);
+    return `<div class="cfg-row" data-b="${chip.bucket}" data-kind="chip" data-original-name="${esc(chip.name)}" data-original-bucket="${chip.bucket}" data-original-long-ok="${chip.longOk ? 1 : 0}" data-count="${count}">
+      ${cfgChipFace({ name: chip.name, count })}
+      <div class="cfg-editor" hidden>
+        <div class="cfg-line">
+          <input class="inp cfg-name" type="text" value="${esc(chip.name)}" aria-label="${esc(t('cfg.nameAria'))}">
+          ${cfgBucketSeg(chip.bucket)}
+        </div>
+        ${cfgWasLine()}
+        <div class="cfg-sub">${cfgLongOkBox(chip.longOk, config.longReview === true)}${countOrDelete(chip.name)}</div>
+      </div>
+    </div>`;
+  };
 
-  // v83：每组底部一个「新建标签」，与 v82 的删除配成对——此前这张 sheet 能改名、
+  // v83：每组末尾一个「新建标签」，与 v82 的删除配成对——此前这张 sheet 能改名、
   // 改桶、设当前、删除，唯独不能建，而建是唯一还只能靠「先去记一条」的动作。
   // 空组仍留那句空态提示（说明标签也会在记录时自动长出来），但组本身不再是空盒。
-  const addBtn = (kind, bucket, title) => `<button class="cell-btn cfg-add" type="button" data-action="cfg-add-row" data-kind="${kind}" data-bucket="${bucket}" aria-label="${esc(t('cfg.addTagAria', { group: title }))}"><span data-role="cell-label">${t('cfg.addTag')}</span></button>`;
-  const section = (title, rowsHtml, kind, bucket, hint) => `<section class="cfg-section">
+  // SPEC-017：它是标签云里最后一个（虚线）chip。
+  const addBtn = (kind, bucket, title) => `<button class="cfg-add" type="button" data-action="cfg-add-row" data-kind="${kind}" data-bucket="${bucket}" aria-label="${esc(t('cfg.addTagAria', { group: title }))}">${t('cfg.addTag')}</button>`;
+  const section = (title, rowsHtml, kind, bucket, hint, opts2 = {}) => `<section class="cfg-section" data-bucket="${bucket}">
     <div class="chip-group-label">${title}</div>
-    <div class="cfg-list cell-group">${rowsHtml}${addBtn(kind, bucket, title)}</div>
+    <div class="cfg-list${opts2.folded ? ' is-folded' : ''}">${rowsHtml}${addBtn(kind, bucket, title)}</div>
     ${rowsHtml ? '' : `<div class="form-hint cfg-empty">${t('cfg.emptySection')}</div>`}
     ${hint ? `<div class="form-hint">${hint}</div>` : ''}
   </section>`;
 
   const chipsOf = bucket => config.chips.filter(chip => chip.bucket === bucket).map(chipRow).join('');
+  // SPEC-017：历史主线多了就收进一个折叠钮——日常只关心当前主线。折叠只藏「没动过、
+  // 没展开」的历史行（CSS 判据），有暂存改动的行收起时照样露在外面。
+  const historyCount = Math.max(0, config.mainline.length - 1);
+  const foldHistory = historyCount >= CFG_HISTORY_FOLD_MIN;
+  const mainlineRowsHtml = config.mainline.map((name, index) => {
+    const row = mainlineRow(name, index);
+    if (index !== 0 || !foldHistory) return row;
+    return `${row}<button class="cfg-fold" type="button" data-action="cfg-toggle-history" aria-expanded="false">${esc(t('cfg.historyFold', { n: historyCount }))}${cellChevron}</button>`;
+  }).join('');
+  const totalTags = config.mainline.length + config.chips.length;
   const preview = opts.defaultsPreview;
   // v1.5.1：只有确实缺默认标签（删过、或切过界面语言）时才给入口，并直接说出缺哪几个。
   // 旧版常驻一个「添加本语言的默认标签」，平时点进去只会说「都已存在」——像个僵尸按钮。
@@ -1117,7 +1185,9 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
     ${sheetHead({ title: t('cfg.title'), cancelText: t('cfg.cancel'), cancelAction: 'close-form', cancelAria: t('cfg.cancelAria'), doneText: t('cfg.done'), doneAction: 'save-tag-config', doneAria: t('cfg.doneAria') })}
     <div class="form-sheet-body config-body">
       <div class="form-hint">${t('cfg.renameHint')}</div>
-      ${section(t('cfg.sectionMainline'), config.mainline.map(mainlineRow).join(''), 'mainline', 'job', t('cfg.mainlineHint'))}
+      ${totalTags >= CFG_SEARCH_MIN_TAGS ? `<input class="inp cfg-search" type="search" data-role="cfg-search" placeholder="${esc(t('cfg.searchPlaceholder'))}" aria-label="${esc(t('cfg.searchAria'))}" autocomplete="off" enterkeyhint="search">
+      <div class="form-hint cfg-no-match" data-role="cfg-no-match" hidden>${t('cfg.noMatch')}</div>` : ''}
+      ${section(t('cfg.sectionMainline'), mainlineRowsHtml, 'mainline', 'job', t('cfg.mainlineHint'), { folded: foldHistory })}
       ${section(t('cfg.sectionMaintain'), chipsOf('maintain'), 'chip', 'maintain')}
       ${section(t('cfg.sectionLeak'), chipsOf('leak'), 'chip', 'leak')}
       ${missingDefaults.length && !preview ? `<div class="cell-group">
