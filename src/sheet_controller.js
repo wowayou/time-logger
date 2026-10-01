@@ -57,7 +57,7 @@ import {
   validateTs,
   validateTsForMode
 } from './time.js';
-import { bucketHint, configChipLabel, entriesCountLabel, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderTagPicker, renderTagSuggestions } from './ui.js';
+import { bucketHint, configChipLabel, coverageDaysLabel, entriesCountLabel, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderTagPicker, renderTagSuggestions } from './ui.js';
 
 export function createSheetController(deps) {
   let sheetScrollY = 0;
@@ -1237,7 +1237,7 @@ export function createSheetController(deps) {
     const lines = [
       t('analytics.summaryTitle', { period: model.periodLabel }),
       '',
-      t('analytics.summaryCoverage', { logged: model.coverage.logged, days: model.coverage.days }),
+      t('analytics.summaryCoverage', { fraction: coverageDaysLabel(model.coverage.logged, model.coverage.days) }),
       t('analytics.summaryTotal', { total: fmtPlainMins(model.total) }),
       '',
       t('analytics.summaryBucketHead')

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
 import { formatPercent, sortedEntriesFrom } from './stats.js';
-import { t } from './i18n.js';
+import { plural, t } from './i18n.js';
 import { fmtDateTime, fmtMins, fmtPlainMins, fmtTs, hhmm, p2 } from './time.js';
 
 // SPEC-012：sheet 关闭走 class 驱动的收起动画（sheet_controller.js
@@ -11,6 +11,11 @@ import { fmtDateTime, fmtMins, fmtPlainMins, fmtTs, hhmm, p2 } from './time.js';
 // 时长一致——这是时序协调，不是硬同步；将来 animateSheetClose 的动画时长若
 // 改变，这个常量需要跟着改。
 const SHEET_CLOSE_MS = 320;
+
+// 冲突条数：英文 1 conflict / 2 conflicts，中文两形同值。进度行与导入完成提示共用。
+function conflictCountLabel(n) {
+  return plural(n, { one: t('io.conflictCountOne', { n }), other: t('io.conflictCountOther', { n }) });
+}
 
 function prefersReducedMotion() {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
@@ -233,7 +238,7 @@ export function createIoActions(deps) {
       t('diag.swControlled', { value: s.controlled ? t('diag.yes') : t('diag.no') }),
       s.sw ? t('diag.swState', { value: s.sw }) : '',
       t('diag.persisted', { value: s.persisted === true ? t('diag.yes') : s.persisted === false ? t('diag.no') : t('tag.unknown') }),
-      s.cache ? t('diag.cache', { name: s.cache, files: s.cacheFiles, sets: s.cacheCount > 1 ? t('diag.cacheSets', { n: s.cacheCount }) : '' }) : t('diag.cacheNone'),
+      s.cache ? t('diag.cache', { name: s.cache, files: plural(s.cacheFiles, { one: t('diag.filesOne', { n: s.cacheFiles }), other: t('diag.filesOther', { n: s.cacheFiles }) }), sets: s.cacheCount > 1 ? t('diag.cacheSets', { n: s.cacheCount }) : '' }) : t('diag.cacheNone'),
       `html ${s.htmlMs}ms`,
       t('diag.module', { ms: s.moduleMs }),
       Number.isFinite(s.fcpMs) && s.fcpMs >= 0 ? t('diag.fcp', { ms: s.fcpMs }) : '',
@@ -242,7 +247,7 @@ export function createIoActions(deps) {
       s.snapshot ? t('diag.snapshotHit') : t('diag.snapshotMiss')
     ].filter(Boolean).join(' · '));
     const text = [
-      t('diag.title', { n: samples.length }),
+      t('diag.title', { launches: plural(samples.length, { one: t('diag.launchesOne', { n: samples.length }), other: t('diag.launchesOther', { n: samples.length }) }) }),
       `- UA: ${navigator.userAgent}`,
       '',
       ...lines
@@ -341,7 +346,9 @@ export function createIoActions(deps) {
     const sourceZone = imported.meta && imported.meta.sourceTimeZone ? ` ${imported.meta.sourceTimeZone}` : '';
     const base = t('io.shiftBase', { source: timezoneOffsetLabel(sourceOffset), zone: sourceZone, current: timezoneOffsetLabel(currentOffset) });
     if (!suggestedMinutes) return t('io.shiftNone', { base });
-    return t('io.shiftSuggested', { base, hours: formatShiftHours(suggestedMinutes) });
+    const hours = formatShiftHours(suggestedMinutes);
+    // ±1 小时都取单数形（-1 hour）；0.5、1.5 等取复数形。
+    return t('io.shiftSuggested', { base, hours: plural(Math.abs(suggestedMinutes) / 60, { one: t('io.shiftHoursOne', { n: hours }), other: t('io.shiftHoursOther', { n: hours }) }) });
   }
 
   function importJSON() {
@@ -451,7 +458,7 @@ export function createIoActions(deps) {
       summary.textContent = !plan
         ? ''
         : conflicts.length
-          ? t('io.conflictProgress', { n: conflicts.length, done: resolvedCount })
+          ? t('io.conflictProgress', { conflicts: conflictCountLabel(conflicts.length), n: conflicts.length, done: resolvedCount })
           : t('io.importablePlan', { imported: plan.imported || 0, skipped: plan.skipped || 0 });
     }
     if (confirm) {
@@ -614,7 +621,7 @@ export function createIoActions(deps) {
     pendingImport = null;
     importResolutions = {};
     deps.closeForm();
-    const message = t('io.importDone', { imported: result.imported, skipped: result.skipped, conflicts: result.resolvedConflicts })
+    const message = t('io.importDone', { imported: result.imported, skipped: result.skipped, conflicts: conflictCountLabel(result.resolvedConflicts) })
       + (result.quotesFailed ? t('io.quotesNotImported') : '');
     // SPEC-012：sheet 关闭动画播完（或 reduced-motion 下没有动画）之后才亮 toast，
     // 让它出现在一个干净的、没有 sheet 遮挡的屏幕上；而不是和 v73 一样在 sheet

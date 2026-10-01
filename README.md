@@ -2,7 +2,7 @@
 
 > Status: active · 已上线，可日常使用；进度与待办见 [STATUS.md](STATUS.md)
 >
-> Release: v1.5.5
+> Release: v1.5.6
 >
 > Updated: 2026-10-01
 >

@@ -370,7 +370,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.5.5';
+export const APP_VERSION = '1.5.6';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -624,9 +624,13 @@ function renderAnalyticsDisplay(model, keys) {
   let sparkHtml = '';
   if (selected.kind === 'bucket' && model.trend && model.trend.bucket === selected.bucket) {
     const tr = model.trend;
-    if (tr.direction === 'up') trendLine = t('analytics.trendUp', { name: esc(selected.name), n: tr.runLength });
-    else if (tr.direction === 'down') trendLine = t('analytics.trendDown', { name: esc(selected.name), n: tr.runLength });
-    else if (tr.direction === 'flat') trendLine = t('analytics.trendFlat', { name: esc(selected.name) });
+    // 方向由近半/前半均值定，runLength 只数末尾连续同向的期数：最后一期回落时方向
+    // 仍可能是 up 而 runLength 为 0。不足 2 期不说「连续 N 期」（v1.5.6）。
+    const name = esc(selected.name);
+    const run = tr.runLength;
+    if (tr.direction === 'up') trendLine = run >= 2 ? t('analytics.trendUp', { name, n: run }) : t('analytics.trendUpLately', { name });
+    else if (tr.direction === 'down') trendLine = run >= 2 ? t('analytics.trendDown', { name, n: run }) : t('analytics.trendDownLately', { name });
+    else if (tr.direction === 'flat') trendLine = t('analytics.trendFlat', { name });
     sparkHtml = analyticsSpark(tr.comparableSeries);
   }
 
@@ -636,7 +640,7 @@ function renderAnalyticsDisplay(model, keys) {
       <div class="an-subline">${subline}</div>
       <div class="an-delta">${delta}</div>
       ${trendLine ? `<div class="an-trend">${trendLine}</div>` : ''}
-      <div class="an-coverage">${t('analytics.coverage', { logged: model.coverage.logged, days: model.coverage.days, total: fmtMins(total) })}</div>
+      <div class="an-coverage">${t('analytics.coverage', { fraction: coverageDaysLabel(model.coverage.logged, model.coverage.days), total: fmtMins(total) })}</div>
       ${sparkHtml ? `<div class="an-spark an-spark-${selected.bucket}">${sparkHtml}</div>` : ''}
     </div>`;
 }
@@ -1046,6 +1050,19 @@ export const CFG_HISTORY_FOLD_MIN = 3;
  */
 export function entriesCountLabel(n) {
   return plural(n, { one: t('cfg.countOne', { n }), other: t('cfg.countOther', { n }) });
+}
+
+/**
+ * 时间分析的「记录覆盖 X/Y 天」：英文按分母 Y 换词尾（1/1 day），中文两形同值。
+ * 结论区与复制的本期摘要共用这一处。
+ * @param {number} logged
+ * @param {number} days
+ */
+export function coverageDaysLabel(logged, days) {
+  return plural(days, {
+    one: t('analytics.coverageDaysOne', { logged, days }),
+    other: t('analytics.coverageDaysOther', { logged, days })
+  });
 }
 
 /**

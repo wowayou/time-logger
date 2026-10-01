@@ -131,11 +131,61 @@ async function medianBoot(page, entries) {
   return { best: Math.min(...samples), samples };
 }
 
+// 机器负载（v1.5.6）：上面的「取最小」只在**一轮之内**去噪。2026-10-01 本机另有
+// 构建在跑（8 核负载约 13–15）时，三轮全量里各有一两条计时用例撞线：500 条增量
+// 81/82ms 对预算 80ms（干净时只有 3–11ms）、2000 条 257ms 对 250ms、年视图 2457ms
+// 对 2000ms。每次都要交替对照 main 才能证明是噪声。
+//
+// 所以超预算时**换一张新页、照原样再量一整轮**（新页不带旧页的 init script，基线
+// 与加载的测量结构和第一轮完全相同），各轮样本合并后两边各取最小，最多 MAX_ROUNDS
+// 轮。真回归会把**每一个**加载样本都抬高，合并后的最小值照样超预算，所以牙齿还在；
+// 只有一轮之内的偶发抖动会被后面的轮次稀释。预算一个数都没动。
+//
+// 实测（同日，负载 6–9，旧/新交替各两组，A 类 4 条 × 双引擎 × 重复 5 次、关闭重试）：
+// 旧判据 80 次失败 8 次，本判据 1 次，耗时不变。牙齿：往启动路径注入每条 0.24ms
+// 的忙等、往年视图注入 2.5s，四条在三轮后全红（增量 177/600/1432ms、年视图 ~3.2s）。
+// **剩下那 1 次是本判据管不了的情形**：WebKit 2000 条三轮 9 个样本的最小值都稳定在
+// 基线 340ms / 加载 592ms，差 252ms——机器**持续**慢了 3–4 倍时，数据成本跟着成倍
+// 放大，这不是抖动，多量几轮也一样。遇到它先看日志里的基线：远高于干净时的 83–133ms
+// 就是机器慢，换个空闲时段重跑；基线正常而增量仍超，才是代码变慢。
+//
+// 不在同一张页上多量：init script 会在页上越积越多，而且全部在计时窗口里执行——
+// 第二轮的基线会先把 5000 条写一遍再清掉，基线虚高、增量被压小，等于悄悄拔牙。
+const MAX_ROUNDS = 3;
+
+async function measureRounds(page, context, isWithinBudget, measure) {
+  const rounds = [await measure(page)];
+  while (rounds.length < MAX_ROUNDS && !isWithinBudget(rounds)) {
+    const fresh = await context.newPage();
+    try {
+      rounds.push(await measure(fresh));
+    } finally {
+      await fresh.close();
+    }
+  }
+  return rounds;
+}
+
+function pooledBoot(rounds) {
+  const baseline = rounds.flatMap(r => r.baseline.samples);
+  const loaded = rounds.flatMap(r => r.loaded.samples);
+  return {
+    baseline: { best: Math.min(...baseline), samples: baseline },
+    loaded: { best: Math.min(...loaded), samples: loaded }
+  };
+}
+
 test.describe('A 类：数据规模', () => {
+  // 一轮约 10 次启动；超预算时最多三轮，30s 默认超时在高负载下不够。
+  test.describe.configure({ timeout: 120_000 });
+
   for (const { count, label, maxDeltaMs } of SCALE_CASES) {
-    test(label, async ({ page }) => {
-      const baseline = await medianBoot(page, []);
-      const loadedBoot = await medianBoot(page, generateEntries(count));
+    test(label, async ({ page, context }) => {
+      const entries = generateEntries(count);
+      const rounds = await measureRounds(page, context,
+        done => { const p = pooledBoot(done); return p.loaded.best - p.baseline.best < maxDeltaMs; },
+        async target => ({ baseline: await medianBoot(target, []), loaded: await medianBoot(target, entries) }));
+      const { baseline, loaded: loadedBoot } = pooledBoot(rounds);
       const deltaMs = loadedBoot.best - baseline.best;
       const ratio = loadedBoot.best / baseline.best;
 
@@ -149,12 +199,12 @@ test.describe('A 类：数据规模', () => {
 
       // ratio 仍然打印，但**只作参考不再作判据**——留着是为了将来排查时能一眼
       // 看出「这轮基线是不是被污染了」（比值 <1 就是铁证）。
-      console.log(`[A] ${label}: baseline=${baseline.best}ms [${baseline.samples.join(', ')}] `
+      console.log(`[A] ${label}: rounds=${rounds.length} baseline=${baseline.best}ms [${baseline.samples.join(', ')}] `
         + `loaded=${loadedBoot.best}ms [${loadedBoot.samples.join(', ')}] `
         + `delta=${deltaMs}ms (预算 ${maxDeltaMs}ms) ratio=${ratio.toFixed(2)}x `
         + `render-flush=${renderMs.toFixed(1)}ms`);
       expect(deltaMs, `${count} 条带来的启动增量 < ${maxDeltaMs}ms `
-        + `(baseline ${baseline.best}ms, loaded ${loadedBoot.best}ms, delta ${deltaMs}ms)`)
+        + `(${rounds.length} 轮合并：baseline ${baseline.best}ms, loaded ${loadedBoot.best}ms, delta ${deltaMs}ms)`)
         .toBeLessThan(maxDeltaMs);
 
       // Verify data integrity after load
@@ -167,39 +217,48 @@ test.describe('A 类：数据规模', () => {
     });
   }
 
-  test('极压 5000 条（约 11 个月）— 年视图完整聚合', async ({ page }) => {
+  test('极压 5000 条（约 11 个月）— 年视图完整聚合', async ({ page, context }) => {
     const entries = generateEntries(5000);
-    await page.addInitScript(({ entries }) => {
-      localStorage.clear();
-      localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
-      localStorage.setItem('timelog.selectedDate', '2025-06-30');
-      localStorage.setItem('timelog.view', 'day');
-    }, { entries });
-    await page.goto('/');
-    await page.waitForFunction(() => document.body.classList.contains('app-ready'));
+    const YEAR_BUDGET_MS = 2000;
+    const attempts = await measureRounds(page, context,
+      done => Math.min(...done.map(a => a.elapsedMs)) < YEAR_BUDGET_MS,
+      async target => {
+        await target.addInitScript(({ entries }) => {
+          localStorage.clear();
+          localStorage.setItem('timelog.v1', JSON.stringify({ version: 1, entries }));
+          localStorage.setItem('timelog.selectedDate', '2025-06-30');
+          localStorage.setItem('timelog.view', 'day');
+        }, { entries });
+        await target.goto('/');
+        await target.waitForFunction(() => document.body.classList.contains('app-ready'));
 
-    await page.evaluate(() => {
-      window.__yearConfigReads = 0;
-      const original = Storage.prototype.getItem;
-      Storage.prototype.getItem = function (key) {
-        if (key === 'timelog.config') window.__yearConfigReads += 1;
-        return original.call(this, key);
-      };
-      window.__yearRenderStarted = performance.now();
-    });
-    await page.locator('#view-tabs button[data-view="year"]').click();
-    await expect(page.locator('.summary-list .sum-row')).toHaveCount(12);
+        await target.evaluate(() => {
+          window.__yearConfigReads = 0;
+          const original = Storage.prototype.getItem;
+          Storage.prototype.getItem = function (key) {
+            if (key === 'timelog.config') window.__yearConfigReads += 1;
+            return original.call(this, key);
+          };
+          window.__yearRenderStarted = performance.now();
+        });
+        await target.locator('#view-tabs button[data-view="year"]').click();
+        await expect(target.locator('.summary-list .sum-row')).toHaveCount(12);
 
-    const result = await page.evaluate(() => ({
-      elapsedMs: performance.now() - window.__yearRenderStarted,
-      configReads: window.__yearConfigReads
-    }));
-    console.log(`[A-year] 5000 条/11 个月: render=${result.elapsedMs.toFixed(1)}ms, config reads=${result.configReads}`);
+        return target.evaluate(() => ({
+          elapsedMs: performance.now() - window.__yearRenderStarted,
+          configReads: window.__yearConfigReads
+        }));
+      });
+    const bestMs = Math.min(...attempts.map(a => a.elapsedMs));
+    const maxConfigReads = Math.max(...attempts.map(a => a.configReads));
+    console.log(`[A-year] 5000 条/11 个月: attempts=${attempts.length} `
+      + `render=[${attempts.map(a => a.elapsedMs.toFixed(1)).join(', ')}]ms, config reads=${maxConfigReads}`);
 
     // 健康基线是百毫秒级；2s 只拦截灾难性退化，留足共享 CI 的负载头寸。
-    // v87 的旧 O(天数×条数) 实测约 3055ms，会被这道闸稳定抓住。
-    expect(result.elapsedMs, '5000 条全年聚合应在 2s 内完成').toBeLessThan(2000);
-    expect(result.configReads, 'tag config 不得按片段反复解析').toBeLessThan(50);
+    // v87 的旧 O(天数×条数) 实测约 3055ms，会被这道闸稳定抓住（每次都慢，换几张页也一样）。
+    expect(bestMs, `5000 条全年聚合应在 2s 内完成（${attempts.length} 次取最快）`).toBeLessThan(YEAR_BUDGET_MS);
+    // 结构判据，不受负载影响：每一次都必须达标。
+    expect(maxConfigReads, 'tag config 不得按片段反复解析').toBeLessThan(50);
   });
 });
 
