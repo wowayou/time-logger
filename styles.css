@@ -2055,7 +2055,12 @@
       border-radius: 9px;
       background: transparent;
       color: var(--muted);
-      font: 600 12px/1.25 inherit;
+      /* 原写法 `font: 600 12px/1.25 inherit` 整条无效（inherit 等全局关键字不能出现在
+         简写的分量里），浏览器整条丢弃，按钮一直落回 UA 默认按钮字体。拆成长写。 */
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.25;
       cursor: pointer;
     }
     .import-conflict-actions button.active {
