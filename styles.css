@@ -294,6 +294,15 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    /* v1.6.0（D32）：今天恰好是第 7/30/100… 个记录日时整天换成 accent 浅底胶囊，与周期
+       标签的「今天」同一强调色；文字不变、不加图标、不加动效。 */
+    .usage-day.is-milestone {
+      color: var(--accent);
+      background: var(--accent-bg);
+      font-weight: 600;
+      padding: 0 var(--sp-2);
+      border-radius: var(--r-pill);
+    }
     body:not(.app-ready):not(.boot-restored) .usage-day { visibility: hidden; }
     .hdr-actions {
       display: inline-flex;
@@ -1559,6 +1568,7 @@
     }
     .undo-toast[hidden] { display: none; }
     .undo-toast span { flex: 1; min-width: 0; color: var(--text); font-size: var(--fs-ui-strong); }
+    #info-toast.is-milestone span { color: var(--accent); font-weight: 600; }
     /* SPEC-006 B：#undo-toast 与 #info-toast 共用同一 fixed 位置；两者理论上可能
        同时可见（例如撤销窗口内触发一条普通提示），此时把 info-toast 挪到上方，
        避免两条 toast 视觉重叠。 */

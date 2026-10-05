@@ -134,6 +134,8 @@ export default {
   // why the template stops short of the trailing word.
   'chrome.milestone': 'Day {journey} of logging · {recorded} logged',
   'chrome.milestoneAria': 'Day {journey} of logging, with {recorded} actually logged',
+  // v1.6.0 (D32): on a milestone day the header only changes style; screen readers get one more clause.
+  'chrome.milestoneAriaToday': 'Day {journey} of logging, with {recorded} actually logged; today is logging day {n}, a milestone',
   'chrome.recordedDayOne': '{n} day',
   'chrome.recordedDayOther': '{n} days',
   'chrome.todayBadge': 'Today',
@@ -168,6 +170,8 @@ export default {
   'toast.segmentChanged': 'This time span has changed; please review it again before confirming.',
   'toast.plannedNoFreeMinute': 'This day has no free minute left for it; edit a neighbouring entry\u2019s time first.',
   'toast.deleted': 'Deleted',
+  // Milestones start at 7, so the count is always plural.
+  'toast.milestone': 'Milestone: {n} days logged',
   'toast.undoCancelled': 'Data was updated elsewhere; undo was cancelled',
   'toast.deleteQuota': 'Local storage is full; the delete did not run. Export a backup and free up space first.',
   'toast.writeQuota': 'Local storage is full; this change was not saved. Export a backup and free up space first.',

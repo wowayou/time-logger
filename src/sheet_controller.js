@@ -15,7 +15,7 @@ import {
   planOvernightContinuation,
   planSegmentSplit
 } from './entry_model.js';
-import { isPlaceholderEntry, comparePeriods, periodTrend, primaryTag, tagMinutes, formatPercent } from './stats.js';
+import { isPlaceholderEntry, comparePeriods, periodTrend, primaryTag, recordedDayCount, tagMinutes, formatPercent } from './stats.js';
 import { t } from './i18n.js';
 import {
   BUCKETS,
@@ -868,6 +868,17 @@ export function createSheetController(deps) {
     run();
   }
 
+  // v1.6.0（D32）：记录写入成功后（含自定义标签落库）关闭 sheet、重渲，再交给 app 判断
+  // 这次是否让「已记录 N 天」跨过里程碑。计划保存不会新增记录日，不走这里。
+  function closeAfterRecordWrite(close, beforeData) {
+    const beforeCount = recordedDayCount(beforeData.entries);
+    teardownNow(() => {
+      close();
+      deps.render();
+      deps.celebrateMilestone(beforeCount, { afterSheetClose: true });
+    });
+  }
+
   function prefersReducedMotion() {
     return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1644,7 +1655,7 @@ export function createSheetController(deps) {
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
     const staysYesterday = latest.kind === 'overnight-day-end' && startTs < formOvernightContext.midnightTs;
     deps.setSelectedDate(staysYesterday ? formOvernightContext.yesterdayKey : formOvernightContext.todayKey);
-    teardownNow(() => { closeForm(); deps.render(); });
+    closeAfterRecordWrite(closeForm, beforeData);
   }
 
   function saveEntry() {
@@ -1733,7 +1744,7 @@ export function createSheetController(deps) {
     }
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
     deps.setSelectedDate(checked.ts.slice(0, 10));
-    teardownNow(() => { closeForm(); deps.render(); });
+    closeAfterRecordWrite(closeForm, beforeData);
   }
 
   // Bounded backfill into a segment: plan [start, end) as the new label and
@@ -1789,7 +1800,7 @@ export function createSheetController(deps) {
     }
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
     deps.setSelectedDate(startChecked.ts.slice(0, 10));
-    teardownNow(() => { closeForm(); deps.render(); });
+    closeAfterRecordWrite(closeForm, beforeData);
   }
 
   function getEditingBox(id = deps.getSheetEditId()) {
@@ -1893,7 +1904,7 @@ export function createSheetController(deps) {
       if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box, write.raw)) return;
     }
     deps.setSelectedDate(checked.ts.slice(0, 10));
-    teardownNow(() => { closeEditSheet(); deps.render(); });
+    closeAfterRecordWrite(closeEditSheet, beforeData);
   }
 
   function toggleStartTime(el) {

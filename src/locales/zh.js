@@ -123,6 +123,8 @@ export default {
   // 逐字相同（已用 ui_smoke.spec.js 既有断言核对，见 v77→v78 变更记录）。
   'chrome.milestone': '记录历程第 {journey} 天 · 已记录 {recorded}',
   'chrome.milestoneAria': '记录历程第 {journey} 天，其中有真实记录的有 {recorded}',
+  // v1.6.0（D32）：今天恰好是第 7/30/100… 个记录日时，header 只换样式，读屏多说一句。
+  'chrome.milestoneAriaToday': '记录历程第 {journey} 天，其中有真实记录的有 {recorded}；今天是第 {n} 个记录日，里程碑',
   'chrome.recordedDayOne': '{n} 天',
   'chrome.recordedDayOther': '{n} 天',
   'chrome.todayBadge': '今天',
@@ -157,6 +159,7 @@ export default {
   'toast.segmentChanged': '这段时间已经变化，请重新查看后再确认。',
   'toast.plannedNoFreeMinute': '这一天已经没有空闲的时刻可以放它了，请先编辑相邻记录的时间。',
   'toast.deleted': '已删除',
+  'toast.milestone': '里程碑：已记录满 {n} 天',
   'toast.undoCancelled': '数据已在别处更新，撤销已取消',
   'toast.deleteQuota': '本机存储空间不足，删除没有执行；请先导出备份并清理空间。',
   'toast.writeQuota': '本机存储空间不足，这次改动没有保存；请先导出备份并清理空间。',

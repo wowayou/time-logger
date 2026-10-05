@@ -429,7 +429,7 @@ const normData = { version: 1, entries: [{ id: 'x', ts: '2026-07-01T09:00', what
 normalizeEntries(normData, { todayKey: '2026-07-01', nowTs: '2026-07-01T12:00', createId: genId });
 assert(normData.entries.some(e => e.ts === '2026-07-01T12:00' && e.what === '' && e.tags.length === 0), 'normalize opens a tail placeholder at now');
 
-import { listPlannedEntries } from './src/stats.js';
+import { listPlannedEntries, isMilestoneCount, milestoneCrossed, recordedDayCount, recordingMilestones } from './src/stats.js';
 import {
   bucketForTag,
   mergeImportedConfig,
@@ -1024,6 +1024,25 @@ assert(todayAfter(['a', 'b', 'C', 'd']) === 'C', 'editing today\'s line stays on
 assert(todayAfter(['x', 'y']) === 'x', 'a full replacement starts from the first line');
 assert(rebaseQuoteAnchor(rebasePrev, ['a', 'b', 'c', 'd'], rebaseToday) === '2026-09-28', 'unchanged lines keep the anchor');
 assert(rebaseQuoteAnchor({ items: [] }, ['a'], rebaseToday) === rebaseToday, 'a new library starts today');
+
+// v1.6.0（D32）：里程碑按累计记录日，节点 7 · 30 · 100 · 200 · 365，之后每满 100。
+assert([7, 30, 100, 200, 365, 400, 500, 1000].every(isMilestoneCount), 'listed milestones are nodes');
+assert(![0, 1, 6, 8, 21, 99, 101, 300, 366, 450, -100, 7.5, NaN].some(isMilestoneCount), 'other counts are not nodes (300 < 365 is not one)');
+assert(milestoneCrossed(6, 7) === 7 && milestoneCrossed(29, 30) === 30, 'stepping onto a node reports it');
+assert(milestoneCrossed(7, 8) === 0 && milestoneCrossed(7, 7) === 0 && milestoneCrossed(8, 7) === 0, 'staying, moving past or dropping below reports nothing');
+assert(milestoneCrossed(99, 101) === 100 && milestoneCrossed(364, 366) === 365, 'a two-day jump (overnight write) still reaches the node it crossed');
+assert(milestoneCrossed(0, 400) === 400, 'crossing several nodes reports the largest');
+// 7 个有真实记录的自然日，今天是第 7 个；计划条与空占位条都不算记过。
+const msDays = ['2026-09-01', '2026-09-03', '2026-09-04', '2026-09-10', '2026-09-20', '2026-09-30', '2026-10-05'];
+const msEntries = msDays.map((day, i) => entry(`ms${i}`, `${day}T09:00`, '阅读'));
+msEntries.push({ id: 'msPlan', ts: '2026-10-07T09:00', what: '计划', tags: ['阅读'], planned: true });
+msEntries.push({ id: 'msHole', ts: '2026-10-02T09:00', what: '', tags: [] });
+assert(recordedDayCount(msEntries) === 7, `planned and placeholder entries do not count, got ${recordedDayCount(msEntries)}`);
+assert(recordingMilestones(msEntries, '2026-10-05').milestoneDay === 7, 'today as the 7th logged day is a milestone day');
+assert(recordingMilestones(msEntries, '2026-10-06').milestoneDay === 0, 'the next day without a record is not');
+assert(recordingMilestones(msEntries.filter(e => e.id !== 'ms6'), '2026-10-05').milestoneDay === 0, 'a day with only a placeholder or nothing is not a milestone day');
+assert(recordingMilestones([...msEntries, entry('ms7', '2026-10-06T09:00', '阅读')], '2026-10-06').milestoneDay === 0, 'the 8th logged day is not a node');
+assert(recordingMilestones(msEntries, '2026-09-30').milestoneDay === 0, 'today\'s rank, not the total, decides (2026-09-30 was the 6th)');
 
 console.log('confirm_logic_smoke passed');
 '''

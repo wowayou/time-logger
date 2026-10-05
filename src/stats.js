@@ -53,11 +53,48 @@ function recordedDayKeys(entries) {
 export function recordingMilestones(entries, todayKey) {
   const days = recordedDayKeys(entries);
   const firstRecordedDate = days[0] || '';
+  const todayRank = days.indexOf(todayKey) + 1;
   return {
     firstRecordedDate,
     journeyDay: firstRecordedDate ? inclusiveCalendarDayCount(firstRecordedDate, todayKey) : 0,
-    recordedDays: days.length
+    recordedDays: days.length,
+    // v1.6.0（D32）：今天是第几个记录日，且恰好是里程碑节点时给出该节点，否则 0。
+    // 只看「今天」的名次，所以第二天无论记不记，高亮都自然消失，不需要任何存储。
+    milestoneDay: todayRank > 0 && isMilestoneCount(todayRank) ? todayRank : 0
   };
+}
+
+/**
+ * @param {unknown[]} entries
+ * @returns {number}
+ */
+export function recordedDayCount(entries) {
+  return recordedDayKeys(entries).length;
+}
+
+/**
+ * v1.6.0（D32）：里程碑节点，按**累计**记录日（与「已记录 N 天」同一口径），中断不清零。
+ * 节点是 7 · 30 · 100 · 200 · 365，之后每满 100。
+ * @param {number} n
+ * @returns {boolean}
+ */
+export function isMilestoneCount(n) {
+  if (!Number.isInteger(n) || n <= 0) return false;
+  return n === 7 || n === 30 || n === 100 || n === 200 || n === 365 || (n > 365 && n % 100 === 0);
+}
+
+/**
+ * 一次写入让累计记录日跨过的最大节点；没跨过（含减少、不变）返回 0。用「跨过」而不是
+ * 「恰好等于」：过夜续记一次能新增昨天和今天两个记录日，99 → 101 也应当算到了 100。
+ * @param {number} beforeCount
+ * @param {number} afterCount
+ * @returns {number}
+ */
+export function milestoneCrossed(beforeCount, afterCount) {
+  for (let n = afterCount; n > beforeCount; n--) {
+    if (isMilestoneCount(n)) return n;
+  }
+  return 0;
 }
 
 export function listPlannedEntries(entries, dateKey) {

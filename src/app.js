@@ -53,6 +53,8 @@ import {
   buildRangeSegmentsFromEntries,
   confirmSegmentInData,
   listPlannedEntries,
+  milestoneCrossed,
+  recordedDayCount,
   recordingMilestones,
   summarizeEntries
 } from './stats.js';
@@ -398,11 +400,14 @@ import {
     });
     // 里程碑从当前数据派生（最早真实记录→今天 + 有真实记录的自然日数），因此随
     // 完整备份天然恢复；本机安装日 firstUsedDate 已降为纯诊断值，不再上 header。
-    const { journeyDay, recordedDays } = recordingMilestones(load().entries, todayStr());
+    const { journeyDay, recordedDays, milestoneDay } = recordingMilestones(load().entries, todayStr());
     const usageEl = document.getElementById('usage-day');
     if (usageEl) {
       // 一条真实记录都没有时不编造里程碑，直接不显示。
       usageEl.hidden = recordedDays === 0;
+      // v1.6.0（D32）：今天恰好是第 7/30/100… 个记录日时整天高亮；只换样式和读屏，
+      // 可见文字不变（320px 下这行已经贴着「···」按钮，加字只会被省略号截掉）。
+      usageEl.classList.toggle('is-milestone', milestoneDay > 0);
       if (recordedDays > 0) {
         // SPEC-014 §3：「N 天/days」的单复数用 i18n.js 的 plural() 现算，再整体
         // 塞进 {recorded}——中文两形取值相同，字节不变；英文 N=1 时读 "1 day"。
@@ -411,7 +416,9 @@ import {
           other: t('chrome.recordedDayOther', { n: recordedDays })
         });
         usageEl.textContent = t('chrome.milestone', { journey: journeyDay, recorded: recordedLabel });
-        usageEl.setAttribute('aria-label', t('chrome.milestoneAria', { journey: journeyDay, recorded: recordedLabel }));
+        usageEl.setAttribute('aria-label', milestoneDay > 0
+          ? t('chrome.milestoneAriaToday', { journey: journeyDay, recorded: recordedLabel, n: milestoneDay })
+          : t('chrome.milestoneAria', { journey: journeyDay, recorded: recordedLabel }));
       }
     }
     // R5：当前周期是否包含今天——驱动「回到今天」按钮的条件渲染 + 日期行内的
@@ -646,14 +653,29 @@ import {
   // SPEC-006 B：原生弹窗清零——非阻塞、自动消退、无动作按钮的通用提示，供导入
   // 完成摘要和区间确认签名过期复用。独立于 #undo-toast，避免抢占撤销窗口。
   let infoToastTimer = null;
-  function showInfoToast(message) {
+  function showInfoToast(message, opts = {}) {
     const toast = document.getElementById('info-toast');
     if (!toast) return;
     const span = toast.querySelector('[data-role="info-message"]');
     if (span) span.textContent = message;
+    toast.classList.toggle('is-milestone', Boolean(opts.milestone));
     toast.hidden = false;
     clearTimeout(infoToastTimer);
     infoToastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
+  }
+
+  // v1.6.0（D32）：一次本机记录写入让「已记录 N 天」跨过里程碑节点时，轻提示一次。
+  // 只由新建/补记/编辑/标记已发生这些记录写入路径在**写入成功之后**显式调用；导入、
+  // 撤销删除、配额回滚、跨标签页同步都不调用——它们不是「今天又记了一天」。
+  // 从 sheet 保存时与导入完成提示同一时序（SPEC-012）：等 sheet 滑出后再亮，免得被遮罩盖住。
+  const SHEET_CLOSE_MS = 320;
+  function celebrateMilestone(beforeCount, opts = {}) {
+    const reached = milestoneCrossed(beforeCount, recordedDayCount(load().entries));
+    if (!reached) return;
+    const show = () => showInfoToast(t('toast.milestone', { n: reached }), { milestone: true });
+    const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (opts.afterSheetClose && !reduced) setTimeout(show, SHEET_CLOSE_MS);
+    else show();
   }
 
   function confirmDelete(id) {
@@ -723,6 +745,7 @@ import {
       showInfoToast(t('toast.plannedNoFreeMinute'));
       return;
     }
+    const beforeCount = recordedDayCount(d.entries);
     delete entry.planned;
     entry.ts = settled;
     normalizeEntries(d, { todayKey: todayStr(), createId: uid });
@@ -733,6 +756,7 @@ import {
       return;
     }
     render();
+    celebrateMilestone(beforeCount);
   }
 
   // --- Data signature ---
@@ -772,6 +796,7 @@ import {
     setSelectedDate,
     render,
     renderChrome,
+    celebrateMilestone,
     isLegacyOrigin,
     // v82：删掉一个零记录标签后，还挂着的「撤销删除」会把引用它的记录放回来，
     // 那条记录就成了孤儿标签。与跨标签页修改同一处理：让撤销失效并明说。
