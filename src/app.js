@@ -44,6 +44,8 @@ import {
   validateImportData,
   loadLocalePref,
   saveLocalePref,
+  readUiPreference,
+  saveUiPreference,
   refreshBucketLabels
 } from './storage.js';
 import { getLocale, plural, resolveLocale, setLocale, t, tList } from './i18n.js';
@@ -56,7 +58,9 @@ import {
   milestoneCrossed,
   recordedDayCount,
   recordingMilestones,
-  summarizeEntries
+  summarizeEntries,
+  summarizeSegments,
+  summarizeSegmentRows
 } from './stats.js';
 import {
   addDays,
@@ -154,8 +158,7 @@ import {
     notice.hidden = !isLegacyOrigin();
   }
 
-  function defaultFormTs() {
-    const entries = load().entries;
+  function defaultFormTs(entries = load().entries) {
     const dateKey = state.selectedDate || todayStr();
     return defaultFormTimestamp(entries, dateKey);
   }
@@ -171,8 +174,8 @@ import {
   }
 
   function persistState() {
-    localStorage.setItem(VIEW_KEY, state.view);
-    localStorage.setItem(SELECTED_DATE_KEY, state.selectedDate);
+    saveUiPreference(VIEW_KEY, state.view);
+    saveUiPreference(SELECTED_DATE_KEY, state.selectedDate);
   }
 
   // --- Theme ---
@@ -195,7 +198,7 @@ import {
     });
   }
   function setThemePref(pref) {
-    localStorage.setItem(THEME_KEY, pref);
+    saveUiPreference(THEME_KEY, pref);
     applyTheme(pref);
   }
 
@@ -214,8 +217,8 @@ import {
   }
 
   // --- Compute entries and summaries ---
-  function settlementEndFor(startTs, dateKey) {
-    return getSettlementEndFor(load().entries, startTs, dateKey);
+  function settlementEndFor(startTs, dateKey, entries = load().entries) {
+    return getSettlementEndFor(entries, startTs, dateKey);
   }
   // v87：`config` 一次读、往下传。stats.js 的桶查询每个片段要问三次（classifySegment
   // 两次 + addBucket 一次），不传的话每次都重新 localStorage.getItem + JSON.parse +
@@ -224,15 +227,14 @@ import {
   function summarizeRange(start, end, opts = {}) {
     return summarizeEntries(load().entries, start, end, { config: loadConfig(), ...opts });
   }
-  function computeDay() {
+  function computeDay(allEntries = load().entries, config = loadConfig()) {
     const { start, end } = periodRange('day', state.selectedDate);
-    const statEnd = state.selectedDate === todayStr() ? new Date() : end;
-    const allEntries = load().entries;
-    const config = loadConfig();
-    const segments = buildRangeSegmentsFromEntries(allEntries, start, statEnd, { config });
+    const now = new Date();
+    const statEnd = state.selectedDate === todayStr() ? now : end;
+    const segments = buildRangeSegmentsFromEntries(allEntries, start, statEnd, { now, config });
     const timeline = segments.filter(segment => segment.e || segment.mins >= UNRECORDED_GAP_FLOOR_MIN);
     const planned = listPlannedEntries(allEntries, state.selectedDate);
-    return { timeline, planned, totals: summarizeEntries(allEntries, start, statEnd, { config }) };
+    return { timeline, planned, totals: summarizeSegments(segments, config) };
   }
   function summaryRows() {
     const { start } = periodRange();
@@ -332,17 +334,21 @@ import {
     // v86：记下这一帧代表的分钟。定时器被系统冻住时（S23 实录：应用在前台，界面
     // 却停在一两分钟前），它是「界面已经过期」的廉价判据——见 refreshLiveClockOnTouch。
     lastRenderedMinute = nowStr();
-    renderChrome();
+    // 每帧只读一份记录与配置，显式往下传；不让只读性能优化污染写路径的新对象图。
+    const entries = load().entries;
+    const config = loadConfig();
+    renderChrome(entries, config);
     if (state.view === 'day') {
-      const day = computeDay();
+      const day = computeDay(entries, config);
       const isToday = state.selectedDate === todayStr();
       renderDayHero(day.totals, day.timeline.length || day.planned.length || day.totals.total, {
         isToday,
         asOf: nowStr().slice(11, 16)
       });
-      renderNowStrip(day.timeline, isToday);
+      renderNowStrip(day.timeline, isToday, config);
       renderTimeline(day.timeline, {
         sheetEditId,
+        config,
         plannedItems: day.planned,
         isToday,
         nowLabel: nowStr().slice(11, 16),
@@ -350,15 +356,17 @@ import {
         // 等写入口，左滑轨道因缺少 data-action="start-edit" 锚点而自然不启用。
         readOnly: isLegacyOrigin()
       });
-      lastIntervalSignature = dataSignature();
+      lastIntervalSignature = dataSignature(entries);
       saveBootSnapshot();
       return;
     }
     const { start, end } = periodRange();
-    renderRuler(summarizeRange(start, end), 1, state.view);
-    renderNowStrip([], false);
-    renderSummary();
-    lastIntervalSignature = dataSignature();
+    // 总览与各行只分段一次；按日切好的分段也能直接按月汇总成年视图的 12 行。
+    const segments = buildRangeSegmentsFromEntries(entries, start, end, { config });
+    renderRuler(summarizeSegments(segments, config), 1, state.view);
+    renderNowStrip([], false, config);
+    renderSummaryRows(summarizeSegmentRows(segments, summaryRows(), config));
+    lastIntervalSignature = dataSignature(entries);
     saveBootSnapshot();
   }
 
@@ -383,16 +391,30 @@ import {
         configRaw: localStorage.getItem('timelog.config'),
         // v1.5.0：文字轮播在独立键里；换了句库的快照不得接回旧句子（index.html 同一门）。
         quotesRaw: readQuotesRaw(),
-        view: localStorage.getItem(VIEW_KEY),
-        selectedDate: localStorage.getItem(SELECTED_DATE_KEY),
-        recordMode: localStorage.getItem(RECORD_MODE_KEY),
+        // 快照记录实际画出的状态；若偏好未能落盘，index.html 的存储比对必须拒绝它。
+        view: state.view,
+        selectedDate: state.selectedDate,
+        recordMode: readUiPreference(RECORD_MODE_KEY),
         today: todayStr()
       }));
     } catch {}
   }
-  function renderChrome() {
-    const crossTabBanner = document.getElementById('cross-tab-banner');
-    if (crossTabBanner) crossTabBanner.hidden = true;
+  function syncCrossTabSpace() {
+    const banner = document.getElementById('cross-tab-banner');
+    const height = banner && !banner.hidden ? Math.ceil(banner.getBoundingClientRect().height) : 0;
+    const root = document.documentElement;
+    const value = `${height}px`;
+    if (root.style.getPropertyValue('--cross-tab-height') !== value) root.style.setProperty('--cross-tab-height', value);
+  }
+
+  function showCrossTabBanner(visible) {
+    const banner = document.getElementById('cross-tab-banner');
+    if (banner) banner.hidden = !visible;
+    syncCrossTabSpace();
+  }
+
+  function renderChrome(entries = load().entries, config = loadConfig()) {
+    showCrossTabBanner(false);
     document.querySelectorAll('#view-tabs button').forEach(btn => {
       const selected = btn.dataset.view === state.view;
       btn.classList.toggle('active', selected);
@@ -400,7 +422,7 @@ import {
     });
     // 里程碑从当前数据派生（最早真实记录→今天 + 有真实记录的自然日数），因此随
     // 完整备份天然恢复；本机安装日 firstUsedDate 已降为纯诊断值，不再上 header。
-    const { journeyDay, recordedDays, milestoneDay } = recordingMilestones(load().entries, todayStr());
+    const { journeyDay, recordedDays, milestoneDay } = recordingMilestones(entries, todayStr());
     const usageEl = document.getElementById('usage-day');
     if (usageEl) {
       // 一条真实记录都没有时不编造里程碑，直接不显示。
@@ -442,15 +464,15 @@ import {
     // v77：defaultFormTimestamp 返回空串＝所看这天已被记录覆盖到最后一分钟
     // （尾点是 23:59 的真实记录），当天没有任何合法的新增起点——与其给一个点
     // 进去必然报冲突的按钮，不如按既有惯例隐藏 FAB（切一刀/编辑仍可从行进入）。
-    const fabStart = isDay ? defaultFormTs() : '';
+    const fabStart = isDay ? defaultFormTs(entries) : '';
     const canCreate = isDay && dateMode.canCreate && !isLegacyOrigin() && fabStart !== '';
     addBtn.hidden = !canCreate;
     if (listFade) listFade.hidden = !canCreate;
     if (canCreate) {
-      const preferPlan = localStorage.getItem(RECORD_MODE_KEY) === 'plan';
+      const preferPlan = readUiPreference(RECORD_MODE_KEY) === 'plan';
       const isPlan = dateMode.forcedMode === 'plan' || (dateMode.kind === 'today' && preferPlan);
       const mainLabel = isPlan ? t('chrome.fabPlan') : t('chrome.fabLog');
-      const sub = fabSubCopy(fabStart);
+      const sub = fabSubCopy(fabStart, entries);
       addBtn.innerHTML = `<span class="fab-main">${mainLabel}</span>${sub ? `<span class="fab-sub">${esc(sub)}</span>` : ''}`;
       // FAB 有可见文案，不需要 hover tooltip；且 `button[data-tip]` 会把 position 强制
       // 成 relative（tooltip 定位规则），破坏 fixed 悬浮——所以只设 aria-label，不设 data-tip。
@@ -461,7 +483,7 @@ import {
     // v1.5.0（D31）：文字轮播开启时同一位置显示当天那一句，只由日期决定。
     const mottoEl = document.getElementById('motto-line');
     if (mottoEl) {
-      const line = resolveMottoLine(loadConfig(), loadQuotes(), todayStr());
+      const line = resolveMottoLine(config, loadQuotes(), todayStr());
       const showMotto = isDay && Boolean(line.text);
       mottoEl.hidden = !showMotto;
       mottoEl.classList.toggle('is-quote', line.kind === 'quote');
@@ -495,10 +517,9 @@ import {
   // v77：历史日再分两种——尾点是**未记录占位**才叫「续」（确实有一段空白可以接
   // 着写）；尾点是**真实记录**时那天已被覆盖到 24:00，没有可续之物，默认起点是
   // 其后一分钟，文案随之改为「补记」，与表单标题（非今天＝补记）同一套词汇。
-  function fabSubCopy(start) {
+  function fabSubCopy(start, entries) {
     const dateKey = state.selectedDate;
     const isToday = dateKey === todayStr();
-    const entries = load().entries;
     const dayLogged = entries.filter(e => !e.planned && e.ts.slice(0, 10) === dateKey);
     if (!dayLogged.length) return isToday ? t('fab.emptyToday') : t('fab.emptyOtherDay');
     if (!start) return '';
@@ -507,21 +528,9 @@ import {
         ? t('fab.continueFrom', { time: hhmm(start) })
         : t('fab.backfillFrom', { time: hhmm(start) });
     }
-    const settlement = settlementEndFor(start, dateKey);
+    const settlement = settlementEndFor(start, dateKey, entries);
     const dur = settlement.endTs ? minsBetweenDates(new Date(start), new Date(settlement.endTs)) : 0;
     return t('fab.ongoingFrom', { time: hhmm(start), dur: fmtMins(dur) });
-  }
-
-  function renderSummary() {
-    // 月视图 31 行、年视图 12 行，每行一次 summarize——entries 与 config 各读一次就够，
-    // 别让每一行都重新 JSON.parse 一遍整份记录（真实数据 120KB）。
-    const entries = load().entries;
-    const config = loadConfig();
-    const rows = summaryRows().map(row => ({
-      ...row,
-      totals: summarizeEntries(entries, row.rangeStart, row.rangeEnd, { config })
-    }));
-    renderSummaryRows(rows);
   }
 
   // --- Segment confirmation ---
@@ -561,6 +570,7 @@ import {
     pendingDelete = {
       id,
       plan,
+      sourceRevision: entriesRevision([entry]),
       returnToEdit: opts.returnToEdit !== false && sheetController.getSheetMode() === 'edit'
     };
     sheetController.openFormSheet({ mode: 'delete-confirm', deletePlan: plan, deleteEntry: entry });
@@ -687,8 +697,11 @@ import {
       deleteError(latest.message || t('txn.missing'));
       return;
     }
-    if (latest.resultSignature !== pendingDelete.plan.resultSignature) {
+    // 删除结果会抹掉原文，不能只比结果签名；原记录变了就先展示最新版，再次确认。
+    const sourceRevision = entriesRevision([entry]);
+    if (sourceRevision !== pendingDelete.sourceRevision || latest.resultSignature !== pendingDelete.plan.resultSignature) {
       pendingDelete.plan = latest;
+      pendingDelete.sourceRevision = sourceRevision;
       sheetController.openFormSheet({
         mode: 'delete-confirm',
         deletePlan: latest,
@@ -760,15 +773,14 @@ import {
   }
 
   // --- Data signature ---
-  function dataSignature() {
-    const d = load();
+  function dataSignature(entries = load().entries) {
     const { start, end } = periodRange();
     const now = new Date();
     const liveMinute = now >= start && now < end ? nowStr() : '';
-    return JSON.stringify({ view: state.view, selectedDate: state.selectedDate, today: todayStr(), liveMinute, entries: d.entries });
+    return JSON.stringify({ view: state.view, selectedDate: state.selectedDate, today: todayStr(), liveMinute, entries });
   }
   function openHelp(opts = {}) {
-    if (opts.markSeen !== false) localStorage.setItem(HELP_SEEN_KEY, '1');
+    if (opts.markSeen !== false) saveUiPreference(HELP_SEEN_KEY, '1');
     sheetController.openFormSheet({ mode: 'help' });
   }
   function openTagConfig() {
@@ -1063,8 +1075,7 @@ import {
         if (banner) banner.hidden = true;
       }
       if (action === 'dismiss-cross-tab-banner') {
-        const b = document.getElementById('cross-tab-banner');
-        if (b) b.hidden = true;
+        showCrossTabBanner(false);
         cancelUndoForConflict();
         render();
       }
@@ -1098,14 +1109,19 @@ import {
         if (sheetController.isFormOpen()) sheetController.saveEntry();
       }
     });
-    window.addEventListener('resize', sheetController.handleResponsiveResize, { passive: true });
-    window.addEventListener('orientationchange', sheetController.handleResponsiveResize, { passive: true });
+    const onResponsiveResize = () => {
+      // 通知随宽度/语言换行，不用固定像素猜高度；只借用既有 resize 事件。
+      syncCrossTabSpace();
+      sheetController.handleResponsiveResize();
+    };
+    window.addEventListener('resize', onResponsiveResize, { passive: true });
+    window.addEventListener('orientationchange', onResponsiveResize, { passive: true });
     window.addEventListener('storage', e => {
-      if (e.key !== 'timelog.v1') return;
-      cancelUndoForConflict();
+      // 配置改桶、句库改句和 clear() 也会使派生界面过期；有表单时仍只提示、不重绘。
+      if (e.storageArea !== localStorage || !['timelog.v1', 'timelog.config', 'timelog.quotes', null].includes(e.key)) return;
+      if (e.key !== 'timelog.quotes') cancelUndoForConflict();
       if (sheetEditId || sheetController.isFormOpen() || sheetController.getSheetMode()) {
-        const b = document.getElementById('cross-tab-banner');
-        if (b) b.hidden = false;
+        showCrossTabBanner(true);
       } else {
         render();
       }
@@ -1497,16 +1513,16 @@ import {
     const today = todayStr();
     // 只做诊断：写下本机首用日备查，不再驱动任何用户可见里程碑。
     ensureFirstUsedDate(today, load().entries);
-    const savedView = localStorage.getItem(VIEW_KEY);
-    const savedDate = parseDateKey(localStorage.getItem(SELECTED_DATE_KEY));
+    const savedView = readUiPreference(VIEW_KEY);
+    const savedDate = parseDateKey(readUiPreference(SELECTED_DATE_KEY));
     state.view = ['day', 'week', 'month', 'year'].includes(savedView) ? savedView : 'day';
     state.selectedDate = savedDate ? localDateKey(savedDate) : today;
-    localStorage.setItem(OPEN_DATE_KEY, today);
+    saveUiPreference(OPEN_DATE_KEY, today);
     persistState();
 
-    applyTheme(localStorage.getItem(THEME_KEY) || 'auto');
+    applyTheme(readUiPreference(THEME_KEY) || 'auto');
     const mq = window.matchMedia('(prefers-color-scheme: light)');
-    if (mq.addEventListener) mq.addEventListener('change', () => applyTheme(localStorage.getItem(THEME_KEY) || 'auto'));
+    if (mq.addEventListener) mq.addEventListener('change', () => applyTheme(readUiPreference(THEME_KEY) || 'auto'));
     // v53：命中快照则跳过首轮渲染（恢复节点保持同一 DOM，不闪）。v56 补版本门：
     // 快照是旧版本写的就当没有快照——旧 DOM 形态不能在新版 JS 下继续活着。
     let restoredBootFrame = window.__timelogBootRestored === true;
@@ -1543,7 +1559,7 @@ import {
         initBootTraceHud();
         document.body.classList.remove('boot-restored');
         delete window.__timelogBootRestored;
-        if (!navigator.webdriver && !localStorage.getItem(HELP_SEEN_KEY)) openHelp();
+        if (!navigator.webdriver && !readUiPreference(HELP_SEEN_KEY)) openHelp();
       });
     });
     document.addEventListener('visibilitychange', () => {

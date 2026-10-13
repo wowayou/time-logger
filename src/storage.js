@@ -16,23 +16,42 @@ export const RECORD_MODE_KEY = 'timelog.recordMode';
 // 不进备份、导入不得改语言（与 timelog.theme 同类）。
 export const LOCALE_KEY = 'timelog.locale';
 
+// 非关键界面偏好存不下时，只保留当前页面会话内的选择。真实记录/config/句库
+// 禁止经过此接口：它们必须明确报告写入失败，不能用内存值冒充已保存的数据。
+/** @type {Map<string, string | null>} */
+const uiPreferenceOverrides = new Map();
+
+/** @param {string} key @returns {string | null} */
+export function readUiPreference(key) {
+  if (uiPreferenceOverrides.has(key)) return uiPreferenceOverrides.get(key) ?? null;
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** @param {string} key @param {string | null} value @returns {boolean} 是否已持久化 */
+export function saveUiPreference(key, value) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+    uiPreferenceOverrides.delete(key);
+    return true;
+  } catch {
+    uiPreferenceOverrides.set(key, value);
+    return false;
+  }
+}
+
 /** @returns {string} 存储的语言偏好（'' ＝ 跟随系统） */
 export function loadLocalePref() {
-  try {
-    return localStorage.getItem(LOCALE_KEY) || '';
-  } catch {
-    return '';
-  }
+  return readUiPreference(LOCALE_KEY) || '';
 }
 
 /** @param {string} code 空串＝跟随系统 */
 export function saveLocalePref(code) {
-  try {
-    if (code) localStorage.setItem(LOCALE_KEY, code);
-    else localStorage.removeItem(LOCALE_KEY);
-  } catch {
-    /* 存不下不影响本次会话内的语言 */
-  }
+  saveUiPreference(LOCALE_KEY, code || null);
 }
 
 // SPEC-014 修复（维护者拍板方案 A，2026-08-01）：v78 之前 SUPPORTED_LOCALES 只有
@@ -995,9 +1014,8 @@ export function readRaw() {
  * 与 expectedRaw（load() 时捕获的快照）。如果不一致，说明另一个标签页在 load() 和
  * saveChecked() 之间写了数据——当前写入会覆盖那些更改，必须中止。
  *
- * 这不能完全消除竞态（readRaw 和 setItem 之间仍有极小窗口），但把窗口从
- * 「整个用户操作周期」缩小到「一次同步函数调用内」，实际上消除了多标签页
- * 同时编辑导致静默数据丢失的问题。
+ * 这不是原子操作：readRaw 和 setItem 之间仍有竞态窗口。它只检查从 loadSnapshot()
+ * 到写入这一段；长表单还须另行比对打开时的原记录，不能用最新 raw 掩盖旧草稿冲突。
  *
  * @param {object} d 要写入的数据
  * @param {string} expectedRaw load() 时捕获的原始字符串

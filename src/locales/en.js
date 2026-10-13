@@ -238,6 +238,7 @@ export default {
   'form.needStartTime': 'Please enter a complete start time.',
   'form.overnightUnsavable': 'This overnight entry cannot be saved.',
   'form.boundaryChanged': 'The entry boundary has changed; please confirm again.',
+  'form.editChanged': 'This entry was changed elsewhere. Your draft is kept; copy anything you need, then close and reopen the entry.',
   'form.previewRecomputed': 'Data has changed; the preview was recomputed from the latest entries. Please confirm again.',
   'form.quotaForm': 'Local storage is full; the form content is kept. Export a backup and free up space first.',
   'form.tagConfigQuota': 'Local storage is full; neither the custom tag nor this entry was saved. The form content is kept. Export a backup and free up space first.',

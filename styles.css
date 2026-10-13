@@ -1527,7 +1527,8 @@
       white-space: nowrap;
     }
 
-    /* Cross-tab conflict banner — fixed at top, above form sheet (z-index 90) */
+    /* Cross-tab notice stays above sheets; its measured height reserves sheet space
+       so a wrapped notice never covers Cancel/Save (no device-specific offsets). */
     .cross-tab-banner {
       position: fixed;
       top: 0;
@@ -1537,7 +1538,7 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 10px var(--sp-4);
+      padding: calc(10px + env(safe-area-inset-top)) var(--sp-4) 10px;
       background: var(--card);
       border-bottom: 1px solid var(--border);
       box-shadow: var(--shadow-1);
@@ -1620,6 +1621,7 @@
       z-index: 80;
       display: grid;
       align-items: end;
+      padding-top: var(--cross-tab-height, 0px);
     }
     .form-sheet[hidden] { display: none; }
     .form-sheet-backdrop {
@@ -1639,7 +1641,7 @@
          save ✓ off the right edge — the SE2 "can't edit" bug. Same discipline as
          the view-tabs minmax(0,1fr) guard. */
       min-width: 0;
-      max-height: calc(100dvh - env(safe-area-inset-top) - 12px);
+      max-height: calc(100dvh - max(env(safe-area-inset-top), var(--cross-tab-height, 0px)) - 12px);
       width: 100%;
       max-width: 600px;
       margin: 0 auto;
@@ -1655,7 +1657,7 @@
        常在、内容从顶部流下、焦点控件滚到键盘上方；面板几何不随键盘变。短 sheet
        （更多/说明/导入平移）不加 .tall，保持内容自适应，不弹键盘也不会跳。 */
     .form-sheet-panel.tall {
-      height: calc(100dvh - env(safe-area-inset-top) - 12px);
+      height: calc(100dvh - max(env(safe-area-inset-top), var(--cross-tab-height, 0px)) - 12px);
     }
     /* v33: sheet 进场动画（纯 CSS 渐进增强；hidden→显示时从 @starting-style 过渡进来。
        旧浏览器无此规则=直接弹出。 */
@@ -2547,6 +2549,7 @@
       .form-sheet {
         align-items: center;
         padding: var(--sp-5);
+        padding-top: calc(var(--sp-5) + var(--cross-tab-height, 0px));
       }
       .form-sheet-panel {
         max-width: 520px;

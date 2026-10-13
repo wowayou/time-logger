@@ -2179,7 +2179,8 @@ test('planned edit exemption compares against the latest entry from the same loa
     localStorage.setItem('timelog.v1', JSON.stringify(data));
   });
   await page.getByRole('button', { name: '保存修改' }).click();
-  await expect(page.locator('[data-role="time-error"]')).toBeVisible();
+  await expect(page.locator('[data-role="conflict-error"]')).toContainText('重新打开');
+  await expect(page.locator('[data-role="edit-what"]')).toHaveValue('只改文字');
   const latest = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries.find(entry => entry.id === 'plan-expired'));
   expect(latest).toMatchObject({ ts: '2026-06-29T08:00', what: '过期计划' });
 });

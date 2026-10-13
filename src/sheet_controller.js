@@ -6,6 +6,7 @@ import { mountRangePicker, mountTimePicker, setTimeInputError, useCompactTimePic
 import {
   addOneMinute,
   cloneEntries,
+  entriesRevision,
   findTimeConflict,
   intervalEditContext,
   normalizeEntries,
@@ -39,6 +40,8 @@ import {
   setCurrentMainline as storageSetCurrentMainline,
   setMainlineLongOk,
   migrateEntryTags,
+  readUiPreference,
+  saveUiPreference,
   RECORD_MODE_KEY
 } from './storage.js';
 import {
@@ -118,12 +121,12 @@ export function createSheetController(deps) {
   }
 
   function loadRecordModePref() {
-    const saved = localStorage.getItem(RECORD_MODE_KEY);
+    const saved = readUiPreference(RECORD_MODE_KEY);
     return saved === 'plan' ? 'plan' : 'log';
   }
 
   function saveRecordModePref(mode) {
-    localStorage.setItem(RECORD_MODE_KEY, mode === 'plan' ? 'plan' : 'log');
+    saveUiPreference(RECORD_MODE_KEY, mode === 'plan' ? 'plan' : 'log');
   }
 
   function safeBucket(bucket) {
@@ -1770,6 +1773,7 @@ export function createSheetController(deps) {
       return;
     }
     const { data: d, raw } = deps.loadSnapshot();
+    if (formSourceId && !unchangedFormEntry(d.entries, formSourceId, panel)) return;
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     const latest = planSegmentSplit(d.entries, {
       sourceId: formSourceId,
@@ -1812,6 +1816,22 @@ export function createSheetController(deps) {
     pickTag(el);
   }
 
+  // 结果签名会先用草稿覆盖原记录，因而看不出原记录本身已被改动（整段切分也一样）。
+  // 编辑与带源记录的补录共用打开时的基线；无关条目仍可重算预览后确认。
+  function unchangedFormEntry(entries, id, scope) {
+    const entry = entries.find(e => e.id === id);
+    if (!entry) {
+      showInlineError(scope, t('txn.missing'));
+      return null;
+    }
+    const original = formBaseEntries.find(e => e.id === id);
+    if (!original || entriesRevision([entry]) !== entriesRevision([original])) {
+      showInlineError(scope, t('form.editChanged'));
+      return null;
+    }
+    return entry;
+  }
+
   function commitEdit(id) {
     const box = getEditingBox(id);
     if (!box) return;
@@ -1820,11 +1840,12 @@ export function createSheetController(deps) {
     const chipBox = box.querySelector('[data-role="edit-chips"]');
     const customEl = box.querySelector('[data-role="edit-custom-tag"]');
     const { data: d, raw } = deps.loadSnapshot();
+    const entry = unchangedFormEntry(d.entries, id, box);
+    if (!entry) return;
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
-    const entry = d.entries.find(e => e.id === id);
-    const planned = Boolean(entry && entry.planned);
+    const planned = Boolean(entry.planned);
     const normalizedInputTs = normalizeTimestamp(tsEl ? tsEl.value : '');
-    const checked = planned && entry && normalizedInputTs === entry.ts
+    const checked = planned && normalizedInputTs === entry.ts
       ? { ok: true, ts: normalizedInputTs }
       : validateTsForMode(tsEl ? tsEl.value : '', { planned });
     if (!checked.ok) {
@@ -1851,7 +1872,7 @@ export function createSheetController(deps) {
     }
     const endEl = box.querySelector('[data-role="edit-end-ts"]');
     const endModeEl = box.querySelector('[data-role="edit-end-mode"]');
-    if (entry && !planned && endEl && endModeEl) {
+    if (!planned && endEl && endModeEl) {
       const expected = buildEditPlan(box, formBaseEntries);
       if (!expected || !expected.ok) {
         showInlineError(box, expected && expected.message || t('form.rangeUnsavable'));
@@ -1889,7 +1910,7 @@ export function createSheetController(deps) {
         return;
       }
       if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box, write.raw)) return;
-    } else if (entry) {
+    } else {
       entry.ts = checked.ts;
       entry.what = what;
       entry.tags = [tag];

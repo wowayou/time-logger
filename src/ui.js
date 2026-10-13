@@ -18,6 +18,7 @@ import {
   loadLocalePref,
   loadQuotes,
   previewLocaleDefaultTags,
+  readUiPreference,
   readBootDiag
 } from './storage.js';
 
@@ -158,7 +159,7 @@ function confirmSegmentLabel(startTs, endTs) {
 // 才看得到；本条只把既有派生数据前置，不新增字段、不加真计时器、不碰统计。只对
 // 今天、且尾段是非空 what 的已发生段显示；未记录尾段沿用 FAB「续 X 起」入口，不重复。
 // 点整条＝编辑该段（复用 start-edit，data-id 走既有点击委托）。
-export function renderNowStrip(items, isToday) {
+export function renderNowStrip(items, isToday, config = loadConfig()) {
   const el = document.getElementById('now-strip');
   if (!el) return;
   const ongoing = isToday
@@ -173,7 +174,6 @@ export function renderNowStrip(items, isToday) {
     el.removeAttribute('aria-label');
     return;
   }
-  const config = loadConfig();
   const tag = (ongoing.e.tags || [])[0] || t('tag.unknown');
   const bucket = bucketForTag(tag, config);
   const dur = fmtMins(ongoing.mins);
@@ -188,11 +188,9 @@ export function renderNowStrip(items, isToday) {
 
 
 export function renderTimeline(items, opts = {}) {
-  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false } = opts;
+  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig() } = opts;
   const el = document.getElementById('timeline');
-  // v87：桶色竖脊每行都要问一次 bucketForTag；不带 config 的话每一行都会重新
-  // 解析并归一化整份 config。整块时间轴共用同一份。
-  const config = loadConfig();
+  // 桶色竖脊共用本帧配置，与统计同源；独立调用时才在上面读一次默认配置。
   const planned = (plannedItems || []).map(e => ({
     e,
     start: new Date(e.ts),
@@ -370,7 +368,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.6.0';
+export const APP_VERSION = '1.6.1';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -449,8 +447,7 @@ function renderAdvancedSheet(opts = {}) {
 }
 
 function renderMoreSheet(opts = {}) {
-  let themePref = 'auto';
-  try { themePref = localStorage.getItem(THEME_KEY) || 'auto'; } catch {}
+  const themePref = readUiPreference(THEME_KEY) || 'auto';
   const themeBtn = (value, label) =>
     `<button type="button" data-action="theme" data-theme="${value}" class="${themePref === value ? 'active' : ''}" aria-pressed="${themePref === value}" aria-label="${t('theme.aria', { label })}">${label}</button>`;
   // SPEC-014 §2：语言开关，紧邻主题，同款三选一 seg；'' ＝跟随系统。active 态

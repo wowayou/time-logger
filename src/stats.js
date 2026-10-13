@@ -274,15 +274,44 @@ export function buildRangeSegmentsFromEntries(inputEntries, start, end, opts = {
   return segments;
 }
 
-export function summarizeEntries(entries, start, end, opts = {}) {
+// 统计累计只认分段产出的分钟与标记。主渲染可让时间轴、总览与明细共用同一份
+// 分段，不再为每一行重新排序全部记录、计算全部边界；不缓存跨帧的可变对象。
+export function summarizeSegments(segments, config = undefined) {
   const totals = emptyTotals();
-  buildRangeSegmentsFromEntries(entries, start, end, opts).forEach(segment => {
+  segments.forEach(segment => {
     addBucket(totals, segment.tag, segment.mins, {
       unrecorded: segment.unrecorded,
       pending: segment.pendingConfirm
-    }, opts.config);
+    }, config);
   });
   return totals;
+}
+
+export function summarizeEntries(entries, start, end, opts = {}) {
+  return summarizeSegments(buildRangeSegmentsFromEntries(entries, start, end, opts), opts.config);
+}
+
+// rows 按 rangeStart 升序、互不重叠；segments 是 buildRangeSegmentsFromEntries
+// 的有序输出。游标只前进，仍保留空行；交集裁剪也支持行端点落在一个分段内部。
+// 只创建新行和 totals，不修改输入行、分段、记录或配置。
+export function summarizeSegmentRows(segments, rows, config = undefined) {
+  let firstLive = 0;
+  return rows.map(row => {
+    const totals = emptyTotals();
+    while (firstLive < segments.length && segments[firstLive].end <= row.rangeStart) firstLive += 1;
+    for (let i = firstLive; i < segments.length && segments[i].start < row.rangeEnd; i += 1) {
+      const segment = segments[i];
+      const mins = minsBetweenDates(
+        new Date(Math.max(+segment.start, +row.rangeStart)),
+        new Date(Math.min(+segment.end, +row.rangeEnd))
+      );
+      addBucket(totals, segment.tag, mins, {
+        unrecorded: segment.unrecorded,
+        pending: segment.pendingConfirm
+      }, config);
+    }
+    return { ...row, totals };
+  });
 }
 
 // ── 周期对比与趋势（v1.3.0 分析页）。全是纯逻辑，config 由调用方注入，不碰

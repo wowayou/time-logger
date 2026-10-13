@@ -24,6 +24,8 @@ import {
   periodTrend as periodTrendRaw,
   primaryTag,
   summarizeEntries as summarizeEntriesRaw,
+  summarizeSegments,
+  summarizeSegmentRows,
   tagMinutes as tagMinutesRaw,
   COMPARE
 } from './src/stats.js';
@@ -1043,6 +1045,89 @@ assert(recordingMilestones(msEntries, '2026-10-06').milestoneDay === 0, 'the nex
 assert(recordingMilestones(msEntries.filter(e => e.id !== 'ms6'), '2026-10-05').milestoneDay === 0, 'a day with only a placeholder or nothing is not a milestone day');
 assert(recordingMilestones([...msEntries, entry('ms7', '2026-10-06T09:00', '阅读')], '2026-10-06').milestoneDay === 0, 'the 8th logged day is not a node');
 assert(recordingMilestones(msEntries, '2026-09-30').milestoneDay === 0, 'today\'s rank, not the total, decides (2026-09-30 was the 6th)');
+
+// v1.6.1：共享分段聚合必须与逐区间计算完全一致；区间有序、不重叠，可以留空隙。
+function summaryRowsForTest(view, key) {
+  const { start, end } = periodRange(view, key);
+  const rows = [];
+  for (let cursor = new Date(start); cursor < end;) {
+    const next = new Date(cursor);
+    if (view === 'year') next.setMonth(next.getMonth() + 1);
+    else next.setDate(next.getDate() + 1);
+    rows.push({ key: formatDate(cursor), rangeStart: cursor, rangeEnd: next });
+    cursor = next;
+  }
+  return { start, end, rows };
+}
+
+function assertSharedSummary(entries, start, end, rows, options, label) {
+  const before = JSON.stringify({ entries, rows, config: options.config });
+  const segments = buildRangeSegmentsRaw(entries, start, end, options);
+  const segmentsBefore = JSON.stringify(segments);
+  const actualRows = summarizeSegmentRows(segments, rows, options.config);
+  assert(actualRows.length === rows.length, `${label}: empty rows remain present`);
+  actualRows.forEach((row, i) => {
+    assert(row.key === rows[i].key, `${label}: row metadata is preserved`);
+    assertTotals(row.totals, summarizeEntriesRaw(entries, row.rangeStart, row.rangeEnd, options), `${label} row ${i}`);
+  });
+  assertTotals(summarizeSegments(segments, options.config), summarizeEntriesRaw(entries, start, end, options), `${label} total`);
+  assert(JSON.stringify({ entries, rows, config: options.config }) === before, `${label}: source inputs are not mutated`);
+  assert(JSON.stringify(segments) === segmentsBefore, `${label}: shared segments are not mutated`);
+  return actualRows;
+}
+
+let summarySeed = 1861;
+const nextSummaryRandom = max => {
+  summarySeed = (Math.imul(summarySeed, 1664525) + 1013904223) >>> 0;
+  return summarySeed % max;
+};
+const summaryEntries = [];
+const summaryTimes = new Set();
+for (let i = 0; i < 650; i++) {
+  const date = new Date(2023, 11, 20 + nextSummaryRandom(420), nextSummaryRandom(24), nextSummaryRandom(60));
+  const ts = formatDate(date);
+  if (summaryTimes.has(ts)) continue;
+  summaryTimes.add(ts);
+  summaryEntries.push({
+    id: `summary-${i}`, ts, what: i % 13 ? `note ${i}` : '',
+    tags: i % 13 ? [['求职推进', '睡觉', '吃饭', '娱乐', '未知'][i % 5]] : [],
+    ...(i % 7 === 0 ? { planned: true } : {}),
+    ...(i % 11 === 0 ? { ongoing: true } : {}),
+    ...(i % 17 === 0 ? { longConfirm: { startTs: ts, endTs: '2024-03-10T12:00' } } : {})
+  });
+}
+for (const longReview of [false, true]) {
+  for (const [view, key, now] of [
+    ['week', '2024-02-28', '2024-02-29T12:34:30'],
+    ['month', '2024-02-15', '2025-02-01T00:00'],
+    ['month', '2024-03-15', '2025-02-01T00:00'],
+    ['month', '2024-11-15', '2025-02-01T00:00'],
+    ['week', '2024-12-31', '2025-01-02T12:34:30'],
+    ['year', '2024-06-15', '2025-02-01T00:00'],
+    ['year', '2025-06-15', '2025-01-10T12:34:30']
+  ]) {
+    const { start, end, rows } = summaryRowsForTest(view, key);
+    const options = { now, config: { ...REVIEW_CONFIG, longReview } };
+    const label = `shared ${view} ${key} review=${longReview}`;
+    const actual = assertSharedSummary(summaryEntries, start, end, rows, options, label);
+    const sum = { job: 0, maintain: 0, leak: 0, unrecorded: 0, pending: 0, total: 0 };
+    actual.forEach(row => Object.keys(sum).forEach(bucket => { sum[bucket] += row.totals[bucket]; }));
+    assertTotals(sum, summarizeEntriesRaw(summaryEntries, start, end, options), `${label}: row sum equals whole range`);
+    assertSharedSummary([], start, end, rows, options, `${label} empty`);
+  }
+}
+// 分段跨过行端点、行间留空隙、计划在段内、段首缺口、进行中秒级尾端。
+const clippedRows = [
+  { key: 'head-gap', rangeStart: new Date('2024-03-10T07:15'), rangeEnd: new Date('2024-03-10T08:15') },
+  { key: 'partial', rangeStart: new Date('2024-03-10T09:00'), rangeEnd: new Date('2024-03-10T10:15') },
+  { key: 'ongoing', rangeStart: new Date('2024-03-10T10:15'), rangeEnd: new Date('2024-03-10T14:00') }
+];
+assertSharedSummary([
+  entry('shared-a', '2024-03-10T08:00', '求职推进'),
+  { ...entry('shared-plan', '2024-03-10T09:30', '娱乐'), planned: true },
+  entry('shared-b', '2024-03-10T11:00', '吃饭')
+], new Date('2024-03-10T00:00'), new Date('2024-03-11T00:00'), clippedRows,
+{ now: '2024-03-10T12:34:30', config: REVIEW_CONFIG }, 'shared clipped ranges');
 
 console.log('confirm_logic_smoke passed');
 '''
