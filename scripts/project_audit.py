@@ -1108,8 +1108,9 @@ def audit_privacy_lists_storage_keys(errors: list[str]) -> None:
 
 
 # ② 改过名的对外叫法不得回流到任何对外表面（应用文案、说明、主页、隐私页、README、
-#    使用文档、推广底稿）。改名的正确做法是一次改齐，这里保证不会只改一半。
+#    使用文档）。改名的正确做法是一次改齐，这里保证不会只改一半。
 #    行内出现「前名」/「formerly」表示在记录改名历史，豁免。
+#    推广材料不入公开仓库（D33），所以不在这里扫描。
 RETIRED_PUBLIC_TERMS = {
     "时间拨号盘": "时间分析（v1.5.1）",
     "Time dial pad": "Time analysis (v1.5.1)",
@@ -1122,7 +1123,6 @@ PUBLIC_COPY_SURFACES = ("README.md", "使用与理念.md", "CONTRIBUTING.md", "s
 def audit_retired_public_terms(errors: list[str]) -> None:
     paths = [ROOT / rel for rel in PUBLIC_COPY_SURFACES]
     paths += sorted((ROOT / "site").rglob("*.html"))
-    paths += sorted((ROOT / "docs" / "promo").glob("*.md"))
     for path in paths:
         if not path.exists():
             continue

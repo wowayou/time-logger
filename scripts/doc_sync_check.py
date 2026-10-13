@@ -83,7 +83,8 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_PREFIXES = ("src/", "icons/")
 RUNTIME_FILES = {"index.html", "styles.css", "sw.js", "manifest.webmanifest", "icon.svg"}
 # 对外可见的文案面：改这些就该同步 README 的 Updated: 与交接文档。
-PUBLIC_COPY_PREFIXES = ("site/", "src/locales/", "docs/promo/")
+# 推广材料不在公开仓库（D33），所以不在这个清单里。
+PUBLIC_COPY_PREFIXES = ("site/", "src/locales/")
 PUBLIC_COPY_FILES = {"README.md", "使用与理念.md", "CONTRIBUTING.md"}
 
 # 正则必须锚定**命令位置**，不能是「字符串里出现过」。`\bgit\s+commit\b` 会把

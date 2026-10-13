@@ -18,6 +18,7 @@ owner: spec/003-launch-copy
    - ⚠️ 审计约束：README 必须继续包含四条维护命令原文（`python3 scripts/project_audit.py` 等，见 `project_audit.py` 的 `REQUIRED_MAINTENANCE_COMMANDS`）与两张 demo PNG 引用，编辑时不得碰掉。
 2. **site/index.html**：tagline（`.tagline`）改为定位句；其余不动。注：主页改动要等下一次 tag push 或手动跑 `build_site.py` 才会出现在线上，PR 里注明即可。
 3. **推广草稿**（新目录 `docs/promo/`，纯 Markdown，每渠道一份）：
+   > 现行位置（2026-10-13，D33）：推广材料已迁出公开仓库到本地私有目录 `推广/`。本条保留当时的规格记录。
    - `shaoshupai.md`（少数派，长文）、`v2ex.md`（V2EX 分享创造节点，中短文）、`jike.md`（即刻，短文）；
    - 内容骨架：一句话定位 → 为什么做（真实一天难以重建）→ 与常见计时器的区别（记「实际做了什么」而非打卡；四桶统计；未记录是诚实信号）→ 隐私边界（本地 localStorage、零账号零后端零追踪、完整 JSON 备份、AGPL 开源）→ 新地址 + GitHub 链接；
    - **诚实纪律（硬约束）**：只用 D3 已核实的事实卖点（不主动保持屏幕常亮；Markdown 摘要 + JSON 完整备份可贴给 AI 复盘）；明示「作者本人 30+ 天自用，个人工具起步」；**禁止**声称市场需求已验证、禁止编造用户数、禁止真实记录内容/截图；如需配图只能引用 `docs/assets/` 白名单内的 demo PNG。

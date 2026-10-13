@@ -20,7 +20,7 @@
 - `manifest.webmanifest`：PWA 清单
 - `icon.svg` 与 `icons/*.png`：运行时图标资产
 
-允许的开发期工具包括 `scripts/project_audit.py`、`scripts/confirm_logic_smoke.py`、`scripts/bump_version.py`（版本仪式六处锚点一键联动）、`scripts/build_site.py`（D12：解析 `sw.js` FILES 组装 `time.eigentime.org` 部署产物——`site/` 主页 → 根、运行时 → `/app/`；`site/` 是非运行时静态主页源码，不进 SW 缓存）、`scripts/doc_sync_check.py`（改动与文档的同步闸，见下）、`scripts/make_demo_backup.mjs`（按录制当天生成虚构演示备份 JSON，供推广录屏导入专用浏览器；import 运行时模块自校验，输出被 `*.json` 忽略，见 `docs/promo/video-recording.md`）、`npm run typecheck`（tsc 对 `time/storage/stats/entry_model` 四个纯逻辑模块做 JSDoc 类型检查，devDependency、无构建产物）和 Playwright UI smoke。Python 脚本使用标准库；确认逻辑 smoke 会调用本机 `node` 导入真实 ES modules；Playwright 只用于开发期响应式验证。
+允许的开发期工具包括 `scripts/project_audit.py`、`scripts/confirm_logic_smoke.py`、`scripts/bump_version.py`（版本仪式六处锚点一键联动）、`scripts/build_site.py`（D12：解析 `sw.js` FILES 组装 `time.eigentime.org` 部署产物——`site/` 主页 → 根、运行时 → `/app/`；`site/` 是非运行时静态主页源码，不进 SW 缓存）、`scripts/doc_sync_check.py`（改动与文档的同步闸，见下）、`npm run typecheck`（tsc 对 `time/storage/stats/entry_model` 四个纯逻辑模块做 JSDoc 类型检查，devDependency、无构建产物）和 Playwright UI smoke。Python 脚本使用标准库；确认逻辑 smoke 会调用本机 `node` 导入真实 ES modules；Playwright 只用于开发期响应式验证。推广/录屏专用工具不进本仓，见「隐私红线」。
 
 **铁律：无运行时依赖 / 无构建 / 原生 ES modules。** npm 只允许作为开发期测试依赖；不引入打包器、框架、账号、云同步或后端。
 
@@ -65,7 +65,7 @@
 
 对外口径同步（v1.5.1，维护者要求「项目和文档的口径一致」）：
 
-- **对外表面清单**：应用文案（`src/locales/zh.js`、`src/locales/en.js`，含应用内「说明」）、主页（`site/index.html`、`site/en/index.html`）、隐私政策（`site/privacy/`、`site/en/privacy/`）、`README.md`、`使用与理念.md`、`CONTRIBUTING.md`、推广底稿（`docs/promo/`）。新增、改名或移除一个用户可见功能，**同一批**把这些表面里提到它的地方一起改掉；不在同批的，写进 `STATUS.md` 的 OPEN。
+- **对外表面清单**：应用文案（`src/locales/zh.js`、`src/locales/en.js`，含应用内「说明」）、主页（`site/index.html`、`site/en/index.html`）、隐私政策（`site/privacy/`、`site/en/privacy/`）、`README.md`、`使用与理念.md`、`CONTRIBUTING.md`。新增、改名或移除一个用户可见功能，**同一批**把这些表面里提到它的地方一起改掉；不在同批的，写进 `STATUS.md` 的 OPEN。推广材料不在公开仓库（见「隐私红线」），不属于对外表面。
 - **命名见名知意**：对外叫法说清「它是什么」，不用需要解释的隐喻（v1.5.1 把「时间拨号盘」改成「时间分析」、「接通」改成「复制本期摘要」）；版式可以保留隐喻，名字不行。
 - **机械判据**（`project_audit.py`，硬拦）：① 隐私政策必须**完整列出**运行时源码里出现的全部 `timelog.*` 存储键，中英两份都要（`audit_privacy_lists_storage_keys`）——新增存储键而不更新政策会红；② 改过名的叫法不得回流到上述对外表面（`audit_retired_public_terms` 的 `RETIRED_PUBLIC_TERMS`；改名时把旧叫法登记进去，记录改名历史的行写「前名」豁免）。
 - **提醒判据**（`doc_sync_check.py`，不打断）：动了应用文案却没动 `site/` 时提醒过一眼主页。
@@ -135,6 +135,7 @@
 - 公开仓库不得含真实记录/真实截图/具体个人线索。
 - 不提交导出的 `timelog-*.json` 或真实备份 JSON。
 - 只发布 `time-logger/` 独立仓库与 `wowayou/time-logger-site` 部署镜像（D12：镜像只含 `scripts/build_site.py` 生成的产物，禁止手工维护业务代码、不得含密钥或用户数据），不发布父目录、`toolkit/`、`archive/` 或本机路径。
+- **推广与发布材料不入公开仓库**（D33，2026-10-13）：渠道底稿、发帖记录、视频分镜与录制手册、演示数据生成器及其录屏检查，全部放在本地私有目录 `推广/`（在工作区内但被 `.gitignore` 整目录忽略，与 `toolkit/`、`memory/`、`外部/` 同类）。新增这类材料只放 `推广/`，不放进 `docs/`、`scripts/` 或 `tests/`；公开仓库的文档只描述边界与流程，不复述推广文案。演示数据生成器可以只读引用本仓运行时模块做自校验（不新增运行时依赖、不进 SW 缓存）。迁出只影响当前与后续版本：历史上已公开的提交、fork 与镜像仍含旧副本，需要真删必须重写公开历史——本仓不做，也不假装做过。
 - README 和使用文档只能描述边界与用法，不写真实公司、个人进度或截图线索。
 - README 演示图只能来自 `docs/assets/` 的固定 demo 数据 PNG，不得用真实 `localStorage` 或真实个人记录截图。
 - `docs/assets/` 是仓库里唯一的 PNG 白名单目录（`.gitignore` 全局忽略 `*.png`），因此它同时是「最容易被当垃圾桶」的目录：新增任何 PNG 必须同步登记进 `project_audit.py` 的 `REQUIRED_DEMO_ASSETS` 或 `ALLOWED_DOC_ASSETS`，audit 会拒绝未登记的图。当前 `ALLOWED_DOC_ASSETS` 只含 3 张 icon-proto 评审渲染（合成图标，无真实记录）；登记用显式文件名，不用通配。
