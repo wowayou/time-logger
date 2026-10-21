@@ -1189,18 +1189,18 @@ D7（2026-07-13）只记录了研究方向，并写明「本条不授权实现�
 
 **不进 `docs/` 的边界如何判断**：读的人需要它来完成发布/维护，且内容不含对外文案草稿 → 留仓库（如 `launch-runbook.md`）；内容是「准备对外的说法或素材」→ 放 `推广/`。
 
-## D34 · 旧 origin 与主站共用一个发布闸：Pages 从「分支直发」改为 tag 触发的 Actions（2026-10-21）
+## D34 · 旧 origin 不再随 main push 发布：Pages 改为版本 tag / 显式手动发布（2026-10-21，同日验收修订）
 
-**触发**：维护者在核对推广时问「push main 就会触发旧站 Pages 构建，有更好的方案吗」。核查发现这不止是构建次数问题：旧站 Pages 的 `build_type` 是 `legacy`、源为 `main /`，而旧 origin 的「只读」是**运行期**判定的（`src/app.js` 的 `isLegacyOrigin()` 按 hostname + `/time-logger/` 前缀收敛写入口），根目录文件与 `time.eigentime.org/app/` 下的运行时**逐字节相同**。因此每次 push main 都在把当前运行时发到旧 origin，与 tag、与 `publish-site`、与线上验证都无关。
+**触发与已核实事实**：Pages 原配置为 `build_type: legacy`、源 `main /`，文档提交也会触发发布。旧地址与新站使用同一份运行时，`isLegacyOrigin()` 仅在旧地址收敛写入口。发布触发应独立于 main 的普通推送，避免发布中的旧来源数据查看/导出入口被无关提交重发。
 
-**证据**：`main` 上改过运行时（`src/`、`index.html`、`styles.css`、`sw.js`、`manifest.webmanifest`、`icons/`）的提交里 **58 个不是 tag 提交**（最近一例 `f962557`，v1.6.1 发布提交，13:06 推送即生效，而主站要等 tag + `publish-site` + 逐字节核对）；`2026-10-05` 的 `1e6fa07` 连续 **4 次 `errored`** 才成功，期间旧站停在上一个版本，且失败没有红灯通知。旧 origin 是部分用户**唯一还能导出历史数据**的入口，这条路径跑在发布闸之前属于发布存续风险。
+**撤回的过度推断**：初稿把「58 个运行时相关提交当前没有 tag 指向」写成「58 次未打 tag 就发布」，又误举已有 `v1.6.1` tag 的 `f962557` 为例；该计数不能证明历史发布时间，撤回。2026-10-05 的 Pages API 确有 4 条 `errored`，但对应 Actions 记录为取消，不能由此断言无人收到通知或发生站点中断。首次切换没有连续可用性探测，「约一分钟实际 404」也未经验证。官方 `upload-pages-artifact@v3` 已排除 `.git` 与 `.github`，因此「直接上传必然泄漏 checkout 凭据」的说法不成立；从提交树组装的价值在于确定来源与排除工作区杂项。
 
-**裁决**：旧站改由 `.github/workflows/publish-legacy-pages.yml` 发布，Pages 的 `build_type` 从 `legacy` 改为 `workflow`。触发条件与 `publish-site.yml` **完全一致**（tag glob `'v[0-9]+'` 与 `'v[0-9]+.[0-9]+.[0-9]+'` + `workflow_dispatch`），内容用 `git archive HEAD` 组装。
+**首次验收发现**：手动 run `39541910380` 成功、线上 23 个运行时文件一致、文档提交 `aec3310` 没有触发部署；但 `github-pages` 环境只有 `main` / `gh-pages` 的**分支**规则，tag 事件会被拒绝，手动成功不能代表自动发布已验收。实际产物从 163 文件变成 131 文件：新增 `.claude/settings.json`、`.gitignore`，移除 33 个 Jekyll 文档 HTML 与 1 个生成样式；不是公开面完全不变。
 
-**为什么用 `git archive` 而不是上传工作区根**：`actions/checkout` 会在 `.git/config` 写入 token 形态的 extraheader，整根直接上传会把凭据打进公开站点；`git archive` 同时排掉 `node_modules/`、`test-results/`、本机临时文件，且公开面与切换前一致（运行时 + `docs/` + 文档；实测 `README.md`、`docs/CHANGELOG.md`、`tests/v1_6_0_milestones.spec.js` 切换前后均 200 且逐字节相同）。
+**修订裁决**：保留 Actions 发布，不恢复分支直发。`github-pages` 环境保留原分支规则，另加 `type: tag` 的 `v[0-9]*`（环境与 workflow 的模式语法不同，不复制 `+`）；workflow 的两种版本 tag glob 与主站保持一致。`scripts/build_legacy_site.py` 要求存在的 `vN` / `vN.N.N` tag、manifest 对应版本，以及所选提交在全部运行时路径上的字节/增删均与该 tag 一致；手动输入 `release_tag` 必填，不接受「版本号没变所以可以发」的替代判据。
 
-**否决的方案**：① Pages 源改为专用分支快照——仓库里多一份运行时拷贝，与「单一真源」冲突，且每次刷新要额外同步，长期必然 drift；② 关掉 Pages 彻底退役旧站——会让老 origin 上的历史数据永久失去唯一导出入口；③ 只把「push main 会重发旧站」写进文档——已有 58 次例外，纪律不是闸。
+**产物边界**：从已核对的提交树复制非隐藏文件，排除 `.git`、`.github`、`.claude`、`.gitignore` 等开发用隐藏路径；保留原 Markdown 等有意公开的内容。原 Jekyll 生成的 `.html` 文档地址改成无脚本的 GitHub 文档兼容入口（不替换已跟踪的同名 HTML）；旧 Jekyll 样式退役。不重新引入 Jekyll、Markdown 编译器或其它依赖，运行时字节不变。专项测试用临时 Git 仓覆盖错误版本、缺 tag、同版本运行时变化、未列入 SW 的新增源文件、删除、图标变化、隐藏文件、符号链接与输出目录保护。
 
-**代价（实测确认，不粉饰）**：`actions/deploy-pages` 只在 `workflow` 类型下可用，所以只能先提交 workflow、再切设置、再立刻手动触发，切换瞬间到首次部署完成之间有约 1 分钟 404 窗口；tag 发布会多一个约 30 秒的 job（公开仓库 Actions 不计费）。2026-10-21 实操：切设置后 `workflow_dispatch`，run `39541910380` success，`build_type` 现为 `workflow`、`status: built`，旧站 7 个代表文件（`index.html`、`sw.js`、`styles.css`、`manifest.webmanifest`、`src/app.js`、`README.md`、`docs/CHANGELOG.md`）与切换前逐字节一致。
+**执行边界与代价**：仍用公开仓库的标准 `ubuntu-latest` runner（2026-10-21 核对 GitHub Actions 官方免费规则，不泛化到付费 runner/私有仓库）；单 job 15 分钟、串行、不自动重试、artifact 保留 1 天、checkout 不持久化凭据。首次手动 run 实际耗时 82 秒，不承诺固定 30 秒。两个站点 workflow 各自执行，不是原子发布，tag 后须分别核对成功；环境配置复核、本地正反向测试和手动发布都不能替代下一次真实 tag 的事件端到端验证。
 
-**维护边界**：两个 workflow 的 tag glob 必须同步修改——`publish-site.yml` 顶部注释记录了「glob 不匹配的后果不是报错，而是静默不触发」；**不得**把 Pages 改回分支直发，否则本条证据会原样复现。旧站部署失败的处置写进 `docs/launch-runbook.md`「异常处理」与 `CLAUDE.md`「开发与维护红线」。
+**未采用的替代方案**：不建需人工同步的运行时快照分支；不关闭旧站或强制跳到新域名（不同来源的存储隔离，跳转不能读取旧数据）；不为试触发造 tag、移动现有 tag 或改写公开历史。失败与回退步骤以 `docs/launch-runbook.md` 为准，当前完成/待验收状态只在 `STATUS.md` 维护。

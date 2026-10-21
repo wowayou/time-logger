@@ -4,7 +4,7 @@
 >
 > Release: v1.6.1（2026-10-13 已上线，线上与本地一致；iOS 等真机复验仍待闭合，见 [STATUS.md](STATUS.md) OPEN）
 >
-> Updated: 2026-10-13
+> Updated: 2026-10-21
 >
 > Intended user: 需要记录每天时间去向并进行每日复盘的个人使用者。
 >

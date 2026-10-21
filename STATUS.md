@@ -7,7 +7,7 @@
 
 ## DONE
 
-- **2026-10-21 旧 origin 改由 tag 触发的 Pages Actions 发布（[D34](docs/decisions.md)）**：Pages `build_type` 从「分支直发」切到「GitHub Actions」，触发条件与 `publish-site` 一致（tag glob 两处同步 + `workflow_dispatch`），内容用 `git archive HEAD` 只取被跟踪文件（不带 `.git`，避免 checkout 凭据进公开站点）。切换后手动部署 `39541910380` **success**，旧站 7 个代表文件与切换前逐字节一致；Pages 现为 `build_type: workflow` / `status: built`。**改之前的事实**：main 上改过运行时的 58 个提交不是 tag 提交，2026-10-05 `1e6fa07` 连续 4 次 `errored` 才成功——旧站跑在发布闸之前且失败无通知。文档同步：`CLAUDE.md` 开发与维护红线、`CONTRIBUTING.md` 提交与发布、runbook 异常处理。
+- **2026-10-21 旧 origin 的 Actions 手动链路已验证（非自动 tag 全链路验收，[D34](docs/decisions.md)）**：首次 run `39541910380` success，Pages 为 `build_type: workflow` / `status: built`，文档提交 `aec3310` 未触发构建。独立验收：23 个线上运行时文件与部署提交一致；双引擎旧站/缓存专项 22/22（关闭重试），真实旧站独立浏览器的虚构记录在线及离线备份均完整、原记录不变。首次产物有公开面变化及环境 tag 规则缺口，不能登记为全验收通过；过度推断已在 D34 更正，修复进度见 OPEN。
 
 - **2026-10-13 Web 三端一致性复核**：发布前本地已提交的 main 与远程均为 `2f33151`，正式 tag `v1.6.0` 指向 `1e6fa07`；部署镜像 `7038f88` 来自该 tag，`publish-site` 成功。按部署清单逐字节比对，23 个运行时文件、4 个主页/隐私页、2 张演示图与镜像、线上全部一致；main 比 tag 多的是发布状态文档，不是漏发代码。原有推广材料与演示脚本保留，不属于本轮优化。
 
@@ -25,6 +25,8 @@
 - **安卓代码侧发版防护已就绪**：独立仓库已实现内嵌运行时、签名缺失即拒绝 Release、`sync_runtime.py --release` 预检及从 Web 三段式版本派生版本号；不代表已上架。
 
 ## OPEN
+
+- **D34 发布链路修复待上线验证**：已补发布校验/组装脚本、必填 `release_tag`、15 分钟超时、隐藏路径排除和旧文档 HTML 兼容入口。隔离 Git 仓专项 **18/18**，撤掉运行时比对/版本校验/隐藏过滤/兼容页的四组反向验证均失败；完整 UI **742 passed / 0 failed**（双引擎、关闭重试，10.0 分钟），audit、逻辑 smoke、typecheck、diff 检查通过，运行时与 `v1.6.1` 无差异。尚待补 `github-pages` 环境的 tag 类型规则及一次受控手动发布，发布后复验产物/兼容地址/在线离线备份。真实 tag 事件端到端仍须留待下一次正式版本，不造 tag 验收。
 
 - **v1.6.1 真机确认待闭合**：线上已是 v1.6.1；[真机验收单](docs/device-acceptance.md#v161-核心操作加固已发布待真机确认) 已补齐多标签编辑/补录/删除、通知可点击性、后台恢复与大数据视图切换步骤，尚无真机结论。写前校验仍不是原子锁，不宣称消除了所有并发窗口。
 

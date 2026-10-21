@@ -9,9 +9,18 @@
 
 - 源码仓库 `wowayou/time-logger` 的 Actions Secret 名为 `DEPLOY_TOKEN`。
 - 使用 GitHub fine-grained PAT（精细权限的个人访问令牌），仅授权 `wowayou/time-logger-site` 的 Contents 读写；令牌到期时更新 Secret，不入库。
-- 正式版本 tag 推送后检查 `publish-site` 工作流；仅改主页的发布方式见 `CLAUDE.md`。
+- 正式版本 tag 推送后**分别**检查 `publish-site` 和 `publish-legacy-pages`；两站独立执行，不是原子发布，仅一边成功不能登记两站完成。仅改主页的发布方式见 `CLAUDE.md`。
 
 - [x] A1 完成（2026-07-26）：v74/v75 连续发布成功。
+
+### A1a. 旧 origin 的 Pages Actions（D34）
+
+- 源码仓库 Pages 的 Build and deployment → Source 必须为 **GitHub Actions**，不能退回 main 分支直发。
+- `github-pages` 环境的 Selected branches and tags 必须**分别**有分支规则与 tag 规则：保留 `main` / `gh-pages` 分支，新增 `type: tag`、`name: v[0-9]*`。环境使用 `File.fnmatch` 风格，不能照搬 workflow 的 `+`；版本格式和字节一致性由脚本严格校验，不改成无限制环境。
+- 仅刷新旧站的文档/发布工具时，从已核对的来源 ref 手动发布：`gh workflow run publish-legacy-pages.yml --ref main -f release_tag=<已存在的版本tag>`。脚本比对 manifest 和全部 `src/`、`icons/`、壳、样式、SW、manifest、SVG；即使版本号相同，运行时有任何差异也拒绝。不得为了绕过检查新造或移动 tag。
+- 组装只复制提交树中的非隐藏文件（不读取本机临时文件），保留原 Markdown，旧 `.html` 文档地址提供无脚本兼容页跳至 GitHub；不恢复 Jekyll，旧生成样式退役。运行时仍逐字节复制。
+- 自动化边界：单个标准 `ubuntu-latest` runner、15 分钟超时、串行部署、不自动重试，Pages artifact 只保留 1 天。公开仓库标准 runner 的免费规则已核对；不切换私有仓库、付费 runner 或增配额。
+- 发布后核对旧站 23 个运行时文件、所有文档兼容地址，以及 `.git/`、`.claude/`、`.gitignore` 不可获取；独立浏览器验证只读、在线/离线导出且原记录不变。新 tag 的事件端到端验证留待下一次真实版本，手动部署不能代替该结论。
 
 ### A2. DNS
 
@@ -83,7 +92,8 @@ GitHub 个人 Settings → Pages → Add a domain，验证 `eigentime.org`；按
 
 ## 异常处理
 
-- 工作流失败：先检查 `DEPLOY_TOKEN` 是否缺失或过期；手动部署方法见 `scripts/build_site.py`，仍须核对发布版本。
-- 旧站（`wowayou.github.io/time-logger/`）部署失败：`publish-legacy-pages` 红灯，旧站停在上一次发布；在 Actions 页面 Re-run，或 `gh workflow run publish-legacy-pages`。旧站是部分用户导出历史数据的唯一入口，红灯不要拖（D34）。
+- 主站 `publish-site` 失败：按失败步骤定位，再检查 `DEPLOY_TOKEN` 是否缺失或过期；手动组装方法见 `scripts/build_site.py`，仍须核对发布版本，不能把旧站成功当成主站成功。
+- 旧站 `publish-legacy-pages` 失败：先查日志及 `github-pages` 环境的**tag 类型**规则，上传/激活失败时实际旧站状态须另查，不能一概断言仍是上一版。修复后最多手动触发一次并填写已存在的 `release_tag`；失败即停，不循环重跑。旧站承载旧来源数据的查看和导出，不可关闭 Pages 或强制跳到新域名。
+- 旧站回退：优先从包含可用 workflow 的已验证来源 ref 重新组装，且通过与目标版本 tag 的运行时比对；若旧 ref 没有新 workflow，则在 main 做正常的修复/回退提交并重新核对，不移动 tag、不 force-push，不靠退回分支自动发布绕过检查。过期 artifact 不能当永久回退备份，执行回退发布需维护者授权。
 - 新站异常：先保留数据与备份，再诊断部署或回退应用文件。旧站是只读导出入口，不能当作继续写入的回退站。
 - 域名或证书故障：修复 DNS/Pages 绑定；**不要把镜像的 github.io 地址承诺为无损后备入口**，它可能重定向到自定义域名，且不同 origin 的本地数据不共享。

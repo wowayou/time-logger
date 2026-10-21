@@ -20,7 +20,7 @@
 - `manifest.webmanifest`：PWA 清单
 - `icon.svg` 与 `icons/*.png`：运行时图标资产
 
-允许的开发期工具包括 `scripts/project_audit.py`、`scripts/confirm_logic_smoke.py`、`scripts/bump_version.py`（版本仪式六处锚点一键联动）、`scripts/build_site.py`（D12：解析 `sw.js` FILES 组装 `time.eigentime.org` 部署产物——`site/` 主页 → 根、运行时 → `/app/`；`site/` 是非运行时静态主页源码，不进 SW 缓存）、`scripts/doc_sync_check.py`（改动与文档的同步闸，见下）、`npm run typecheck`（tsc 对 `time/storage/stats/entry_model` 四个纯逻辑模块做 JSDoc 类型检查，devDependency、无构建产物）和 Playwright UI smoke。Python 脚本使用标准库；确认逻辑 smoke 会调用本机 `node` 导入真实 ES modules；Playwright 只用于开发期响应式验证。推广/录屏专用工具不进本仓，见「隐私红线」。
+允许的开发期工具包括 `scripts/project_audit.py`、`scripts/confirm_logic_smoke.py`、`scripts/bump_version.py`（版本仪式六处锚点一键联动）、`scripts/build_site.py`（D12：解析 `sw.js` FILES 组装 `time.eigentime.org` 部署产物——`site/` 主页 → 根、运行时 → `/app/`；`site/` 是非运行时静态主页源码，不进 SW 缓存）、`scripts/build_legacy_site.py`（D34：核对版本 tag 与提交树的全部运行时路径，组装旧站及文档兼容页；专项检查为 `python3 -m unittest discover -s tests -p 'test_build_legacy_site.py'`）、`scripts/doc_sync_check.py`（改动与文档的同步闸，见下）、`npm run typecheck`（tsc 对 `time/storage/stats/entry_model` 四个纯逻辑模块做 JSDoc 类型检查，devDependency、无构建产物）和 Playwright UI smoke。Python 脚本使用标准库；确认逻辑 smoke 会调用本机 `node` 导入真实 ES modules；Playwright 只用于开发期响应式验证。推广/录屏专用工具不进本仓，见「隐私红线」。
 
 **铁律：无运行时依赖 / 无构建 / 原生 ES modules。** npm 只允许作为开发期测试依赖；不引入打包器、框架、账号、云同步或后端。
 
@@ -31,7 +31,7 @@
 - `package.json` 必须保持 `"private": true` 和 `"type": "module"`；禁止新增 `dependencies`，只能在 `devDependencies` 中放开发期测试工具。
 - 改动开发期 npm 依赖时必须提交 `package-lock.json`；不得提交 `node_modules/`、`test-results/`、`playwright-report/`。
 - 运行时文件禁止从 npm 包导入代码；`src/*.js` 只能使用相对路径导入本项目模块。
-- 不新增应用编译、打包命令、压缩产物或框架初始化文件。旧 origin 只读站由 `.github/workflows/publish-legacy-pages.yml` 在 **tag 或手动触发**时发布（源仍是仓库根，`git archive HEAD` 只取被跟踪文件）；**不要改回 Pages 的「分支直发」构建**——那会在每次 push main 时把未打 tag 的运行时发到旧 origin（D34）。主站由 `scripts/build_site.py` 复制组装到部署镜像 `wowayou/time-logger-site`，再由 GitHub Pages 发布。静态组装不改变「无构建」的运行时边界，产物不提交到源码仓库。
+- 不新增应用编译、打包命令、压缩产物或框架初始化文件。旧 origin 只读站由 `.github/workflows/publish-legacy-pages.yml` 在 **tag 或显式手动触发**时发布：`scripts/build_legacy_site.py` 要求指定存在的版本 tag，manifest 版本及全部运行时路径须与之完全一致；手动发布必填 `release_tag`，不能只凭版本号相同发布当前 main。产物只取提交树的非隐藏文件，旧文档 HTML 地址提供指向 GitHub 的兼容页。`github-pages` 环境必须分别放行所需分支和版本 tag；两站 workflow 独立运行，正式发版后分别核对，不能称为原子发布。**不要改回 Pages 的「分支直发」构建**——那会绕过 tag 条件随 main push 发布旧站（D34）。主站由 `scripts/build_site.py` 复制组装到部署镜像 `wowayou/time-logger-site`，再由 GitHub Pages 发布。静态组装不改变「无构建」的运行时边界，产物不提交到源码仓库。
 - 新增任何运行时资产时，必须同步 `sw.js` 缓存列表；文档、测试、npm 元数据不进 Service Worker 缓存。
 - 本地开发必须通过 HTTP server 打开页面；不要用 `file://` 验证 ES modules 或 Service Worker。
 - 多步改动走主线程，逐个顺序做；不要为了加速并发 fan-out 子代理 / workflow——上游 API 不扛并发，连串行 workflow 都会 429。
