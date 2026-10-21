@@ -1,0 +1,65 @@
+# 旧 origin（wowayou.github.io/time-logger/）只读站发布。
+#
+# 为什么存在这个文件：Pages 原先用「legacy」构建（源 = main 分支根目录），
+# 每次 push 都会把一个还没打 tag 的运行时发到旧 origin。而旧 origin 是老用户
+# **唯一还能导出历史数据**的入口——它在发布闸之前上线、没有验证、失败也没有红灯
+# （2026-10-05 的 1e6fa07 连续 4 次 errored 才成功）。publish-site.yml 里
+# 「不是 push 到 main 就自动发」的结论对这条路径同样成立，所以两者用同一套触发条件。
+#
+# 内容口径：`git archive HEAD` —— 只发该提交里**被跟踪**的文件，因此：
+# - 不会带 `.git`（checkout 的 `.git/config` 里有 token 形态的 extraheader，
+#   整个根目录直接上传会把凭据打进公开站点）；
+# - 不会有 node_modules、test-results、本机临时文件（它们本来就不在版本库里）；
+# - 与改动前 legacy 构建实际公开的内容一致（运行时 + docs/ + 文档）。
+#
+# 改触发条件时注意 publish-site.yml 里那条教训：glob 不匹配的后果不是报错，
+# 而是 workflow 静默不触发、线上停在上一版。两处 glob 必须同步修改。
+name: publish-legacy-pages
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  # 与 publish-site 同理：没有新版本、只想刷新旧站时不至于无从下手。
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # 只发被跟踪的文件：确定性组装，不压缩、不改写任何字节。
+      - name: Assemble tracked tree
+        run: |
+          mkdir -p _site
+          git archive --format=tar HEAD | tar -x -C _site
+          test -f _site/index.html || { echo "missing _site/index.html" >&2; exit 1; }
+          test -f _site/sw.js || { echo "missing _site/sw.js" >&2; exit 1; }
+          test ! -e _site/.git || { echo "_site must not contain .git" >&2; exit 1; }
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
