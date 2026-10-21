@@ -31,7 +31,7 @@
 - `package.json` 必须保持 `"private": true` 和 `"type": "module"`；禁止新增 `dependencies`，只能在 `devDependencies` 中放开发期测试工具。
 - 改动开发期 npm 依赖时必须提交 `package-lock.json`；不得提交 `node_modules/`、`test-results/`、`playwright-report/`。
 - 运行时文件禁止从 npm 包导入代码；`src/*.js` 只能使用相对路径导入本项目模块。
-- 不新增应用编译、打包命令、压缩产物或框架初始化文件。Web 源码仓库根目录直发的是只读旧站；主站由 `scripts/build_site.py` 复制组装到部署镜像 `wowayou/time-logger-site`，再由 GitHub Pages 发布。静态组装不改变「无构建」的运行时边界，产物不提交到源码仓库。
+- 不新增应用编译、打包命令、压缩产物或框架初始化文件。旧 origin 只读站由 `.github/workflows/publish-legacy-pages.yml` 在 **tag 或手动触发**时发布（源仍是仓库根，`git archive HEAD` 只取被跟踪文件）；**不要改回 Pages 的「分支直发」构建**——那会在每次 push main 时把未打 tag 的运行时发到旧 origin（D34）。主站由 `scripts/build_site.py` 复制组装到部署镜像 `wowayou/time-logger-site`，再由 GitHub Pages 发布。静态组装不改变「无构建」的运行时边界，产物不提交到源码仓库。
 - 新增任何运行时资产时，必须同步 `sw.js` 缓存列表；文档、测试、npm 元数据不进 Service Worker 缓存。
 - 本地开发必须通过 HTTP server 打开页面；不要用 `file://` 验证 ES modules 或 Service Worker。
 - 多步改动走主线程，逐个顺序做；不要为了加速并发 fan-out 子代理 / workflow——上游 API 不扛并发，连串行 workflow 都会 429。

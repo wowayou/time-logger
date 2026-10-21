@@ -84,5 +84,6 @@ GitHub 个人 Settings → Pages → Add a domain，验证 `eigentime.org`；按
 ## 异常处理
 
 - 工作流失败：先检查 `DEPLOY_TOKEN` 是否缺失或过期；手动部署方法见 `scripts/build_site.py`，仍须核对发布版本。
+- 旧站（`wowayou.github.io/time-logger/`）部署失败：`publish-legacy-pages` 红灯，旧站停在上一次发布；在 Actions 页面 Re-run，或 `gh workflow run publish-legacy-pages`。旧站是部分用户导出历史数据的唯一入口，红灯不要拖（D34）。
 - 新站异常：先保留数据与备份，再诊断部署或回退应用文件。旧站是只读导出入口，不能当作继续写入的回退站。
 - 域名或证书故障：修复 DNS/Pages 绑定；**不要把镜像的 github.io 地址承诺为无损后备入口**，它可能重定向到自定义域名，且不同 origin 的本地数据不共享。

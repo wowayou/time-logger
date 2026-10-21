@@ -1188,3 +1188,19 @@ D7（2026-07-13）只记录了研究方向，并写明「本条不授权实现�
 **诚实代价（不粉饰）**：迁出只影响当前与后续版本。这些文件在**历史提交、fork 和已构建的镜像**里仍然存在，可被检索；要真正撤回必须重写公开历史并强制推送，本仓**不做**，也不声称做过。它们本身不含真实记录或个人线索（底稿是通用文案、演示数据是脚本生成的虚构内容），所以这不是数据泄露处置，而是仓库定位问题：公开仓库是产品与规范，不是营销工作台。
 
 **不进 `docs/` 的边界如何判断**：读的人需要它来完成发布/维护，且内容不含对外文案草稿 → 留仓库（如 `launch-runbook.md`）；内容是「准备对外的说法或素材」→ 放 `推广/`。
+
+## D34 · 旧 origin 与主站共用一个发布闸：Pages 从「分支直发」改为 tag 触发的 Actions（2026-10-21）
+
+**触发**：维护者在核对推广时问「push main 就会触发旧站 Pages 构建，有更好的方案吗」。核查发现这不止是构建次数问题：旧站 Pages 的 `build_type` 是 `legacy`、源为 `main /`，而旧 origin 的「只读」是**运行期**判定的（`src/app.js` 的 `isLegacyOrigin()` 按 hostname + `/time-logger/` 前缀收敛写入口），根目录文件与 `time.eigentime.org/app/` 下的运行时**逐字节相同**。因此每次 push main 都在把当前运行时发到旧 origin，与 tag、与 `publish-site`、与线上验证都无关。
+
+**证据**：`main` 上改过运行时（`src/`、`index.html`、`styles.css`、`sw.js`、`manifest.webmanifest`、`icons/`）的提交里 **58 个不是 tag 提交**（最近一例 `f962557`，v1.6.1 发布提交，13:06 推送即生效，而主站要等 tag + `publish-site` + 逐字节核对）；`2026-10-05` 的 `1e6fa07` 连续 **4 次 `errored`** 才成功，期间旧站停在上一个版本，且失败没有红灯通知。旧 origin 是部分用户**唯一还能导出历史数据**的入口，这条路径跑在发布闸之前属于发布存续风险。
+
+**裁决**：旧站改由 `.github/workflows/publish-legacy-pages.yml` 发布，Pages 的 `build_type` 从 `legacy` 改为 `workflow`。触发条件与 `publish-site.yml` **完全一致**（tag glob `'v[0-9]+'` 与 `'v[0-9]+.[0-9]+.[0-9]+'` + `workflow_dispatch`），内容用 `git archive HEAD` 组装。
+
+**为什么用 `git archive` 而不是上传工作区根**：`actions/checkout` 会在 `.git/config` 写入 token 形态的 extraheader，整根直接上传会把凭据打进公开站点；`git archive` 同时排掉 `node_modules/`、`test-results/`、本机临时文件，且公开面与切换前一致（运行时 + `docs/` + 文档；实测 `README.md`、`docs/CHANGELOG.md`、`tests/v1_6_0_milestones.spec.js` 切换前后均 200 且逐字节相同）。
+
+**否决的方案**：① Pages 源改为专用分支快照——仓库里多一份运行时拷贝，与「单一真源」冲突，且每次刷新要额外同步，长期必然 drift；② 关掉 Pages 彻底退役旧站——会让老 origin 上的历史数据永久失去唯一导出入口；③ 只把「push main 会重发旧站」写进文档——已有 58 次例外，纪律不是闸。
+
+**代价（实测确认，不粉饰）**：`actions/deploy-pages` 只在 `workflow` 类型下可用，所以只能先提交 workflow、再切设置、再立刻手动触发，切换瞬间到首次部署完成之间有约 1 分钟 404 窗口；tag 发布会多一个约 30 秒的 job（公开仓库 Actions 不计费）。2026-10-21 实操：切设置后 `workflow_dispatch`，run `39541910380` success，`build_type` 现为 `workflow`、`status: built`，旧站 7 个代表文件（`index.html`、`sw.js`、`styles.css`、`manifest.webmanifest`、`src/app.js`、`README.md`、`docs/CHANGELOG.md`）与切换前逐字节一致。
+
+**维护边界**：两个 workflow 的 tag glob 必须同步修改——`publish-site.yml` 顶部注释记录了「glob 不匹配的后果不是报错，而是静默不触发」；**不得**把 Pages 改回分支直发，否则本条证据会原样复现。旧站部署失败的处置写进 `docs/launch-runbook.md`「异常处理」与 `CLAUDE.md`「开发与维护红线」。

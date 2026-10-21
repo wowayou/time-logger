@@ -3,9 +3,11 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**状态整理：2026-10-21（本轮只动推广状态与 README 版本行，未重新发布）。最近发布核验：2026-10-13，Web `v1.6.1` 已发布上线；安卓 `aab025d` 已推送、未发版。** 安卓跨仓结论沿用已有核验记录，不代表安卓侧已重新验收。
+**状态整理：2026-10-21（本轮只动推广状态、README 版本行与旧 origin 发布路径；主站应用未重新发布）。最近发布核验：2026-10-13，Web `v1.6.1` 已发布上线；安卓 `aab025d` 已推送、未发版。** 安卓跨仓结论沿用已有核验记录，不代表安卓侧已重新验收。
 
 ## DONE
+
+- **2026-10-21 旧 origin 改由 tag 触发的 Pages Actions 发布（[D34](docs/decisions.md)）**：Pages `build_type` 从「分支直发」切到「GitHub Actions」，触发条件与 `publish-site` 一致（tag glob 两处同步 + `workflow_dispatch`），内容用 `git archive HEAD` 只取被跟踪文件（不带 `.git`，避免 checkout 凭据进公开站点）。切换后手动部署 `39541910380` **success**，旧站 7 个代表文件与切换前逐字节一致；Pages 现为 `build_type: workflow` / `status: built`。**改之前的事实**：main 上改过运行时的 58 个提交不是 tag 提交，2026-10-05 `1e6fa07` 连续 4 次 `errored` 才成功——旧站跑在发布闸之前且失败无通知。文档同步：`CLAUDE.md` 开发与维护红线、`CONTRIBUTING.md` 提交与发布、runbook 异常处理。
 
 - **2026-10-13 Web 三端一致性复核**：发布前本地已提交的 main 与远程均为 `2f33151`，正式 tag `v1.6.0` 指向 `1e6fa07`；部署镜像 `7038f88` 来自该 tag，`publish-site` 成功。按部署清单逐字节比对，23 个运行时文件、4 个主页/隐私页、2 张演示图与镜像、线上全部一致；main 比 tag 多的是发布状态文档，不是漏发代码。原有推广材料与演示脚本保留，不属于本轮优化。
 
