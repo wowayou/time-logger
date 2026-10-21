@@ -27,10 +27,13 @@ class LegacySiteTest(unittest.TestCase):
         self.git("config", "user.name", "Isolated test")
         self.git("config", "user.email", "test@example.invalid")
         self.write("manifest.webmanifest", '{"version":"1.6.1"}')
-        self.write("index.html", "<html>unchanged runtime</html>\n")
+        self.write("index.html", '<html>unchanged runtime<script type="module" src="src/app.js"></script><!-- $Format:%H$ --></html>\n')
+        self.write("styles.css", "body { color: black; }\n")
         self.write("sw.js", "const CACHE = 'timelog-v1.6.1';\n")
-        self.write("src/app.js", "export const value = 1;\n")
-        self.write("icons/icon.png", b"synthetic image")
+        self.write("icon.svg", '<svg xmlns="http://www.w3.org/2000/svg"></svg>\n')
+        self.write("src/app.js", "export const value = 1; // $Format:%H$\n")
+        self.write("src/locales/en.js", "export const locale = 'en';\n")
+        self.write("icons/icon.png", b"synthetic image $Format:%H$\0\xff")
         self.write("README.md", "# README\n")
         self.write("CONTRIBUTING.md", "# Contributing\n")
         self.write("STATUS.md", "# Status\n")
@@ -59,12 +62,20 @@ class LegacySiteTest(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             return assemble(self.root, self.out, tag)
 
+    def assert_runtime_bytes(self, source):
+        paths = (
+            "index.html", "styles.css", "sw.js", "manifest.webmanifest", "icon.svg",
+            "src/app.js", "src/locales/en.js", "icons/icon.png",
+        )
+        for path in paths:
+            with self.subTest(runtime=path):
+                self.assertEqual((self.out / path).read_bytes(), self.git("show", f"{source}:{path}"))
+
     def test_annotated_release_and_runtime_bytes(self):
         source, release = verify_release(self.root, "v1.6.1")
         self.assertEqual(source, release)
         self.build()
-        for name in ("index.html", "sw.js", "manifest.webmanifest", "src/app.js", "icons/icon.png"):
-            self.assertEqual((self.out / name).read_bytes(), (self.root / name).read_bytes())
+        self.assert_runtime_bytes(source)
 
     def test_docs_only_commit_can_publish_with_existing_release(self):
         self.write("STATUS.md", "# Updated docs, same runtime\n")
@@ -124,6 +135,125 @@ class LegacySiteTest(unittest.TestCase):
         self.write("src/app.js", "uncommitted code must not ship")
         self.build()
         self.assertEqual((self.out / "src/app.js").read_bytes(), original)
+
+    def test_directory_gitattributes_committed_with_release_are_allowed(self):
+        paths = ("src/.gitattributes", "src/locales/.gitattributes", "icons/.gitattributes")
+        for index, path in enumerate(paths, start=2):
+            with self.subTest(path=path):
+                # Each release contains only this case's directory metadata.
+                for previous in paths:
+                    (self.root / previous).unlink(missing_ok=True)
+                self.out = Path(self.temp.name) / f"metadata-output-{index}"
+                tag = f"v1.6.{index}"
+                self.write(path, "* text=auto\n")
+                self.write("manifest.webmanifest", json.dumps({"version": tag[1:]}))
+                self.commit()
+                self.git("tag", "-a", tag, "-m", "release with directory metadata")
+                source, release = verify_release(self.root, tag)
+                self.assertEqual(source, release)
+                self.build(tag)
+                self.assert_runtime_bytes(source)
+                self.assertFalse((self.out / path).exists())
+
+    def test_hidden_runtime_path_components_are_excluded(self):
+        paths = ("src/.hidden/helper.js", "src/locales/.metadata.js", "icons/.hidden/icon.png")
+        for path in paths:
+            self.write(path, "tracked metadata, not an artifact runtime file\n")
+        self.write("manifest.webmanifest", '{"version":"1.6.2"}')
+        self.commit()
+        self.git("tag", "-a", "v1.6.2", "-m", "release with hidden metadata")
+        source, release = verify_release(self.root, "v1.6.2")
+        self.assertEqual(source, release)
+        self.build("v1.6.2")
+        self.assert_runtime_bytes(source)
+        for path in ("src/.hidden", "src/locales/.metadata.js", "icons/.hidden"):
+            with self.subTest(path=path):
+                self.assertFalse((self.out / path).exists())
+
+    def test_unreleased_hidden_runtime_metadata_is_still_rejected(self):
+        self.write("src/.gitattributes", "* text=auto\n")
+        self.commit()
+        with self.assertRaisesRegex(ValueError, r"runtime differs from release tag: src/\.gitattributes"):
+            self.build()
+        self.assertFalse(self.out.exists())
+
+    def test_directory_export_attributes_are_rejected_before_writing(self):
+        paths = ("src/.gitattributes", "src/locales/.gitattributes", "icons/.gitattributes")
+        cases = (
+            ("src/.gitattributes", "export-ignore", "missing runtime file: src/app.js"),
+            ("src/locales/.gitattributes", "export-ignore", "missing runtime file: src/locales/en.js"),
+            ("icons/.gitattributes", "export-ignore", "missing runtime file: icons/icon.png"),
+            ("src/.gitattributes", "export-subst", "archived runtime differs from Git content: src/app.js"),
+            ("icons/.gitattributes", "export-subst", "archived runtime differs from Git content: icons/icon.png"),
+        )
+        for index, (path, attribute, error) in enumerate(cases, start=2):
+            with self.subTest(path=path, attribute=attribute):
+                for previous in paths:
+                    (self.root / previous).unlink(missing_ok=True)
+                self.out = Path(self.temp.name) / f"directory-attributes-output-{index}"
+                if attribute == "export-subst":
+                    self.out.mkdir()
+                tag = f"v1.6.{index}"
+                self.write(path, f"* {attribute}\n")
+                self.write("manifest.webmanifest", json.dumps({"version": tag[1:]}))
+                self.commit()
+                self.git("tag", "-a", tag, "-m", "release with directory export rules")
+                source, release = verify_release(self.root, tag)
+                self.assertEqual(source, release)
+                with self.assertRaises(ValueError) as raised:
+                    self.build(tag)
+                self.assertEqual(str(raised.exception), error)
+                if attribute == "export-subst":
+                    self.assertEqual(list(self.out.iterdir()), [])
+                else:
+                    self.assertFalse(self.out.exists())
+
+    def test_export_ignore_runtime_is_rejected_before_writing(self):
+        paths = (
+            "index.html", "styles.css", "sw.js", "manifest.webmanifest", "icon.svg",
+            "src/app.js", "src/locales/en.js", "icons/icon.png", "src", "src/locales", "icons",
+        )
+        directory_files = {"src": "src/app.js", "src/locales": "src/locales/en.js", "icons": "icons/icon.png"}
+        for index, path in enumerate(paths):
+            with self.subTest(path=path):
+                self.out = Path(self.temp.name) / f"ignored-output-{index}"
+                self.write(".gitattributes", f"{path} export-ignore\n")
+                self.commit()
+                source, release = verify_release(self.root, "v1.6.1")
+                self.assertNotEqual(source, release)  # Only archive rules changed after the tag.
+                with self.assertRaisesRegex(ValueError, "missing runtime file") as raised:
+                    self.build()
+                self.assertEqual(str(raised.exception), f"missing runtime file: {directory_files.get(path, path)}")
+                self.assertFalse(self.out.exists())
+
+    def test_export_subst_runtime_is_rejected_before_writing(self):
+        # Real Git substitution must be caught in both text and binary blobs.
+        for index, path in enumerate(("index.html", "src/app.js", "icons/icon.png")):
+            with self.subTest(path=path):
+                self.out = Path(self.temp.name) / f"substituted-output-{index}"
+                self.out.mkdir()
+                self.assertIn(b"$Format:%H$", self.git("show", f"HEAD:{path}"))
+                self.write(".gitattributes", f"{path} export-subst\n")
+                self.commit()
+                source, release = verify_release(self.root, "v1.6.1")
+                self.assertNotEqual(source, release)
+                with self.assertRaisesRegex(ValueError, "archived runtime differs") as raised:
+                    self.build()
+                self.assertEqual(str(raised.exception), f"archived runtime differs from Git content: {path}")
+                self.assertEqual(list(self.out.iterdir()), [])
+
+    def test_export_attributes_that_preserve_runtime_are_allowed(self):
+        self.write("STATUS.md", "# Status $Format:%H$\n")
+        self.write(".gitattributes", "docs/CHANGELOG.md export-ignore\nSTATUS.md export-subst\nsrc/locales/en.js export-subst\n")
+        self.commit()
+        source, _ = verify_release(self.root, "v1.6.1")
+        self.build()
+        self.assertEqual((self.out / "src/locales/en.js").read_bytes(), self.git("show", f"{source}:src/locales/en.js"))
+        self.assertEqual((self.out / "STATUS.md").read_text(), f"# Status {source}\n")
+        self.assertTrue((self.out / "STATUS.html").is_file())
+        self.assertFalse((self.out / "docs/CHANGELOG.md").exists())
+        self.assertFalse((self.out / "docs/CHANGELOG.html").exists())
+        self.assertFalse((self.out / ".gitattributes").exists())
 
     def test_old_document_urls_get_scriptless_links(self):
         self.build()

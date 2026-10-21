@@ -32,6 +32,11 @@ NO_LEGACY_HTML = {"README.md", "CONTRIBUTING.md"}
 DOC_BASE = "https://github.com/wowayou/time-logger/blob/main/"
 
 
+def is_hidden_path(path: PurePosixPath) -> bool:
+    """Use the same hidden-component policy for archive and runtime validation."""
+    return any(part.startswith(".") for part in path.parts)
+
+
 def git(root: Path, *args: str) -> bytes:
     result = subprocess.run(
         ["git", *args], cwd=root, capture_output=True, timeout=30, check=False
@@ -88,7 +93,7 @@ def assemble(root: Path, out: Path, release_tag: str) -> tuple[int, int]:
             path = PurePosixPath(entry.name)
             if path.is_absolute() or ".." in path.parts:
                 raise ValueError(f"unsafe archive path: {entry.name}")
-            if any(part.startswith(".") for part in path.parts):
+            if is_hidden_path(path):
                 continue
             if entry.isdir():
                 continue
@@ -99,6 +104,16 @@ def assemble(root: Path, out: Path, release_tag: str) -> tuple[int, int]:
     for required in ("index.html", "sw.js", "manifest.webmanifest"):
         if required not in files:
             raise ValueError(f"missing runtime file: {required}")
+    # git archive honors export-ignore/export-subst; a matching source tree does
+    # not guarantee that the artifact contains every original runtime byte.
+    runtime_names = git(root, "ls-tree", "-r", "--name-only", "-z", source, "--", *RUNTIME_PATHS)
+    for name in runtime_names.decode("utf-8").split("\0")[:-1]:
+        if is_hidden_path(PurePosixPath(name)):
+            continue
+        if name not in files:
+            raise ValueError(f"missing runtime file: {name}")
+        if files[name] != git(root, "show", f"{source}:{name}"):
+            raise ValueError(f"archived runtime differs from Git content: {name}")
 
     pages = {}
     for source_path in files:
