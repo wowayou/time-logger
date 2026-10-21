@@ -2,7 +2,7 @@
 
 > Status: active · 已上线，可日常使用；进度与待办见 [STATUS.md](STATUS.md)
 >
-> Release: v1.6.1（本地候选，未发布；线上仍为 v1.6.0）
+> Release: v1.6.1（2026-10-13 已上线，线上与本地一致；iOS 等真机复验仍待闭合，见 [STATUS.md](STATUS.md) OPEN）
 >
 > Updated: 2026-10-13
 >
