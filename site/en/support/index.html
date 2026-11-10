@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<!-- Copyright © 2026 wowayou. SPDX-License-Identifier: AGPL-3.0-or-later. Static support page; no payment verification, scripts or storage. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="description" content="If Eigentime helps you see your day more clearly, you can support it voluntarily. Here are a few small thank-you gifts to keep beside your daily record.">
+<title>Support Eigentime — Eigentime</title>
+<link rel="icon" href="../../app/icon.svg" type="image/svg+xml">
+<link rel="icon" type="image/png" sizes="192x192" href="../../app/icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="../../app/icons/icon-512.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../../app/icons/apple-touch-icon.png">
+<link rel="canonical" href="https://time.eigentime.org/en/support/">
+<link rel="alternate" hreflang="zh-Hans" href="https://time.eigentime.org/support/">
+<link rel="alternate" hreflang="en" href="https://time.eigentime.org/en/support/">
+<link rel="alternate" hreflang="x-default" href="https://time.eigentime.org/support/">
+<style>
+    :root {
+      color-scheme: dark light;
+      --bg: #0e0f13;
+      --card: #16171e;
+      --text: #e8e9f1;
+      --muted: #9fa1b8;
+      --faint: #898ba2;
+      --border: rgba(255, 255, 255, 0.09);
+      --accent: #a99fff;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #eceef3;
+        --card: #ffffff;
+        --text: #33323b;
+        --muted: #686570;
+        --faint: #66646d;
+        --border: rgba(28, 32, 44, 0.10);
+        --accent: #5745c7;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      overflow-x: hidden;
+    }
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 0 clamp(18px, 5vw, 28px) calc(64px + env(safe-area-inset-bottom));
+    }
+    a { color: var(--accent); }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+      gap: 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+    .brand img { width: 28px; height: 28px; border-radius: 7px; display: block; }
+    .brand span { font-size: 15px; font-weight: 650; }
+    .lang-bar a { color: var(--muted); font-size: 13px; text-decoration: none; }
+    .lang-bar a:hover, .lang-bar a:focus-visible { color: var(--text); }
+
+    header.doc-head { padding: 24px 0 8px; }
+    header.doc-head h1 { font-size: clamp(26px, 5vw, 32px); font-weight: 700; margin: 0 0 8px; letter-spacing: -0.01em; }
+    header.doc-head .updated { color: var(--faint); font-size: 13px; margin: 0; }
+
+    article {
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      padding: 32px 0 8px;
+    }
+    article section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 22px;
+    }
+    article h2 { font-size: 16px; font-weight: 650; margin: 0 0 8px; }
+    article p { color: var(--muted); font-size: 14px; line-height: 1.65; margin: 0; }
+    article code { font-size: 13px; }
+
+    footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: space-between;
+      align-items: center;
+    }
+    footer nav { display: flex; gap: 16px; flex-wrap: wrap; }
+    footer a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    footer a:hover, footer a:focus-visible { color: var(--text); }
+    footer .copyright { color: var(--faint); font-size: 12px; width: 100%; }
+
+    .doc-head { margin: 36px 0 28px; }
+    .intro { color: var(--muted); max-width: 52ch; }
+    .eyebrow { color: var(--accent); font-size: 12px; letter-spacing: .12em; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+    .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 18px; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; font-size: 15px; font-weight: 600; }
+    .button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+    .small { color: var(--muted); font-size: 14px; line-height: 1.7; }
+    .gifts { margin-top: 48px; scroll-margin-top: 24px; }
+    .gift-list { display: grid; gap: 12px; }
+    .pack { padding: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; }
+    .pack h3 { margin: 0 0 8px; font-size: 18px; }
+    .pack p { margin: 0 0 16px; }
+    .pack blockquote { margin: 18px 0; padding-left: 16px; border-left: 2px solid var(--accent); color: var(--text); line-height: 1.8; }
+    .pack a { display: inline-flex; align-items: center; min-height: 44px; }
+    .card-preview { display: block; width: 100%; height: auto; border-radius: 12px; margin: 18px 0 8px; }
+    .howto { margin: 28px 0; padding: 0; }
+    .howto li { margin: 10px 0 10px 22px; line-height: 1.7; }
+    details { margin: 16px 0; border-top: 1px solid var(--border); padding-top: 16px; }
+    summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+    a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+    .skip { position: absolute; left: 12px; top: -100px; background: var(--card); padding: 12px; }
+    .skip:focus { top: 8px; }
+    @media (prefers-reduced-motion: no-preference) { a { transition: color .15s, background .15s; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<main id="main">
+<div class="top-bar">
+<a class="brand" href="../">
+<img src="../../app/icon.svg" alt="">
+<span>Eigentime</span>
+</a>
+<div class="lang-bar">
+<a href="../../support/">简体中文</a>
+</div>
+</div>
+<header class="doc-head">
+<p class="eyebrow">SUPPORT / THANK YOU</p>
+<h1>Support Eigentime</h1>
+<p class="intro">If Eigentime helps you see your day more clearly, you can support it voluntarily. Here are a few small thank-you gifts to keep beside your daily record.</p>
+</header>
+<p class="small">Every feature stays free, with no ads or in-app purchases. Support buys no features, priority or influence over the roadmap, and carries no promise of scheduled updates or personal services.</p>
+<div class="actions">
+<a class="button primary" href="https://afdian.com/a/eigentime" rel="noopener noreferrer">Support on Afdian</a>
+<a class="button" href="https://ko-fi.com/eigentime" rel="noopener noreferrer">Support on Ko-fi</a>
+</div>
+<p class="small">Payment takes place on the platform. Check the currency, amount and whether payment recurs before confirming. Eigentime receives no payment notifications and stores no payment information.</p>
+<a class="button" href="#gifts">Already supported? Get the gifts ↓</a>
+<section class="gifts" id="gifts" aria-labelledby="gifts-title">
+<h2 id="gifts-title">A small thank-you</h2>
+<p class="small">No order check, name or email is needed. These gifts are public downloads you can share and use whether or not you have supported.</p>
+<p class="small">Three sets of lines written for Eigentime, each lasting two weeks. They are not attributed quotations or book excerpts, and ask for no daily streak.</p>
+<div class="gift-list">
+<div class="pack">
+<h3>Return to what matters</h3>
+<p class="small">A little room for one worthwhile thing.</p>
+<blockquote>Choose one worthwhile task and give it a small stretch of undivided time.</blockquote>
+<a href="../../support/packs/focus-en.txt" download="eigentime-focus-en.txt">Download 14 lines · TXT</a>
+</div>
+<div class="pack">
+<h3>Leave a little space</h3>
+<p class="small">Room to rest without filling every minute.</p>
+<blockquote>Rest does not have to wait until everything is finished.</blockquote>
+<a href="../../support/packs/rest-en.txt" download="eigentime-rest-en.txt">Download 14 lines · TXT</a>
+</div>
+<div class="pack">
+<h3>Begin again from here</h3>
+<p class="small">One small step after an interruption.</p>
+<blockquote>An interruption is allowed. Your next entry can begin now.</blockquote>
+<a href="../../support/packs/restart-en.txt" download="eigentime-restart-en.txt">Download 14 lines · TXT</a>
+</div>
+<div class="pack">
+<h3>A thank-you card</h3>
+<p class="small">Keep it or share it with someone who might find the tool useful. It contains no name, payment details or supporter number.</p>
+<img class="card-preview" src="../../support/thank-you-en.svg" width="960" height="540" alt="Thank you for supporting Eigentime.">
+<a href="../../support/thank-you-en.svg" download="eigentime-thank-you-en.svg">Save thank-you card · SVG image</a>
+<p class="small">If your phone opens the image first, save a screenshot or use the browser share menu to save it to Files.</p>
+</div>
+</div>
+</section>
+<section class="gifts" aria-labelledby="how-title">
+<h2 id="how-title">Use a pack in Rotating lines</h2>
+<ol class="howto">
+<li>Download a pack. Each has 14 editable lines, one per line.</li>
+<li>In the app, open “··· → Motto · Rotating lines” and choose “Rotating lines”.</li>
+<li>Choose “Import from file”, review the lines, then save. Import appends to your library; clear the text field first if you want to replace it.</li>
+<li>One line appears each day, in order, and stays the same that day. Your library is included in full backups.</li>
+</ol>
+<a class="button" href="../../app/">Open Eigentime</a>
+</section>
+<details>
+<summary>What comes with these gifts?</summary>
+<p class="small">These are static gifts you can keep, edit and share after downloading. There is no membership, exclusive feature, public list, recurring delivery or individual customization, and no promise the website will stay online forever. The packs and card are open source under the project license. <a href="https://github.com/wowayou/time-logger/blob/main/LICENSE" rel="noopener noreferrer">AGPL-3.0-or-later</a>
+</p>
+</details>
+<footer>
+<nav>
+<a href="../">Home</a>
+<a href="../privacy/">Privacy</a>
+<a href="https://github.com/wowayou/time-logger" rel="noopener">GitHub</a>
+</nav>
+<span class="copyright">© 2026 Eigentime · Thank you for every kind of support.</span>
+</footer>
+</main>
+</body>
+</html>

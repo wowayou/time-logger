@@ -533,7 +533,7 @@ export default {
   // obligation, urgency, or hardship framing — see D30.
   'more.support': 'Support the author',
   'more.supportAria': 'Support the author, opens the support page in a new tab',
-  'more.supportHint': 'Entirely voluntary. Every feature stays free, with no ads and no in-app purchases; supporting buys no features, no priority, and no say over the roadmap.',
+  'more.supportHint': 'Entirely voluntary. Every feature stays free, with no ads or in-app purchases; support buys no features, priority or influence over the roadmap. The support page has line packs and a thank-you card to download.',
   'more.language': 'Language',
   'more.languageAria': 'Language',
   'more.languageAuto': 'System',

@@ -1129,6 +1129,37 @@ assertSharedSummary([
 ], new Date('2024-03-10T00:00'), new Date('2024-03-11T00:00'), clippedRows,
 { now: '2024-03-10T12:34:30', config: REVIEW_CONFIG }, 'shared clipped ranges');
 
+
+// Bounded-range performance must preserve neighbours, gaps and confirmation.
+const windowEntries = [
+  { id: 'win-left', ts: '2024-03-09T22:00', what: 'work', tags: ['求职推进'] },
+  { id: 'win-mid', ts: '2024-03-10T08:00', what: 'work', tags: ['求职推进'],
+    longConfirm: { startTs: '2024-03-10T08:00', endTs: '2024-03-10T18:00' } },
+  { id: 'win-right', ts: '2024-03-10T18:00', what: 'rest', tags: ['吃饭'] }
+];
+const windowNow = { now: '2024-03-12T12:00', config: REVIEW_CONFIG };
+const clippedWindow = buildRangeSegmentsFromEntries([...windowEntries].reverse(), '2024-03-10T09:00', '2024-03-10T10:00', windowNow);
+assert(clippedWindow.length === 1 && clippedWindow[0].e.id === 'win-mid', 'clipped range retains the immediate predecessor');
+assert(clippedWindow[0].mins === 60 && clippedWindow[0].rawMins === 600, 'visible minutes are clipped, full duration uses the actual right neighbour');
+assert(clippedWindow[0].endTs === '2024-03-10T18:00' && !clippedWindow[0].isLast && !clippedWindow[0].isOngoing, 'right neighbour outside the range still closes the segment');
+assert(!clippedWindow[0].pendingConfirm, 'clipping must not invalidate a full-segment confirmation');
+const futureFirst = [{ id: 'future-first', ts: '2024-03-10T18:00', what: 'later', tags: ['吃饭'] }];
+const leadingOnly = buildRangeSegmentsFromEntries(futureFirst, '2024-03-10T09:00', '2024-03-10T10:00', windowNow);
+assert(leadingOnly.length === 0, 'range before the first ever record keeps existing empty-day semantics');
+const exactRight = buildRangeSegmentsFromEntries(windowEntries, '2024-03-10T08:00', '2024-03-10T18:00', windowNow);
+assert(exactRight.length === 1 && exactRight[0].e.id === 'win-mid', 'half-open range excludes a start exactly at its end');
+// A local century includes leap days; keep the whole archive in memory only.
+const centuryEntries = [];
+for (let d = new Date(1926, 0, 1); d < new Date(2026, 0, 1); d.setDate(d.getDate() + 1)) {
+  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  for (let hour = 8; hour <= 16; hour += 2) centuryEntries.push({ id: `${key}-${hour}`, ts: `${key}T${String(hour).padStart(2, '0')}:00`, what: 'synthetic', tags: ['求职推进'] });
+}
+assert(centuryEntries.length === 182625, '100 calendar years at 5 starts/day include 36525 days');
+const centuryTail = buildRangeSegmentsFromEntries(centuryEntries, '2025-12-31T00:00', '2026-01-01T00:00', { now: '2026-01-02T12:00', config: REVIEW_CONFIG });
+assert(centuryTail.length === 6, 'last day in a century has five starts and previous-day carry');
+assert(centuryTail.reduce((n, seg) => n + seg.mins, 0) === 1440, 'last day of a century retains all 1440 minutes');
+assert(centuryEntries[0].ts === '1926-01-01T08:00' && centuryEntries.length === 182625, 'large-history reads never modify the source archive');
+
 console.log('confirm_logic_smoke passed');
 '''
 

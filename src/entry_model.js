@@ -21,7 +21,7 @@ import {
 } from './time.js';
 
 function entriesOnDate(entries, dateKey) {
-  return loggedEntriesFrom(entries).filter(entry => entry.ts.slice(0, 10) === dateKey);
+  return loggedEntriesFrom((entries || []).filter(entry => typeof entry.ts === 'string' && entry.ts.slice(0, 10) === dateKey));
 }
 
 function lastEntryOnDate(entries, dateKey) {
@@ -35,9 +35,8 @@ export function openPlaceholderForDate(entries, dateKey) {
 }
 
 export function defaultFormTimestamp(entries, dateKey) {
-  const placeholder = openPlaceholderForDate(entries, dateKey);
-  if (placeholder) return placeholder.ts;
   const last = lastEntryOnDate(entries, dateKey);
+  if (isPlaceholderEntry(last)) return last.ts;
   if (last && last.ongoing) return nowStr();
   if (last) {
     // v77：走到这里说明尾点是一条**真实**记录（占位与进行中都已在上面返回）。

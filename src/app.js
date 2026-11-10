@@ -1512,7 +1512,7 @@ import {
     updateMigrationNotice();
     const today = todayStr();
     // 只做诊断：写下本机首用日备查，不再驱动任何用户可见里程碑。
-    ensureFirstUsedDate(today, load().entries);
+    if (!readFirstUsedDate()) ensureFirstUsedDate(today, load().entries);
     const savedView = readUiPreference(VIEW_KEY);
     const savedDate = parseDateKey(readUiPreference(SELECTED_DATE_KEY));
     state.view = ['day', 'week', 'month', 'year'].includes(savedView) ? savedView : 'day';

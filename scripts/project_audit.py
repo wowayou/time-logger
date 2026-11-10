@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # v1.0.0 起是三段式（此前是单整数，v1–v93）。判据必须**只认三段式**：写回单整数
 # 会让 android 仓的 versionCode 派生与 publish-site 的 tag 校验重新分叉，那两处
 # 现在都按三段式解析。历史 tag 与 docs/CHANGELOG.md 的单整数条目不受影响。
-EXPECTED_VERSION = "1.6.1"
+EXPECTED_VERSION = "1.6.2"
 VERSION_PATTERN = r"\d+\.\d+\.\d+"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
@@ -421,8 +421,7 @@ def audit_docs(errors: list[str]) -> None:
             fail(errors, f"CLAUDE.md must document maintenance command: {command}")
 
 
-# SPEC-015: the four public site/ pages (zh + en landing, zh + en privacy
-# policy), each a self-contained single-file page with its own inline token
+# SPEC-015 / D35: public site/ pages (zh + en landing, privacy, support), each a self-contained single-file page with its own inline token
 # block. Kept as an explicit list (not a glob) so a new page under site/
 # must be registered here deliberately, same judgment call as
 # ALLOWED_DOC_ASSETS above.
@@ -431,6 +430,8 @@ SITE_PAGES = [
     "site/en/index.html",
     "site/privacy/index.html",
     "site/en/privacy/index.html",
+    "site/support/index.html",
+    "site/en/support/index.html",
 ]
 
 WCAG_MIN_CONTRAST = 4.5
@@ -662,6 +663,8 @@ def audit_site_favicon(errors: list[str]) -> None:
         "site/privacy/index.html": "privacy",
         "site/en/index.html": "en",
         "site/en/privacy/index.html": "en/privacy",
+        "site/support/index.html": "support",
+        "site/en/support/index.html": "en/support",
     }
     for rel, dir_ in deployed_dir.items():
         path = ROOT / rel
@@ -748,6 +751,8 @@ def audit_site_hreflang(errors: list[str]) -> None:
         "site/en/index.html": ("https://time.eigentime.org/", "https://time.eigentime.org/en/"),
         "site/privacy/index.html": ("https://time.eigentime.org/privacy/", "https://time.eigentime.org/en/privacy/"),
         "site/en/privacy/index.html": ("https://time.eigentime.org/privacy/", "https://time.eigentime.org/en/privacy/"),
+        "site/support/index.html": ("https://time.eigentime.org/support/", "https://time.eigentime.org/en/support/"),
+        "site/en/support/index.html": ("https://time.eigentime.org/support/", "https://time.eigentime.org/en/support/"),
     }
     for rel, (zh_url, en_url) in expected.items():
         path = ROOT / rel

@@ -2,9 +2,9 @@
 
 > Status: active · 已上线，可日常使用；进度与待办见 [STATUS.md](STATUS.md)
 >
-> Release: v1.6.1（2026-10-13 已上线，线上与本地一致；iOS 等真机复验仍待闭合，见 [STATUS.md](STATUS.md) OPEN）
+> Release: v1.6.2（本地验收完成、未发布；线上仍为 v1.6.1，见 [STATUS.md](STATUS.md)）
 >
-> Updated: 2026-10-21
+> Updated: 2026-11-10
 >
 > Intended user: 需要记录每天时间去向并进行每日复盘的个人使用者。
 >
@@ -205,7 +205,7 @@ git diff --check
 
 ## 支持作者（自愿）
 
-若时间尺对你有用，可以在 [`eigentime.org/support`](https://eigentime.org/support?from=time-logger) 自愿支持作者。这完全自愿：所有功能始终免费、无广告无内购，支持也不购买任何功能、优先权或产品方向。链接指向 eigentime.org 的中转页而不是收款平台本身（决策见 `docs/decisions.md` D30）。
+若时间尺对你有用，可以在[时间尺支持页](https://time.eigentime.org/support/?from=time-logger)自愿支持作者。所有功能始终免费、无广告无内购，支持不购买功能、优先权或产品方向。支持页提供三套各 14 句的原创文字轮播句库和通用感谢卡，公开自取、不核验订单、不收集姓名或邮箱，也不承诺持续补发。句库经「文字轮播 → 从文件导入」追加，检查后保存；链接可分享，不支持也可取用。决策见 [D35](docs/decisions.md#d35)。
 
 ## 许可证与版权
 

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<!-- Copyright © 2026 wowayou. SPDX-License-Identifier: AGPL-3.0-or-later. Static support page; no payment verification, scripts or storage. -->
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="description" content="如果时间尺帮你看清了一天，欢迎自愿支持它。这里也准备了一点小小的回礼，让记录旁边的那句话，偶尔替你留个提醒。">
+<title>支持时间尺 — 时间尺</title>
+<link rel="icon" href="../app/icon.svg" type="image/svg+xml">
+<link rel="icon" type="image/png" sizes="192x192" href="../app/icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="../app/icons/icon-512.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../app/icons/apple-touch-icon.png">
+<link rel="canonical" href="https://time.eigentime.org/support/">
+<link rel="alternate" hreflang="zh-Hans" href="https://time.eigentime.org/support/">
+<link rel="alternate" hreflang="en" href="https://time.eigentime.org/en/support/">
+<link rel="alternate" hreflang="x-default" href="https://time.eigentime.org/support/">
+<style>
+    :root {
+      color-scheme: dark light;
+      --bg: #0e0f13;
+      --card: #16171e;
+      --text: #e8e9f1;
+      --muted: #9fa1b8;
+      --faint: #898ba2;
+      --border: rgba(255, 255, 255, 0.09);
+      --accent: #a99fff;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #eceef3;
+        --card: #ffffff;
+        --text: #33323b;
+        --muted: #686570;
+        --faint: #66646d;
+        --border: rgba(28, 32, 44, 0.10);
+        --accent: #5745c7;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      overflow-x: hidden;
+    }
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 0 clamp(18px, 5vw, 28px) calc(64px + env(safe-area-inset-bottom));
+    }
+    a { color: var(--accent); }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+      gap: 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+    .brand img { width: 28px; height: 28px; border-radius: 7px; display: block; }
+    .brand span { font-size: 15px; font-weight: 650; }
+    .lang-bar a { color: var(--muted); font-size: 13px; text-decoration: none; }
+    .lang-bar a:hover, .lang-bar a:focus-visible { color: var(--text); }
+
+    header.doc-head { padding: 24px 0 8px; }
+    header.doc-head h1 { font-size: clamp(26px, 5vw, 32px); font-weight: 700; margin: 0 0 8px; letter-spacing: -0.01em; }
+    header.doc-head .updated { color: var(--faint); font-size: 13px; margin: 0; }
+
+    article {
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      padding: 32px 0 8px;
+    }
+    article section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 22px;
+    }
+    article h2 { font-size: 16px; font-weight: 650; margin: 0 0 8px; }
+    article p { color: var(--muted); font-size: 14px; line-height: 1.65; margin: 0; }
+    article code { font-size: 13px; }
+
+    footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: space-between;
+      align-items: center;
+    }
+    footer nav { display: flex; gap: 16px; flex-wrap: wrap; }
+    footer a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    footer a:hover, footer a:focus-visible { color: var(--text); }
+    footer .copyright { color: var(--faint); font-size: 12px; width: 100%; }
+
+    .doc-head { margin: 36px 0 28px; }
+    .intro { color: var(--muted); max-width: 52ch; }
+    .eyebrow { color: var(--accent); font-size: 12px; letter-spacing: .12em; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+    .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 18px; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; font-size: 15px; font-weight: 600; }
+    .button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+    .small { color: var(--muted); font-size: 14px; line-height: 1.7; }
+    .gifts { margin-top: 48px; scroll-margin-top: 24px; }
+    .gift-list { display: grid; gap: 12px; }
+    .pack { padding: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; }
+    .pack h3 { margin: 0 0 8px; font-size: 18px; }
+    .pack p { margin: 0 0 16px; }
+    .pack blockquote { margin: 18px 0; padding-left: 16px; border-left: 2px solid var(--accent); color: var(--text); line-height: 1.8; }
+    .pack a { display: inline-flex; align-items: center; min-height: 44px; }
+    .card-preview { display: block; width: 100%; height: auto; border-radius: 12px; margin: 18px 0 8px; }
+    .howto { margin: 28px 0; padding: 0; }
+    .howto li { margin: 10px 0 10px 22px; line-height: 1.7; }
+    details { margin: 16px 0; border-top: 1px solid var(--border); padding-top: 16px; }
+    summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+    a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+    .skip { position: absolute; left: 12px; top: -100px; background: var(--card); padding: 12px; }
+    .skip:focus { top: 8px; }
+    @media (prefers-reduced-motion: no-preference) { a { transition: color .15s, background .15s; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<main id="main">
+<div class="top-bar">
+<a class="brand" href="../">
+<img src="../app/icon.svg" alt="">
+<span>时间尺</span>
+</a>
+<div class="lang-bar">
+<a href="../en/support/">English</a>
+</div>
+</div>
+<header class="doc-head">
+<p class="eyebrow">SUPPORT / 自愿支持</p>
+<h1>支持时间尺</h1>
+<p class="intro">如果时间尺帮你看清了一天，欢迎自愿支持它。这里也准备了一点小小的回礼，让记录旁边的那句话，偶尔替你留个提醒。</p>
+</header>
+<p class="small">所有功能始终免费，无广告、无内购。支持不购买任何功能、优先权或产品方向，也不承诺固定更新或个人服务。</p>
+<div class="actions">
+<a class="button primary" href="https://afdian.com/a/eigentime" rel="noopener noreferrer">在爱发电支持</a>
+<a class="button" href="https://ko-fi.com/eigentime" rel="noopener noreferrer">在 Ko-fi 支持</a>
+</div>
+<p class="small">付款在平台完成，币种、金额和是否自动续费以平台结账页为准，请在付款前确认。时间尺不接收付款通知、不保存支付信息。</p>
+<a class="button" href="#gifts">已经支持过了？领取回馈 ↓</a>
+<section class="gifts" id="gifts" aria-labelledby="gifts-title">
+<h2 id="gifts-title">送给愿意同行的你</h2>
+<p class="small">不用核对订单，也不用留姓名或邮箱。回馈公开下载，链接可以分享；没有支持，也可以取用。</p>
+<p class="small">三套为时间尺写的短句，每套可轮播两周；不是名人语录或书摘，也不要求连续打卡。</p>
+<div class="gift-list">
+<div class="pack">
+<h3>把注意力放回来</h3>
+<p class="small">不催你更忙，只提醒你选一件值得做的事。</p>
+<blockquote>先挑一件值得做的事，再给它一小段完整的时间。</blockquote>
+<a href="packs/focus-zh.txt" download="eigentime-focus-zh.txt">下载 14 句 · TXT</a>
+</div>
+<div class="pack">
+<h3>给一天留白</h3>
+<p class="small">让休息也有位置，不把每一分钟都填满。</p>
+<blockquote>休息不需要等到所有事情都完成。</blockquote>
+<a href="packs/rest-zh.txt" download="eigentime-rest-zh.txt">下载 14 句 · TXT</a>
+</div>
+<div class="pack">
+<h3>从这里重新开始</h3>
+<p class="small">中断之后，从手边的一步接着来。</p>
+<blockquote>中断过也没有关系，下一条记录可以从现在开始。</blockquote>
+<a href="packs/restart-zh.txt" download="eigentime-restart-zh.txt">下载 14 句 · TXT</a>
+</div>
+<div class="pack">
+<h3>一张感谢卡</h3>
+<p class="small">留作纪念，或分享给用得上的朋友。卡片不含姓名、付款信息或支持者编号。</p>
+<img class="card-preview" src="thank-you-zh.svg" width="960" height="540" alt="谢谢你，让时间尺继续生长。">
+<a href="thank-you-zh.svg" download="eigentime-thank-you-zh.svg">保存感谢卡 · SVG 图片</a>
+<p class="small">手机若先打开图片，可截图保存；也可从浏览器分享菜单存储到文件。</p>
+</div>
+</div>
+</section>
+<section class="gifts" aria-labelledby="how-title">
+<h2 id="how-title">把句库放进文字轮播</h2>
+<ol class="howto">
+<li>下载喜欢的句库。每套 14 句，一行一句，可自行删改。</li>
+<li>打开应用「··· → 阶段格言 · 文字轮播」，选择「文字轮播」。</li>
+<li>点「从文件导入」，检查句子后点「完成」。导入会追加到原句库；想替换时，先自行清空文本框。</li>
+<li>保存后每天按顺序显示一句；同一天保持不变。句库随完整备份保存。</li>
+</ol>
+<a class="button" href="../app/">打开时间尺</a>
+</section>
+<details>
+<summary>这份回馈包含什么约定？</summary>
+<p class="small">这是当前版本的静态小礼物，下载后可长期保留、自行修改和分享。不设会员、专属功能、公开名单、定期补发或个别定制，也不保证网站永久在线。句库、感谢卡与项目一同开源，遵循项目许可证。 <a href="https://github.com/wowayou/time-logger/blob/main/LICENSE" rel="noopener noreferrer">AGPL-3.0-or-later</a>
+</p>
+</details>
+<footer>
+<nav>
+<a href="../">产品主页</a>
+<a href="../privacy/">隐私政策</a>
+<a href="https://github.com/wowayou/time-logger" rel="noopener">GitHub</a>
+</nav>
+<span class="copyright">© 2026 Eigentime · 谢谢每一种支持。</span>
+</footer>
+</main>
+</body>
+</html>

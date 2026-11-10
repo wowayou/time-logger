@@ -39,8 +39,8 @@ export function isPlaceholderEntry(entry) {
 // （normalizeEntries 恒给今天留一条尾占位），两者都不构成「记过一天」。
 function recordedDayKeys(entries) {
   const seen = new Set();
-  loggedEntriesFrom(entries).forEach(entry => {
-    if (isPlaceholderEntry(entry)) return;
+  (entries || []).forEach(entry => {
+    if (entry.planned || isPlaceholderEntry(entry) || !normalizeTimestamp(entry.ts)) return;
     seen.add(entry.ts.slice(0, 10));
   });
   return [...seen].sort();
@@ -98,8 +98,7 @@ export function milestoneCrossed(beforeCount, afterCount) {
 }
 
 export function listPlannedEntries(entries, dateKey) {
-  return sortedEntriesFrom(entries)
-    .filter(e => e.planned && e.ts.slice(0, 10) === dateKey);
+  return sortedEntriesFrom((entries || []).filter(e => e.planned && typeof e.ts === 'string' && e.ts.slice(0, 10) === dateKey));
 }
 
 function emptyTotals() {
@@ -216,13 +215,33 @@ export function buildRangeSegmentsFromEntries(inputEntries, start, end, opts = {
   const entries = loggedEntriesFrom(inputEntries);
   if (!entries.length) return [];
 
+  // Only the immediate predecessor and starts inside the range can overlap it.
+  // Keep the complete list for next/endTs/isLast: dropping the right neighbour
+  // would turn a closed segment into an ongoing one or change midnight rules.
+  const lowerBound = target => {
+    let lo = 0;
+    let hi = entries.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (+new Date(entries[mid].ts) < target) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+  // Legacy accepted formats sort by their original text, which need not be
+  // chronological. Preserve their existing scan semantics instead of assuming
+  // they can be searched by time. New app records use the canonical format.
+  const canonical = entries.every(entry => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(entry.ts));
+  const first = canonical ? Math.max(0, lowerBound(+s) - 1) : 0;
+  const boundLast = canonical ? lowerBound(+e) : entries.length;
+
   const config = opts.config;
   // v87：段边界只算一次。旧代码在**每一天**的循环里对**全部**条目重跑
   // segmentBoundsForEntry（O(天数 × 条数)）——年视图一次 render 因此是
   // 365 × 全部条目：633 条时 ~170ms，5000 条时 ~1.5s，而年视图包含今天，
   // dataSignature 的 liveMinute 每分钟都变，于是每分钟整屏重算一次。
   const bounds = [];
-  for (let index = 0; index < entries.length; index += 1) {
+  for (let index = first; index < boundLast; index += 1) {
     bounds.push(segmentBoundsForEntry(entries, index, now));
   }
   // 两个游标都只前进，因为日循环的 rangeStart / rangeEnd 单调递增、entries 按 ts 升序：
@@ -230,19 +249,19 @@ export function buildRangeSegmentsFromEntries(inputEntries, start, end, opts = {
   //   条目对**后续每一天**同样出局（这条不依赖 rawEnd 单调，while 的判据自己保证）；
   // - `break` 用 rawStart >= rangeEnd，rawStart 即 ts，严格升序。
   const segments = [];
-  let firstLive = 0;
+  let firstLive = first;
   for (let dayStart = startOfDay(s); dayStart < e; dayStart = addDays(dayStart, 1)) {
     const dayEnd = addDays(dayStart, 1);
     const rangeStart = new Date(Math.max(+s, +dayStart));
     const rangeEnd = new Date(Math.min(+e, +dayEnd));
     if (rangeEnd <= rangeStart) continue;
 
-    while (firstLive < bounds.length && bounds[firstLive].rawEnd <= rangeStart) firstLive += 1;
+    while (firstLive < boundLast && bounds[firstLive - first].rawEnd <= rangeStart) firstLive += 1;
 
     let cursor = new Date(rangeStart);
-    for (let index = firstLive; index < entries.length; index += 1) {
+    for (let index = firstLive; index < boundLast; index += 1) {
       const entry = entries[index];
-      const { rawStart, rawEnd, endTs, isOngoing, next } = bounds[index];
+      const { rawStart, rawEnd, endTs, isOngoing, next } = bounds[index - first];
       if (rawStart >= rangeEnd) break;
       if (rawEnd <= rangeStart) continue;
 

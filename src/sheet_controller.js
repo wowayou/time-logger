@@ -2797,9 +2797,15 @@ export function createSheetController(deps) {
 
   async function loadQuotesFile(input) {
     const panel = input.closest('.form-sheet-panel');
+    const textarea = panel && panel.querySelector('[data-role="quotes-input"]');
+    const sheet = panel && panel.closest('#form-sheet');
+    // The panel is reused across sheets. Keep the actual draft node so a late
+    // file result (or error) cannot spill into a newly opened draft.
+    const isCurrentDraft = () => textarea && textarea.isConnected && input.isConnected
+      && sheet && !sheet.hidden && !sheet.classList.contains('sheet-closing');
     const file = input.files && input.files[0];
     input.value = '';
-    if (!panel || !file) return;
+    if (!isCurrentDraft() || !file) return;
     if (file.size > QUOTES_FILE_MAX_BYTES) {
       showInlineError(panel, t('quotes.fileTooLarge'), 'motto-error');
       return;
@@ -2808,11 +2814,10 @@ export function createSheetController(deps) {
     try {
       text = decodeQuotesFile(await file.arrayBuffer());
     } catch {
-      showInlineError(panel, t('quotes.fileUnreadable'), 'motto-error');
+      if (isCurrentDraft()) showInlineError(panel, t('quotes.fileUnreadable'), 'motto-error');
       return;
     }
-    const textarea = panel.querySelector('[data-role="quotes-input"]');
-    if (!textarea) return;
+    if (!isCurrentDraft()) return;
     // 追加而不是覆盖：已有的句子不会因为导入第二本书而静默消失；要换掉就先清空文本框。
     // 追加的是**已拆好**的句子——用户在框里看见的就是将要轮播的样子。
     const incoming = splitQuoteText(text).items;
