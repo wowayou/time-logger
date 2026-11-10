@@ -7,8 +7,10 @@ Established: 2026-07-31. Copyright holder: **wowayou**.
 
 ## 1. Public license
 
-The project is published under **AGPL-3.0-or-later**. Every runtime file carries an
-`SPDX-License-Identifier: AGPL-3.0-or-later` header. Anyone may use, study, modify and
+The project is published under **AGPL-3.0-or-later**. Every runtime code file carries an
+`SPDX-License-Identifier: AGPL-3.0-or-later` header. The theme line packs in `packs/` are
+plain text read one line per entry, so they carry no header; they are covered by the same
+license. Anyone may use, study, modify and
 redistribute the software under those terms.
 
 ## 2. The distributed work contains no third-party code

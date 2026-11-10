@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # v1.0.0 起是三段式（此前是单整数，v1–v93）。判据必须**只认三段式**：写回单整数
 # 会让 android 仓的 versionCode 派生与 publish-site 的 tag 校验重新分叉，那两处
 # 现在都按三段式解析。历史 tag 与 docs/CHANGELOG.md 的单整数条目不受影响。
-EXPECTED_VERSION = "1.6.2"
+EXPECTED_VERSION = "1.7.0"
 VERSION_PATTERN = r"\d+\.\d+\.\d+"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
@@ -35,6 +35,12 @@ REQUIRED_RUNTIME_ASSETS = [
     "src/pickers.js",
     "src/ui.js",
     "icon.svg",
+    "packs/focus-zh.txt",
+    "packs/focus-en.txt",
+    "packs/rest-zh.txt",
+    "packs/rest-en.txt",
+    "packs/restart-zh.txt",
+    "packs/restart-en.txt",
 ]
 REQUIRED_ICON_SIZES = {
     "icons/icon-192.png": (192, 192),
@@ -155,6 +161,32 @@ def audit_service_worker(errors: list[str]) -> None:
     for fragment, message in required_reliability_guards.items():
         if fragment not in sw:
             fail(errors, f"service worker reliability guard missing: {message}")
+
+
+def audit_quote_packs(errors: list[str]) -> None:
+    """D36：主题句库按钮读 packs/<id>-<locale>.txt。id 只在 src/ui.js 的 QUOTE_PACKS
+    定义，语言只在 src/i18n.js 的 SUPPORTED_LOCALES 定义；任一组合缺文件或没进
+    缓存清单，按钮在离线时就会读不到——这里点名缺的那一个。packs/ 里多出的文件
+    同样报错：没有按钮引用它，却被每台设备预缓存。"""
+    ui = read_text("src/ui.js")
+    block = re.search(r"export const QUOTE_PACKS = \[(.*?)\];", ui, re.S)
+    locales = re.search(r"export const SUPPORTED_LOCALES = \[([^\]]*)\]", read_text("src/i18n.js"))
+    if not block or not locales:
+        fail(errors, "src/ui.js QUOTE_PACKS or src/i18n.js SUPPORTED_LOCALES not found")
+        return
+    ids = re.findall(r"id:\s*'([a-z0-9-]+)'", block.group(1))
+    langs = re.findall(r"'([a-z]+)'", locales.group(1))
+    expected = {f"packs/{pack}-{lang}.txt" for pack in ids for lang in langs}
+    if not ids:
+        fail(errors, "src/ui.js QUOTE_PACKS declares no pack ids")
+    for rel in sorted(expected):
+        if rel not in REQUIRED_RUNTIME_ASSETS:
+            fail(errors, f"{rel} is used by QUOTE_PACKS but missing from REQUIRED_RUNTIME_ASSETS / sw.js FILES")
+        if not (ROOT / rel).is_file():
+            fail(errors, f"{rel} is used by QUOTE_PACKS but does not exist")
+    actual = {f"packs/{path.name}" for path in (ROOT / "packs").glob("*")} if (ROOT / "packs").is_dir() else set()
+    for rel in sorted(actual - expected):
+        fail(errors, f"{rel} is not referenced by any QUOTE_PACKS id; remove it or add the pack")
 
 
 def audit_app_version_string(errors: list[str]) -> None:
@@ -1143,6 +1175,7 @@ def main() -> int:
     errors: list[str] = []
     audit_manifest(errors)
     audit_service_worker(errors)
+    audit_quote_packs(errors)
     audit_app_version_string(errors)
     audit_demo_assets(errors)
     audit_smoke_scripts(errors)

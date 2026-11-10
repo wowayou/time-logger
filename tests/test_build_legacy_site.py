@@ -116,6 +116,14 @@ class LegacySiteTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "runtime differs.*src/app.js"):
             self.build()
 
+    def test_line_pack_added_after_release_is_rejected(self):
+        # D36: packs/ is runtime. A pack committed after the tag must block a
+        # publish that claims the tag's runtime.
+        self.write("packs/focus-en.txt", "A line added after the release.\n")
+        self.commit()
+        with self.assertRaisesRegex(ValueError, "runtime differs.*packs/focus-en.txt"):
+            self.build()
+
     def test_changed_icon_is_rejected(self):
         self.write("icons/icon.png", b"changed synthetic image")
         self.commit()

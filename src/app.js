@@ -1009,6 +1009,7 @@ import {
       if (action === 'reset-motto-input') sheetController.resetMottoInput();
       if (action === 'pick-motto-mode') sheetController.pickMottoMode(el);
       if (action === 'pick-quotes-file') sheetController.pickQuotesFile(el);
+      if (action === 'add-quote-pack') sheetController.addQuotePack(el);
       if (action === 'toggle-start-time') sheetController.toggleStartTime(el);
       if (action === 'toggle-edit-start-time') sheetController.toggleEditStartTime(el);
       if (action === 'pick-edit-end-mode') sheetController.pickEditEndMode(el);

@@ -119,5 +119,24 @@ class BuildSiteSafety(unittest.TestCase):
         self.assertEqual(outside.read_text(), 'secret')
 
 
+
+class RealRepoAssembly(unittest.TestCase):
+    """D36: the line packs are runtime assets. The real sw.js FILES must carry
+    them to /app/packs/ byte for byte, and site/ must not keep a second copy."""
+
+    def test_line_packs_ship_once_under_app(self):
+        repo = Path(__file__).resolve().parents[1]
+        packs = sorted((repo / 'packs').glob('*.txt'))
+        self.assertTrue(packs)
+        with tempfile.TemporaryDirectory() as temp:
+            out = Path(temp) / 'mirror'
+            with patch.object(sys, 'argv', ['build_site.py', '--out', str(out)]), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(build.main(), 0)
+            for pack in packs:
+                with self.subTest(pack=pack.name):
+                    self.assertEqual((out / 'app/packs' / pack.name).read_bytes(), pack.read_bytes())
+            self.assertFalse((out / 'support/packs').exists())
+
+
 if __name__ == '__main__':
     unittest.main()

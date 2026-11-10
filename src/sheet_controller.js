@@ -17,7 +17,7 @@ import {
   planSegmentSplit
 } from './entry_model.js';
 import { isPlaceholderEntry, comparePeriods, periodTrend, primaryTag, recordedDayCount, tagMinutes, formatPercent } from './stats.js';
-import { t } from './i18n.js';
+import { plural, t } from './i18n.js';
 import {
   BUCKETS,
   BUCKET_ORDER,
@@ -60,7 +60,7 @@ import {
   validateTs,
   validateTsForMode
 } from './time.js';
-import { bucketHint, configChipLabel, coverageDaysLabel, entriesCountLabel, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderTagPicker, renderTagSuggestions } from './ui.js';
+import { QUOTE_PACKS, bucketHint, configChipLabel, coverageDaysLabel, entriesCountLabel, quotePackPath, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderTagPicker, renderTagSuggestions } from './ui.js';
 
 export function createSheetController(deps) {
   let sheetScrollY = 0;
@@ -797,7 +797,7 @@ export function createSheetController(deps) {
       overnightEndMode: formOvernightEndMode,
       planOutsideWindow: mode === 'edit' && Boolean(entry && entry.planned)
         && !validateTsForMode(entry.ts, { planned: true }).ok,
-      isLegacyOrigin: (mode === 'more' || mode === 'backup') && Boolean(deps.isLegacyOrigin && deps.isLegacyOrigin()),
+      isLegacyOrigin: (mode === 'more' || mode === 'backup' || mode === 'motto') && Boolean(deps.isLegacyOrigin && deps.isLegacyOrigin()),
       intervalContext: mode === 'edit'
         ? intervalEditContext(formBaseEntries, id, { todayKey: todayStr(), nowTs: nowStr() })
         : null,
@@ -2795,14 +2795,29 @@ export function createSheetController(deps) {
     }
   }
 
-  async function loadQuotesFile(input) {
-    const panel = input.closest('.form-sheet-panel');
+  // The panel is reused across sheets. Keep the actual draft node so a late
+  // async result (file read or theme pack, or its error) cannot spill into a
+  // newly opened draft (v1.6.2; shared with the D36 packs in v1.7.0).
+  function quoteDraftScope(el) {
+    const panel = el.closest('.form-sheet-panel');
     const textarea = panel && panel.querySelector('[data-role="quotes-input"]');
     const sheet = panel && panel.closest('#form-sheet');
-    // The panel is reused across sheets. Keep the actual draft node so a late
-    // file result (or error) cannot spill into a newly opened draft.
-    const isCurrentDraft = () => textarea && textarea.isConnected && input.isConnected
-      && sheet && !sheet.hidden && !sheet.classList.contains('sheet-closing');
+    const isCurrentDraft = () => Boolean(textarea && textarea.isConnected && el.isConnected
+      && sheet && !sheet.hidden && !sheet.classList.contains('sheet-closing'));
+    return { panel, textarea, isCurrentDraft };
+  }
+
+  // 追加而不是覆盖：已有的句子不会因为导入第二本书而静默消失；要换掉就先清空文本框。
+  // 追加的是**已拆好**的句子——用户在框里看见的就是将要轮播的样子。
+  function appendQuotesDraft(panel, textarea, incoming) {
+    const existing = textarea.value.replace(/\s+$/, '');
+    textarea.value = (existing ? `${existing}\n` : '') + incoming.join('\n');
+    autosizeTextareas(panel);
+    paintQuotesCount(panel);
+  }
+
+  async function loadQuotesFile(input) {
+    const { panel, textarea, isCurrentDraft } = quoteDraftScope(input);
     const file = input.files && input.files[0];
     input.value = '';
     if (!isCurrentDraft() || !file) return;
@@ -2818,18 +2833,48 @@ export function createSheetController(deps) {
       return;
     }
     if (!isCurrentDraft()) return;
-    // 追加而不是覆盖：已有的句子不会因为导入第二本书而静默消失；要换掉就先清空文本框。
-    // 追加的是**已拆好**的句子——用户在框里看见的就是将要轮播的样子。
     const incoming = splitQuoteText(text).items;
     if (!incoming.length) {
       showInlineError(panel, t('quotes.fileEmpty'), 'motto-error');
       return;
     }
     clearInlineError(panel, 'motto-error');
-    const existing = textarea.value.replace(/\s+$/, '');
-    textarea.value = (existing ? `${existing}\n` : '') + incoming.join('\n');
-    autosizeTextareas(panel);
-    paintQuotesCount(panel);
+    appendQuotesDraft(panel, textarea, incoming);
+  }
+
+  // D36（v1.7.0）：主题句库从运行时预缓存的 packs/ 读取（SW cache-first，离线可用）。
+  // 只追加文本框里还没有的句子——连点两次不会重复；比较对象是「保存时会得到的句子」，
+  // 所以框里写成「- 句子」的那一句也算已有。与文件导入一样只改草稿，「完成」才保存。
+  // 已有句子的判断放在 await 之后：并发的两次点击按顺序落地，后一次看得见前一次。
+  async function addQuotePack(el) {
+    const pack = QUOTE_PACKS.find(item => item.id === el.dataset.pack);
+    const { panel, textarea, isCurrentDraft } = quoteDraftScope(el);
+    if (!pack || !isCurrentDraft()) return;
+    let items = [];
+    try {
+      const response = await fetch(quotePackPath(pack.id));
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      items = splitQuoteText(await response.text()).items;
+    } catch {
+      items = [];
+    }
+    if (!isCurrentDraft()) return;
+    const status = panel.querySelector('[data-role="quote-pack-status"]');
+    if (!items.length) {
+      if (status) status.textContent = '';
+      showInlineError(panel, t('quotes.packUnavailable'), 'motto-error');
+      return;
+    }
+    clearInlineError(panel, 'motto-error');
+    const present = new Set(splitQuoteText(textarea.value).items);
+    const incoming = items.filter(line => !present.has(line));
+    if (!incoming.length) {
+      if (status) status.textContent = t('quotes.packAlready');
+      return;
+    }
+    appendQuotesDraft(panel, textarea, incoming);
+    const n = incoming.length;
+    if (status) status.textContent = plural(n, { one: t('quotes.packAddedOne', { n }), other: t('quotes.packAddedOther', { n }) });
   }
 
   function resetMottoInput() {
@@ -2894,6 +2939,7 @@ export function createSheetController(deps) {
     pickMottoMode,
     pickQuotesFile,
     loadQuotesFile,
+    addQuotePack,
     handleResponsiveResize
   };
 }

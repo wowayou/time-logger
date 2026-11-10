@@ -14,7 +14,7 @@
 // 前缀清理正常淘汰，不需要迁移代码。
 // 前缀因此单独声明；两者一致性由 audit 断言（见 audit_service_worker）。
 const CACHE_PREFIX = 'timelog-';
-const CACHE = 'timelog-v1.6.2';
+const CACHE = 'timelog-v1.7.0';
 const FILES = [
   './',
   './index.html',
@@ -39,7 +39,13 @@ const FILES = [
   './icons/maskable-192.png',
   './icons/maskable-512.png',
   './icons/apple-touch-icon.png',
-  './icons/splash-750x1334.png'
+  './icons/splash-750x1334.png',
+  './packs/focus-zh.txt',
+  './packs/focus-en.txt',
+  './packs/rest-zh.txt',
+  './packs/rest-en.txt',
+  './packs/restart-zh.txt',
+  './packs/restart-en.txt'
 ];
 
 self.addEventListener('install', e => {

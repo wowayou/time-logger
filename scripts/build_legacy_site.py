@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # Compare whole runtime directories, not another copy of the SW asset manifest:
 # additions/deletions and files not yet listed in FILES must also block publishing.
 RUNTIME_PATHS = (
-    "index.html", "styles.css", "sw.js", "manifest.webmanifest", "icon.svg", "src", "icons"
+    "index.html", "styles.css", "sw.js", "manifest.webmanifest", "icon.svg", "src", "icons", "packs"
 )
 TAG_PATTERN = re.compile(r"v[0-9]+(?:\.[0-9]+\.[0-9]+)?")
 # These two source documents had no .html counterparts in the old Jekyll output.

@@ -2137,6 +2137,12 @@
     .motto-pane > * + * { margin-top: var(--sp-3); }
     .quotes-input { font-size: var(--fs-input); line-height: 1.55; }
     .quotes-count { overflow-wrap: anywhere; }
+    /* v1.7.0（D36）：主题句库是 cell 分组里的三行；右侧「添加」用 accent 文字而不是
+       chevron——这里是动作，不是导航。状态行为空时不占间距，但保留在文档流里，让
+       aria-live 在填入文字时可被读出。 */
+    .quote-packs > * + * { margin-top: var(--sp-2); }
+    .quote-pack-add { color: var(--accent); font-weight: 600; flex: 0 0 auto; }
+    .quote-pack-status:empty { margin-top: 0; }
     .app-version {
       text-align: center;
       color: var(--faint);

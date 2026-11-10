@@ -17,7 +17,9 @@ for (const locale of ['zh', 'en']) {
     const downloads = page.locator('a[download]');
     await expect(downloads).toHaveCount(4);
     for (const link of await downloads.all()) {
-      const url = await link.evaluate(el => el.href);
+      // The API request context does not pass through page.route, so apply the
+      // same production mapping (site/app/ → runtime root) here.
+      const url = (await link.evaluate(el => el.href)).replace('/site/app/', '/');
       const response = await request.get(url);
       expect(response.ok()).toBe(true);
       expect((await response.body()).length).toBeGreaterThan(100);
@@ -42,7 +44,7 @@ test('all six packs keep their lines intact and append without changing time rec
   const before = await page.evaluate(() => localStorage.getItem('timelog.v1'));
   for (const lang of ['zh', 'en']) {
     for (const key of ['focus', 'rest', 'restart']) {
-      const text = readFileSync(`site/support/packs/${key}-${lang}.txt`, 'utf8');
+      const text = readFileSync(`packs/${key}-${lang}.txt`, 'utf8');
       const lines = text.trim().split('\n');
       expect(lines).toHaveLength(14);
       expect(new Set(lines).size).toBe(14);
@@ -53,7 +55,7 @@ test('all six packs keep their lines intact and append without changing time rec
   await page.locator('#motto-line').click();
   await page.locator('[data-action="pick-motto-mode"][data-mode="quote"]').click();
   await page.locator('[data-role="quotes-input"]').fill('已有的一句。');
-  await page.locator('[data-role="quotes-file"]').setInputFiles('site/support/packs/focus-zh.txt');
+  await page.locator('[data-role="quotes-file"]').setInputFiles('packs/focus-zh.txt');
   await expect(page.locator('[data-role="quotes-count"]')).toContainText('共 15 句');
   await page.getByRole('button', { name: '保存阶段格言' }).click();
   await expect(page.locator('#motto-line')).toHaveText('已有的一句。');

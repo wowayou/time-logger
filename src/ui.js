@@ -29,12 +29,25 @@ const PRIVACY_URL = {
   en: 'https://time.eigentime.org/en/privacy/'
 };
 
-// D35: the app links only to our static support page. Payment providers and
-// public thank-you downloads live there; no verification or tracking in the app.
+// D35 → D36: the app links only to our static support page. Payment providers
+// and the thank-you card live there; no verification or tracking in the app.
 const SUPPORT_URL = {
   zh: 'https://time.eigentime.org/support/?from=time-logger',
   en: 'https://time.eigentime.org/en/support/?from=time-logger'
 };
+
+// D36（v1.7.0）：主题句库是运行时资产 packs/<id>-<locale>.txt（进 sw.js FILES，离线
+// 可读；支持页下载同一批文件）。id 与展示顺序只在这里定义；标题写成 t('…') 字面调用，
+// 让 audit 的「词条被引用」检查看得见，也随界面语言即时取词。
+export const QUOTE_PACKS = [
+  { id: 'focus', title: () => t('quotes.packFocus') },
+  { id: 'rest', title: () => t('quotes.packRest') },
+  { id: 'restart', title: () => t('quotes.packRestart') }
+];
+
+export function quotePackPath(id, locale = getLocale()) {
+  return `./packs/${id}-${locale}.txt`;
+}
 
 export function esc(s) {
   return String(s)
@@ -362,7 +375,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.6.2';
+export const APP_VERSION = '1.7.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -530,10 +543,27 @@ function renderMottoSheet(opts = {}) {
         </div>
         <button class="cell-action" type="button" data-action="pick-quotes-file">${t('quotes.importFile')}</button>
         <input type="file" data-role="quotes-file" accept=".txt,.md,.markdown,text/plain,text/markdown" hidden>
+        ${opts.isLegacyOrigin ? '' : renderQuotePacks()}
         <div class="form-hint">${t('quotes.rules')}</div>
       </div>
       <div class="form-inline-error" data-role="motto-error" hidden></div>
     </div>`;
+}
+
+// D36（v1.7.0）：主题句库一键追加到草稿。旧 origin 只读（SPEC-002），不渲染这组新入口；
+// 面板里不出现赞助、支持页或支付平台（D35 边界不变）。
+function renderQuotePacks() {
+  const rows = QUOTE_PACKS.map(pack => {
+    const title = pack.title();
+    return `<button class="cell-btn" type="button" data-action="add-quote-pack" data-pack="${pack.id}" aria-label="${esc(t('quotes.packAddAria', { title }))}"><span>${esc(title)}</span><span class="quote-pack-add" aria-hidden="true">${t('quotes.packAdd')}</span></button>`;
+  }).join('');
+  return `
+        <div class="quote-packs" role="group" aria-labelledby="quote-packs-label">
+          <div class="fl-label" id="quote-packs-label">${t('quotes.packsLabel')}</div>
+          <div class="form-hint">${t('quotes.packsHint')}</div>
+          <div class="cell-group">${rows}</div>
+          <div class="form-hint quote-pack-status" data-role="quote-pack-status" aria-live="polite"></div>
+        </div>`;
 }
 
 // ── v1.3.0 时间分析页（v1.5.1 前名「时间拨号盘」，版式仍是拨号盘式圆键）────────────────────────────────

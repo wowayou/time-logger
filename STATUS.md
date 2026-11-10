@@ -3,12 +3,12 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**状态整理：2026-11-10（v1.6.2 已正式发布，两站上线与文件核对通过）。线上最近正式版本为 Web `v1.6.2`；发布代码提交 `281653c`，tag 与 Release 均为 `v1.6.2`。安卓 `aab025d` 已推送、未发版。** 安卓跨仓结论沿用已有核验记录，本轮未重新验收。
+**状态整理：2026-11-10（v1.6.2 已正式发布，两站上线与文件核对通过；v1.7.0 本地已验收并提交，未推送、未发布）。线上最近正式版本为 Web `v1.6.2`；发布代码提交 `281653c`，tag 与 Release 均为 `v1.6.2`。安卓 `aab025d` 已推送、未发版。** 安卓跨仓结论沿用已有核验记录，本轮未重新验收。
 
 ## DONE
 
 - **Web v1.6.2 已发布，两站核对完成（2026-11-10）**：维护者明确授权提交与发布；D35 独立决策提交 `715015b`，代码与验收交接提交 `281653c452de549062ccd6e0d3aea3a6537a5fb1`，tag [v1.6.2 / Release](https://github.com/wowayou/time-logger/releases/tag/v1.6.2)。真实 tag push 触发的主站镜像发布 [42738874793](https://github.com/wowayou/time-logger/actions/runs/42738874793)、镜像 Pages [42738889796](https://github.com/wowayou/time-logger-site/actions/runs/42738889796)、旧站 Pages [42738874635](https://github.com/wowayou/time-logger/actions/runs/42738874635) 均 **success**；镜像 `30f70fe88d9b30facbc7ae148ed57d4b28e4e2ef` 来源明确为本 tag 的代码提交。
-  - **产物与线上**：主站 **40/40** 公开文件（23 runtime + 14 site + 2 demo + CNAME；不计隐藏 `.nojekyll`）与本地组装逐字节一致；旧站 **181/181**（147 个提交文件 + 34 个文档兼容页）与 tag 来源组装逐字节一致，包含全部 23 个运行时；`.git/HEAD`、`.gitattributes`、`.gitignore`、`.github/`、`.claude/` 五项均 404。两站 manifest `1.6.2`、缓存 `timelog-v1.6.2`。
+  - **产物与线上**：主站 **40/40** 公开文件（23 runtime + 14 site + 2 demo + CNAME；不计隐藏 `.nojekyll`）与本地组装逐字节一致；旧站 **181/181**（147 个提交文件 + 34 个文档兼容页）与 tag 来源组装逐字节一致，包含全部 23 个运行时；之后手动 run [42739579745](https://github.com/wowayou/time-logger/actions/runs/42739579745) 以 `9705c43` 刷新文档（运行时不变），2026-11-10 复核时线上 181/181 与该提交的组装一致；`.git/HEAD`、`.gitattributes`、`.gitignore`、`.github/`、`.claude/` 五项均 404。两站 manifest `1.6.2`、缓存 `timelog-v1.6.2`。
   - **线上功能检查**：独立 Chromium 临时上下文、只用两条合成记录；两站均由新版 SW 接管，在线和断网重开均能下载完整备份，记录原样保留、无页面脚本错误；旧站只读且导入/新建入口不可用。中英支持页下载各一套 14 句成功，无脚本/表单/iframe。此为桌面自动化，不替代手机真机验收。
   - **交接**：[本版验收单](docs/device-acceptance.md#v162-支持回馈大历史与安全边界) 已逐项列明改动、实现位置、回归证据、操作与预期；[性能报告](docs/perf/large-history.md) 保留全表、复现命令和百年容量限制。后续状态文档提交不改变本 tag 的运行时，旧站文档可按 runbook 用本 tag 刷新。
 
@@ -44,7 +44,9 @@
 
 ## OPEN
 
-- **D36 主题句库内置与平台致谢已确认，v1.7.0 实现中（2026-11-10）**：见 [D36](docs/decisions.md#d36) 与 [SPEC-019](docs/specs/SPEC-019-builtin-quote-packs-and-platform-thanks.md)。A（句库内置进文字轮播）本地实现中，未提交、未发布；B（平台致谢）待维护者在爱发电、Ko-fi 后台确认是否支持付款后自动消息，尚未配置。
+- **v1.7.0（D36 主题句库内置）本地已验收，待授权推送与发布（2026-11-10）**：决策见 [D36](docs/decisions.md#d36)，规格与实现记录见 [SPEC-019](docs/specs/SPEC-019-builtin-quote-packs-and-platform-thanks.md)，变更见 [CHANGELOG](CLAUDE.md#changelog)。全量 UI **777 passed / 1 skipped / 0 failed**（双引擎、关闭重试，11.6 分钟）；跳过的是 WebKit 离线添加——Playwright 的 WebKit 断网模拟连已预缓存的 `src/app.js` 也读不到，留作真机项，不写成已覆盖。audit、三时区逻辑 smoke、typecheck、部署专项 **34/34**、diff 检查通过。反向验证两处：去掉读取后的草稿归属判断，延迟结果/错误用例双引擎 **4/4** 失败；`RUNTIME_PATHS` 去掉 `packs` 后旧站新用例失败。真实组装：主站 29 个运行时（23 + 6 个句库）+ 8 个站点文件 + 2 张 demo 图。本轮全量未出现下方登记的 WebKit 起点改写与启动超时，不据此关闭那两项。线上仍为 v1.6.2；推送、tag、Release 与两站发布须维护者授权，发布后按 SPEC-019 核对 `/app/packs/` 6/6 一致、`/support/packs/*.txt` 404。真机项见 [本版验收单](docs/device-acceptance.md#v170-主题句库内置d36)。
+
+- **D36 平台致谢待维护者配置**：先在爱发电、Ko-fi 后台确认是否支持付款后自动发给付款人的消息或附件；原文与不公开内容只放平台，不进仓库与站点。「已配置」与「已收到实付验证」分开登记。
 
 - **v1.6.2 真机验收待闭合**：自动化及线上检查通过，手机更新/离线、句库导入与保存、大历史操作和起点修改仍须按 [本版验收单](docs/device-acceptance.md#v162-支持回馈大历史与安全边界) 逐项填写。未执行的步骤保持待验，不能由本次上线代填。
 
@@ -68,7 +70,7 @@
 
 ## BLOCKED
 
-- **安卓正式发版与 Play 上传**：缺上传密钥、开发者账号和真机复验；最近登记的待发 tag 为 `a1.0.0.1`。清单在安卓仓 `docs/release-checklist.md`，实际发版前须重新核对其 Web 来源与版本——Web 已到 v1.5.0，内嵌运行时同步时注意完整备份新增可选字段 `quotes` 与存储键 `timelog.quotes`，安卓仓 `docs/DATA-CONTRACT.md` 若列举备份字段需一并补上。
+- **安卓正式发版与 Play 上传**：缺上传密钥、开发者账号和真机复验；最近登记的待发 tag 为 `a1.0.0.1`。清单在安卓仓 `docs/release-checklist.md`，实际发版前须重新核对其 Web 来源与版本——Web 已到 v1.5.0，内嵌运行时同步时注意完整备份新增可选字段 `quotes` 与存储键 `timelog.quotes`；Web v1.7.0 起运行时多出 `packs/` 下 6 个 TXT，安卓同步脚本是否按 `sw.js` FILES 取文件未核实（安卓仓不在 2026-11-10 这台机器上），安卓仓 `docs/DATA-CONTRACT.md` 若列举备份字段需一并补上。
 
 ## 未放行的方向与证据边界
 
