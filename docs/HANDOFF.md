@@ -75,6 +75,6 @@
 
 ## 支持回馈与部署清理
 
-D36（修订 D35）：三套主题句库是运行时资产 `packs/<id>-<locale>.txt`，进 `sw.js` FILES、部署在 `/app/packs/`；文字轮播的「主题句库」按 `src/ui.js` 的 `QUOTE_PACKS` 一键追加到草稿，支持页下载同一批文件，`site/` 不留副本。增删一套时同步 `QUOTE_PACKS`、`FILES` 与 audit 的 `REQUIRED_RUNTIME_ASSETS`，`audit_quote_packs` 会点名缺失或多余的文件。感谢卡仍在 `site/support/`。只给付款人的致谢由维护者在平台后台设置，原文与不公开内容不进仓库和站点。无订单数据库或发货队列，无需维护支持者名单、领取状态或回馈日历；更换收款平台只改静态支持页。异步读取（文件、句库）属于发起时那一份草稿，不能用复用的 panel 节点判断归属；旧 origin 不渲染句库按钮。Playwright 的 WebKit 断网模拟会让所有请求失败（连已预缓存的 `src/app.js` 也读不到），离线添加句库的用例只在 Chromium 跑，WebKit 离线留给真机。主站组装先检查全部来源与输出归属，再清理；遇到陌生输出目录应换一个空目录，不要为跑通部署放宽删除保护。
+回馈的现行规则（D35 → D36：句库在 `packs/`、平台致谢不进仓库）只写在 [CLAUDE.md](../CLAUDE.md#支持者回馈d35--d36)，这里只记容易踩的坑：增删一套句库要同时改 `QUOTE_PACKS`、`sw.js` FILES 与 audit 的 `REQUIRED_RUNTIME_ASSETS`，漏了 `audit_quote_packs` 会点名；异步读取（文件、句库）属于发起时那一份草稿，不能用复用的 panel 节点判断归属；Playwright 的 WebKit 断网模拟会让所有请求失败（连已预缓存的 `src/app.js` 也读不到），离线用例只能在 Chromium 跑，WebKit 离线靠真机。主站组装先检查全部来源与输出归属，再清理；遇到陌生输出目录应换一个空目录，不要为跑通部署放宽删除保护。
 
 大历史改动的对照方法、结果及百年容量边界见 [性能记录](perf/large-history.md)。范围裁剪只能减少边界计算，不能裁掉真实右邻或改变确认端点；不要为提速复用跨帧可变数据。百年内存统计通过不代表 localStorage 能保存百年。

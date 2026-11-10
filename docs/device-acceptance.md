@@ -45,7 +45,7 @@
 
 | 改动 | 实现位置与方法 | 已有自动化证据 |
 |---|---|---|
-| 支持回馈公开自取 | `site/support/`、`site/en/support/`：中英三套各 14 句 TXT 与通用 SVG 卡；`src/ui.js` 按界面语言链接本站支持页。平台入口只在静态页，无订单、账号、发货或定期更新机制 | `tests/v1_6_2_support_gifts.spec.js` 验证下载、六套拆句、追加与完整备份；`tests/v1_1_0_support_entry.spec.js` 保留核心流程无赞助打扰边界 |
+| 支持回馈公开自取 | `site/support/`、`site/en/support/`：中英三套各 14 句 TXT（v1.7.0 起移至 `packs/`，见上节）与通用 SVG 卡；`src/ui.js` 按界面语言链接本站支持页。平台入口只在静态页，无订单、账号、发货或定期更新机制 | `tests/v1_6_2_support_gifts.spec.js` 验证下载、六套拆句、追加与完整备份；`tests/v1_1_0_support_entry.spec.js` 保留核心流程无赞助打扰边界 |
 | 减少历史数据重复处理 | `src/stats.js` 二分定位范围内起点和紧邻前一条，只为它们算边界；保留完整数组的真实右邻，旧格式仍全扫描。`entry_model.js` 先筛日期再排序；`app.js` 已有首用日时少解析一次历史 | `tests/v1_6_2_large_history.spec.js` 覆盖 20,000 条的日视图、编辑和容量失败；`scripts/confirm_logic_smoke.py` 覆盖范围端点、确认与百年内存统计；实测方法与全表见 [性能报告](perf/large-history.md) |
 | 异步句库读取不能串到新草稿 | `src/sheet_controller.js::loadQuotesFile` 捕获原 textarea/input，结果与报错只回到仍连接且未关闭的原 sheet | `tests/v1_6_2_quotes_file_race.spec.js` 人为延迟成功与失败，两条路径均保持新草稿；旧代码对照确实失败 |
 | 防止组装脚本误删目录 | `scripts/build_site.py` 在清理前检查输出归属、源码祖先/后代、符号链接、路径越界、全部来源文件；只接受空目录或已识别镜像 | `tests/test_build_site.py` 在临时目录验证拒绝清理、输入缺失保留旧产物、重复组装与 .git/README 保留；旧站专项继续通过 |
