@@ -2,7 +2,7 @@
 
 > Status: active · 已上线，可日常使用；进度与待办见 [STATUS.md](STATUS.md)
 >
-> Release: v1.6.2（本地验收完成、未发布；线上仍为 v1.6.1，见 [STATUS.md](STATUS.md)）
+> Release: v1.6.2（2026-11-10 两站已上线并核对；真机验收与已知风险见 [STATUS.md](STATUS.md)）
 >
 > Updated: 2026-11-10
 >
