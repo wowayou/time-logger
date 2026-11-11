@@ -2,7 +2,7 @@
 
 > Status: active · 已上线，可日常使用；进度与待办见 [STATUS.md](STATUS.md)
 >
-> Release: v1.7.1（本地日期／时间控件布局优化，未发布；线上正式版仍为 v1.7.0，验收与风险见 [STATUS.md](STATUS.md)）
+> Release: v1.7.1（2026-11-11 两站已上线并逐文件核对；真机验收与已知风险见 [STATUS.md](STATUS.md)）
 >
 > Updated: 2026-11-11
 >
