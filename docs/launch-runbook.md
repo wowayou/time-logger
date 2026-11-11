@@ -17,10 +17,10 @@
 
 - 源码仓库 Pages 的 Build and deployment → Source 必须为 **GitHub Actions**，不能退回 main 分支直发。
 - `github-pages` 环境的 Selected branches and tags 必须**分别**有分支规则与 tag 规则：保留 `main` / `gh-pages` 分支，新增 `type: tag`、`name: v[0-9]*`。环境使用 `File.fnmatch` 风格，不能照搬 workflow 的 `+`；版本格式和字节一致性由脚本严格校验，不改成无限制环境。
-- 仅刷新旧站的文档/发布工具时，从已核对的来源 ref 手动发布：`gh workflow run publish-legacy-pages.yml --ref main -f release_tag=<已存在的版本tag>`。脚本比对 manifest 和全部 `src/`、`icons/`、壳、样式、SW、manifest、SVG；即使版本号相同，运行时有任何差异也拒绝。不得为了绕过检查新造或移动 tag。
+- 仅刷新旧站的文档/发布工具时，从已核对的来源 ref 手动发布：`gh workflow run publish-legacy-pages.yml --ref main -f release_tag=<已存在的版本tag>`。脚本比对 manifest 和全部 `src/`、`icons/`、`packs/`、壳、样式、SW、manifest、SVG；即使版本号相同，运行时有任何差异也拒绝。不得为了绕过检查新造或移动 tag。
 - 组装只复制提交树中的非隐藏文件（不读取本机临时文件），保留原 Markdown，旧 `.html` 文档地址提供无脚本兼容页跳至 GitHub；不恢复 Jekyll，旧生成样式退役。全部非隐藏运行时写出前再按提交树枚举核对存在性与 Git 原始字节；枚举与归档共用隐藏路径策略（任一路径段以 `.` 开头即排除），不要求产物包含目录级 `.gitattributes` 等隐藏元数据。来源/tag 的完整目录比较不变；`git archive` 的 `export-ignore` / `export-subst` 导致非隐藏运行时缺失或改变时拒绝，且不创建或填充输出目录。
-- 自动化边界：单个标准 `ubuntu-latest` runner、15 分钟超时、串行部署、不自动重试，Pages artifact 只保留 1 天。公开仓库标准 runner 的免费规则已核对；不切换私有仓库、付费 runner 或增配额。
-- 发布后核对旧站 23 个运行时文件、所有文档兼容地址，以及 `.git/`、`.claude/`、`.gitignore` 不可获取；独立浏览器验证只读、在线/离线导出且原记录不变。真实 tag 的事件端到端已在 v1.6.2 完成（证据见 STATUS）；每次新版本仍须分别验两站，手动部署不能替代 tag 触发结论。
+- 自动化边界：单个标准 `ubuntu-latest` runner、15 分钟超时、串行部署、不自动重试，Pages artifact 只保留 1 天。2026-11-11 按官方计费说明与当前配置复核：公开仓库的标准 runner 与 Pages 托管适用免费规则，**artifact 存储须单独核对，不能因仓库公开就假定免费**；需要时取得限次数、产物大小、保留期及费用范围的授权。不得为发布切换私有仓库、付费 runner、增加预算或持续重跑。
+- 发布后按 `sw.js` FILES 与提交树核对旧站全部运行时文件、所有文档兼容地址，以及 `.git/`、`.claude/`、`.gitignore` 不可获取；独立浏览器验证只读、在线/离线导出且原记录不变。真实 tag 的事件端到端已在 v1.6.2 完成（证据见 STATUS）；每次新版本仍须分别验两站，手动部署不能替代 tag 触发结论。
 
 ### A2. DNS
 
@@ -38,7 +38,7 @@ GitHub 个人 Settings → Pages → Add a domain，验证 `eigentime.org`；按
 
 `wowayou/time-logger-site` → Settings → Pages：Custom domain 为 `time.eigentime.org`；确认 DNS 检查、证书和 Enforce HTTPS。
 
-- [x] B 访问验证完成（2026-07-26）：`/` 与 `/app/` 均 HTTP 200、TLS 正常。**Enforce HTTPS 勾选状态仍需维护者自查**。
+- [x] B 访问验证完成（2026-07-26）：`/` 与 `/app/` 均 HTTP 200、TLS 正常。**Enforce HTTPS 于 2026-11-11 用两仓 Pages API 只读确认均为 true**；账号级域名验证与真机迁移仍由维护者确认。
 
 ## Phase C · 真机迁移确认
 

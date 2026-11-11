@@ -710,10 +710,10 @@
     }
     .start-time-section[hidden] { display: none; }
 
-    /* Wheel picker */
+    /* Wheel picker: 160px, with the same 40px rows and 60px padding in pickers.js. */
     .wheel-picker {
       display: flex;
-      height: 200px;
+      height: 160px;
       border-radius: var(--r-ctl);
       overflow: hidden;
       border: 1px solid var(--border);
@@ -743,7 +743,8 @@
       align-items: center;
       justify-content: center;
       scroll-snap-align: center;
-      font-size: var(--fs-ui-strong);
+      font-size: var(--fs-body);
+      font-variant-numeric: tabular-nums;
       color: var(--text);
       cursor: pointer;
       user-select: none;
@@ -752,15 +753,28 @@
     }
     .wheel-item.is-selected {
       color: var(--text);
+      font-size: var(--fs-title);
       font-weight: 700;
     }
     .wheel-col:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-    .wheel-col-date .wheel-item { font-size: var(--fs-cap); }
+    .wheel-col-date .wheel-item { font-size: var(--fs-body); }
     .wheel-divider {
       width: 1px;
       background: var(--border);
       flex-shrink: 0;
       align-self: stretch;
+    }
+    .wheel-time-divider {
+      position: relative;
+      z-index: 1;
+      width: 12px;
+      align-self: center;
+      background: none;
+      color: var(--muted);
+      font-size: var(--fs-title);
+      font-weight: 600;
+      text-align: center;
+      pointer-events: none;
     }
     .wheel-highlight {
       position: absolute;
@@ -778,22 +792,33 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-top: 6px;
+      gap: var(--sp-2);
+      margin-bottom: var(--sp-1);
+    }
+    .wheel-caption {
+      min-width: 0;
+      color: var(--muted);
+      font-size: var(--fs-cap);
     }
     .wheel-now-btn {
-      background: transparent;
-      border: none;
+      min-width: var(--control-h);
+      min-height: var(--control-h);
+      flex-shrink: 0;
+      background: var(--chrome);
+      border: 1px solid var(--border);
+      border-radius: var(--r-ctl);
       color: var(--accent);
       font-size: var(--fs-ui);
       font-family: inherit;
       cursor: pointer;
-      padding: var(--sp-1) 0;
+      padding: 0 var(--sp-3);
     }
-    /* Desktop datetime picker */
+    /* Desktop datetime picker: expand in the sheet's flow, never over its fields. */
     .dt-picker {
       display: grid;
-      gap: 9px;
-      position: relative;
+      gap: var(--sp-2);
+      min-width: 0;
+      container-type: inline-size;
     }
     .dt-trigger {
       display: flex;
@@ -821,57 +846,58 @@
       height: 16px;
     }
     .dt-pop {
-      position: absolute;
-      top: calc(100% + 6px);
-      left: 0;
-      z-index: 100;
+      position: static;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 128px;
+      gap: var(--sp-2) var(--sp-3);
+      align-items: start;
+      min-width: 0;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: var(--r-card);
-      box-shadow: var(--shadow-2), var(--top-light);
-      padding: var(--sp-3);
-      width: 280px;
-      max-width: calc(100vw - 24px);
+      padding: var(--sp-2);
+      width: 100%;
     }
-    .dt-pop.dt-pop-up {
-      top: auto;
-      bottom: calc(100% + 6px);
-    }
+    .dt-pop[hidden] { display: none; }
     .dt-cal-head {
+      grid-column: 1;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: var(--sp-2);
       font-size: var(--fs-ui-strong);
       font-weight: 600;
       color: var(--text);
     }
     .dt-nav {
+      min-width: var(--control-h);
+      min-height: var(--control-h);
+      flex-shrink: 0;
       background: transparent;
       border: none;
       color: var(--text);
       font-size: var(--fs-title);
       font-family: inherit;
       cursor: pointer;
-      padding: 2px var(--sp-2);
+      padding: 0 var(--sp-2);
       border-radius: var(--r-sm);
     }
     .dt-nav:hover { background: var(--input); }
     .dt-cal-dow {
+      grid-column: 1;
       display: grid;
       grid-template-columns: repeat(7, 1fr);
       text-align: center;
       font-size: var(--fs-cap);
       color: var(--muted);
-      margin-bottom: var(--sp-1);
     }
     .dt-cal-grid {
+      grid-column: 1;
       display: grid;
-      grid-template-columns: repeat(7, 1fr);
+      grid-template-columns: repeat(7, minmax(0, 1fr));
       gap: 2px;
     }
     .dt-day {
-      aspect-ratio: 1;
+      min-height: var(--control-h);
       background: transparent;
       border: none;
       border-radius: var(--r-sm);
@@ -890,21 +916,25 @@
     .dt-day.is-sel:hover { background: var(--accent); }
     .dt-blank { pointer-events: none; color: transparent; cursor: default; }
     .dt-time {
-      display: flex;
+      grid-column: 2;
+      grid-row: 1 / span 3;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 12px minmax(0, 1fr);
       align-items: center;
-      justify-content: center;
-      gap: var(--sp-2);
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid var(--border);
+      align-content: start;
+      gap: var(--sp-2) var(--sp-1);
+      min-width: 0;
+      padding-left: var(--sp-2);
+      border-left: 1px solid var(--border);
     }
     .dt-step {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 2px;
+      display: grid;
+      gap: var(--sp-1);
+      min-width: 0;
     }
     .dt-step-btn {
+      min-height: var(--control-h);
+      width: 100%;
       background: transparent;
       border: 1px solid var(--border);
       border-radius: var(--r-sm);
@@ -912,12 +942,13 @@
       font-size: var(--fs-cap);
       font-family: inherit;
       cursor: pointer;
-      padding: 2px var(--sp-2);
+      padding: 0 var(--sp-2);
       line-height: 1;
     }
     .dt-step-btn:hover { background: var(--input); }
     .dt-step-inp {
-      width: 44px;
+      width: 100%;
+      min-height: var(--control-h);
       text-align: center;
       font-size: var(--fs-input);
       font-family: inherit;
@@ -925,7 +956,7 @@
       color: var(--text);
       border: 1px solid transparent;
       border-radius: var(--r-sm);
-      padding: 2px 0;
+      padding: 0;
       -moz-appearance: textfield;
     }
     .dt-step-inp::-webkit-outer-spin-button,
@@ -934,10 +965,11 @@
       font-size: var(--fs-title);
       font-weight: 600;
       color: var(--text);
-      padding-bottom: 2px;
+      text-align: center;
     }
     .dt-now {
-      margin-left: var(--sp-1);
+      grid-column: 1 / -1;
+      min-height: var(--control-h);
       background: transparent;
       border: 1px solid var(--border);
       border-radius: var(--r-sm);
@@ -945,10 +977,15 @@
       font-size: var(--fs-ui);
       font-family: inherit;
       cursor: pointer;
-      padding: 3px 10px;
+      padding: 0 var(--sp-2);
     }
     .dt-now:hover { background: var(--accent-bg); }
-    .dt-precise { display: grid; gap: var(--sp-1); }
+    .dt-precise {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: var(--sp-2);
+    }
     .dt-precise-label { font-size: var(--fs-cap); color: var(--muted); }
     .dt-error {
       color: var(--danger);
@@ -958,6 +995,22 @@
     }
     .dt-error[hidden] {
       display: none;
+    }
+    /* Below 478px the 7×44px day targets and time column cannot fit together.
+       Adapt to the actual picker container, not a device/viewport patch. */
+    @container (max-width: 477px) {
+      .dt-pop { grid-template-columns: minmax(0, 1fr); }
+      .dt-time {
+        grid-column: 1;
+        grid-row: 4;
+        grid-template-columns: var(--control-h) 12px var(--control-h) minmax(0, 1fr);
+        gap: var(--sp-2);
+        padding-left: 0;
+        padding-top: var(--sp-2);
+        border-left: none;
+        border-top: 1px solid var(--border);
+      }
+      .dt-now { grid-column: auto; }
     }
 
     /* Ruler */
@@ -1946,7 +1999,7 @@
     }
     .cut-overview + .interval-preview .preview-new .preview-label { font-weight: 600; }
 
-    /* v1.5.0 段内区间选择器：一行四列「时:分 – 时:分」，比单点滚轮矮（160px，须与
+    /* v1.5.0 段内区间选择器：一行四列「时:分 – 时:分」，保持 160px（须与
        pickers.js RANGE_PAD 同步）；宽屏为两枚 HH:MM 文本框。 */
     .range-wheel-head {
       display: grid;

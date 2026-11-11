@@ -1928,6 +1928,20 @@ export function createSheetController(deps) {
     closeAfterRecordWrite(closeEditSheet, beforeData);
   }
 
+  function schedulePickerFocus(section) {
+    const focusOwner = document.activeElement;
+    const focusEl = section.querySelector('[data-role="text"], [data-role="date"], button, input, [tabindex]:not([tabindex="-1"])');
+    const sheet = section.closest('.form-sheet');
+    if (!focusEl) return;
+    requestAnimationFrame(() => {
+      // 这帧到来前用户可能已选中文本准备输入，不能再把焦点抢回日历按钮。
+      // 捕获实际目标节点，旧选择器被重挂／关闭后也不把旧请求转给新控件。
+      if (!focusEl.isConnected || section.hidden || sheet.hidden
+        || sheet.classList.contains('sheet-closing') || document.activeElement !== focusOwner) return;
+      focusEl.focus({ preventScroll: true });
+    });
+  }
+
   function toggleStartTime(el) {
     const panel = el.closest('.form-sheet-panel');
     if (!panel || formRecordMode === 'plan') return;
@@ -1940,10 +1954,7 @@ export function createSheetController(deps) {
     paintPrevSegment(panel, tsEl.value);
     if (willOpen) {
       mountNewTimePicker(panel, tsEl.value);
-      requestAnimationFrame(() => {
-        const focusEl = section.querySelector('[data-role="text"], [data-role="date"], button, input, [tabindex]:not([tabindex="-1"])');
-        if (focusEl) focusEl.focus({ preventScroll: true });
-      });
+      schedulePickerFocus(section);
     }
   }
 
@@ -1977,10 +1988,7 @@ export function createSheetController(deps) {
     if (!section) return;
     if (section.hidden) {
       expandEditTimeSection(panel);
-      requestAnimationFrame(() => {
-        const focusEl = section.querySelector('[data-role="text"], [data-role="date"], button, input, [tabindex]:not([tabindex="-1"])');
-        if (focusEl) focusEl.focus({ preventScroll: true });
-      });
+      schedulePickerFocus(section);
     } else {
       section.hidden = true;
       el.setAttribute('aria-expanded', 'false');

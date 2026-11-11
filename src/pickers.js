@@ -7,9 +7,10 @@ import { addDays, localDateKey, normalizeTimestamp, nowStr, p2, parseDateKey, to
 import { setButtonTip } from './ui.js';
 
 const ITEM_H = 40;
-const PAD = 80;
-// 区间滚轮比单点滚轮矮一截（160 vs 200px，上下各露一行半）：一个选择器同时摆两端，
-// 高度省下来留给上方的切分条与逐段预览。pad＝(容器高 − 行高) / 2，须与 .range-wheel 同步。
+// 单点滚轮改为 160px；行高与吸附步长不变，pad = (160 - 40) / 2。
+const PAD = 60;
+// 区间滚轮保持 160px、上下各露一行半：一个选择器同时摆两端，把空间留给上方的
+// 切分条与逐段预览。pad＝(容器高 − 行高) / 2，须与 .range-wheel 同步。
 const RANGE_PAD = 60;
 const DAYS_BACK = 90;
 const DAYS_FWD = 7;
@@ -98,6 +99,7 @@ function makeWheelCol(items, initIdx, onSelect, extraClass, ariaLabel, pad = PAD
   const inner = document.createElement('div');
   inner.style.paddingTop = pad + 'px';
   inner.style.paddingBottom = pad + 'px';
+  let positioned = false;
 
   items.forEach((item, idx) => {
     const el = document.createElement('div');
@@ -124,6 +126,8 @@ function makeWheelCol(items, initIdx, onSelect, extraClass, ariaLabel, pad = PAD
     col.setAttribute('aria-activedescendant', `${colId}-${index}`);
   }
   function onSnap() {
+    // 初次布局也会触发 scrollend；初始行就位前不能把默认的第 0 行当成用户选择。
+    if (!positioned) return;
     const index = getIdx();
     paintSelection(index);
     onSelect(index);
@@ -148,7 +152,10 @@ function makeWheelCol(items, initIdx, onSelect, extraClass, ariaLabel, pad = PAD
   });
 
   paintSelection(initIdx);
-  requestAnimationFrame(() => { col.scrollTop = initIdx * ITEM_H; });
+  requestAnimationFrame(() => {
+    col.scrollTop = initIdx * ITEM_H;
+    positioned = true;
+  });
   return col;
 }
 
@@ -180,7 +187,7 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
   const dateCol = makeWheelCol(dateItems, initDateIdx, idx => { selDate = idx; emit(); }, 'wheel-col-date', t('picker.colDate'));
   const div1 = document.createElement('div'); div1.className = 'wheel-divider'; div1.setAttribute('aria-hidden', 'true');
   const hCol = makeWheelCol(hourItems, initH, idx => { selH = idx; emit(); }, '', t('picker.colHour'));
-  const div2 = document.createElement('div'); div2.className = 'wheel-divider'; div2.setAttribute('aria-hidden', 'true');
+  const div2 = document.createElement('div'); div2.className = 'wheel-divider wheel-time-divider'; div2.setAttribute('aria-hidden', 'true'); div2.textContent = ':';
   const mCol = makeWheelCol(minItems, initM, idx => { selM = idx; emit(); }, '', t('picker.colMinute'));
 
   const highlight = document.createElement('div');
@@ -190,6 +197,11 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
 
   const actions = document.createElement('div');
   actions.className = 'wheel-actions';
+  const caption = document.createElement('span');
+  caption.className = 'wheel-caption';
+  caption.setAttribute('aria-hidden', 'true');
+  caption.textContent = `${t('picker.colDate')} · ${t('picker.colHour')}:${t('picker.colMinute')}`;
+  actions.appendChild(caption);
 
   const nowBtn = document.createElement('button');
   nowBtn.className = 'wheel-now-btn';
@@ -208,8 +220,8 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
   });
 
   actions.appendChild(nowBtn);
-  mountEl.appendChild(picker);
   mountEl.appendChild(actions);
+  mountEl.appendChild(picker);
 }
 
 // v1.5.0：段内区间选择器（切一刀 / 补一下共用）。原段落在一个自然日内，日期列只会引人
@@ -564,16 +576,6 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
   // --- Popover lifecycle ---
   let ac = null;
 
-  function reposition() {
-    if (popEl.hidden) return;
-    const rect = triggerBtn.getBoundingClientRect();
-    if (rect.bottom + 300 > window.innerHeight) {
-      popEl.classList.add('dt-pop-up');
-    } else {
-      popEl.classList.remove('dt-pop-up');
-    }
-  }
-
   function openPop() {
     if (!popEl.hidden) return;
     renderCal();
@@ -581,23 +583,25 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
     ac = new AbortController();
     const { signal } = ac;
     document.addEventListener('keydown', e => {
-      if (popEl.hidden || !document.contains(wrap)) return;
+      if (!document.contains(wrap)) { closePop(false); return; }
+      if (popEl.hidden) return;
       if (e.key === 'Escape') { e.stopPropagation(); closePop(); }
     }, { capture: true, signal });
-    document.addEventListener('pointerdown', e => {
-      if (popEl.hidden || !document.contains(wrap)) return;
-      if (!wrap.contains(e.target)) closePop();
+    // 文档流中的面板收起会挪动后续控件；外部点击须先完成动作，再收起。
+    document.addEventListener('click', e => {
+      // 同步关闭会先移除控件；也要结束旧监听作用域，不能只忽略这次点击。
+      if (!document.contains(wrap)) { closePop(false); return; }
+      if (popEl.hidden) return;
+      // 日历点击会重建子节点；原事件路径仍属于本控件，不能把脱离的旧按钮当外部点击。
+      if (!e.composedPath().includes(wrap)) closePop(popEl.contains(document.activeElement));
     }, { signal });
-    window.addEventListener('resize', reposition, { signal });
-    document.addEventListener('scroll', reposition, { signal, passive: true });
-    reposition();
   }
 
-  function closePop() {
+  function closePop(restoreFocus = true) {
     if (popEl.hidden) return;
     popEl.hidden = true;
     if (ac) { ac.abort(); ac = null; }
-    triggerBtn.focus();
+    if (restoreFocus) triggerBtn.focus();
   }
 
   // --- Delegated click for all data-act controls ---
