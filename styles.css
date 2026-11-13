@@ -207,9 +207,9 @@
        first render() (render runs before app-ready, so they reveal already
        correct — including add-btn hidden on non-day views). */
     body:not(.app-ready):not(.boot-restored) :is(#add-btn, .ruler, .tl-head, #timeline) { opacity: 0; }
-    :is(#add-btn, .ruler, .tl-head, #timeline) { transition: opacity 0.18s ease; }
+    :is(#add-btn, .list-fade, .ruler, .tl-head, #timeline) { transition: opacity 0.18s ease; }
     @media (prefers-reduced-motion: reduce) {
-      :is(#add-btn, .ruler, .tl-head, #timeline) { transition: none; }
+      :is(#add-btn, .list-fade, .ruler, .tl-head, #timeline) { transition: none; }
     }
     button { touch-action: manipulation; }
     :where(button, a, input, textarea, select, [tabindex]):focus-visible {
@@ -2668,6 +2668,10 @@
     body.sheet-open {
       overflow: hidden;
     }
+    /* Hand the foreground to the sheet instead of letting it merely cover the
+       launcher. Keep [hidden] for business visibility and boot snapshots; the
+       existing sheet lifecycle restores opacity on close without extra timers. */
+    body.sheet-open :is(#add-btn, .list-fade) { opacity: 0; pointer-events: none; }
     body.sheet-open .update-banner { bottom: calc(12px + env(safe-area-inset-bottom)); }
 
     .empty-tip {

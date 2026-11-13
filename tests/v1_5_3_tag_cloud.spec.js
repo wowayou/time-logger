@@ -2,7 +2,7 @@
 // 补回默认标签的预览不再落在视口外；合并提示在改名撞名时说「你把 A 改成了 B」。
 // 保存 / 合并 / 并发 / 暂存回填的既有语义由 tag_config*.spec.js、tag_merge.spec.js 守着，
 // 这里只锁本次新增的呈现行为。
-import { expect, test } from '@playwright/test';
+import { expect, test } from './startup_fixture.js';
 import { bootLocale, TODAY_KEY } from './i18n_fixture.js';
 import { cfgRow, openCfgRow } from './cfg_fixture.js';
 
