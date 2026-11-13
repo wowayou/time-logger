@@ -426,6 +426,22 @@ const distinctEntries = [
 coalesceRedundant(distinctEntries);
 assert(distinctEntries.length === 2, 'same tag but different content stays two records');
 
+// R01: legacy imports may carry secondary tags or exact whitespace. Four-bucket
+// minutes alone cannot reveal a lost boundary when both sides have the same
+// primary bucket, so compare the original object fields as well as the totals.
+const legacyDetailEntries = [
+  { id: 'legacy-a', ts: '2026-07-01T09:00', what: '原记录', tags: ['求职推进', '附加A'] },
+  { id: 'legacy-b', ts: '2026-07-01T10:00', what: '原记录', tags: ['求职推进', '附加B'] },
+  { id: 'legacy-c', ts: '2026-07-01T11:00', what: '保留空格 ', tags: ['求职推进'] },
+  { id: 'legacy-d', ts: '2026-07-01T12:00', what: '保留空格', tags: ['求职推进'] },
+  { id: 'legacy-e', ts: '2026-07-01T13:00', what: '维持', tags: ['吃饭'] }
+];
+const legacyRaw = JSON.stringify(legacyDetailEntries);
+const legacyTotals = summarizeEntries(legacyDetailEntries, '2026-07-01T09:00', '2026-07-01T14:00', { now: '2026-07-02T12:00' });
+coalesceRedundant(legacyDetailEntries);
+assert(JSON.stringify(legacyDetailEntries) === legacyRaw, 'normalization must retain secondary tags and exact original text');
+assertTotals(summarizeEntries(legacyDetailEntries, '2026-07-01T09:00', '2026-07-01T14:00', { now: '2026-07-02T12:00' }), legacyTotals, 'normalization preserves four-bucket minutes');
+
 // normalizeEntries guarantees today keeps a tail placeholder at now (kills +1min).
 const normData = { version: 1, entries: [{ id: 'x', ts: '2026-07-01T09:00', what: '写代码', tags: ['求职推进'] }] };
 normalizeEntries(normData, { todayKey: '2026-07-01', nowTs: '2026-07-01T12:00', createId: genId });

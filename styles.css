@@ -57,6 +57,9 @@
        用户不生效。 */
     /* === 暗·石墨（默认） === */
     :root {
+      --on-accent: #0e0f13;
+      --on-maintain: #0e0f13;
+      --on-danger: #0e0f13;
       color-scheme: dark;
       --bg: #0e0f13;
       --card: #16171e;
@@ -86,6 +89,9 @@
     /* === 亮·宣纸（跟随系统） === */
     @media (prefers-color-scheme: light) {
       :root {
+        --on-accent: #ffffff;
+        --on-maintain: #ffffff;
+        --on-danger: #ffffff;
         color-scheme: light;
         --bg: #eceef3;
         --card: #ffffff;
@@ -114,6 +120,9 @@
     }
     /* === 手动覆盖（优先级高于 media query） === */
     html[data-theme="light"] {
+      --on-accent: #ffffff;
+      --on-maintain: #ffffff;
+      --on-danger: #ffffff;
       color-scheme: light;
       --bg: #eceef3;
       --card: #ffffff;
@@ -137,6 +146,9 @@
       --top-light: none;
     }
     html[data-theme="dark"] {
+      --on-accent: #0e0f13;
+      --on-maintain: #0e0f13;
+      --on-danger: #0e0f13;
       color-scheme: dark;
       --bg: #0e0f13;
       --card: #16171e;
@@ -186,7 +198,6 @@
       min-height: 100svh;
       display: flex;
       flex-direction: column;
-      overflow-x: hidden;
     }
     /* P15: boot latch narrowed to the JS-rendered regions only. Hiding all of
        .app while .footer (outside it) stayed visible painted "a blank page
@@ -362,7 +373,7 @@
       min-height: 52px;
       padding: 9px 18px;
       background: var(--accent);
-      color: #fff;
+      color: var(--on-accent);
       border: none;
       border-radius: var(--r-pill);
       font-family: inherit;
@@ -373,7 +384,7 @@
     .fab-main { font-size: var(--fs-input); font-weight: 600; line-height: 1.15; }
     .fab-sub {
       font-size: var(--fs-cap);
-      color: rgba(255,255,255,0.78);
+      color: color-mix(in srgb, var(--on-accent) 78%, var(--accent));
       font-variant-numeric: tabular-nums;
       line-height: 1.1;
     }
@@ -611,6 +622,9 @@
       font-size: var(--fs-cap);
     }
     .chip {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
       min-height: 44px;
       padding: var(--sp-2) 15px;
       border-radius: var(--r-pill);
@@ -685,6 +699,7 @@
       background: var(--input);
     }
     .start-time-trigger {
+      position: relative;
       background: none;
       border: none;
       padding: 0;
@@ -912,7 +927,7 @@
     }
     .dt-day:hover:not(:disabled) { background: var(--input); }
     .dt-day.is-today { color: var(--accent); font-weight: 600; }
-    .dt-day.is-sel { background: var(--accent); color: #fff; }
+    .dt-day.is-sel { background: var(--accent); color: var(--on-accent); }
     .dt-day.is-sel:hover { background: var(--accent); }
     .dt-blank { pointer-events: none; color: transparent; cursor: default; }
     .dt-time {
@@ -1328,8 +1343,8 @@
       line-height: 1.2;
     }
     .swipe-action svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; }
-    .swipe-edit { background: var(--accent); }
-    .swipe-delete { background: var(--danger); }
+    .swipe-edit { background: var(--accent); color: var(--on-accent); }
+    .swipe-delete { background: var(--danger); color: var(--on-danger); }
     .swipe-actions[aria-hidden="true"] { pointer-events: none; }
     /* v56：行＝时间｜内容｜时长 三列网格，贴地无圆角无描边；--card 底必须保留且
        不透明——左滑时行滑过底下的操作轨道，透明底会让轨道透出（v53 教训的行级版）。 */
@@ -1398,6 +1413,14 @@
     .entry.placeholder .e-what { color: var(--muted); }
     .e-meta { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
     .e-meta > * { min-width: 0; }
+    /* Each link owns its full target in the flex layout, including wrapped
+       lines and multi-line labels; no hot area may borrow the record text. */
+    .e-meta > .mini-btn {
+      min-width: var(--control-h);
+      min-height: var(--control-h);
+      max-width: 100%;
+      padding: var(--sp-2);
+    }
     /* v56：tag 降为素色小字——桶的颜色职责整体移交竖脊，列表只保留一个彩色通道。 */
     .e-tag {
       font-size: var(--fs-cap);
@@ -1436,12 +1459,22 @@
       white-space: normal;
       overflow-wrap: anywhere;
     }
-    /* 视觉是一行小字，透明伪元素把可点区扩到 ≥44px（触控目标红线，T11）。 */
-    .mini-btn::before {
+    /* Keep the 44px hit area separate from tooltip arrows. Visible mini links
+       have no data-tip, so the tooltip's hidden/non-interactive ::before cannot
+       disable their transparent target. Verify with elementFromPoint. */
+    .mini-btn::before,
+    .start-time-trigger::before {
       content: '';
       position: absolute;
-      inset: -13px -8px;
+      left: 50%;
+      top: 50%;
+      width: calc(100% + 16px);
+      min-width: var(--control-h);
+      height: max(100%, var(--control-h));
+      transform: translate(-50%, -50%);
     }
+    /* Log links already reserve the target: keep it inside that footprint. */
+    .e-meta > .mini-btn::before { width: 100%; height: 100%; }
     .mini-btn:active { opacity: 0.75; }
     /* SPEC-011: fixed scrim over the safe-area status bar strip. standalone +
        black-translucent + viewport-fit=cover lets scrolled content run under the
@@ -1525,7 +1558,7 @@
       border: none;
       border-radius: var(--r-sm);
       background: var(--accent);
-      color: #fff;
+      color: var(--on-accent);
       font-size: var(--fs-ui-strong);
       font-weight: 600;
       font-family: inherit;
@@ -1567,12 +1600,12 @@
       line-height: 1.35;
     }
     .update-btn {
-      min-height: 36px;
+      min-height: var(--control-h);
       padding: 0 var(--sp-3);
       border: none;
       border-radius: var(--r-sm);
       background: var(--accent);
-      color: #fff;
+      color: var(--on-accent);
       font-size: var(--fs-ui-strong);
       font-weight: 600;
       font-family: inherit;
@@ -1778,6 +1811,7 @@
       font-family: inherit;
       font-size: var(--fs-input);
       padding: var(--sp-2) 2px;
+      min-width: var(--control-h);
       min-height: 44px;
       cursor: pointer;
       flex: 0 0 auto;
@@ -2443,7 +2477,7 @@
       width: 20px;
       height: 20px;
       margin: 0;
-      border: 1.5px solid var(--border);
+      border: 1.5px solid var(--muted);
       border-radius: 6px; /* raw: 20px 勾选框；--r-sm 会接近圆形、读成单选框 */
       background: var(--card);
       cursor: pointer;
@@ -2465,7 +2499,7 @@
       top: 2px;
       width: 5px;
       height: 10px;
-      border: solid #fff;
+      border: solid var(--on-accent);
       border-width: 0 2px 2px 0;
       transform: rotate(45deg);
     }
@@ -2583,7 +2617,10 @@
     }
     /* 待删除是**可撤销的中间态**，不是已经消失：行留在原地变灰，按钮翻成「撤销」，
        真正生效要按 sheet 头部的「保存」。 */
-    .cfg-row[data-pending-delete="1"] { opacity: 0.5; }
+    /* Pending deletion is still interactive: fade neither the Undo label nor
+       the whole row. Muted text + strike-through conveys the staged state. */
+    .cfg-row[data-pending-delete="1"] .cfg-name,
+    .cfg-row[data-pending-delete="1"] > .cfg-chip { color: var(--muted); }
     .cfg-row[data-pending-delete="1"] .cfg-name,
     .cfg-row[data-pending-delete="1"] .cfg-chip-name { text-decoration: line-through; }
     .cfg-row[data-pending-delete="1"] .cfg-delete { color: var(--accent); }
@@ -2611,6 +2648,12 @@
         padding-top: calc(var(--sp-5) + var(--cross-tab-height, 0px));
       }
       .form-sheet-panel {
+        /* The desktop grid reserves padding above AND below the dialog. Keep
+           the safe-area cap too; a long form must scroll inside the viewport. */
+        max-height: min(
+          calc(100dvh - max(env(safe-area-inset-top), var(--cross-tab-height, 0px)) - 12px),
+          calc(100dvh - var(--sp-5) - var(--sp-5) - var(--cross-tab-height, 0px))
+        );
         max-width: 520px;
         border-bottom: 1px solid var(--border);
         border-radius: var(--r-sheet);
@@ -2759,9 +2802,10 @@
 
     .an-pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 2px 0; min-height: 24px; }
     .an-dots { display: flex; gap: 7px; }
-    .an-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--track); border: 0; padding: 0; cursor: pointer; }
-    .an-dot.on { background: var(--accent); }
-    .an-arrow { background: none; border: 0; color: var(--muted); font-size: var(--fs-title); cursor: pointer; padding: 2px var(--sp-2); line-height: 1; }
+    .an-dot { width: var(--control-h); height: var(--control-h); background: none; border: 0; padding: 0; cursor: pointer; display: grid; place-items: center; }
+    .an-dot::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+    .an-dot.on::before { background: var(--accent); }
+    .an-arrow { min-width: var(--control-h); min-height: var(--control-h); background: none; border: 0; color: var(--muted); font-size: var(--fs-title); cursor: pointer; padding: 2px var(--sp-2); line-height: 1; }
     .an-arrow[disabled] { opacity: 0.3; cursor: default; }
 
     .an-call-wrap { display: grid; place-items: center; padding: 10px 0 var(--sp-1); }
@@ -2769,7 +2813,7 @@
       width: 60px; height: 60px; border-radius: 50%; background: var(--maintain); border: 0; cursor: pointer;
       display: grid; place-items: center; box-shadow: var(--shadow-2);
     }
-    .an-call svg { width: 27px; height: 27px; fill: #fff; }
+    .an-call svg { width: 27px; height: 27px; fill: var(--on-maintain); }
     .an-call:active { transform: scale(0.94); }
     .an-call:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     .an-call-label { color: var(--muted); font-size: var(--fs-cap); margin-top: 7px; }

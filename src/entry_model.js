@@ -117,10 +117,11 @@ function ensureOpenPlaceholderAt(entries, ts, completedId = '', createId) {
 }
 
 // Drop redundant boundary points: a logged entry that starts a segment carrying
-// the exact same content (primary tag AND `what` text) as the one before it adds
-// no information. Comparing `what` too is essential — two back-to-back records
-// that merely share a tag (写代码 / 写方案, both 求职推进) are distinct and must NOT
-// merge; only a true duplicate boundary or two adjacent empty placeholders do.
+// the exact same content (all stored tags AND exact `what` text) as the one
+// before it adds no information. Legacy secondary tags and whitespace are raw
+// data even though statistics only use the primary tag; never discard them as
+// redundant. Two same-tag records (写代码 / 写方案) are distinct and must NOT
+// merge; only a true duplicate boundary or two identical empty placeholders do.
 // This is what lets a deleted split-middle self-heal (the synthetic restore point
 // duplicates the owner) and folds stray placeholders together. Planned entries
 // never participate. Mutates `entries` in place.
@@ -132,7 +133,7 @@ export function coalesceRedundant(entries) {
   let prevSig = null;
   let prevEntry = null;
   for (const entry of logged) {
-    const sig = `${entry.ts.slice(0, 10)}\u0000${primaryTag(entry)}\u0000${(entry.what || '').trim()}`;
+    const sig = JSON.stringify([entry.ts.slice(0, 10), Array.isArray(entry.tags) ? entry.tags : [], String(entry.what || '')]);
     if (prevSig === sig) {
       if (entry.ongoing && prevEntry) prevEntry.ongoing = true;
       removeIds.add(entry.id);

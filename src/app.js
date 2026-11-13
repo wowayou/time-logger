@@ -21,9 +21,10 @@ import {
   ensureFirstUsedDate,
   ensureLegacyLocalePinned,
   load,
-  loadSnapshot,
+  loadSnapshotChecked,
   loadConfig,
-  loadConfigSnapshot,
+  loadConfigSnapshotChecked,
+  loadQuotesSnapshotChecked,
   mergeImportedConfig,
   mergeImportedEntries,
   mergeImportedFirstUsedDate,
@@ -331,6 +332,12 @@ import {
 
   // --- Render ---
   function render() {
+    // Closing a sheet restores its source row before this render replaces the
+    // timeline; minute ticks can replace a keyboard-focused row as well. Keep
+    // that same existing row focused, never redirect focus from a form/control.
+    const active = document.activeElement;
+    const focusedEntryId = active instanceof HTMLElement && active.matches('.entry[data-id][tabindex]')
+      ? active.dataset.id : '';
     // v86：记下这一帧代表的分钟。定时器被系统冻住时（S23 实录：应用在前台，界面
     // 却停在一两分钟前），它是「界面已经过期」的廉价判据——见 refreshLiveClockOnTouch。
     lastRenderedMinute = nowStr();
@@ -356,6 +363,11 @@ import {
         // 等写入口，左滑轨道因缺少 data-action="start-edit" 锚点而自然不启用。
         readOnly: isLegacyOrigin()
       });
+      if (focusedEntryId) {
+        const row = Array.from(document.querySelectorAll('.entry[data-id][tabindex]'))
+          .find(el => el.dataset.id === focusedEntryId);
+        if (row) row.focus({ preventScroll: true });
+      }
       lastIntervalSignature = dataSignature(entries);
       saveBootSnapshot();
       return;
@@ -533,10 +545,30 @@ import {
     return t('fab.ongoingFrom', { time: hhmm(start), dur: fmtMins(dur) });
   }
 
+  // Read failures are not an empty database or a concurrent revision. Stop
+  // before source/planner comparisons; keep the caller's draft/undo state.
+  function checkedActionSnapshot(reader, errorRole = '') {
+    const snapshot = reader();
+    if (snapshot.ok) return snapshot;
+    const message = snapshot.message || t('toast.writeQuota');
+    const error = errorRole && document.querySelector(`#form-sheet [data-role="${errorRole}"]`);
+    if (error) {
+      error.setAttribute('role', 'alert');
+      error.setAttribute('aria-atomic', 'true');
+      error.textContent = message;
+      error.hidden = false;
+    } else showInfoToast(message);
+    return null;
+  }
+
   // --- Segment confirmation ---
   function confirmSegment(id, endTs) {
-    const { data: d, raw } = loadSnapshot();
-    const result = confirmSegmentInData(d, id, endTs, { config: loadConfig() });
+    const snapshot = checkedActionSnapshot(loadSnapshotChecked);
+    if (!snapshot) return;
+    const configSnapshot = checkedActionSnapshot(loadConfigSnapshotChecked);
+    if (!configSnapshot) return;
+    const { data: d, raw } = snapshot;
+    const result = confirmSegmentInData(d, id, endTs, { config: configSnapshot.config });
     if (!result.ok) {
       if (result.reason === 'stale') {
         showInfoToast(t('toast.segmentChanged'));
@@ -547,7 +579,7 @@ import {
     normalizeEntries(d, { todayKey: todayStr(), createId: uid });
     const write = saveChecked(d, raw);
     if (!write.ok) {
-      showInfoToast(write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('toast.writeQuota'));
+      showInfoToast(write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('toast.writeQuota')));
       render();
       return;
     }
@@ -558,12 +590,16 @@ import {
   function deleteError(message) {
     const error = document.querySelector('#form-sheet [data-role="delete-error"]');
     if (!error) return;
+    error.setAttribute('role', 'alert');
+    error.setAttribute('aria-atomic', 'true');
     error.textContent = message;
     error.hidden = false;
   }
 
   function requestDelete(id, opts = {}) {
-    const d = load();
+    const snapshot = checkedActionSnapshot(loadSnapshotChecked, sheetController.getSheetMode() === 'edit' ? 'conflict-error' : '');
+    if (!snapshot) return;
+    const d = snapshot.data;
     const entry = d.entries.find(item => item.id === id);
     const plan = planDeleteEntry(d.entries, id, { todayKey: todayStr(), nowTs: nowStr() });
     if (!entry || !plan.ok) return;
@@ -690,7 +726,9 @@ import {
 
   function confirmDelete(id) {
     if (!pendingDelete || pendingDelete.id !== id) return;
-    const { data: d, raw } = loadSnapshot();
+    const snapshot = checkedActionSnapshot(loadSnapshotChecked, 'delete-error');
+    if (!snapshot) return;
+    const { data: d, raw } = snapshot;
     const entry = d.entries.find(item => item.id === id);
     const latest = planDeleteEntry(d.entries, id, { todayKey: todayStr(), nowTs: nowStr() });
     if (!entry || !latest.ok) {
@@ -714,7 +752,7 @@ import {
     d.entries = latest.resultEntries;
     const write = saveChecked(d, raw);
     if (!write.ok) {
-      deleteError(write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('toast.deleteQuota'));
+      deleteError(write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('toast.deleteQuota')));
       return;
     }
     pendingDelete = null;
@@ -726,15 +764,19 @@ import {
   function undoDelete() {
     const pending = undoDeleteState;
     if (!pending) return;
-    const { data: current, raw } = loadSnapshot();
+    const snapshot = checkedActionSnapshot(loadSnapshotChecked);
+    if (!snapshot) return;
+    const { data: current, raw } = snapshot;
     if (entriesRevision(current.entries) !== pending.afterRevision) {
       cancelUndoForConflict();
       return;
     }
     const write = saveChecked(pending.beforeData, raw);
     if (!write.ok) {
-      if (write.reason === 'concurrent') showInfoToast(t('toast.concurrentWrite'));
-      cancelUndoForConflict();
+      if (write.reason === 'concurrent') cancelUndoForConflict();
+      else showInfoToast(write.message || t('toast.writeQuota'));
+      // A storage failure is not a new revision. Keep the original undo window
+      // available for recovery; never extend its eight-second lifetime.
       return;
     }
     hideUndoToast();
@@ -742,7 +784,9 @@ import {
   }
 
   function confirmPlanned(id) {
-    const { data: d, raw } = loadSnapshot();
+    const snapshot = checkedActionSnapshot(loadSnapshotChecked);
+    if (!snapshot) return;
+    const { data: d, raw } = snapshot;
     const entry = d.entries.find(e => e.id === id);
     if (!entry || !entry.planned) return;
     const wanted = new Date(entry.ts) > new Date() ? nowStr() : entry.ts;
@@ -764,7 +808,7 @@ import {
     normalizeEntries(d, { todayKey: todayStr(), createId: uid });
     const write = saveChecked(d, raw);
     if (!write.ok) {
-      showInfoToast(write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('toast.writeQuota'));
+      showInfoToast(write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('toast.writeQuota')));
       render();
       return;
     }
@@ -790,9 +834,11 @@ import {
   const sheetController = createSheetController({
     state,
     load,
-    loadSnapshot,
+    loadSnapshotChecked,
     loadConfig,
-    loadConfigSnapshot,
+    loadConfigSnapshotChecked,
+    loadQuotesSnapshotChecked,
+    showInfoToast,
     save,
     saveChecked,
     saveConfigChecked,
@@ -820,9 +866,9 @@ import {
   const ioActions = createIoActions({
     state,
     load,
-    loadSnapshot,
+    loadSnapshotChecked,
     loadConfig,
-    loadConfigSnapshot,
+    loadConfigSnapshotChecked,
     save,
     saveChecked,
     saveConfigChecked,
@@ -1065,6 +1111,7 @@ import {
       if (action === 'import-json') ioActions.importJSON();
       if (action === 'cancel-import-shift') ioActions.cancelImportShift();
       if (action === 'confirm-import-shift') ioActions.confirmImportShift();
+      if (action === 'retry-import-preview') ioActions.retryImportPreview();
       if (action === 'resolve-import-conflict') ioActions.resolveImportConflict(el.dataset.key, el.dataset.resolution);
       if (action === 'send-backup') ioActions.shareJSON();
       if (action === 'toggle-boot-diag') toggleBootDiag();
@@ -1101,8 +1148,10 @@ import {
 
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
-        if (sheetController.getSheetMode() === 'delete-confirm') cancelDelete();
-        else { sheetController.cancelEdit(); sheetController.closeForm(); }
+        const mode = sheetController.getSheetMode();
+        if (mode === 'delete-confirm') cancelDelete();
+        else if (mode === 'edit') sheetController.cancelEdit();
+        else sheetController.closeForm();
         renderIfCrossTabPending();
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {

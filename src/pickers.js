@@ -17,6 +17,10 @@ const DAYS_FWD = 7;
 const MAX_WINDOW_DAYS = 800;
 let wheelSequence = 0;
 
+function scrollBehavior() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+}
+
 export function setTimeInputError(scope, msg) {
   if (!scope) return;
   let err = scope.querySelector('[data-role="time-error"]');
@@ -27,11 +31,13 @@ export function setTimeInputError(scope, msg) {
     scope.appendChild(err);
   }
   if (!err) return;
+  err.setAttribute('role', 'alert');
+  err.setAttribute('aria-atomic', 'true');
   err.textContent = msg || '';
   err.hidden = !msg;
   // ④ Keep a blocked-save reason visible above the iOS keyboard / scroll fold.
   if (msg && typeof err.scrollIntoView === 'function') {
-    err.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    err.scrollIntoView({ block: 'center', behavior: scrollBehavior() });
   }
 }
 
@@ -81,11 +87,11 @@ export function useCompactTimePicker() {
   return document.documentElement.clientWidth < 720;
 }
 
-export function mountTimePicker(mountEl, initialValue, onChangeCb) {
+export function mountTimePicker(mountEl, initialValue, onChangeCb, opts = {}) {
   const coarse = useCompactTimePicker();
   if (mountEl) mountEl.dataset.pickerCompact = coarse ? '1' : '0';
-  if (coarse) mountWheel(mountEl, initialValue, onChangeCb);
-  else mountDesktopTimePicker(mountEl, initialValue, onChangeCb);
+  if (coarse) mountWheel(mountEl, initialValue, onChangeCb, opts);
+  else mountDesktopTimePicker(mountEl, initialValue, onChangeCb, opts);
 }
 
 function makeWheelCol(items, initIdx, onSelect, extraClass, ariaLabel, pad = PAD) {
@@ -109,7 +115,7 @@ function makeWheelCol(items, initIdx, onSelect, extraClass, ariaLabel, pad = PAD
     el.setAttribute('aria-selected', String(idx === initIdx));
     el.tabIndex = -1;
     el.textContent = item.label;
-    el.addEventListener('click', () => col.scrollTo({ top: idx * ITEM_H, behavior: 'smooth' }));
+    el.addEventListener('click', () => col.scrollTo({ top: idx * ITEM_H, behavior: scrollBehavior() }));
     inner.appendChild(el);
   });
   col.appendChild(inner);
@@ -144,10 +150,10 @@ function makeWheelCol(items, initIdx, onSelect, extraClass, ariaLabel, pad = PAD
     const cur = getIdx();
     if (e.key === 'ArrowUp' && cur > 0) {
       e.preventDefault();
-      col.scrollTo({ top: (cur - 1) * ITEM_H, behavior: 'smooth' });
+      col.scrollTo({ top: (cur - 1) * ITEM_H, behavior: scrollBehavior() });
     } else if (e.key === 'ArrowDown' && cur < items.length - 1) {
       e.preventDefault();
-      col.scrollTo({ top: (cur + 1) * ITEM_H, behavior: 'smooth' });
+      col.scrollTo({ top: (cur + 1) * ITEM_H, behavior: scrollBehavior() });
     }
   });
 
@@ -159,7 +165,7 @@ function makeWheelCol(items, initIdx, onSelect, extraClass, ariaLabel, pad = PAD
   return col;
 }
 
-function mountWheel(mountEl, initialValue, onChangeCb) {
+function mountWheel(mountEl, initialValue, onChangeCb, { showNow = true } = {}) {
   const [datePart, timePart] = (initialValue || nowStr()).split('T');
   const [initH, initM] = (timePart || '00:00').split(':').map(Number);
   // Build the window around the opened date so its row always exists; the picker
@@ -203,23 +209,24 @@ function mountWheel(mountEl, initialValue, onChangeCb) {
   caption.textContent = `${t('picker.colDate')} · ${t('picker.colHour')}:${t('picker.colMinute')}`;
   actions.appendChild(caption);
 
-  const nowBtn = document.createElement('button');
-  nowBtn.className = 'wheel-now-btn';
-  nowBtn.type = 'button';
-  nowBtn.textContent = t('picker.now');
-  setButtonTip(nowBtn, t('picker.nowTip'), t('picker.nowAria'));
-  nowBtn.addEventListener('click', () => {
-    const n = new Date();
-    const ds = `${n.getFullYear()}-${p2(n.getMonth()+1)}-${p2(n.getDate())}`;
-    const idx = dateItems.findIndex(x => x.val === ds);
-    if (idx >= 0) { selDate = idx; dateCol.scrollTo({ top: idx * ITEM_H, behavior: 'smooth' }); }
-    selH = n.getHours(); selM = n.getMinutes();
-    hCol.scrollTo({ top: selH * ITEM_H, behavior: 'smooth' });
-    mCol.scrollTo({ top: selM * ITEM_H, behavior: 'smooth' });
-    emit();
-  });
-
-  actions.appendChild(nowBtn);
+  if (showNow) {
+    const nowBtn = document.createElement('button');
+    nowBtn.className = 'wheel-now-btn';
+    nowBtn.type = 'button';
+    nowBtn.textContent = t('picker.now');
+    setButtonTip(nowBtn, t('picker.nowTip'), t('picker.nowAria'));
+    nowBtn.addEventListener('click', () => {
+      const n = new Date();
+      const ds = `${n.getFullYear()}-${p2(n.getMonth()+1)}-${p2(n.getDate())}`;
+      const idx = dateItems.findIndex(x => x.val === ds);
+      if (idx >= 0) { selDate = idx; dateCol.scrollTo({ top: idx * ITEM_H, behavior: scrollBehavior() }); }
+      selH = n.getHours(); selM = n.getMinutes();
+      hCol.scrollTo({ top: selH * ITEM_H, behavior: scrollBehavior() });
+      mCol.scrollTo({ top: selM * ITEM_H, behavior: scrollBehavior() });
+      emit();
+    });
+    actions.appendChild(nowBtn);
+  }
   mountEl.appendChild(actions);
   mountEl.appendChild(picker);
 }
@@ -316,8 +323,8 @@ export function mountRangePicker(mountEl, range, onChangeCb) {
     mountEl.append(head, picker);
     function show(which, m) {
       const { hCol, mCol, hours } = cols[which];
-      hCol.scrollTo({ top: Math.max(0, hours.indexOf(Math.floor(m / 60))) * ITEM_H, behavior: 'smooth' });
-      mCol.scrollTo({ top: (m % 60) * ITEM_H, behavior: 'smooth' });
+      hCol.scrollTo({ top: Math.max(0, hours.indexOf(Math.floor(m / 60))) * ITEM_H, behavior: scrollBehavior() });
+      mCol.scrollTo({ top: (m % 60) * ITEM_H, behavior: scrollBehavior() });
     }
     return { show };
   }
@@ -389,7 +396,7 @@ export function mountRangePicker(mountEl, range, onChangeCb) {
   return { set: (which, ts) => set(which, toMin(ts) ?? value[which]) };
 }
 
-function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
+function mountDesktopTimePicker(mountEl, initialValue, onChangeCb, { showNow = true } = {}) {
   let value = normalizeTimestamp(initialValue) || nowStr();
   mountEl.innerHTML = '';
 
@@ -538,14 +545,16 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb) {
     const colon = document.createElement('span');
     colon.className = 'dt-colon'; colon.textContent = ':';
 
-    const nowBtn = document.createElement('button');
-    nowBtn.type = 'button'; nowBtn.className = 'dt-now';
-    nowBtn.dataset.act = 'now'; nowBtn.dataset.tip = t('picker.nowAria');
-    nowBtn.setAttribute('aria-label', t('picker.nowAria'));
-    nowBtn.textContent = t('picker.now');
-
     timeDiv.appendChild(hParts.step); timeDiv.appendChild(colon);
-    timeDiv.appendChild(mParts.step); timeDiv.appendChild(nowBtn);
+    timeDiv.appendChild(mParts.step);
+    if (showNow) {
+      const nowBtn = document.createElement('button');
+      nowBtn.type = 'button'; nowBtn.className = 'dt-now';
+      nowBtn.dataset.act = 'now'; nowBtn.dataset.tip = t('picker.nowAria');
+      nowBtn.setAttribute('aria-label', t('picker.nowAria'));
+      nowBtn.textContent = t('picker.now');
+      timeDiv.appendChild(nowBtn);
+    }
     popEl.appendChild(timeDiv);
 
     // Typed-number-input handlers (no re-render to keep focus)

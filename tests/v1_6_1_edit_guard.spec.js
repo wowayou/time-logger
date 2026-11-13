@@ -3,7 +3,9 @@ import { boot, FIXED_NOW } from './ui_fixture.js';
 import { bootLocale } from './i18n_fixture.js';
 
 async function openDraft(page, id) {
-  await page.locator(`.entry[data-id="${id}"]`).click();
+  // The row contains a separate 44px Mark-as-done/Fill-in target. Click the
+  // record's actual text to request Edit, never an ambiguous row-center point.
+  await page.locator(`.entry[data-id="${id}"] .e-what`).click();
   await page.locator('[data-role="edit-what"]').fill('本页草稿');
 }
 

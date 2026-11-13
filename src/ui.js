@@ -244,7 +244,7 @@ export function renderTimeline(items, opts = {}) {
           <div class="e-what">${esc(e.what || t('timeline.emptyWhat'))}</div>
           <div class="e-meta">
             <span class="e-tag">#${esc(displayTag)}</span>
-            ${readOnly ? '' : `<button class="mini-btn" type="button" data-action="confirm-planned" data-id="${esc(e.id)}" data-tip="${t('timeline.markDoneTip')}" aria-label="${t('timeline.markDoneAria')}">${t('timeline.markDone')}</button>`}
+            ${readOnly ? '' : `<button class="mini-btn" type="button" data-action="confirm-planned" data-id="${esc(e.id)}" aria-label="${t('timeline.markDoneAria')}">${t('timeline.markDone')}</button>`}
           </div>
         </div>
         <div class="e-dur">${t('timeline.planDur')}</div>
@@ -288,7 +288,7 @@ export function renderTimeline(items, opts = {}) {
     // 编辑 sheet（逐行常显的动作词＝换了位置的 card soup）。进行中的今日尾占位不放
     // 「补一下」——FAB「记一条·续 X 起」已是同一缺口的入口，三重冗余只留一个。
     const fillBtn = !readOnly && (isPlaceholder || unrecorded || pendingConfirm) && segEndTs && !activePlaceholder
-      ? `<button class="mini-btn" type="button" data-action="backfill-seg" data-kind="${isPlaceholder ? 'fill' : 'split'}" data-source-id="${esc(e.id)}" data-ts="${esc(segStartTs)}" data-end="${esc(segEndTs)}" data-tip="${t('timeline.fillTip')}" aria-label="${t('timeline.fillAria')}">${t('timeline.fillIn')}</button>`
+      ? `<button class="mini-btn" type="button" data-action="backfill-seg" data-kind="${isPlaceholder ? 'fill' : 'split'}" data-source-id="${esc(e.id)}" data-ts="${esc(segStartTs)}" data-end="${esc(segEndTs)}" aria-label="${t('timeline.fillAria')}">${t('timeline.fillIn')}</button>`
       : '';
     const cardLabel = isPlaceholder ? t('timeline.editGapAria') : t('timeline.editEntryAria', { what: esc(e.what) });
     const interactiveAttrs = readOnly ? '' : ` data-action="start-edit" role="button" tabindex="0" aria-label="${cardLabel}"`;
@@ -298,7 +298,7 @@ export function renderTimeline(items, opts = {}) {
         <div class="e-what">${esc(isPlaceholder ? (activePlaceholder ? t('timeline.notLoggedYet') : t('timeline.unrecorded')) : e.what)}</div>
         <div class="e-meta">
           ${displayTag ? `<span class="e-tag">#${esc(displayTag)}</span>` : ''}
-          ${!readOnly && confirmable ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" data-tip="${t('timeline.confirmTip')}" aria-label="${esc(confirmText)}">${esc(confirmText)}</button>` : ''}
+          ${!readOnly && confirmable ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" aria-label="${esc(confirmText)}">${esc(confirmText)}</button>` : ''}
           ${fillBtn}
         </div>
       </div>
@@ -375,7 +375,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.7.1';
+export const APP_VERSION = '1.7.4';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -515,7 +515,8 @@ function renderMoreSheet(opts = {}) {
 function renderMottoSheet(opts = {}) {
   const config = opts.config || loadConfig();
   const value = config.motto === undefined ? defaultMotto() : config.motto;
-  const lib = loadQuotes();
+  // Editable text and its CAS baseline must share the controller's snapshot.
+  const lib = opts.quotes || loadQuotes();
   const mode = lib.enabled ? 'quote' : 'motto';
   const modeBtn = (key, label) => `<button type="button" data-action="pick-motto-mode" data-mode="${key}" class="${mode === key ? 'active' : ''}" aria-pressed="${mode === key}">${label}</button>`;
   return `

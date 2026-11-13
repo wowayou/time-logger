@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './startup_fixture.js';
 import { boot } from './ui_fixture.js';
 import { bootLocale } from './i18n_fixture.js';
 

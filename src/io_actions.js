@@ -521,20 +521,61 @@ export function createIoActions(deps) {
     error.hidden = false;
   }
 
+  function checkedImportSnapshot(reader) {
+    const snapshot = reader();
+    if (snapshot.ok) return snapshot;
+    const error = document.querySelector('#form-sheet [data-role="import-error"]');
+    if (error) {
+      // Keep conflict cards and their choices intact while access is denied.
+      let failure = error.querySelector('[data-role="import-read-failure"]');
+      if (!failure) {
+        failure = document.createElement('div');
+        failure.dataset.role = 'import-read-failure';
+        error.prepend(failure);
+      }
+      const message = document.createElement('div');
+      message.textContent = snapshot.message || t('io.importQuota');
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'cell-action';
+      retry.dataset.action = 'retry-import-preview';
+      retry.textContent = t('io.retryRead');
+      failure.replaceChildren(message, retry);
+      error.hidden = false;
+    }
+    return null;
+  }
+
   function importPlan(imported, shiftMinutes) {
-    return deps.mergeImportedEntries(deps.load(), imported.entries, { shiftMinutes });
+    const snapshot = checkedImportSnapshot(deps.loadSnapshotChecked);
+    if (!snapshot) return null;
+    return deps.mergeImportedEntries(snapshot.data, imported.entries, { shiftMinutes });
   }
 
   function previewImportShift(raw) {
     if (!pendingImport) return;
-    importShiftMinutes = parseImportShiftHours(raw);
+    const nextShift = parseImportShiftHours(raw);
+    const plan = importPlan(pendingImport, nextShift);
+    if (!plan) return;
+    importShiftMinutes = nextShift;
     importResolutions = {};
-    paintImportPlan(importPlan(pendingImport, importShiftMinutes));
+    paintImportPlan(plan);
+  }
+
+  function retryImportPreview() {
+    if (!pendingImport) return;
+    const nextShift = parseImportShiftHours(document.getElementById('import-shift-hours').value);
+    const plan = importPlan(pendingImport, nextShift);
+    if (!plan) return;
+    if (nextShift !== importShiftMinutes) importResolutions = {};
+    importShiftMinutes = nextShift;
+    paintImportPlan(plan);
   }
 
   function resolveImportConflict(key, action) {
     if (!pendingImport || !['local', 'incoming', 'merge'].includes(action)) return;
     const plan = importPlan(pendingImport, importShiftMinutes);
+    if (!plan) return;
     const conflict = (plan.conflicts || []).find(item => item.key === key);
     if (!conflict) return;
     importResolutions[key] = { action, signature: conflict.signature };
@@ -542,7 +583,12 @@ export function createIoActions(deps) {
   }
 
   function applyImportedData(imported, shiftMinutes) {
-    const { data: current, raw } = deps.loadSnapshot();
+    const snapshot = checkedImportSnapshot(deps.loadSnapshotChecked);
+    if (!snapshot) return false;
+    const configSnapshot = checkedImportSnapshot(deps.loadConfigSnapshotChecked);
+    if (!configSnapshot) return false;
+    const { data: current, raw } = snapshot;
+    const { config: currentConfig, raw: configRaw } = configSnapshot;
     const plan = deps.mergeImportedEntries(current, imported.entries, { shiftMinutes, resolutions: importResolutions });
     if (!plan.ok) {
       const latest = deps.mergeImportedEntries(current, imported.entries, { shiftMinutes });
@@ -558,25 +604,31 @@ export function createIoActions(deps) {
       }
       return false;
     }
-    const { config: currentConfig, raw: configRaw } = deps.loadConfigSnapshot();
     const nextConfig = deps.mergeImportedConfig(currentConfig, imported.config);
     const write = deps.saveChecked(plan.data, raw);
     if (!write.ok) {
       const error = document.querySelector('#form-sheet [data-role="import-error"]');
       if (error) {
-        error.textContent = write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('io.importQuota');
+        error.textContent = write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('io.importQuota'));
         error.hidden = false;
       }
       return false;
     }
-    let configFailureMessage = t('io.configSaveFailed');
+    let configWrite;
     try {
-      const configWrite = deps.saveConfigChecked(nextConfig, configRaw);
-      if (!configWrite.ok) {
-        configFailureMessage = configWrite.reason === 'concurrent' ? t('toast.concurrentWrite') : t('io.configSaveFailed');
-        throw new Error('config-save-failed');
+      configWrite = deps.saveConfigChecked(nextConfig, configRaw);
+    } catch (error) {
+      // Preserve compensation and its failure warning, then expose the unknown
+      // programming error instead of disguising it as a storage limitation.
+      const rollback = deps.saveChecked(current, write.raw);
+      if (!rollback.ok) {
+        const message = document.querySelector('#form-sheet [data-role="import-error"]');
+        if (message) { message.textContent = t('io.importRollbackFailed'); message.hidden = false; }
       }
-    } catch {
+      throw error;
+    }
+    if (!configWrite.ok) {
+      const configFailureMessage = configWrite.message || (configWrite.reason === 'concurrent' ? t('toast.concurrentWrite') : t('io.configSaveFailed'));
       // 配置合并失败时，只在数据仍是本次导入写入的版本上回滚。无条件 save()
       // 会覆盖另一标签页在导入与配置 CAS 之间追加的记录。
       const rollback = deps.saveChecked(current, write.raw);
@@ -607,7 +659,7 @@ export function createIoActions(deps) {
       imported: plan.imported,
       skipped: plan.skipped,
       resolvedConflicts: plan.resolvedConflicts || 0,
-      quotesFailed: !quotes.ok
+      quotesFailure: quotes.ok ? '' : quotes.reason
     };
   }
 
@@ -621,8 +673,11 @@ export function createIoActions(deps) {
     pendingImport = null;
     importResolutions = {};
     deps.closeForm();
+    const quotesWarning = result.quotesFailure === 'denied' ? t('io.quotesImportDenied')
+      : result.quotesFailure === 'concurrent' ? t('io.quotesImportChanged')
+        : result.quotesFailure ? t('io.quotesNotImported') : '';
     const message = t('io.importDone', { imported: result.imported, skipped: result.skipped, conflicts: conflictCountLabel(result.resolvedConflicts) })
-      + (result.quotesFailed ? t('io.quotesNotImported') : '');
+      + quotesWarning;
     // SPEC-012：sheet 关闭动画播完（或 reduced-motion 下没有动画）之后才亮 toast，
     // 让它出现在一个干净的、没有 sheet 遮挡的屏幕上；而不是和 v73 一样在 sheet
     // 还在滑出时就亮起、被半透明遮罩盖过去。
@@ -654,7 +709,10 @@ export function createIoActions(deps) {
         importShiftHours: formatShiftHours(importShiftMinutes),
         importShiftHint: importShiftHint(imported, importShiftMinutes)
       });
-      requestAnimationFrame(() => paintImportPlan(importPlan(imported, importShiftMinutes)));
+      requestAnimationFrame(() => {
+        const plan = importPlan(imported, importShiftMinutes);
+        if (plan) paintImportPlan(plan);
+      });
     };
     reader.readAsText(file);
     event.target.value = '';
@@ -707,6 +765,7 @@ export function createIoActions(deps) {
     confirmImportShift,
     handleImport,
     previewImportShift,
+    retryImportPreview,
     resolveImportConflict,
     shareJSON
   };

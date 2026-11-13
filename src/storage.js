@@ -6,6 +6,47 @@ import { addDays, localDateKey, normalizeTimestamp, parseDateKey } from './time.
 import { getLocale, t, tAll } from './i18n.js';
 
 const KEY = 'timelog.v1';
+
+/** @typedef {{ ok: false, reason: 'concurrent' | 'quota' | 'denied', message?: string }} StorageWriteFailure */
+
+/** Known browser storage failures are actionable; programming errors still throw.
+ * @param {any} error
+ * @returns {StorageWriteFailure}
+ */
+function storageWriteFailure(error) {
+  if (error && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+    return { ok: false, reason: 'quota' };
+  }
+  if (error && error.name === 'SecurityError') {
+    return { ok: false, reason: 'denied', message: t('storage.denied') };
+  }
+  throw error;
+}
+
+// Critical reads return a failure without a fallback value. Callers must check
+// ok before deriving a source record, preview, or CAS baseline. Rendering keeps
+// its tolerant helpers below; their empty/default values never authorize writes.
+/** @param {string} key @returns {{ ok: true, raw: string | null } | StorageWriteFailure} */
+function readStorageChecked(key) {
+  try {
+    return { ok: true, raw: localStorage.getItem(key) };
+  } catch (e) {
+    return storageWriteFailure(e);
+  }
+}
+
+/** Preserve the existing missing/invalid JSON fallback, not storage failures.
+ * @param {string | null} raw @returns {any}
+ */
+function parseStoredJson(raw) {
+  if (!raw) return null;
+  try { return JSON.parse(raw); }
+  catch (e) {
+    if (e instanceof SyntaxError) return null;
+    throw e;
+  }
+}
+
 export const CONFIG_KEY = 'timelog.config';
 export const THEME_KEY = 'timelog.theme';
 export const VIEW_KEY = 'timelog.view';
@@ -295,25 +336,33 @@ let quotesCache = { raw: /** @type {string | null} */ (null), lib: /** @type {Qu
 
 /** @returns {QuoteLibrary} */
 export function loadQuotes() {
-  const raw = readQuotesRaw();
+  return quotesFromRaw(readQuotesRaw());
+}
+
+/** @param {string | null} raw @returns {QuoteLibrary} */
+function quotesFromRaw(raw) {
   if (!raw) return normalizeQuotes(null);
   if (quotesCache.raw !== raw || !quotesCache.lib) {
-    let lib;
-    try {
-      lib = normalizeQuotes(JSON.parse(raw));
-    } catch {
-      lib = normalizeQuotes(null);
-    }
+    const lib = normalizeQuotes(parseStoredJson(raw));
     quotesCache = { raw, lib };
   }
   const cached = /** @type {QuoteLibrary} */ (quotesCache.lib);
   return { version: 1, enabled: cached.enabled, items: cached.items.slice(), anchor: cached.anchor };
 }
 
+/** Single read: library and CAS raw always describe the same stored version.
+ * @returns {{ ok: true, lib: QuoteLibrary, raw: string | null } | StorageWriteFailure}
+ */
+export function loadQuotesSnapshotChecked() {
+  const read = readStorageChecked(QUOTES_KEY);
+  if (read.ok === false) return read;
+  return { ok: true, lib: quotesFromRaw(read.raw), raw: read.raw };
+}
+
 /**
  * 没有句子时整键删除（不留空壳，与 config 的「空集不写键」同一精神）。
  * @param {unknown} lib
- * @returns {{ ok: true } | { ok: false, reason: 'quota' }}
+ * @returns {{ ok: true } | StorageWriteFailure}
  */
 export function saveQuotes(lib) {
   const normalized = normalizeQuotes(lib);
@@ -322,8 +371,7 @@ export function saveQuotes(lib) {
     else localStorage.setItem(QUOTES_KEY, JSON.stringify(normalized));
     return { ok: true };
   } catch (e) {
-    if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) return { ok: false, reason: 'quota' };
-    throw e;
+    return storageWriteFailure(e);
   }
 }
 
@@ -332,11 +380,16 @@ export function saveQuotes(lib) {
  * 字符串，保存前比一次；期间另一标签页改过句库就拦下，不让后保存的静默覆盖先保存的。
  * @param {unknown} lib
  * @param {string | null} expectedRaw
- * @returns {{ ok: true } | { ok: false, reason: 'concurrent' | 'quota' }}
+ * @returns {{ ok: true } | StorageWriteFailure}
  */
 export function saveQuotesChecked(lib, expectedRaw) {
-  if (readQuotesRaw() !== expectedRaw) return { ok: false, reason: 'concurrent' };
-  return saveQuotes(lib);
+  try {
+    // Read strictly here: a denied read must never masquerade as an empty key.
+    if (localStorage.getItem(QUOTES_KEY) !== expectedRaw) return { ok: false, reason: 'concurrent' };
+    return saveQuotes(lib);
+  } catch (e) {
+    return storageWriteFailure(e);
+  }
 }
 
 function dayOrdinal(dayKey) {
@@ -412,14 +465,17 @@ export function resolveMottoLine(config, lib, dayKey) {
  * 导入备份里的句库：与格言同一精神——本机优先。本机已有句子就保留本机，只有本机
  * 从未设置过时才采用备份（含它的开关与起始日，换机恢复时原样接回）。
  * @param {unknown} raw 备份里的 `quotes` 字段（已过 validateImportData）
- * @returns {{ ok: boolean, adopted: boolean }}
+ * @returns {{ ok: true, adopted: boolean } | (StorageWriteFailure & { adopted: false })}
  */
 export function adoptImportedQuotes(raw) {
   if (raw === undefined) return { ok: true, adopted: false };
   const incoming = normalizeQuotes(raw);
-  if (!incoming.items.length || loadQuotes().items.length) return { ok: true, adopted: false };
-  const write = saveQuotes(incoming);
-  return { ok: write.ok, adopted: write.ok };
+  if (!incoming.items.length) return { ok: true, adopted: false };
+  const snapshot = loadQuotesSnapshotChecked();
+  if (!snapshot.ok) return { ...snapshot, adopted: false };
+  if (snapshot.lib.items.length) return { ok: true, adopted: false };
+  const write = saveQuotesChecked(incoming, snapshot.raw);
+  return write.ok ? { ok: true, adopted: true } : { ...write, adopted: false };
 }
 
 // SPEC-014 §1.5（维护者拍板方案 B，2026-07-31）：默认标签种子按当前 locale 分流，
@@ -595,6 +651,14 @@ export function loadConfigSnapshot() {
   }
 }
 
+/** @returns {{ ok: true, config: TagConfig, raw: string } | StorageWriteFailure} */
+export function loadConfigSnapshotChecked() {
+  const read = readStorageChecked(CONFIG_KEY);
+  if (read.ok === false) return read;
+  const raw = read.raw || '';
+  return { ok: true, config: normalizeConfig(parseStoredJson(raw)), raw };
+}
+
 export function readConfigRaw() {
   try {
     return localStorage.getItem(CONFIG_KEY) || '';
@@ -622,23 +686,30 @@ export function saveConfig(config) {
  * 覆盖另一标签页在表单打开期间做的改动。成功时回传落库后的 normalized raw，
  * 供调用方把「打开时快照」推进到这次写入后的值——否则接着的局部动作会拿旧
  * 基线再比一次，误判成并发冲突。
- * @returns {{ ok: true, raw: string } | { ok: false, reason: 'concurrent' | 'quota' }}
+ * @returns {{ ok: true, raw: string } | StorageWriteFailure}
  */
 export function saveConfigChecked(config, expectedRaw) {
-  if (readConfigRaw() !== expectedRaw) return { ok: false, reason: 'concurrent' };
-  const saved = saveConfig(config);
-  return saved ? { ok: true, raw: JSON.stringify(saved) } : { ok: false, reason: 'quota' };
+  try {
+    if ((localStorage.getItem(CONFIG_KEY) || '') !== expectedRaw) return { ok: false, reason: 'concurrent' };
+    const saved = saveConfig(config);
+    return saved ? { ok: true, raw: JSON.stringify(saved) } : { ok: false, reason: 'quota' };
+  } catch (e) {
+    return storageWriteFailure(e);
+  }
 }
 
 function addMainlineTag(tag) {
   const name = cleanName(tag);
   if (!name || name === RESERVED_UNKNOWN_TAG) return loadConfig();
-  const { config, raw } = loadConfigSnapshot();
+  const snapshot = loadConfigSnapshotChecked();
+  if (!snapshot.ok) return snapshot;
+  const { config, raw } = snapshot;
   const key = tagKey(name);
   if (!config.mainline.some(item => tagKey(item) === key)
     && !config.chips.some(chip => tagKey(chip.name) === key)) {
     config.mainline.unshift(name);
-    return saveConfigChecked(config, raw).ok ? config : false;
+    const write = saveConfigChecked(config, raw);
+    return write.ok ? config : write;
   }
   return config;
 }
@@ -646,7 +717,9 @@ function addMainlineTag(tag) {
 function addChipTag(tag, bucket) {
   const name = cleanName(tag);
   if (!name || name === RESERVED_UNKNOWN_TAG || bucket === 'job' || bucket === 'unrecorded') return loadConfig();
-  const { config, raw } = loadConfigSnapshot();
+  const snapshot = loadConfigSnapshotChecked();
+  if (!snapshot.ok) return snapshot;
+  const { config, raw } = snapshot;
   const key = tagKey(name);
   const existing = config.chips.find(chip => tagKey(chip.name) === key);
   if (existing) {
@@ -657,7 +730,8 @@ function addChipTag(tag, bucket) {
   }
   if (config.mainline.some(item => tagKey(item) === key)) return config;
   config.chips.push({ name, bucket, longOk: false });
-  return saveConfigChecked(config, raw).ok ? config : false;
+  const write = saveConfigChecked(config, raw);
+  return write.ok ? config : write;
 }
 
 function rememberTagForBucket(tag, bucket) {
@@ -901,6 +975,16 @@ export function loadSnapshot() {
   }
 }
 
+/** Strict storage access, existing JSON/model fallback, one data/raw read.
+ * @returns {{ ok: true, data: any, raw: string } | StorageWriteFailure}
+ */
+export function loadSnapshotChecked() {
+  const read = readStorageChecked(KEY);
+  if (read.ok === false) return read;
+  const raw = read.raw || '';
+  return { ok: true, data: parseStoredJson(raw) || { version: 1, entries: [] }, raw };
+}
+
 export function load() {
   return loadSnapshot().data;
 }
@@ -1019,15 +1103,17 @@ export function readRaw() {
  *
  * @param {object} d 要写入的数据
  * @param {string} expectedRaw load() 时捕获的原始字符串
- * @returns {{ ok: true, raw: string } | { ok: false, reason: 'concurrent' } | { ok: false, reason: 'quota' }}
+ * @returns {{ ok: true, raw: string } | StorageWriteFailure}
  */
 export function saveChecked(d, expectedRaw) {
-  const currentRaw = readRaw();
-  if (currentRaw !== expectedRaw) {
-    return { ok: false, reason: 'concurrent' };
+  try {
+    const currentRaw = localStorage.getItem(KEY) || '';
+    if (currentRaw !== expectedRaw) return { ok: false, reason: 'concurrent' };
+    if (save(d)) return { ok: true, raw: JSON.stringify(d) };
+    return { ok: false, reason: 'quota' };
+  } catch (e) {
+    return storageWriteFailure(e);
   }
-  if (save(d)) return { ok: true, raw: JSON.stringify(d) };
-  return { ok: false, reason: 'quota' };
 }
 
 export function uid() {

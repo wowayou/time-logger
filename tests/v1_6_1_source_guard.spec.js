@@ -77,7 +77,8 @@ for (const planned of [false, true]) {
   test(`v1.6.1: deletion rechecks the original before every confirmation (planned=${planned})`, async ({ page }) => {
     await boot(page, 390, planned ? 'planned-expired' : 'two-records', false, FIXED_NOW);
     const id = planned ? 'plan-expired' : 'today-1';
-    await page.locator(`.entry[data-id="${id}"]`).click();
+    // Explicit Edit target; row-center may belong to its separate touch action.
+    await page.locator(`.entry[data-id="${id}"] .e-what`).click();
     await page.locator('#form-sheet [data-action="request-delete"]').click();
     await expect(page.locator('.form-sheet-panel')).toHaveAttribute('data-mode', 'delete-confirm');
     let raw;

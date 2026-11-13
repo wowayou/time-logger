@@ -133,10 +133,8 @@ export function createSheetController(deps) {
     return bucket === 'maintain' || bucket === 'leak' ? bucket : 'job';
   }
 
-  function defaultBucketFromEntries() {
-    const entries = deps.load().entries;
+  function defaultBucketFromEntries(entries = deps.load().entries, config = deps.loadConfig()) {
     const dateKey = deps.state.selectedDate || todayStr();
-    const config = deps.loadConfig();
     const onDay = entries
       .filter(entry => !entry.planned && entry.ts.slice(0, 10) === dateKey)
       .sort((a, b) => a.ts < b.ts ? -1 : 1);
@@ -169,7 +167,9 @@ export function createSheetController(deps) {
   function paintPrevSegment(panel, startTs) {
     startTs = normalizeTimestamp(startTs);
     if (!startTs) return;
-    const settlement = deps.settlementEndFor(startTs, deps.state.selectedDate);
+    const snapshot = checkedSheetSnapshot(deps.loadSnapshotChecked, panel);
+    if (!snapshot) return;
+    const settlement = deps.settlementEndFor(startTs, deps.state.selectedDate, snapshot.data.entries);
     const startLabel = panel ? panel.querySelector('[data-role="start-time-label"]') : null;
     const endLabel = panel ? panel.querySelector('[data-role="end-label"]') : null;
     const durationLabel = panel ? panel.querySelector('[data-role="duration-label"]') : null;
@@ -187,11 +187,13 @@ export function createSheetController(deps) {
     if (formRecordMode !== 'plan' && !formOvernightContext) paintPrevSegment(panel, startTs);
     if (!mountEl) return;
     if (formRecordMode === 'plan' || !(panel.querySelector('[data-role="start-time-section"]') || {}).hidden) {
+      // Overnight continuation already ends at now or an earlier real record;
+      // resetting its START to now can only make that interval invalid.
       mountTimePicker(mountEl, startTs, v => {
         tsEl.value = v;
         if (formOvernightContext) refreshOvernightPreview(panel);
         else if (formRecordMode !== 'plan') paintPrevSegment(panel, v);
-      });
+      }, { showNow: !formOvernightContext });
     }
   }
 
@@ -199,14 +201,14 @@ export function createSheetController(deps) {
   // 中间三分之一（贴整 5 分钟）：一打开就看见「切成三段」长什么样；旧版默认整段选区，
   // 效果等于「整段改标签」，用户得先把两端都滚一遍才开始像在切。原段本来就是未记录
   // （缺口、占位、未知标签段）时，整段补满才是常见意图，保持整段。
-  function defaultCutRange(startTs, endTs) {
+  function defaultCutRange(startTs, endTs, config) {
     const s = normalizeTimestamp(startTs);
     const e = normalizeTimestamp(endTs);
     const whole = { startTs, endTs };
     if (!s || !e || e <= s) return whole;
     const source = formSourceId ? formBaseEntries.find(entry => entry.id === formSourceId) : null;
     if (!source || source.planned || isPlaceholderEntry(source)
-      || bucketForTag(primaryTag(source), deps.loadConfig()) === 'unrecorded') return whole;
+      || bucketForTag(primaryTag(source), config) === 'unrecorded') return whole;
     const total = minsBetweenDates(new Date(s), new Date(e));
     if (total < 3) return whole;
     const at = fraction => {
@@ -633,7 +635,10 @@ export function createSheetController(deps) {
       if (!focusable.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
+      // Initial panel focus has tabindex=-1, so reverse Tab must wrap from
+      // that starting point too. The first forward Tab remains native.
+      if (e.shiftKey && (document.activeElement === first
+        || document.activeElement === container.querySelector('.form-sheet-panel'))) {
         e.preventDefault();
         last.focus();
       } else if (!e.shiftKey && document.activeElement === last) {
@@ -686,7 +691,21 @@ export function createSheetController(deps) {
     const requestedMode = opts && opts.mode;
     const mode = ['edit', 'help', 'config', 'import-shift', 'more', 'delete-confirm', 'motto', 'backup', 'advanced', 'analytics'].includes(requestedMode) ? requestedMode : 'new';
     const id = opts && opts.id;
-    const loaded = deps.load();
+    const currentPanel = document.querySelector('#form-sheet .form-sheet-panel');
+    const currentMode = getSheetMode();
+    const errorRole = currentMode === 'config' ? 'config-error' : currentMode === 'motto' ? 'motto-error'
+      : currentMode === 'delete-confirm' ? 'delete-error' : currentMode === 'import-shift' ? 'import-error' : 'conflict-error';
+    const recordSnapshot = ['new', 'edit', 'config'].includes(mode)
+      ? checkedSheetSnapshot(deps.loadSnapshotChecked, currentPanel, errorRole) : null;
+    if (['new', 'edit', 'config'].includes(mode) && !recordSnapshot) return;
+    const configSnapshot = ['new', 'edit', 'config', 'motto'].includes(mode)
+      ? checkedSheetSnapshot(deps.loadConfigSnapshotChecked, currentPanel, errorRole) : null;
+    if (['new', 'edit', 'config', 'motto'].includes(mode) && !configSnapshot) return;
+    const quoteSnapshot = mode === 'motto'
+      ? checkedSheetSnapshot(deps.loadQuotesSnapshotChecked, currentPanel, errorRole) : null;
+    if (mode === 'motto' && !quoteSnapshot) return;
+    const loaded = recordSnapshot ? recordSnapshot.data : deps.load();
+    const config = configSnapshot ? configSnapshot.config : deps.loadConfig();
     const entry = mode === 'edit' ? loaded.entries.find(e => e.id === id) : null;
     if (mode === 'edit' && !entry) return;
     sheetLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -695,7 +714,7 @@ export function createSheetController(deps) {
       deps.persistState();
       deps.setSheetEditId(null);
       formTag = '';
-      formBucket = defaultBucketFromEntries();
+      formBucket = defaultBucketFromEntries(loaded.entries, config);
       formTargetDate = deps.state.selectedDate || todayStr();
       formDateMode = entryModeForDate(formTargetDate);
       formRecordMode = formDateMode.forcedMode || loadRecordModePref();
@@ -723,7 +742,7 @@ export function createSheetController(deps) {
     } else if (mode === 'edit') {
       deps.setSheetEditId(id);
       sheetTimeMounted = false;
-      editBucket = safeBucket(bucketForTag((entry.tags || [])[0] || '', deps.loadConfig()));
+      editBucket = safeBucket(bucketForTag((entry.tags || [])[0] || '', config));
       formBaseEntries = cloneEntries(loaded.entries);
       resetPlanIds();
       lastPreviewSignature = '';
@@ -740,7 +759,7 @@ export function createSheetController(deps) {
     const ts = mode === 'edit'
       ? entry.ts
       : (opts && opts.ts) || (formOvernightContext && formOvernightContext.startTs)
-        || (formRecordMode === 'plan' ? defaultPlanTimestamp() : deps.defaultFormTs());
+        || (formRecordMode === 'plan' ? defaultPlanTimestamp() : deps.defaultFormTs(loaded.entries));
     const prevMode = sheet.hidden ? '' : (panel.dataset.mode || '');
     // 配置页 CAS 基线（v93）只在真正新开时刷新：“设为当前”/“添加默认标签”
     // 等局部动作会原地重渲整张 sheet（prevMode === 'config'），若这时也把基线刷成
@@ -748,9 +767,9 @@ export function createSheetController(deps) {
     // 只有 prevMode !== 'config' （从「更多/高级」下钻新开）才重取基线；与下面抓取
     // 暂存的条件严格互补：要回填暂存（重渲染）就不动基线。必须在渲染用的
     // loadConfig() 之前。
-    if (mode === 'config' && prevMode !== 'config') configRawAtOpen = deps.readConfigRaw();
-    // v1.5.1：句库 CAS 基线，同一纪律——只在真正新开格言 sheet 时取。
-    if (mode === 'motto' && prevMode !== 'motto') quotesRawAtOpen = deps.readQuotesRaw();
+    if (mode === 'config' && prevMode !== 'config') configRawAtOpen = configSnapshot.raw;
+    // Quote input below is filled from this same snapshot, never a second read.
+    if (mode === 'motto' && prevMode !== 'motto') quotesRawAtOpen = quoteSnapshot.raw;
     if (opts && opts.restore) {
       // 从返回栈恢复：这一层已经在关闭时弹出，别再压回去。
     } else if (prevMode === mode) {
@@ -779,7 +798,8 @@ export function createSheetController(deps) {
     panel.innerHTML = renderFormSheet({
       mode,
       entry,
-      config: deps.loadConfig(),
+      config,
+      quotes: quoteSnapshot && quoteSnapshot.lib,
       entries: loaded.entries,
       importShiftHours: opts && opts.importShiftHours,
       importShiftHint: opts && opts.importShiftHint,
@@ -809,6 +829,12 @@ export function createSheetController(deps) {
       analytics: mode === 'analytics' ? buildAnalyticsModel() : null
     });
     if (preservedConfigEdits) restoreConfigEdits(panel, preservedConfigEdits);
+    // Establish live error regions before any later validation/write failure.
+    // This covers new/edit/config/import sheets without duplicating templates.
+    panel.querySelectorAll('.form-inline-error:not([data-role="delete-error"])').forEach(error => {
+      error.setAttribute('role', 'alert');
+      error.setAttribute('aria-atomic', 'true');
+    });
     // v43: 面板几何恒定，开合键盘不再改 sheet 尺寸；lockBodyForSheet 锁滚动 + 起初
     // 写一次 --kb 供正文 scroll-padding。
     lockBodyForSheet();
@@ -837,7 +863,7 @@ export function createSheetController(deps) {
       }
     } else if (mode === 'new') {
       if (formBackfill) {
-        const cut = defaultCutRange(ts, formBackfillEnd);
+        const cut = defaultCutRange(ts, formBackfillEnd, config);
         mountBackfillPickers(panel, cut.startTs, cut.endTs);
       }
       else {
@@ -850,7 +876,7 @@ export function createSheetController(deps) {
       if (ctagEl) ctagEl.value = '';
       deps.renderChrome();
     }
-    if (mode === 'motto') paintQuotesCount(panel);
+    if (mode === 'motto') paintQuotesCount(panel, quoteSnapshot.lib);
     autosizeTextareas(panel);
     trapFocus(sheet);
     requestAnimationFrame(() => {
@@ -959,8 +985,15 @@ export function createSheetController(deps) {
     formPlanIds = [];
     lastPreviewSignature = '';
     editEndMode = 'fixed';
-    if (restoreFocus && sheetLastFocus && document.contains(sheetLastFocus)) {
-      sheetLastFocus.focus();
+    if (restoreFocus && sheetLastFocus) {
+      // Opening edit already redraws the timeline. The original row reference
+      // can be detached; resolve its replacement by data, not a user-built CSS
+      // selector, and only restore it if that record still exists.
+      const sourceId = sheetLastFocus.matches('.entry[data-id][tabindex]') ? sheetLastFocus.dataset.id : '';
+      const target = document.contains(sheetLastFocus) ? sheetLastFocus
+        : (sourceId && Array.from(document.querySelectorAll('.entry[data-id][tabindex]'))
+          .find(el => el.dataset.id === sourceId));
+      if (target) target.focus({ preventScroll: true });
     }
     sheetLastFocus = null;
     return mode;
@@ -1278,13 +1311,15 @@ export function createSheetController(deps) {
   }
 
   function toggleLongReview() {
-    const { config, raw } = deps.loadConfigSnapshot();
+    const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    const snapshot = checkedSheetSnapshot(deps.loadConfigSnapshotChecked, panel, 'advanced-error');
+    if (!snapshot) return;
+    const { config, raw } = snapshot;
     if (config.longReview === true) delete config.longReview;
     else config.longReview = true;
-    const panel = document.querySelector('#form-sheet .form-sheet-panel');
     const write = deps.saveConfigChecked(config, raw);
     if (!write.ok) {
-      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'advanced-error');
+      showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota')), 'advanced-error');
       return;
     }
     deps.render();
@@ -1449,9 +1484,30 @@ export function createSheetController(deps) {
     // scrolls and the iOS keyboard can hide the lower half, so pull it into view.
     const target = focusEl || err;
     if (typeof target.scrollIntoView === 'function') {
-      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      target.scrollIntoView({ block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
     }
     if (focusEl && typeof focusEl.focus === 'function') focusEl.focus({ preventScroll: true });
+  }
+
+  // Fail explicitly before source/preview/revision branches. No fallback data
+  // is returned, and no form state or undo deadline is advanced on a failed read.
+  function checkedSheetSnapshot(reader, scope = null, role = 'conflict-error') {
+    const snapshot = reader();
+    if (snapshot.ok) return snapshot;
+    const message = snapshot.message || t('toast.writeQuota');
+    if (scope && scope.querySelector(`[data-role="${role}"]`)) showInlineError(scope, message, role);
+    else deps.showInfoToast(message);
+    return null;
+  }
+
+  function checkedConfigAtOpen(panel) {
+    const snapshot = checkedSheetSnapshot(deps.loadConfigSnapshotChecked, panel, 'config-error');
+    if (!snapshot) return null;
+    if (snapshot.raw !== configRawAtOpen) {
+      showInlineError(panel, t('toast.concurrentWrite'), 'config-error');
+      return null;
+    }
+    return snapshot;
   }
 
   function showConflictError(scope, conflict, ts, plusAction) {
@@ -1474,7 +1530,7 @@ export function createSheetController(deps) {
     plus.textContent = t('form.conflictPlusOne');
     err.append(edit, plus);
     err.hidden = false;
-    if (typeof err.scrollIntoView === 'function') err.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (typeof err.scrollIntoView === 'function') err.scrollIntoView({ block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
   }
 
   function useConflictPlusMinute(el) {
@@ -1603,7 +1659,8 @@ export function createSheetController(deps) {
   // 标签；若第二步因配额失败，就把记录回滚到写前快照并留在表单里，避免新标签掉进
   // 「未记录」桶。覆盖旧值通常不增加占用，正好是配额已满时最可靠的补偿写。
   function rememberTagOrRollback(tag, bucket, entries, beforeData, scope, writtenRaw) {
-    if (!tag || rememberTag(tag, bucket, entries)) return true;
+    const tagWrite = tag ? rememberTag(tag, bucket, entries) : null;
+    if (!tag || (tagWrite && tagWrite.ok !== false)) return true;
     // 配置写入失败时，只在数据仍是本次写入版本上回滚；无条件 save() 会抹掉
     // 另一标签页在两次写入之间追加的记录。
     const rollback = deps.saveChecked(beforeData, writtenRaw);
@@ -1611,11 +1668,17 @@ export function createSheetController(deps) {
       showInlineError(scope, t('io.importRollbackFailed'));
       return false;
     }
-    showInlineError(scope, t('form.tagConfigQuota'));
+    showInlineError(scope, (tagWrite && tagWrite.message)
+      || (tagWrite && tagWrite.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.tagConfigQuota')));
     return false;
   }
 
   function saveOvernightEntry(panel) {
+    const snapshot = checkedSheetSnapshot(deps.loadSnapshotChecked, panel);
+    if (!snapshot) return;
+    const configSnapshot = checkedSheetSnapshot(deps.loadConfigSnapshotChecked, panel);
+    if (!configSnapshot) return;
+    const { data: d, raw } = snapshot;
     const timeScope = getFormWheelMount(panel) || panel;
     const startTs = normalizeTimestamp((panel.querySelector('#form-ts') || {}).value);
     if (!startTs) {
@@ -1628,14 +1691,13 @@ export function createSheetController(deps) {
     if (!what) { if (whatEl) whatEl.focus(); return; }
     const ctagEl = panel.querySelector('#form-ctag');
     const ctag = ctagEl ? ctagEl.value.trim() : '';
-    const tag = canonicalTagName(ctag || formTag || RESERVED_UNKNOWN_TAG, deps.loadConfig());
+    const tag = canonicalTagName(ctag || formTag || RESERVED_UNKNOWN_TAG, configSnapshot.config);
     const expected = buildOvernightPlan(panel, formBaseEntries);
     if (!expected || !expected.ok) {
       showInlineError(panel, expected && expected.message || t('form.overnightUnsavable'));
       paintTransactionPreview(panel, expected);
       return;
     }
-    const { data: d, raw } = deps.loadSnapshot();
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     const latest = buildOvernightPlan(panel, d.entries);
     if (!latest || !latest.ok) {
@@ -1652,7 +1714,7 @@ export function createSheetController(deps) {
     d.entries = latest.resultEntries;
     const write = deps.saveChecked(d, raw);
     if (!write.ok) {
-      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
+      showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm')));
       return;
     }
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
@@ -1665,6 +1727,11 @@ export function createSheetController(deps) {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
     if (formBackfill) { saveBackfill(panel); return; }
     if (formOvernightContext) { saveOvernightEntry(panel); return; }
+    const snapshot = checkedSheetSnapshot(deps.loadSnapshotChecked, panel);
+    if (!snapshot) return;
+    const configSnapshot = checkedSheetSnapshot(deps.loadConfigSnapshotChecked, panel);
+    if (!configSnapshot) return;
+    const { data: d, raw } = snapshot;
     const timeScope = getFormWheelMount(panel) || panel;
     const planned = formRecordMode === 'plan';
     const checked = validateTsForMode(document.getElementById('form-ts').value, {
@@ -1680,8 +1747,7 @@ export function createSheetController(deps) {
     const what = document.getElementById('form-what').value.trim();
     if (!what) { document.getElementById('form-what').focus(); return; }
     const ctag = document.getElementById('form-ctag').value.trim();
-    const tag = canonicalTagName(ctag || formTag || RESERVED_UNKNOWN_TAG, deps.loadConfig());
-    const { data: d, raw } = deps.loadSnapshot();
+    const tag = canonicalTagName(ctag || formTag || RESERVED_UNKNOWN_TAG, configSnapshot.config);
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     let placeholder = openPlaceholderForDate(d.entries, checked.ts.slice(0, 10));
     // v87：占位条只有在**新起点不晚于它**时才可以复用（复用＝把它的 ts 挪到新起点）。
@@ -1720,7 +1786,7 @@ export function createSheetController(deps) {
       normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
       const write = deps.saveChecked(d, raw);
       if (!write.ok) {
-        showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
+        showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm')));
         return;
       }
       if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
@@ -1742,7 +1808,7 @@ export function createSheetController(deps) {
     normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
     const write = deps.saveChecked(d, raw);
     if (!write.ok) {
-      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
+      showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm')));
       return;
     }
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
@@ -1753,6 +1819,11 @@ export function createSheetController(deps) {
   // Bounded backfill into a segment: plan [start, end) as the new label and
   // restore the segment's original label at end through planSegmentSplit.
   function saveBackfill(panel) {
+    const snapshot = checkedSheetSnapshot(deps.loadSnapshotChecked, panel);
+    if (!snapshot) return;
+    const configSnapshot = checkedSheetSnapshot(deps.loadConfigSnapshotChecked, panel);
+    if (!configSnapshot) return;
+    const { data: d, raw } = snapshot;
     const startScope = (panel && panel.querySelector('[data-role="backfill-range-mount"]')) || panel;
     const endScope = startScope;
     const startChecked = validateTs(document.getElementById('form-ts').value);
@@ -1765,14 +1836,13 @@ export function createSheetController(deps) {
     const what = document.getElementById('form-what').value.trim();
     if (!what) { document.getElementById('form-what').focus(); return; }
     const ctag = document.getElementById('form-ctag').value.trim();
-    const tag = canonicalTagName(ctag || formTag || RESERVED_UNKNOWN_TAG, deps.loadConfig());
+    const tag = canonicalTagName(ctag || formTag || RESERVED_UNKNOWN_TAG, configSnapshot.config);
     const expected = buildSplitPlan(panel, formBaseEntries);
     if (!expected || !expected.ok) {
       showInlineError(panel, expected && expected.message || t('form.backfillUnsavable'));
       paintTransactionPreview(panel, expected);
       return;
     }
-    const { data: d, raw } = deps.loadSnapshot();
     if (formSourceId && !unchangedFormEntry(d.entries, formSourceId, panel)) return;
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     const latest = planSegmentSplit(d.entries, {
@@ -1799,7 +1869,7 @@ export function createSheetController(deps) {
     d.entries = latest.resultEntries;
     const write = deps.saveChecked(d, raw);
     if (!write.ok) {
-      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
+      showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm')));
       return;
     }
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
@@ -1839,7 +1909,11 @@ export function createSheetController(deps) {
     const whatEl = box.querySelector('[data-role="edit-what"]');
     const chipBox = box.querySelector('[data-role="edit-chips"]');
     const customEl = box.querySelector('[data-role="edit-custom-tag"]');
-    const { data: d, raw } = deps.loadSnapshot();
+    const snapshot = checkedSheetSnapshot(deps.loadSnapshotChecked, box);
+    if (!snapshot) return;
+    const configSnapshot = checkedSheetSnapshot(deps.loadConfigSnapshotChecked, box);
+    if (!configSnapshot) return;
+    const { data: d, raw } = snapshot;
     const entry = unchangedFormEntry(d.entries, id, box);
     if (!entry) return;
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
@@ -1864,7 +1938,7 @@ export function createSheetController(deps) {
     const ctag = customEl ? customEl.value.trim() : '';
     // v85：敲 `sleep` 而 config 里是 `Sleep` 时，记录存权威拼写——否则时间轴显示
     // `#sleep`、设置页显示 `Sleep`，同一个标签两副面孔。
-    const tag = canonicalTagName(ctag || (sel ? sel.dataset.tag : RESERVED_UNKNOWN_TAG), deps.loadConfig());
+    const tag = canonicalTagName(ctag || (sel ? sel.dataset.tag : RESERVED_UNKNOWN_TAG), configSnapshot.config);
     const conflict = findTimeConflict(d.entries, checked.ts, id);
     if (conflict) {
       showConflictError(box, conflict, checked.ts, 'use-conflict-plus-edit');
@@ -1906,7 +1980,7 @@ export function createSheetController(deps) {
       d.entries = latest.resultEntries;
       const write = deps.saveChecked(d, raw);
       if (!write.ok) {
-        showInlineError(box, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
+        showInlineError(box, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm')));
         return;
       }
       if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box, write.raw)) return;
@@ -1919,7 +1993,7 @@ export function createSheetController(deps) {
       normalizeEntries(d, { todayKey: todayStr(), createId: deps.uid });
       const write = deps.saveChecked(d, raw);
       if (!write.ok) {
-        showInlineError(box, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm'));
+        showInlineError(box, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm')));
         return;
       }
       if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box, write.raw)) return;
@@ -2391,7 +2465,7 @@ export function createSheetController(deps) {
     box.hidden = false;
     revealConfigRow(plan.source.el);
     if (plan.source.el && typeof plan.source.el.scrollIntoView === 'function') {
-      plan.source.el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      plan.source.el.scrollIntoView({ block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
     }
   }
 
@@ -2412,6 +2486,11 @@ export function createSheetController(deps) {
 
   function saveTagConfig(opts = {}) {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    const snapshot = checkedSheetSnapshot(deps.loadSnapshotChecked, panel, 'config-error');
+    if (!snapshot) return;
+    const configSnapshot = checkedConfigAtOpen(panel);
+    if (!configSnapshot) return;
+    const { data: d, raw } = snapshot;
     // 本次保存要被并掉的那一行（如果有）：它不参与改名、也不进最终的 config。
     let mergeSourceRow = null;
     let mergeTargetName = '';
@@ -2439,7 +2518,6 @@ export function createSheetController(deps) {
       showInlineError(panel, t('config.reservedName', { name: RESERVED_UNKNOWN_TAG }), 'config-error', reserved.input);
       return;
     }
-    const { data: d, raw } = deps.loadSnapshot();
     const beforeData = { ...d, entries: cloneEntries(d.entries) };
     // v85：重名判定跨三组一起做（主线与 chip 之间同名同样是冲突），且判据是 tagKey——
     // `sleep` 与 `Sleep` 是同一个标签。判严之后必须同时给出**出口**，否则本来就同时
@@ -2472,10 +2550,10 @@ export function createSheetController(deps) {
         .find(item => item.dataset.originalName === stillUsed);
       if (row) revealConfigRow(row);
       showInlineError(panel, t('config.deleteHasEntries', { name: stillUsed }), 'config-error');
-      if (row && typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (row && typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
       return;
     }
-    let nextConfig = deps.loadConfig();
+    let nextConfig = configSnapshot.config;
     // v85：合并——把来源标签的记录迁到目标名下，来源行随后不进最终 config。
     // 与改名共用 migrateEntryTags，同样落在**这一次** load() 的对象图上。
     if (mergeSourceRow) {
@@ -2513,16 +2591,11 @@ export function createSheetController(deps) {
       if (row === mergeSourceRow) continue;
       nextConfig = setMainlineLongOk(nextConfig, row.name, row.longOk);
     }
-    // 标签设置是长表单：若另一个标签页在打开期间写过 config，旧行状态不能继续
-    // 参与这次重建，否则会静默抹掉对方的改名/分桶。先做一次便宜的前置检查，
-    // 保存后再由 saveConfigChecked() 复核一次。
-    if (deps.readConfigRaw() !== configRawAtOpen) {
-      showInlineError(panel, t('toast.concurrentWrite'), 'config-error');
-      return;
-    }
+    // The checked config snapshot already passed the opening-baseline check;
+    // the writer below still rechecks after the record write.
     const write = deps.saveChecked(d, raw);
     if (!write.ok) {
-      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'config-error');
+      showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota')), 'config-error');
       return;
     }
     const configWrite = deps.saveConfigChecked(nextConfig, configRawAtOpen);
@@ -2534,7 +2607,7 @@ export function createSheetController(deps) {
         showInlineError(panel, t('io.importRollbackFailed'), 'config-error');
         return;
       }
-      showInlineError(panel, configWrite.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'config-error');
+      showInlineError(panel, configWrite.message || (configWrite.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota')), 'config-error');
       return;
     }
     // 删除生效后，还挂着的「撤销删除记录」会把引用这个标签的记录放回来——那条记录
@@ -2550,10 +2623,12 @@ export function createSheetController(deps) {
     const panel = document.querySelector('#form-sheet .form-sheet-panel');
     // 用打开时的 CAS 基线，而不是现读的 raw：否则另一标签页在本 sheet 打开期间
     // 的写入会被当成自己的基线，静默覆盖。
-    const write = deps.saveConfigChecked(storageSetCurrentMainline(deps.loadConfig(), name), configRawAtOpen);
+    const snapshot = checkedConfigAtOpen(panel);
+    if (!snapshot) return;
+    const write = deps.saveConfigChecked(storageSetCurrentMainline(snapshot.config, name), configRawAtOpen);
     if (!write.ok) {
       // 失败不重渲染，暂存在 DOM 里的未保存编辑留住。
-      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'config-error');
+      showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota')), 'config-error');
       return;
     }
     configRawAtOpen = write.raw;
@@ -2633,7 +2708,11 @@ export function createSheetController(deps) {
   }
 
   function previewLocaleDefaults() {
-    openFormSheet({ mode: 'config', defaultsPreview: previewLocaleDefaultTags(deps.loadConfig()) });
+    // Preview is read-only: require readable data, not an unchanged opening
+    // revision. Apply/Save still compare that original baseline before writing.
+    const snapshot = checkedSheetSnapshot(deps.loadConfigSnapshotChecked, configPanel(), 'config-error');
+    if (!snapshot) return;
+    openFormSheet({ mode: 'config', defaultsPreview: previewLocaleDefaultTags(snapshot.config) });
     const preview = configPanel() && configPanel().querySelector('[data-role="defaults-preview"]');
     if (!preview) return;
     preview.scrollIntoView({ block: 'nearest' });
@@ -2645,9 +2724,11 @@ export function createSheetController(deps) {
     const panel = configPanel();
     const added = configDefaultsPreview ? configDefaultsPreview.additions.map(chip => chip.name) : [];
     // 同 setCurrentMainline：用打开时的 CAS 基线，不用现读的 raw。
-    const write = deps.saveConfigChecked(appendLocaleDefaultTags(deps.loadConfig()), configRawAtOpen);
+    const snapshot = checkedConfigAtOpen(panel);
+    if (!snapshot) return;
+    const write = deps.saveConfigChecked(appendLocaleDefaultTags(snapshot.config), configRawAtOpen);
     if (!write.ok) {
-      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'config-error');
+      showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota')), 'config-error');
       return;
     }
     configRawAtOpen = write.raw;
@@ -2691,22 +2772,26 @@ export function createSheetController(deps) {
     if (mottoMode(panel) === 'quote') { saveQuotesMode(panel); return; }
     // 切回单句格言会顺带关掉轮播（写句库）；先确认句库在 sheet 打开期间没被别处改过，
     // 再动任何一个键，避免只写成一半。
-    const lib = deps.loadQuotes();
-    if (lib.enabled && deps.readQuotesRaw() !== quotesRawAtOpen) {
+    const quoteSnapshot = checkedSheetSnapshot(deps.loadQuotesSnapshotChecked, panel, 'motto-error');
+    if (!quoteSnapshot) return;
+    const configSnapshot = checkedSheetSnapshot(deps.loadConfigSnapshotChecked, panel, 'motto-error');
+    if (!configSnapshot) return;
+    const lib = quoteSnapshot.lib;
+    if (lib.enabled && quoteSnapshot.raw !== quotesRawAtOpen) {
       showInlineError(panel, t('toast.concurrentWrite'), 'motto-error');
       return;
     }
-    const { config, raw } = deps.loadConfigSnapshot();
+    const { config, raw } = configSnapshot;
     config.motto = input.value;
     const write = deps.saveConfigChecked(config, raw);
     if (!write.ok) {
-      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota'), 'motto-error');
+      showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota')), 'motto-error');
       return;
     }
     // 切回单句格言：句库保留（再切回来不用重新导入），只关掉轮播。
     if (lib.enabled) {
       const off = deps.saveQuotesChecked({ ...lib, enabled: false }, quotesRawAtOpen);
-      if (!off.ok) { showInlineError(panel, t('config.quota'), 'motto-error'); return; }
+      if (!off.ok) { showInlineError(panel, off.message || (off.reason === 'concurrent' ? t('toast.concurrentWrite') : t('config.quota')), 'motto-error'); return; }
     }
     closeForm();
     deps.render();
@@ -2718,7 +2803,9 @@ export function createSheetController(deps) {
   function saveQuotesMode(panel) {
     const textarea = panel.querySelector('[data-role="quotes-input"]');
     const value = textarea ? textarea.value : '';
-    const current = deps.loadQuotes();
+    const snapshot = checkedSheetSnapshot(deps.loadQuotesSnapshotChecked, panel, 'motto-error');
+    if (!snapshot) return;
+    const current = snapshot.lib;
     const items = quotesFromInput(value, current);
     // v1.5.1：只有文本框**确实空了**才表示「删除句库」。有字却拆不出任何一句（全是
     // 标题/分隔线/代码块）时拦下说明原因——绝不静默整键删除（v1.5.0 验收发现的丢数据路径）。
@@ -2732,7 +2819,7 @@ export function createSheetController(deps) {
       anchor: rebaseQuoteAnchor(current, items, todayStr())
     }, quotesRawAtOpen);
     if (!write.ok) {
-      showInlineError(panel, write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('quotes.quota'), 'motto-error');
+      showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('quotes.quota')), 'motto-error');
       return;
     }
     closeForm();
@@ -2767,11 +2854,15 @@ export function createSheetController(deps) {
   }
 
   // 实时告诉用户「存下去会是几句、今天显示哪一句」——拆句规则不必读说明也看得见。
-  function paintQuotesCount(panel) {
+  function paintQuotesCount(panel, current = null) {
     const textarea = panel ? panel.querySelector('[data-role="quotes-input"]') : null;
     const out = panel ? panel.querySelector('[data-role="quotes-count"]') : null;
     if (!textarea || !out) return;
-    const current = deps.loadQuotes();
+    if (!current) {
+      const snapshot = checkedSheetSnapshot(deps.loadQuotesSnapshotChecked, panel, 'motto-error');
+      if (!snapshot) return;
+      current = snapshot.lib;
+    }
     const { total } = splitQuoteText(textarea.value);
     const items = quotesFromInput(textarea.value, current);
     if (!items.length) {

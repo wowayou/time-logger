@@ -4,7 +4,7 @@
 // the v77 FAB copy variants, the SPEC-013 snapshot locale door, and the new
 // language switch all work under a real en boot, not just in the catalog
 // file itself.
-import { expect, test } from '@playwright/test';
+import { expect, test } from './startup_fixture.js';
 import { bootLocale, TODAY_KEY, YESTERDAY_KEY } from './i18n_fixture.js';
 
 // ① header / view switching renders in English, and <html lang> follows.

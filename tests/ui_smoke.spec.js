@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './startup_fixture.js';
 import { readFile } from 'node:fs/promises';
 import { openCfgRow } from './cfg_fixture.js';
 import { FIXED_NOW, STATES, VIEWPORTS, boot, expectNoHorizontalOverflow, openAdvancedSheet, openBackupMenu, openBackupSheet, routeStaticOrigin, trackDialogs } from './ui_fixture.js';
