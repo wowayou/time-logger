@@ -2,7 +2,7 @@
 
 > Status: active · 已上线，可日常使用；进度与待办见 [STATUS.md](STATUS.md)
 >
-> Release: v1.7.5（源码候选，尚未正式发布；线上仍为 v1.7.4，进度与风险见 [STATUS.md](STATUS.md)）
+> Release: v1.7.5（2026-11-13 两站已部署、线上运行时逐文件核对；产物验证缺口、真机及已知风险见 [STATUS.md](STATUS.md)）
 >
 > Updated: 2026-11-13
 >
