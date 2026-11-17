@@ -2,9 +2,9 @@
 
 > Status: active · 已上线，可日常使用；进度与待办见 [STATUS.md](STATUS.md)
 >
-> Release: v1.7.5（2026-11-13 两站已部署、线上运行时逐文件核对；产物验证缺口、真机及已知风险见 [STATUS.md](STATUS.md)）
+> Release: v1.8.0（源码已推送 main，尚未发布；线上仍为 v1.7.5，2026-11-13 两站已部署；验证结果、真机及已知风险见 [STATUS.md](STATUS.md)）
 >
-> Updated: 2026-11-13
+> Updated: 2026-11-17
 >
 > Intended user: 需要记录每天时间去向并进行每日复盘的个人使用者。
 >

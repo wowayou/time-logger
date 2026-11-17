@@ -361,6 +361,7 @@ export default {
   'hero.jobToday': '今日主线',
   'hero.job': '主线',
   'hero.leak': '偏航',
+  'hero.total': '共 {dur}',
   'dur.pendingOngoing': '待核 · 已 {dur}',
   'dur.pending': '待核 · {dur}',
   'dur.ongoing': '已 {dur}',

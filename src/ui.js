@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-import { fmtMins, hhmm, localDateTimeKey, minsBetweenDates, normalizeTimestamp } from './time.js';
+import { fmtMins, fmtPlainMins, hhmm, localDateTimeKey, minsBetweenDates, normalizeTimestamp } from './time.js';
 import { formatPercent } from './stats.js';
 import { getLocale, plural, t } from './i18n.js';
 import {
@@ -72,6 +72,9 @@ export function setButtonTip(el, text, ariaLabel) {
   if (ariaLabel) el.setAttribute('aria-label', ariaLabel);
 }
 
+// v1.8.0：周/月/年总览与日视图同一张结论卡——主线大数字 + 偏航次要数字 + 比例条 +
+// 辅助行。旧版是「比例条 + 四桶百分比 + 总时长」平铺，总时长挤在图例末尾换行；四桶
+// 分钟仍是权威值，百分比不再上卡（明细行保留）。
 export function renderRuler(totals, hasItems, view) {
   const el = document.getElementById('ruler');
   if (!hasItems || !totals.total) {
@@ -81,20 +84,12 @@ export function renderRuler(totals, hasItems, view) {
     el.innerHTML = `<p class="muted-note">${text}</p>`;
     return;
   }
-  const parts = bucketParts(totals);
-  el.innerHTML = `
-    <div class="ruler-bar">
-      ${parts.map(part => `<div style="flex:${part.value};background:var(${part.color})"></div>`).join('')}
-    </div>
-    <div class="ruler-text">
-      ${parts.map(part => `<span><span class="dot" style="background:var(${part.color})"></span>${part.label} ${part.percent}</span>`).join('')}
-      ${totals.pending ? `<span>${t('hero.pending', { dur: fmtMins(totals.pending) })}</span>` : ''}
-      <span>${fmtMins(totals.total)}</span>
-    </div>`;
+  el.innerHTML = heroCard(totals, t('hero.job'), [t('hero.total', { dur: fmtMins(totals.total) })]);
 }
 
 // R4（v47）：日视图尺子从「四桶清单」改「结论卡」——主线净时长是屏幕唯一大数字，
-// 偏航（v69 前称漏损）为次要数字，比例条 + 百分比降为辅助。只用于 day 视图；周/月/年仍走 renderRuler。
+// 偏航（v69 前称漏损）为次要数字，比例条 + 百分比降为辅助。v1.8.0 起周/月/年经 renderRuler
+// 共用同一张 heroCard，只是标签与辅助行末项不同（「截至」换成「共」）。
 export function renderDayHero(totals, hasItems, opts = {}) {
   const el = document.getElementById('ruler');
   const { isToday = false, asOf = '' } = opts;
@@ -103,6 +98,11 @@ export function renderDayHero(totals, hasItems, opts = {}) {
     el.innerHTML = `<p class="muted-note">${text}</p>`;
     return;
   }
+  el.innerHTML = heroCard(totals, isToday ? t('hero.jobToday') : t('hero.job'), [isToday && asOf ? t('hero.asOf', { time: asOf }) : '']);
+}
+
+// 结论卡上的桶分钟恰为 0 时写「0min」而不是「<1min」——后者暗示有过一点时长。
+function heroCard(totals, label, extraAux) {
   const parts = bucketParts(totals);
   const bar = parts.map(part => {
     // 维持段 .55 透明度（设计稿：主线/偏航为焦点，维持退到背景）。
@@ -110,21 +110,21 @@ export function renderDayHero(totals, hasItems, opts = {}) {
     return `<div style="flex:${part.value};background:var(${part.color})${dim}"></div>`;
   }).join('');
   const aux = [
-    t('hero.maintain', { dur: fmtMins(totals.maintain) }),
-    t('hero.unrecorded', { dur: fmtMins(totals.unrecorded) }),
+    t('hero.maintain', { dur: fmtPlainMins(totals.maintain) }),
+    t('hero.unrecorded', { dur: fmtPlainMins(totals.unrecorded) }),
     totals.pending ? t('hero.pending', { dur: fmtMins(totals.pending) }) : '',
-    isToday && asOf ? t('hero.asOf', { time: asOf }) : ''
+    ...extraAux
   ].filter(Boolean).join(' · ');
-  el.innerHTML = `
+  return `
     <div class="day-hero">
       <div class="hero-nums">
         <div class="hero-cell">
-          <div class="hero-label">${isToday ? t('hero.jobToday') : t('hero.job')}</div>
-          <div class="hero-big">${fmtMins(totals.job)}</div>
+          <div class="hero-label">${label}</div>
+          <div class="hero-big">${fmtPlainMins(totals.job)}</div>
         </div>
         <div class="hero-cell">
           <div class="hero-label">${t('hero.leak')}</div>
-          <div class="hero-leak">${fmtMins(totals.leak)}</div>
+          <div class="hero-leak">${fmtPlainMins(totals.leak)}</div>
         </div>
       </div>
       <div class="hero-bar">${bar}</div>
@@ -238,7 +238,7 @@ export function renderTimeline(items, opts = {}) {
     if (isPlanned) {
       const displayTag = (e.tags || [])[0] || t('tag.unknown');
       const interactiveAttrs = readOnly ? '' : ` data-action="start-edit" role="button" tabindex="0" aria-label="${esc(t('timeline.editPlanAria', { what: e.what || t('timeline.emptyWhat') }))}"`;
-      const card = `<div class="entry planned" data-b="${bucketForTag(displayTag, config)}" data-id="${esc(e.id)}"${interactiveAttrs}>
+      const card = `<div class="entry planned${readOnly ? ' inline-meta' : ''}" data-b="${bucketForTag(displayTag, config)}" data-id="${esc(e.id)}"${interactiveAttrs}>
         <div class="e-time">${hhmm(e.ts)}</div>
         <div class="e-body">
           <div class="e-what">${esc(e.what || t('timeline.emptyWhat'))}</div>
@@ -255,7 +255,7 @@ export function renderTimeline(items, opts = {}) {
       const gapTs = localDateTimeKey(start);
       const gapEnd = localDateTimeKey(end);
       const interactiveAttrs = readOnly ? '' : ` data-action="backfill-seg" data-kind="fill" data-ts="${esc(gapTs)}" data-end="${esc(gapEnd)}" role="button" tabindex="0" aria-label="${t('timeline.gapAria', { time: hhmm(start) })}"`;
-      return `<div class="entry gap" data-b="unrecorded" data-gap-ts="${esc(gapTs)}"${interactiveAttrs}>
+      return `<div class="entry gap inline-meta" data-b="unrecorded" data-gap-ts="${esc(gapTs)}"${interactiveAttrs}>
         <div class="e-time">${hhmm(start)}</div>
         <div class="e-body">
           <div class="e-what">${t('timeline.gapWhat')}</div>
@@ -278,6 +278,9 @@ export function renderTimeline(items, opts = {}) {
     // 既要重做双主题令牌，也会破坏 v56 定下的「竖脊＝唯一颜色语法」。曾有过一个 `pending-review`
     // 钩子，但它没有任何样式规则也没有用例，属死类，已删。
     const entryClass = `entry${isPlaceholder ? ' placeholder' : ''}${sheetEditId === e.id ? ' sheet-editing' : ''}`;
+    // v1.8.0：行内没有动作链接时，#标签 接在正文同一行（放不下才换行），行高从两行
+    // 收到一行；有「补一下/确认/标记已发生」的行保持两行——v1.7.3 要求每枚链接独占
+    // 44×44px 且排在正文下方，不能与正文争同一行。
     const durStr = timelineDurationLabel(mins, isOngoing, pendingConfirm);
     const confirmText = confirmSegmentLabel(e.ts, endTs);
     const startLabel = start ? hhmm(start) : hhmm(e.ts);
@@ -292,7 +295,8 @@ export function renderTimeline(items, opts = {}) {
       : '';
     const cardLabel = isPlaceholder ? t('timeline.editGapAria') : t('timeline.editEntryAria', { what: esc(e.what) });
     const interactiveAttrs = readOnly ? '' : ` data-action="start-edit" role="button" tabindex="0" aria-label="${cardLabel}"`;
-    const card = `<div class="${entryClass}" data-b="${bucket}" data-id="${esc(e.id)}"${interactiveAttrs}>
+    const hasLinks = !readOnly && (confirmable || Boolean(fillBtn));
+    const card = `<div class="${entryClass}${hasLinks ? '' : ' inline-meta'}" data-b="${bucket}" data-id="${esc(e.id)}"${interactiveAttrs}>
       <div class="e-time">${startLabel}</div>
       <div class="e-body">
         <div class="e-what">${esc(isPlaceholder ? (activePlaceholder ? t('timeline.notLoggedYet') : t('timeline.unrecorded')) : e.what)}</div>
@@ -318,13 +322,24 @@ export function renderSummaryRows(rows) {
   const el = document.getElementById('timeline');
   const html = rows.map(row => {
     const { totals } = row;
-    const parts = bucketParts(totals);
-    return `<button class="sum-row" type="button" data-action="drill" data-date="${esc(row.key)}" data-view="${esc(row.targetView)}" data-tip="${t('summary.drillTip')}" aria-label="${esc(t('summary.drillAria', { label: row.label }))}">
+    const attrs = `type="button" data-action="drill" data-date="${esc(row.key)}" data-view="${esc(row.targetView)}" data-tip="${t('summary.drillTip')}" aria-label="${esc(t('summary.drillAria', { label: row.label }))}"`;
+    // v1.8.0：没有可统计时长的日/月只占一行——不再画空条和一排「0%」。仍是同一个
+    // 可下钻按钮，行数与顺序不变。
+    if (!totals.total) {
+      return `<button class="sum-row is-empty" ${attrs}>
       <div class="sum-top">
         <span class="sum-name">${esc(row.label)}</span>
-        <span class="sum-total">${totals.total ? fmtMins(totals.total) : t('summary.noEntries')}</span>
+        <span class="sum-total">${t('summary.noEntries')}</span>
       </div>
-      <div class="ruler-bar" style="margin-bottom:8px">
+    </button>`;
+    }
+    const parts = bucketParts(totals);
+    return `<button class="sum-row" ${attrs}>
+      <div class="sum-top">
+        <span class="sum-name">${esc(row.label)}</span>
+        <span class="sum-total">${fmtMins(totals.total)}</span>
+      </div>
+      <div class="ruler-bar">
         ${parts.map(part => `<div style="flex:${part.value};background:var(${part.color})"></div>`).join('')}
       </div>
       <div class="sum-meta">
@@ -375,7 +390,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.7.5';
+export const APP_VERSION = '1.8.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};

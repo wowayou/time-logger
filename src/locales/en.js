@@ -373,6 +373,7 @@ export default {
   'hero.jobToday': 'Focus today',
   'hero.job': 'Focus',
   'hero.leak': 'Drift',
+  'hero.total': 'Total {dur}',
   'dur.pendingOngoing': 'Pending review · {dur} so far',
   'dur.pending': 'Pending review · {dur}',
   'dur.ongoing': '{dur} so far',

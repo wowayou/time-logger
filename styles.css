@@ -1399,6 +1399,11 @@
       mask-repeat: repeat-y;
       mask-size: 4px 11px;
     }
+    /* v1.8.0：时间轴容器 16px 圆角会把首行竖脊左上角裁成楔形。实色脊顺着圆角弯过去
+       看着自然；虚线脊的第一节只剩半截，像一个毛刺。首行是计划时虚线从圆角下方起画
+       （12px：4px 宽的脊在此处已完整露出）。计划行恒在倒序最前，尾行不会是计划。 */
+    .log > .entry.planned:first-child::before,
+    .log > :first-child > .entry.planned::before { top: 12px; }
     .entry.sheet-editing { background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
     .entry.gap .e-what { color: var(--muted); }
     /* R6：整卡可点（role=button）——指针手型 + 按压/聚焦反馈；键盘 focus-visible 描边
@@ -1413,6 +1418,16 @@
     .entry.placeholder .e-what { color: var(--muted); }
     .e-meta { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
     .e-meta > * { min-width: 0; }
+    /* v1.8.0：没有行内动作的行，正文与 #标签 同处一个可换行的 flex 行——短正文时
+       整行只有一行高（≥44px 由上下 11px 内边距 + 正文行高保证），正文很长时它自己
+       占满一行、标签照旧落到下一行。标签按基线对齐正文。 */
+    .entry.inline-meta .e-body {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      column-gap: var(--sp-2);
+    }
+    .entry.inline-meta .e-what { margin-bottom: 0; min-width: 0; }
     /* Each link owns its full target in the flex layout, including wrapped
        lines and multi-line labels; no hot area may borrow the record text. */
     .e-meta > .mini-btn {
@@ -2241,6 +2256,10 @@
       /* Pin the single column to the container so tall/long content scrolls
          instead of widening the panel past the screen (see .form-sheet-panel). */
       grid-template-columns: minmax(0, 1fr);
+      /* v1.8.0：窄屏 .tall 面板定高（满视口，见 v43），grid 默认 align-content:stretch
+         会把多出的高度平均摊进每条 auto 轨道——字段之间出现大片留白，「已发生/计划中」
+         被撑成一块大灰框，标签区被推到折线以下。行高只按内容，余量留在底部。 */
+      align-content: start;
       gap: var(--sp-3);
       padding-top: 14px;
       /* v43: 底部预留键盘遮挡高度 --kb，让最后一个字段能滚到键盘上方；键盘落下时
@@ -2742,6 +2761,24 @@
 
     .bucket-seg { margin-bottom: 10px; }
     .record-mode-seg { margin-bottom: var(--sp-3); }
+    /* v1.8.0：记录表单里的两组分段是每条记录都要点的控件——grid 子项默认横向拉满，
+       「已发生/计划中」两枚小按钮缩在一条整宽灰带左端；按钮本身只有 26px 高。
+       改为按内容宽度靠左，按钮 36px 高、正文小一档字号（与 iOS 分段控件同级）。 */
+    .form-sheet-body > .seg { justify-self: start; }
+    :is(.record-mode-seg, .bucket-seg) button {
+      min-height: 36px;
+      padding: 0 14px;
+      font-size: var(--fs-ui);
+    }
+    /* v1.8.0：没有可统计时长的日/月只占一行，退到背景，不与有数据的行抢视线。 */
+    .sum-row .ruler-bar { margin-bottom: var(--sp-2); }
+    .sum-row.is-empty {
+      padding-block: 10px;
+      background: color-mix(in srgb, var(--card) 55%, transparent);
+      box-shadow: none;
+    }
+    .sum-row.is-empty .sum-top { margin-bottom: 0; }
+    .sum-row.is-empty .sum-name { color: var(--muted); font-weight: 500; }
     .cell-btn[aria-disabled="true"] {
       opacity: 0.45;
       cursor: not-allowed;
