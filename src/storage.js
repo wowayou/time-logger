@@ -53,6 +53,16 @@ export const VIEW_KEY = 'timelog.view';
 export const SELECTED_DATE_KEY = 'timelog.selectedDate';
 export const OPEN_DATE_KEY = 'timelog.openDate';
 export const RECORD_MODE_KEY = 'timelog.recordMode';
+// v1.8.1：日视图时间轴行布局（单行 / 两行 / 按时长比例），设备偏好，不进备份。
+// 缺失或非法值按默认「两行」——最接近 v1.7.5 以前的样子。
+export const TIMELINE_DENSITY_KEY = 'timelog.timelineDensity';
+export const TIMELINE_DENSITIES = ['single', 'double', 'scaled'];
+export const DEFAULT_TIMELINE_DENSITY = 'double';
+
+/** @param {string | null | undefined} value @returns {string} */
+export function normalizeTimelineDensity(value) {
+  return value && TIMELINE_DENSITIES.includes(value) ? value : DEFAULT_TIMELINE_DENSITY;
+}
 // SPEC-013：语言偏好。'' / 键缺失＝跟随系统。是**设备偏好不是用户数据**——
 // 不进备份、导入不得改语言（与 timelog.theme 同类）。
 export const LOCALE_KEY = 'timelog.locale';

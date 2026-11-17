@@ -721,10 +721,12 @@ test('plan mode uses plan copy and is hidden on historical days', async ({ page 
 
   // v47 R2+FAB：入口是悬浮 FAB；计划模式下主文案切「＋ 计划一条」（fab-main）。
   await expect(page.locator('#add-btn .fab-main')).toHaveText('＋ 计划一条');
-  // v56：tag 是素色 #标签，桶色走竖脊（data-b）；「计划」状态词在时长列，脊为虚线。
+  // v56：tag 是素色 #标签，桶色走竖脊（data-b），脊为虚线。v1.8.1：有「标记已发生」时
+  // 右列只放这枚链接，不再显示「计划」二字（只读页没有链接时仍显示）。
   await expect(page.locator('#timeline')).toContainText('#求职推进');
   await expect(page.locator('.entry.planned')).toHaveAttribute('data-b', 'job');
-  await expect(page.locator('.entry.planned .e-dur')).toHaveText('计划');
+  await expect(page.locator('.entry.planned [data-action="confirm-planned"]')).toBeVisible();
+  await expect(page.locator('.entry.planned .e-dur')).toHaveCount(0);
   const entries = await page.evaluate(() => JSON.parse(localStorage.getItem('timelog.v1')).entries);
   expect(entries).toHaveLength(1);
   expect(entries[0]).toMatchObject({ what: '准备面试', tags: ['求职推进'], planned: true });

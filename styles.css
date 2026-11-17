@@ -1348,15 +1348,22 @@
     .swipe-actions[aria-hidden="true"] { pointer-events: none; }
     /* v56：行＝时间｜内容｜时长 三列网格，贴地无圆角无描边；--card 底必须保留且
        不透明——左滑时行滑过底下的操作轨道，透明底会让轨道透出（v53 教训的行级版）。 */
+    /* v1.8.1：行高与内容无关（维护者裁定）。通高竖脊行行相接，长度在眼里就是时长——行高
+       若随文字量或行内链接变化，短段反而显得「长」（v1.8.0 的教训）。三种布局由「更多 →
+       时间轴」选（.log[data-density]）：单行 52px（下面的基础样式）、两行 72px（默认）、
+       按时长（1 分钟 1px，下限 52px）。前两种同一列表内每行严格等高；完整正文在编辑页。
+       改这里之前先读 docs/HANDOFF.md 对应条目。 */
     .entry {
       position: relative;
       background: var(--card);
       border-radius: 0;
-      padding: 11px 14px 11px var(--sp-4);
+      height: 52px;
+      padding: 0 14px 0 var(--sp-4);
       margin: 0;
       display: grid;
-      grid-template-columns: 44px minmax(0, 1fr) auto;
-      align-items: start;
+      /* 正文列保底 4em；右列可收缩（时长先省略、链接保底 44px），窄屏英文待核行也不溢出。 */
+      grid-template-columns: 44px minmax(4em, 1fr) minmax(0, auto);
+      align-items: center;
       gap: 10px;
       min-width: 0;
       box-shadow: none;
@@ -1412,50 +1419,120 @@
     .entry[data-action]:active { background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
     .entry[data-action]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     .entry[data-action]:focus:not(:focus-visible) { outline: none; }
-    .e-body { min-width: 0; }
-    .e-time { font-size: var(--fs-ui); color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
-    .e-what { font-size: var(--fs-body); color: var(--text); word-break: break-word; white-space: pre-wrap; margin-bottom: 3px; }
-    .entry.placeholder .e-what { color: var(--muted); }
-    .e-meta { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
-    .e-meta > * { min-width: 0; }
-    /* v1.8.0：没有行内动作的行，正文与 #标签 同处一个可换行的 flex 行——短正文时
-       整行只有一行高（≥44px 由上下 11px 内边距 + 正文行高保证），正文很长时它自己
-       占满一行、标签照旧落到下一行。标签按基线对齐正文。 */
-    .entry.inline-meta .e-body {
+    /* 正文与标签同一行。标签要么完整显示、要么整个让位：容器可换行但只露一行高，放不下
+       的标签被挤到第二行、随之被裁掉——不出现只剩一个字的「#当…」（桶已由竖脊表达）。
+       正文独占一行仍放不下时省略；正文里的换行折成空格，完整多行内容在编辑页。 */
+    .e-body {
+      min-width: 0;
       display: flex;
       flex-wrap: wrap;
+      align-content: flex-start;
       align-items: baseline;
       column-gap: var(--sp-2);
+      height: 22px;
+      line-height: 22px;
+      overflow: hidden;
     }
-    .entry.inline-meta .e-what { margin-bottom: 0; min-width: 0; }
-    /* Each link owns its full target in the flex layout, including wrapped
-       lines and multi-line labels; no hot area may borrow the record text. */
+    .e-time { font-size: var(--fs-ui); color: var(--muted); font-variant-numeric: tabular-nums; }
+    .e-what {
+      flex: 0 1 auto;
+      min-width: 2em;
+      font-size: var(--fs-body);
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .entry.placeholder .e-what { color: var(--muted); }
+    /* 右列：时长 + 动作链接，不换行、不收缩，整列垂直居中。 */
+    .e-side {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+      min-width: 0;
+    }
+    /* 链接容器的最小宽度＝链接数 × 44px + 间距（grid 列 minmax 的 min-content），空间不够
+       时先省略时长、再把链接文字压到 44px 为止，链接永远不越出行、不压正文。 */
+    .e-meta {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(var(--control-h), max-content);
+      align-items: center;
+      gap: var(--sp-1);
+    }
+    .e-meta > * { min-width: 0; }
+    /* 每枚链接在右列里独占 ≥44×44 的命中区，不借正文、不越出 52px 行。v1.8.1 起文字单行
+       （修订 v1.7.3「长标签换行」）：超长译文省略，完整文字在读屏名里。 */
     .e-meta > .mini-btn {
+      display: block;
       min-width: var(--control-h);
-      min-height: var(--control-h);
-      max-width: 100%;
-      padding: var(--sp-2);
+      height: var(--control-h);
+      max-width: 9em;
+      padding: 0 var(--sp-1);
+      line-height: var(--control-h);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     /* v56：tag 降为素色小字——桶的颜色职责整体移交竖脊，列表只保留一个彩色通道。 */
     .e-tag {
+      flex: 0 0 auto;
+      max-width: 100%;
+      line-height: 16px;
       font-size: var(--fs-cap);
       color: var(--faint);
-      max-width: 100%;
-      overflow-wrap: anywhere;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .e-dur {
+      flex: 1 1 auto;
+      min-width: 0;
       font-size: var(--fs-cap);
       color: var(--muted);
-      overflow-wrap: anywhere;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       font-variant-numeric: tabular-nums;
       text-align: right;
-      padding-top: 3px;
+    }
+    /* 两行（默认）72px：第一行正文、第二行 #标签；右列上方时长（8–25px），下方动作链接
+       热区 26–70px，离行底留 2px——贴死行底时最底下半像素会落到下一行（v1.7.3 边缘点击
+       检查抓到）。44px 热区完整落在行内、不压正文、不叠时长。 */
+    .log[data-density="double"] .entry { height: 72px; align-items: start; }
+    .log[data-density="double"] .e-time { padding-top: 12px; }
+    .log[data-density="double"] .e-body {
+      flex-direction: column;
+      flex-wrap: nowrap;
+      align-items: stretch;
+      height: auto;
+      padding-top: 10px;
+      line-height: normal;
+    }
+    .log[data-density="double"] .e-what { line-height: 22px; }
+    .log[data-density="double"] .e-tag { line-height: 18px; }
+    .log[data-density="double"] .e-side {
+      height: 72px;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0;
+      padding: 8px 0 2px;
+    }
+    .log[data-density="double"] .e-side > :last-child:not(.e-dur) { margin-top: auto; }
+    .log[data-density="double"] .e-side .e-cta { line-height: var(--control-h); }
+    /* 按时长：行高＝时长分钟数 px（--mins 由渲染写入），下限 52px 保证可点、放得下一行；
+       内容贴在顶部 52px 的带里，时间对齐段的开始。计划行没有时长，按下限。 */
+    .log[data-density="scaled"] .entry {
+      height: max(52px, calc(var(--mins, 0) * 1px));
+      grid-template-rows: 52px;
+      align-content: start;
     }
     /* gap 行的「补一下」纯提示（整行即补录动作）——素色文字链形态，与 mini-btn 同语。 */
     .e-cta {
       font-size: var(--fs-cap);
       font-weight: 600;
       color: var(--accent);
+      white-space: nowrap;
     }
     /* v56：mini-btn（补一下/确认/标记已发生）从实心胶囊降为素色文字链——安静台账里
        只有真正指向缺口/待办的动作保留 accent 文字；触控热区仍由透明伪元素补足。 */
@@ -2756,7 +2833,7 @@
     }
 
     @container (max-width: 420px) {
-      .entry { padding: 11px var(--sp-3) 11px var(--sp-4); gap: var(--sp-2); }
+      .entry { padding: 0 var(--sp-3) 0 var(--sp-4); gap: var(--sp-2); }
     }
 
     .bucket-seg { margin-bottom: 10px; }
@@ -2791,7 +2868,11 @@
        四桶脊色用 --accent/--maintain/--leak/--track，「接通」键用 --maintain（本站无
        独立 green 令牌，维持键的绿即连接色）。无新令牌、无新运行时资产。 */
     .analytics-body { display: flex; flex-direction: column; gap: 6px; }
-    .an-period { align-self: center; margin: 2px 0 var(--sp-1); }
+    /* v1.8.1：分析页的周/月/年分段原先给选中项加的是 .on，而 .seg 的选中样式只认 .active
+       ——三个按钮看起来一样、不知道当前是哪一期；align-self 在块级父容器里也不生效，分段
+       一直贴左。改用 .active，按内容宽度居中，按钮与记录表单分段同为 36px。 */
+    .an-period { display: flex; width: fit-content; margin: 2px auto var(--sp-1); }
+    .an-period button { min-height: 36px; padding: 0 var(--sp-4); font-size: var(--fs-ui); }
     .an-period-label { text-align: center; color: var(--muted); font-size: var(--fs-cap); }
 
     .an-display { text-align: center; padding: 6px var(--sp-1) 2px; }
@@ -2805,8 +2886,10 @@
     .an-delta { color: var(--faint); font-size: var(--fs-cap); margin-top: 3px; min-height: 16px; }
     .an-trend { color: var(--accent); font-size: var(--fs-cap); margin-top: 2px; }
     .an-coverage { color: var(--faint); font-size: var(--fs-cap); margin-top: var(--sp-1); }
-    .an-spark { height: 40px; margin: var(--sp-2) 6px 0; }
-    .an-spark svg { width: 100%; height: 40px; overflow: visible; }
+    .an-spark { margin: var(--sp-2) 6px 0; }
+    .an-spark svg { display: block; width: 100%; height: 40px; overflow: visible; }
+    .an-spark rect.past { opacity: 0.4; }
+    .an-spark-cap { color: var(--faint); font-size: var(--fs-cap); margin-top: var(--sp-1); }
     .an-spark rect { fill: var(--accent); }
     .an-spark-maintain rect { fill: var(--maintain); }
     .an-spark-leak rect { fill: var(--leak); }

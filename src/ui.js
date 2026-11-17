@@ -10,6 +10,8 @@ import {
   BUCKET_ORDER,
   defaultMotto,
   THEME_KEY,
+  TIMELINE_DENSITY_KEY,
+  normalizeTimelineDensity,
   bucketForTag,
   chipGroups,
   configuredBucketForTag,
@@ -195,7 +197,7 @@ export function renderNowStrip(items, isToday, config = loadConfig()) {
 
 
 export function renderTimeline(items, opts = {}) {
-  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig() } = opts;
+  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig(), density = 'double' } = opts;
   const el = document.getElementById('timeline');
   // 桶色竖脊共用本帧配置，与统计同源；独立调用时才在上面读一次默认配置。
   const planned = (plannedItems || []).map(e => ({
@@ -238,16 +240,17 @@ export function renderTimeline(items, opts = {}) {
     if (isPlanned) {
       const displayTag = (e.tags || [])[0] || t('tag.unknown');
       const interactiveAttrs = readOnly ? '' : ` data-action="start-edit" role="button" tabindex="0" aria-label="${esc(t('timeline.editPlanAria', { what: e.what || t('timeline.emptyWhat') }))}"`;
-      const card = `<div class="entry planned${readOnly ? ' inline-meta' : ''}" data-b="${bucketForTag(displayTag, config)}" data-id="${esc(e.id)}"${interactiveAttrs}>
+      // v1.8.1：有「标记已发生」时不再显示「计划」二字——虚线竖脊与「现在」线上方的位置
+      // 已表达，单行等高行里把宽度留给正文；只读页没有动作，仍显示「计划」。读屏名不变。
+      const card = `<div class="entry planned" data-b="${bucketForTag(displayTag, config)}" data-id="${esc(e.id)}" style="--mins:0"${interactiveAttrs}>
         <div class="e-time">${hhmm(e.ts)}</div>
         <div class="e-body">
           <div class="e-what">${esc(e.what || t('timeline.emptyWhat'))}</div>
-          <div class="e-meta">
-            <span class="e-tag">#${esc(displayTag)}</span>
-            ${readOnly ? '' : `<button class="mini-btn" type="button" data-action="confirm-planned" data-id="${esc(e.id)}" aria-label="${t('timeline.markDoneAria')}">${t('timeline.markDone')}</button>`}
-          </div>
+          <span class="e-tag">#${esc(displayTag)}</span>
         </div>
-        <div class="e-dur">${t('timeline.planDur')}</div>
+        <div class="e-side">
+          ${readOnly ? `<div class="e-dur">${t('timeline.planDur')}</div>` : `<div class="e-meta"><button class="mini-btn" type="button" data-action="confirm-planned" data-id="${esc(e.id)}" aria-label="${t('timeline.markDoneAria')}">${t('timeline.markDone')}</button></div>`}
+        </div>
       </div>`;
       return readOnly ? card : swipeWrap(card, e, t('timeline.kindPlan'));
     }
@@ -255,16 +258,16 @@ export function renderTimeline(items, opts = {}) {
       const gapTs = localDateTimeKey(start);
       const gapEnd = localDateTimeKey(end);
       const interactiveAttrs = readOnly ? '' : ` data-action="backfill-seg" data-kind="fill" data-ts="${esc(gapTs)}" data-end="${esc(gapEnd)}" role="button" tabindex="0" aria-label="${t('timeline.gapAria', { time: hhmm(start) })}"`;
-      return `<div class="entry gap inline-meta" data-b="unrecorded" data-gap-ts="${esc(gapTs)}"${interactiveAttrs}>
+      return `<div class="entry gap" data-b="unrecorded" data-gap-ts="${esc(gapTs)}" style="--mins:${Math.round(mins)}"${interactiveAttrs}>
         <div class="e-time">${hhmm(start)}</div>
         <div class="e-body">
           <div class="e-what">${t('timeline.gapWhat')}</div>
-          <div class="e-meta">
-            <span class="e-tag">${t('timeline.gapTag')}</span>
-            ${readOnly ? '' : `<span class="e-cta">${t('timeline.fillIn')}</span>`}
-          </div>
+          <span class="e-tag">${t('timeline.gapTag')}</span>
         </div>
-        <div class="e-dur">${fmtMins(mins)}</div>
+        <div class="e-side">
+          <div class="e-dur">${fmtMins(mins)}</div>
+          ${readOnly ? '' : `<span class="e-cta">${t('timeline.fillIn')}</span>`}
+        </div>
       </div>`;
     }
     const isPlaceholder = typeof e.what === 'string' && e.what.trim() === '';
@@ -278,9 +281,6 @@ export function renderTimeline(items, opts = {}) {
     // 既要重做双主题令牌，也会破坏 v56 定下的「竖脊＝唯一颜色语法」。曾有过一个 `pending-review`
     // 钩子，但它没有任何样式规则也没有用例，属死类，已删。
     const entryClass = `entry${isPlaceholder ? ' placeholder' : ''}${sheetEditId === e.id ? ' sheet-editing' : ''}`;
-    // v1.8.0：行内没有动作链接时，#标签 接在正文同一行（放不下才换行），行高从两行
-    // 收到一行；有「补一下/确认/标记已发生」的行保持两行——v1.7.3 要求每枚链接独占
-    // 44×44px 且排在正文下方，不能与正文争同一行。
     const durStr = timelineDurationLabel(mins, isOngoing, pendingConfirm);
     const confirmText = confirmSegmentLabel(e.ts, endTs);
     const startLabel = start ? hhmm(start) : hhmm(e.ts);
@@ -295,18 +295,21 @@ export function renderTimeline(items, opts = {}) {
       : '';
     const cardLabel = isPlaceholder ? t('timeline.editGapAria') : t('timeline.editEntryAria', { what: esc(e.what) });
     const interactiveAttrs = readOnly ? '' : ` data-action="start-edit" role="button" tabindex="0" aria-label="${cardLabel}"`;
-    const hasLinks = !readOnly && (confirmable || Boolean(fillBtn));
-    const card = `<div class="${entryClass}${hasLinks ? '' : ' inline-meta'}" data-b="${bucket}" data-id="${esc(e.id)}"${interactiveAttrs}>
+    // v1.8.1：单行等高——正文与 #标签 同一行，时长与动作链接在右列。「确认」可见文字
+    // 只留动词，完整区间仍在读屏名里。
+    const confirmBtn = !readOnly && confirmable
+      ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" aria-label="${esc(confirmText)}">${t('timeline.confirmShort')}</button>`
+      : '';
+    const card = `<div class="${entryClass}" data-b="${bucket}" data-id="${esc(e.id)}" style="--mins:${Math.round(mins)}"${interactiveAttrs}>
       <div class="e-time">${startLabel}</div>
       <div class="e-body">
         <div class="e-what">${esc(isPlaceholder ? (activePlaceholder ? t('timeline.notLoggedYet') : t('timeline.unrecorded')) : e.what)}</div>
-        <div class="e-meta">
-          ${displayTag ? `<span class="e-tag">#${esc(displayTag)}</span>` : ''}
-          ${!readOnly && confirmable ? `<button class="mini-btn" type="button" data-action="confirm-segment" data-id="${esc(e.id)}" data-end="${esc(endTs)}" aria-label="${esc(confirmText)}">${esc(confirmText)}</button>` : ''}
-          ${fillBtn}
-        </div>
+        ${displayTag ? `<span class="e-tag">#${esc(displayTag)}</span>` : ''}
       </div>
-      <div class="e-dur">${durStr}</div>
+      <div class="e-side">
+        <div class="e-dur">${durStr}</div>
+        ${confirmBtn || fillBtn ? `<div class="e-meta">${confirmBtn}${fillBtn}</div>` : ''}
+      </div>
     </div>`;
     return (readOnly || isPlaceholder) ? card : swipeWrap(card, e, t('timeline.kindEntry'));
   });
@@ -315,7 +318,8 @@ export function renderTimeline(items, opts = {}) {
   if (isToday) {
     rows.splice(planned.length, 0, `<div class="tl-now" role="separator" aria-label="${esc(t('timeline.nowAria', { time: nowLabel }))}"><span class="tl-now-dot"></span><span class="tl-now-label">${esc(t('timeline.now', { time: nowLabel }))}</span><span class="tl-now-line"></span></div>`);
   }
-  el.innerHTML = `<div class="log">${rows.join('')}</div>`;
+  // v1.8.1：行布局由「更多」里的偏好决定；--mins 只在「按时长」模式下参与行高。
+  el.innerHTML = `<div class="log" data-density="${esc(normalizeTimelineDensity(density))}">${rows.join('')}</div>`;
 }
 
 export function renderSummaryRows(rows) {
@@ -390,7 +394,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.8.0';
+export const APP_VERSION = '1.8.1';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -483,6 +487,9 @@ function renderMoreSheet(opts = {}) {
   // 「重开」入口；同一个 isLegacyOrigin 现在改用于收敛这个菜单里唯一的写路径入口——
   // 「导入备份」——只读态完全不渲染这个 cell，其余三项（复制/存储/分享）都是导出/
   // 读能力，照常保留。
+  const densityPref = normalizeTimelineDensity(readUiPreference(TIMELINE_DENSITY_KEY));
+  const densityBtn = (value, label) =>
+    `<button type="button" data-action="set-density" data-density="${value}" class="${densityPref === value ? 'active' : ''}" aria-pressed="${densityPref === value}" aria-label="${esc(t('density.aria', { label }))}">${esc(label)}</button>`;
   const isLegacyOrigin = Boolean(opts.isLegacyOrigin);
   const privacyHref = PRIVACY_URL[getLocale()] || PRIVACY_URL.zh;
   return `
@@ -501,6 +508,11 @@ function renderMoreSheet(opts = {}) {
         <div class="cell-row"><span>${t('more.theme')}</span>
           <div class="seg theme-seg" id="theme-seg" role="group" aria-label="${t('more.themeAria')}">
             ${themeBtn('auto', t('theme.auto'))}${themeBtn('light', t('theme.light'))}${themeBtn('dark', t('theme.dark'))}
+          </div>
+        </div>
+        <div class="cell-row"><span>${t('more.timeline')}</span>
+          <div class="seg theme-seg" id="density-seg" role="group" aria-label="${t('more.timelineAria')}">
+            ${densityBtn('single', t('density.single'))}${densityBtn('double', t('density.double'))}${densityBtn('scaled', t('density.scaled'))}
           </div>
         </div>
         <div class="cell-row"><span>${t('more.language')}</span>
@@ -625,15 +637,22 @@ function analyticsPageCount(keys) {
   return Math.max(1, Math.ceil(keys.length / ANALYTICS_PAGE));
 }
 
-function analyticsSpark(series) {
+// v1.8.1：柱宽封顶并整组居中——只有两三期时不再铺成两块无标注的大色块；最近一期
+// 实色、更早的压浅，下方一行说明这是什么（此前已完成的 N 期，右为最近）。
+function analyticsSpark(series, name) {
   if (!series || series.length < 2) return '';
   const max = Math.max(...series, 1);
-  const n = series.length, gap = 3, w = 100, bw = (w - gap * (n - 1)) / n;
+  const n = series.length, gap = 3, w = 100;
+  const bw = Math.min((w - gap * (n - 1)) / n, 9);
+  const offset = (w - (bw * n + gap * (n - 1))) / 2;
   const bars = series.map((v, i) => {
     const h = Math.max(2, v / max * 38);
-    return `<rect x="${(i * (bw + gap)).toFixed(2)}" y="${(40 - h).toFixed(2)}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}" rx="1"/>`;
+    const dim = i === n - 1 ? '' : ' class="past"';
+    return `<rect${dim} x="${(offset + i * (bw + gap)).toFixed(2)}" y="${(40 - h).toFixed(2)}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}" rx="1"/>`;
   }).join('');
-  return `<svg viewBox="0 0 100 46" preserveAspectRatio="none" role="img" aria-label="${esc(t('analytics.title'))}">${bars}</svg>`;
+  const caption = t('analytics.sparkCaption', { n, name });
+  return `<svg viewBox="0 0 100 40" preserveAspectRatio="none" role="img" aria-label="${esc(caption)}">${bars}</svg>
+        <div class="an-spark-cap" aria-hidden="true">${esc(caption)}</div>`;
 }
 
 // 顶部结论区：选中键的时长（大字）+ 占比 + 对比上期 delta +（桶才有的）趋势 spark。
@@ -668,7 +687,7 @@ function renderAnalyticsDisplay(model, keys) {
     if (tr.direction === 'up') trendLine = run >= 2 ? t('analytics.trendUp', { name, n: run }) : t('analytics.trendUpLately', { name });
     else if (tr.direction === 'down') trendLine = run >= 2 ? t('analytics.trendDown', { name, n: run }) : t('analytics.trendDownLately', { name });
     else if (tr.direction === 'flat') trendLine = t('analytics.trendFlat', { name });
-    sparkHtml = analyticsSpark(tr.comparableSeries);
+    sparkHtml = analyticsSpark(tr.comparableSeries, selected.name);
   }
 
   return `
@@ -716,7 +735,7 @@ function renderAnalyticsPad(model, keys) {
 
 function renderAnalyticsPeriodSeg(view) {
   const btn = (value, label) =>
-    `<button type="button" data-action="analytics-period" data-period="${value}" class="${view === value ? 'on' : ''}" aria-pressed="${view === value}">${esc(label)}</button>`;
+    `<button type="button" data-action="analytics-period" data-period="${value}" class="${view === value ? 'active' : ''}" aria-pressed="${view === value}">${esc(label)}</button>`;
   return `<div class="an-period seg" role="group" aria-label="${esc(t('analytics.title'))}">
     ${btn('week', t('period.week'))}${btn('month', t('period.month'))}${btn('year', t('period.year'))}
   </div>`;

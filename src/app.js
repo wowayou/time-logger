@@ -16,6 +16,8 @@ import {
   RECORD_MODE_KEY,
   SELECTED_DATE_KEY,
   THEME_KEY,
+  TIMELINE_DENSITY_KEY,
+  normalizeTimelineDensity,
   VIEW_KEY,
   appendBootDiagSample,
   ensureFirstUsedDate,
@@ -198,6 +200,21 @@ import {
       btn.setAttribute('aria-pressed', String(selected));
     });
   }
+  // v1.8.1：时间轴行布局。读失败/非法值都按默认两行；写不下只留本页会话选择
+  // （readUiPreference 的内存覆盖），与主题同一降级路径。
+  function currentTimelineDensity() {
+    return normalizeTimelineDensity(readUiPreference(TIMELINE_DENSITY_KEY));
+  }
+  function setTimelineDensity(value) {
+    const density = normalizeTimelineDensity(value);
+    saveUiPreference(TIMELINE_DENSITY_KEY, density);
+    document.querySelectorAll('#density-seg button').forEach(btn => {
+      const selected = btn.dataset.density === density;
+      btn.classList.toggle('active', selected);
+      btn.setAttribute('aria-pressed', String(selected));
+    });
+    render();
+  }
   function setThemePref(pref) {
     saveUiPreference(THEME_KEY, pref);
     applyTheme(pref);
@@ -361,7 +378,8 @@ import {
         nowLabel: nowStr().slice(11, 16),
         // SPEC-002：旧 origin 只读——行不可点开编辑、不渲染补一下/标记已发生/确认
         // 等写入口，左滑轨道因缺少 data-action="start-edit" 锚点而自然不启用。
-        readOnly: isLegacyOrigin()
+        readOnly: isLegacyOrigin(),
+        density: currentTimelineDensity()
       });
       if (focusedEntryId) {
         const row = Array.from(document.querySelectorAll('.entry[data-id][tabindex]'))
@@ -407,6 +425,8 @@ import {
         view: state.view,
         selectedDate: state.selectedDate,
         recordMode: readUiPreference(RECORD_MODE_KEY),
+        // v1.8.1：实际画出的时间轴布局（已归一化）；index.html 按同一归一化比对存储。
+        timelineDensity: currentTimelineDensity(),
         today: todayStr()
       }));
     } catch {}
@@ -1034,6 +1054,7 @@ import {
       if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
       const action = el.dataset.action;
       if (action === 'theme') setThemePref(el.dataset.theme);
+      if (action === 'set-density') setTimelineDensity(el.dataset.density);
       if (action === 'set-locale') setLocalePref(el.dataset.locale || '');
       if (action === 'view') setView(el.dataset.view);
       if (action === 'shift-period') shiftPeriod(Number(el.dataset.delta || 0));

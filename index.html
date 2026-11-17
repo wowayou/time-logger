@@ -331,7 +331,10 @@
       }
       if (snapshot.view !== localStorage.getItem('timelog.view')
         || snapshot.selectedDate !== localStorage.getItem('timelog.selectedDate')
-        || snapshot.recordMode !== localStorage.getItem('timelog.recordMode')) {
+        || snapshot.recordMode !== localStorage.getItem('timelog.recordMode')
+        // v1.8.1：时间轴布局门（缺失/非法＝两行，与 storage.normalizeTimelineDensity 一致）。
+        || snapshot.timelineDensity !== (['single', 'double', 'scaled'].includes(localStorage.getItem('timelog.timelineDensity'))
+          ? localStorage.getItem('timelog.timelineDensity') : 'double')) {
         setSnapshotState('rejected:state');
         return;
       }

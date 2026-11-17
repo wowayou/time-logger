@@ -1,5 +1,5 @@
 import { expect, test } from './startup_fixture.js';
-import { boot, FIXED_NOW, expectNoHorizontalOverflow } from './ui_fixture.js';
+import { boot, FIXED_NOW } from './ui_fixture.js';
 import { bootLocale, TODAY_KEY } from './i18n_fixture.js';
 
 // v1.8.0 ①：窄屏记录表单是定高面板（满视口），正文 grid 不得把余量摊进每一行。
@@ -79,52 +79,7 @@ test('v1.8.0: English week overview shows the total in the hero aux line', async
   await expect(page.locator('.sum-row.is-empty').first()).toContainText('No entries');
 });
 
-// v1.8.0 ③：没有行内动作的时间轴行，#标签 接在正文同一行，行高收到一行（仍 ≥44px）；
-// 正文放不下时标签换到下一行，不横向溢出。
-async function rowGeometry(row) {
-  return row.evaluate(el => {
-    const box = node => node.getBoundingClientRect();
-    const what = box(el.querySelector('.e-what'));
-    const tag = box(el.querySelector('.e-tag'));
-    return { row: box(el).height, whatTop: what.top, whatBottom: what.bottom, whatRight: what.right,
-      tagTop: tag.top, tagBottom: tag.bottom, tagLeft: tag.left, inline: el.classList.contains('inline-meta') };
-  });
-}
-
-for (const width of [320, 390]) {
-  test(`v1.8.0: short timeline rows put the tag on the text line at ${width}px`, async ({ page }) => {
-    await boot(page, width, 'two-records', false, FIXED_NOW);
-    const row = page.locator('.entry[data-id="today-1"]');
-    await expect(row).toBeVisible();
-    const g = await rowGeometry(row);
-    expect(g.inline).toBe(true);
-    expect(g.row).toBeGreaterThanOrEqual(44);
-    expect(g.row).toBeLessThanOrEqual(50);
-    expect(g.tagTop).toBeGreaterThanOrEqual(g.whatTop - 1);
-    expect(g.tagBottom).toBeLessThanOrEqual(g.whatBottom + 1);
-    expect(g.tagLeft).toBeGreaterThanOrEqual(g.whatRight);
-    await expectNoHorizontalOverflow(page);
-  });
-}
-
-test('v1.8.0: a long note keeps its own lines and the tag wraps below it', async ({ page }) => {
-  await boot(page, 320, 'long-note', false, FIXED_NOW);
-  const g = await rowGeometry(page.locator('.entry[data-id="today-long"]'));
-  expect(g.inline).toBe(true);
-  expect(g.tagTop).toBeGreaterThanOrEqual(g.whatBottom - 1);
-  await expectNoHorizontalOverflow(page);
-});
-
-test('v1.8.0: rows with inline links keep the links on their own line', async ({ page }) => {
-  await boot(page, 390, 'planned-only', false, FIXED_NOW);
-  const row = page.locator('.entry.planned[data-id="plan-1"]');
-  await expect(row).not.toHaveClass(/inline-meta/);
-  const g = await row.evaluate(el => ({
-    what: el.querySelector('.e-what').getBoundingClientRect().bottom,
-    link: el.querySelector('.e-meta > .mini-btn').getBoundingClientRect().top
-  }));
-  expect(g.link).toBeGreaterThanOrEqual(g.what);
-});
+// v1.8.0 ③（时间轴单行/两行混排）已被 v1.8.1 的单行等高取代，见 tests/v1_8_1_ui.spec.js。
 
 // v1.8.0 ④：容器圆角不再把首行计划的虚线竖脊裁出半截——首行虚线从 12px 起画；
 // 后面的计划行与实色脊仍从行顶起画，竖脊行行相接。

@@ -79,8 +79,11 @@ function expectIndependentLinks(report) {
     const context = JSON.stringify(control);
     expect.soft(control.box.width, context).toBeGreaterThanOrEqual(44);
     expect.soft(control.box.height, context).toBeGreaterThanOrEqual(44);
-    expect.soft(control.box.top, context).toBeGreaterThanOrEqual(report.body.bottom);
-    expect.soft(control.box.bottom, context).toBeLessThanOrEqual(report.row.bottom);
+    // v1.8.1 单行等高：链接在右列、与正文同一行，判据从「在正文下方」改为「不与正文
+    // 重叠、整个落在行内」。热区与真实点击检查不变。
+    expect.soft(control.box.left, context).toBeGreaterThanOrEqual(report.body.right);
+    expect.soft(control.box.top, context).toBeGreaterThanOrEqual(report.row.top - 0.5);
+    expect.soft(control.box.bottom, context).toBeLessThanOrEqual(report.row.bottom + 0.5);
     expect.soft(control.box.left, context).toBeGreaterThanOrEqual(report.meta.left);
     expect.soft(control.box.right, context).toBeLessThanOrEqual(report.meta.right);
     expect.soft(control.hits44.every(p => p.hit), context).toBe(true);
@@ -154,7 +157,9 @@ for (const theme of ['light', 'dark']) {
       await evidence(testInfo, 'controls', geometry);
       await screenshot(page, testInfo, 'pending-controls');
       expectIndependentLinks(geometry);
-      if (width === 320) expect.soft(geometry.controls[1].box.top).toBeGreaterThanOrEqual(geometry.controls[0].box.bottom);
+      // v1.8.1：两枚链接在右列并排（旧版 320px 上下堆叠）；互不重叠已在上面检查。
+      // 默认「两行」布局每行 72px，与内容无关。
+      expect.soft(geometry.row.height).toBe(72);
       await expectNoHorizontalOverflow(page);
       expect(await page.evaluate(() => getComputedStyle(document.body).overflowX)).not.toBe('hidden');
       await clickFillEdges(page, testInfo, before);
@@ -200,7 +205,9 @@ for (const width of [320, 390]) {
       await evidence(testInfo, 'label-pressure', geometry);
       await screenshot(page, testInfo, 'label-pressure');
       expectIndependentLinks(geometry);
-      if (pressure) for (const control of geometry.controls) expect.soft(control.lines).toBeGreaterThan(1);
+      // v1.8.1：行高固定，超长译文不再换行、单行省略（修订 v1.7.3 的换行保证）；默认两行布局仍是 72px。
+      for (const control of geometry.controls) expect.soft(control.lines).toBe(1);
+      expect.soft(geometry.row.height).toBe(72);
       await expectNoHorizontalOverflow(page);
       expect(await row.locator('.e-tag').textContent()).toBe('#' + tag);
       await clickBodyBottom(page, testInfo, before);

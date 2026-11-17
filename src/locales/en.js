@@ -393,6 +393,7 @@ export default {
   'timeline.emptyWhat': 'not filled in',
   'timeline.markDoneAria': 'Mark plan as done',
   'timeline.markDone': 'Mark as done',
+  'timeline.confirmShort': 'Confirm',
   'timeline.planDur': 'Plan',
   'timeline.gapAria': 'Fill in this unlogged stretch starting {time}',
   'timeline.gapWhat': 'Not logged yet',
@@ -452,7 +453,7 @@ export default {
   'advanced.longReviewAriaOn': 'on',
   'advanced.longReviewAriaOff': 'off',
   'advanced.longReviewHint': 'Off by default. When enabled, non-exempt segments over 3 hours are marked for duration review but still count under their tags; confirming only clears the reminder.',
-  'more.backupHint': 'The summary covers only the current view and can be pasted to an AI. The items below are all full JSON backups, done entirely on this device.',
+  'more.backupHint': 'Everything below is a full JSON backup, done entirely on this device. For a text summary of just the current view, use “Copy current view summary” in More.',
   'more.copyJsonAria': 'Copy full JSON backup',
   'more.copyJson': 'Copy JSON backup',
   'more.saveAria': 'Save JSON backup',
@@ -506,6 +507,7 @@ export default {
   'analytics.trendUp': '{name} up {n} periods running',
   'analytics.trendDown': '{name} down {n} periods running',
   'analytics.trendFlat': '{name} steady lately',
+  'analytics.sparkCaption': '{name}, previous {n} periods · latest on the right',
   // Mean-based direction with a trailing run under 2 (a final dip makes it 0):
   // no "N periods running" claim.
   'analytics.trendUpLately': '{name} trending up lately',
@@ -538,6 +540,12 @@ export default {
   'more.supportHint': 'Entirely voluntary. Every feature stays free, with no ads or in-app purchases; support buys no features, priority or influence over the roadmap. The support page has a thank-you card; the line packs are built into Rotating lines.',
   'more.language': 'Language',
   'more.languageAria': 'Language',
+  'more.timeline': 'Timeline',
+  'more.timelineAria': 'Timeline row layout',
+  'density.single': '1 line',
+  'density.double': '2 lines',
+  'density.scaled': 'To scale',
+  'density.aria': 'Timeline: {label}',
   'more.languageAuto': 'System',
   // Language names are not translated per current UI language — "Chinese"
   // always shows as 中文, matching the zh.js value (see that file's comment).
@@ -639,7 +647,7 @@ export default {
   'help.title': 'Help',
   'help.closeAria': 'Close help',
   'help.h1': 'How to log',
-  'help.p1': 'Tap "＋ Log it" in the bottom right to record what you just did. If the page is still on yesterday and the tail is unlogged, the new entry form will explicitly ask you to continue into today or stop at yesterday 24:00. The day view is one continuous log: the colored spine on the left is the bucket — solid means happened, dashed means planned, gray means unlogged. Today also has a "Now" line: above it is planned, below it is happened. Tap any row to edit its text, tag, and full start/end time. "Split" lives inside the edit sheet and only splits within the original segment; tap "Fill in" on an unlogged row to backfill it. Both show the result first (the original segment, a proportional split bar, and each resulting part), then let you pick start and end on one row of wheels; values outside the segment spring back. Swiping a row left reveals edit and delete; deleting shows the exact result first, and you can undo within 8 seconds.',
+  'help.p1': 'Tap "＋ Log it" in the bottom right to record what you just did. If the page is still on yesterday and the tail is unlogged, the new entry form will explicitly ask you to continue into today or stop at yesterday 24:00. The day view is one continuous log: the colored spine on the left is the bucket — solid means happened, dashed means planned, gray means unlogged. Today also has a "Now" line: above it is planned, below it is happened. Choose the row layout in More → Timeline: 1 line, 2 lines (default), or to scale. In the first two every row is the same height, so spine length does not mean duration; to scale, one minute is about one pixel and segments shorter than about 50 minutes use the minimum row height. Tap any row to edit its text, tag, and full start/end time. "Split" lives inside the edit sheet and only splits within the original segment; tap "Fill in" on an unlogged row to backfill it. Both show the result first (the original segment, a proportional split bar, and each resulting part), then let you pick start and end on one row of wheels; values outside the segment spring back. Swiping a row left reveals edit and delete; deleting shows the exact result first, and you can undo within 8 seconds.',
   'help.h2': '4 buckets',
   'help.p2a': 'Choose a bucket first, then a tag: Focus = whatever you are pushing forward right now (a placeholder "Current focus" ships by default — rename it to your own); Upkeep = necessary upkeep such as sleep, meals, or commuting; Drift = time that drifted away from the current focus, such as entertainment, phone, or zoning out; Unlogged = unknown tags, orphaned tags, and explicit gaps. Pick the bucket first when logging; a custom tag is fixed the first time you use it, and can be renamed or re-bucketed later in Tag settings. If a custom tag has the same name as an existing tag in another bucket, the entry goes to the bucket of that existing tag — the form warns you and offers a one-tap switch.',
   'help.p2b': 'Drift is not failure. Stepping back is sometimes necessary — this bucket only answers how much time drifted from focus today, not a moral judgment. If you consider a tag to actually be necessary upkeep, you can re-bucket it in Tag settings.',
