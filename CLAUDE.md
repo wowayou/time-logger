@@ -21,7 +21,7 @@
 - `icon.svg` 与 `icons/*.png`：运行时图标资产
 - `packs/*.txt`：主题句库（D36，文字轮播一键追加；支持页下载同一批文件）
 
-允许的开发期工具包括 `scripts/project_audit.py`、`scripts/confirm_logic_smoke.py`、`scripts/bump_version.py`（版本仪式六处锚点一键联动）、`scripts/build_site.py`（D12：按 `sw.js` FILES 组装 `time.eigentime.org`——`site/` → 根、运行时 → `/app/`；`site/` 是非运行时静态页源码，不进 SW 缓存）、`scripts/build_legacy_site.py`（D34，见下方红线；专项 `python3 -m unittest discover -s tests -p 'test_build_legacy_site.py'`）、`scripts/doc_sync_check.py`（同步闸，见下）、`npm run typecheck`（tsc 对 `time/storage/stats/entry_model` 做 JSDoc 类型检查，无构建产物）和 Playwright UI smoke。Python 脚本只用标准库；逻辑 smoke 用本机 `node` 导入真实 ES modules。推广/录屏工具不进本仓，见「隐私红线」。
+允许的开发期工具包括 `scripts/project_audit.py`、`scripts/confirm_logic_smoke.py`、`scripts/bump_version.py`（版本仪式六处锚点一键联动）、`scripts/build_site.py`（D12：按 `sw.js` FILES 组装 `time.eigentime.org`——`site/` → 根、运行时 → `/app/`；`site/` 是非运行时静态页源码，不进 SW 缓存）、`scripts/build_legacy_site.py`（D34，见下方红线；专项 `python3 -m unittest discover -s tests -p 'test_build_legacy_site.py'`）、`scripts/doc_sync_check.py`（同步闸，见下）、`scripts/what_repeat_stats.mjs`（node 只读分析完整备份里正文的重复程度，评估「按事项归并」规则；只出聚合数字、标签名默认打码，D37 同日加入）、`npm run typecheck`（tsc 对 `time/storage/stats/entry_model` 做 JSDoc 类型检查，无构建产物）和 Playwright UI smoke。Python 脚本只用标准库；逻辑 smoke 用本机 `node` 导入真实 ES modules。推广/录屏工具不进本仓，见「隐私红线」。
 
 **铁律：无运行时依赖 / 无构建 / 原生 ES modules。** npm 只允许作为开发期测试依赖；不引入打包器、框架、账号、云同步或后端。
 
