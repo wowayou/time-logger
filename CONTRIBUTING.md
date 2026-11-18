@@ -82,9 +82,7 @@ WSL2 端口默认只在 Windows 本机可达，手机访问 WSL IP 会超时。�
 
 ## 提交与发布
 
-- 只把 `time-logger/` 作为独立仓库发布；只读旧地址由源码仓库自己的 Pages 在 **tag 或显式手动触发**时发布（`.github/workflows/publish-legacy-pages.yml`，D34）。旧站手动发布须填写 `release_tag`，由 `scripts/build_legacy_site.py` 核对整个运行时与该版本一致；专项回归用 `python3 -m unittest discover -s tests -p 'test_build_legacy_site.py'`。线上主站由 `scripts/build_site.py` 生成到部署镜像 `wowayou/time-logger-site` 并绑定 `time.eigentime.org`（D12）；两站独立发布，正式版本必须分别核对成功。
-- 正式版本推 `main` 后建并推同版本 tag（如 `v1.4.2`），再建/更新同版本 GitHub Release，简短列用户影响 / 内部治理 / 验证结果，不贴真实数据或截图。
-- 除非明确要求，不把无关重构、真实数据或工作区外文件混进同一个提交。
+发布拓扑、tag 与 GitHub Release 的要求只写在 `CLAUDE.md`「开发与维护红线」和「提交与推送前红线」，本页不复述。除非明确要求，不把无关重构、真实数据或工作区外文件混进同一个提交。
 
 ## 许可证
 
