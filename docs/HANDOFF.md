@@ -59,7 +59,8 @@
 - **反馈类断言须检查用户实际可见**：文本存在不代表可见；先检查 `toBeVisible()`，需证明在屏幕内时再检查边界盒与遮挡，见上文第 5 条。
 - **同一枚硬币的反面（v91）：断言「不该出现」时不能用带自动重试的否定断言。** `toBeHidden()` 会重试到默认 5s 超时，而 info toast 自己 3s 后消失——于是它等到 toast 自然过期再判过，「无条件弹提示」这个红灯照样全绿。凡是判据里含「自动消失/自动收起」的元素，否定断言必须用一次性读取（`isVisible()`），并在注释里写明为什么不存在「还没来得及出现」的竞态。
 - **再往前一步（v1.6.0）：一次性读取也只看得到最后一眼。** 导入完成提示 320ms 后会覆盖同一个 `#info-toast`，先亮过的另一条提示（例如误触发的里程碑）就被盖掉了——「导入也庆祝」这个红灯第一次照样全绿。同一个元素可能先后显示多条消息时，在动作之前挂 `MutationObserver` 记下每次变化，最后逐条检查（`tests/v1_6_0_milestones.spec.js` 的 `watchToasts`）。
-- **`returnToMore` 会让 sheet「关不掉」**：从「更多」下钻的 sheet，`closeForm()` 是把内容换回「更多」而非 hidden，构成持续性遮挡（详见 SPEC-012 文末实测校正）。写用例时的直接后果：保存后**不要**再点一次「···」，「更多」已经在那儿了；要露出 FAB 得先点「关闭更多菜单」。
+- **`returnToMore` 会让 sheet「关不掉」**：从「更多」下钻的 sheet，`closeForm()` 是把内容换回「更多」而非 hidden，构成持续性遮挡（详见 SPEC-012 文末实测校正）。写用例时的直接后果：保存后**不要**再点一次「···」，「更多」已经在那儿了；要露出 FAB 得先点「关闭更多菜单」。同一机制的第三面（v1.9.0）：从「更多 → 时间分析」的事项排行跳到某天时，主视图已切过去，`closeForm()` 却把面板换回「更多」盖在上面——下钻要用 `closeAllForms()`（清空返回栈再关），`drill()` 已改；新加「从二级页跳走」的入口同理。
+- **时间分析的局部重渲契约**（v1.9.0）：周/月/年/全部、选键、翻页只替换 `[data-role=analytics-content]`；关键词输入框也在这块里，所以打字时**只能**替换 `[data-role=an-items-list]`（`refreshAnalyticsItems` + `buildAnalyticsItemsModel`，只算排行、不算对比/趋势/常态），否则每个按键都会重建输入框、丢焦点与光标，年视图大历史下还会每键重算十几遍整年分段。事项键里含 `\u0000` 分隔符，不能放进 HTML 属性，行按钮用排行里的序号（`data-index`）。
 - **端口陷阱（v65）**：`reuseExistingServer: true` 会把 4173 上任何陈旧 server 当被测应用，整套假超时。v1.7.2 本地候选以受控进程成功 `listen` 的 stdout 标记就绪，启动上限 10s，避免未监听端口的 HTTP 预探测挂起；实测占用端口时 EADDRINUSE、未执行测试，不关闭此防护。同一个坑的第二面：全量套件正在跑时再起一个 Playwright 进程会因端口占用直接失败——要临时截图，等全量跑完。
 - **`gh pr edit` 会撞 Projects classic 弃用报错**：改用 `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> --input -`；转 ready 用 GraphQL `markPullRequestReadyForReview`。另：`gh pr create --body "$(cat <<'EOF' … )"` 偶发 graphql 连接被重置，改用 `--body-file -` 直接喂 heredoc 更稳。
 - `外部/` 已进 `.gitignore` 并已重命名为不带空格（2026-07-27）。原真名尾部带一个空格，而 gitignore 会吃掉行尾空格，旧规则匹配不到它——**规则在、却从不生效**，比没有规则更危险。现为 `外部/` + `外部*/` 两条。

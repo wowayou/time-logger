@@ -26,19 +26,28 @@ test('v1.8.1: analytics period segment shows the selected period and is centred'
       buttonHeight: el.querySelector('button').getBoundingClientRect().height
     };
   });
+  // v1.9.0 起分段多了第四项「全部」；不变量照旧：选中项底色与其余不同、其余彼此相同、居中、≥36px。
   const week = await read();
-  expect(week.pressed).toEqual(['true', 'false', 'false']);
+  expect(week.pressed).toEqual(['true', 'false', 'false', 'false']);
   // 选中项的底色必须与未选中项不同——旧版三个按钮完全一样。
   expect(week.bg[0]).not.toBe(week.bg[1]);
   expect(week.bg[1]).toBe(week.bg[2]);
+  expect(week.bg[2]).toBe(week.bg[3]);
   expect(week.centreOffset).toBeLessThanOrEqual(2);
   expect(week.buttonHeight).toBeGreaterThanOrEqual(36);
 
   await page.locator('#form-sheet [data-action="analytics-period"][data-period="year"]').click();
   const year = await read();
-  expect(year.pressed).toEqual(['false', 'false', 'true']);
+  expect(year.pressed).toEqual(['false', 'false', 'true', 'false']);
   expect(year.bg[2]).not.toBe(year.bg[0]);
   expect(year.bg[0]).toBe(year.bg[1]);
+  expect(year.bg[1]).toBe(year.bg[3]);
+
+  await page.locator('#form-sheet [data-action="analytics-period"][data-period="all"]').click();
+  const all = await read();
+  expect(all.pressed).toEqual(['false', 'false', 'false', 'true']);
+  expect(all.bg[3]).not.toBe(all.bg[0]);
+  expect(all.centreOffset).toBeLessThanOrEqual(2);
 });
 
 test('v1.8.1: the trend bars are capped in width and explained by a caption', async ({ page }) => {
