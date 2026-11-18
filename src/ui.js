@@ -150,8 +150,15 @@ function bucketParts(totals) {
   }));
 }
 
-// v1.8.2「全文」布局时长条的满格分钟数（4h），见 renderTimeline 的 durBar。
-const TIMELINE_BAR_FULL_MINS = 240;
+// v1.8.3「全文」布局的尺子刻度：整小时一道长刻线，余下每一刻钟一道短刻线（四舍五入，
+// 凑满 4 道进位成 1 小时）。没有满格，任何时长都画得下；不到 8 分钟一道都不画。
+function timelineTicks(mins) {
+  const m = Math.max(0, Math.round(Number(mins) || 0));
+  let hours = Math.floor(m / 60);
+  let quarters = Math.round((m % 60) / 15);
+  if (quarters === 4) { hours += 1; quarters = 0; }
+  return { hours, quarters };
+}
 
 // v56 文案单职责：标题说状态、tag 说桶、这里只说时长——「未记录/进行中」不再在
 // 时长里复读（旧版一行里「未记录」出现两次）。进行中用「已 X」，与 FAB 副文案同语。
@@ -203,12 +210,15 @@ export function renderTimeline(items, opts = {}) {
   const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig(), density = 'full' } = opts;
   const el = document.getElementById('timeline');
   const layout = normalizeTimelineDensity(density);
-  // v1.8.2 时长条：只在「全文」布局画（行高随正文变，竖脊长短不再代表时长，时长交给
-  // 数字和这根横条）。刻度固定——满格＝4h，跨天同长即同时长；超过 4h 满格并在末端留缺口。
+  // v1.8.3 尺子刻度（取代 v1.8.2 的 4h 满格时长条）：只在「全文」布局画（行高随正文变，
+  // 竖脊长短不再代表时长，时长交给数字和刻度）。刻度绝对、无上限，跨天同样多即同样长。
   // 纯装饰（aria-hidden），时长数字仍是可读真源；计划没有时长，不画。
-  const durBar = mins => layout === 'full'
-    ? `<div class="e-bar${mins > TIMELINE_BAR_FULL_MINS ? ' over' : ''}" aria-hidden="true"><i style="width:${Math.min(100, Math.max(0, mins) / TIMELINE_BAR_FULL_MINS * 100).toFixed(1)}%"></i></div>`
-    : '';
+  const durTicks = mins => {
+    if (layout !== 'full') return '';
+    const { hours, quarters } = timelineTicks(mins);
+    if (!hours && !quarters) return '';
+    return `<div class="e-ticks" aria-hidden="true">${'<i class="h"></i>'.repeat(hours)}${'<i class="q"></i>'.repeat(quarters)}</div>`;
+  };
   // 桶色竖脊共用本帧配置，与统计同源；独立调用时才在上面读一次默认配置。
   const planned = (plannedItems || []).map(e => ({
     e,
@@ -276,7 +286,7 @@ export function renderTimeline(items, opts = {}) {
         </div>
         <div class="e-side">
           <div class="e-dur">${fmtMins(mins)}</div>
-          ${durBar(mins)}
+          ${durTicks(mins)}
           ${readOnly ? '' : `<span class="e-cta">${t('timeline.fillIn')}</span>`}
         </div>
       </div>`;
@@ -319,7 +329,7 @@ export function renderTimeline(items, opts = {}) {
       </div>
       <div class="e-side">
         <div class="e-dur">${durStr}</div>
-        ${durBar(mins)}
+        ${durTicks(mins)}
         ${confirmBtn || fillBtn ? `<div class="e-meta">${confirmBtn}${fillBtn}</div>` : ''}
       </div>
     </div>`;
@@ -406,7 +416,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.8.2';
+export const APP_VERSION = '1.8.3';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
