@@ -7,9 +7,10 @@
 
 ## DONE
 
-- **Web v1.8.4 发布中（2026-11-19）**：时间分析跟随所看周期（主视图周/月/年沿用粒度、天视图从所在周开始，未来日期退回今天），此前固定今天、无法复盘已结束的周期。
+- **Web v1.8.4 已发布（2026-11-19）**：时间分析跟随所看周期（主视图周/月/年沿用粒度、天视图从所在周开始，未来日期退回今天），此前固定今天、无法复盘已结束的周期。
   - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过；新用例 `tests/v1_8_4_analytics_period.spec.js` 双引擎 12/12，以 v1.8.3 运行时 8/12 红（余 4 条为改动前后都应绿的哨兵）。完整 UI **1223 passed / 1 skipped / 2 failed**（38.6 分钟）：两条失败均为 `stress.spec.js`「小压 500 条」启动增量（Chromium 87ms、WebKit 92ms，预算 80ms），当时本机另在 worktree 并行跑用例与截图。随后无并行负载下 v1.8.4 / v1.8.3 交替各两轮（每轮双引擎）共 8/8 通过，增量 −96～79ms、基线 300–620ms 波动，本版不改启动路径，判为负载噪声，未改预算或断言。
   - **浏览器核对**：Chromium 390/768px，周视图停在 06/08 那周打开即分析该周、覆盖 7/7、无横向溢出、关闭回到「更多」且主视图不变、零脚本错误；未做真机核对。
+  - **发布**：功能提交 `eb1274e`，tag / [Release](https://github.com/wowayou/time-logger/releases/tag/v1.8.4)；publish-site [44339411067](https://github.com/wowayou/time-logger/actions/runs/44339411067)、旧站 Pages [44339411311](https://github.com/wowayou/time-logger/actions/runs/44339411311)、镜像 Pages [44339443594](https://github.com/wowayou/time-logger-site/actions/runs/44339443594) 均首次 success。主站 `/app/` 与旧站按 `sw.js` FILES 各 30/30 与 tag 逐字节一致（带随机参数绕过边缘缓存），中英主页新文案已上线。未做线上 SW 接管与真机核对；实际账单未核实。
 
 - **Web v1.8.3 已发布（2026-11-18）**：时间轴「全文」布局的 4h 满格时长条换成尺子刻度（长刻线 1 小时、短刻线 15 分钟，无上限）。起因是维护者真机截图（未入库）里超过 4h 的末端缺口像断了，且满格 4h 是 v1.8.2 对比稿里未单独确认的参数；维护者看过刻度与热力底对比图（私有 Artifact）后选「只有尺子刻度」，热力底未采纳。
   - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过；完整 UI **1213 passed / 1 skipped / 0 failed**（双引擎，34.7 分钟；跳过为 WebKit 离线句库模拟限制）。新刻度用例以 v1.8.2 运行时 2/2 红。
