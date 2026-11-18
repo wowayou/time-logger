@@ -200,7 +200,7 @@ import {
       btn.setAttribute('aria-pressed', String(selected));
     });
   }
-  // v1.8.1：时间轴行布局。读失败/非法值都按默认两行；写不下只留本页会话选择
+  // v1.8.1：时间轴行布局。读失败/非法值都按默认全文（v1.8.2）；写不下只留本页会话选择
   // （readUiPreference 的内存覆盖），与主题同一降级路径。
   function currentTimelineDensity() {
     return normalizeTimelineDensity(readUiPreference(TIMELINE_DENSITY_KEY));

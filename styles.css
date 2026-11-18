@@ -1348,11 +1348,11 @@
     .swipe-actions[aria-hidden="true"] { pointer-events: none; }
     /* v56：行＝时间｜内容｜时长 三列网格，贴地无圆角无描边；--card 底必须保留且
        不透明——左滑时行滑过底下的操作轨道，透明底会让轨道透出（v53 教训的行级版）。 */
-    /* v1.8.1：行高与内容无关（维护者裁定）。通高竖脊行行相接，长度在眼里就是时长——行高
-       若随文字量或行内链接变化，短段反而显得「长」（v1.8.0 的教训）。三种布局由「更多 →
-       时间轴」选（.log[data-density]）：单行 52px（下面的基础样式）、两行 72px（默认）、
-       按时长（1 分钟 1px，下限 52px）。前两种同一列表内每行严格等高；完整正文在编辑页。
-       改这里之前先读 docs/HANDOFF.md 对应条目。 */
+    /* 三种布局由「更多 → 时间轴」选（.log[data-density]）：全文（默认，v1.8.2）、单行 52px
+       （下面的基础样式）、按时长（1 分钟 1px，下限 52px）。v1.8.1 裁定「行高与内容无关」——
+       通高竖脊行行相接，长度在眼里就是时长；v1.8.2 维护者看过对比图后选定「全文」：正文
+       完整换行、行高随内容、竖脊仍通高，接受竖脊长短不再代表时长，时长改由右列数字和
+       固定刻度时长条表达。单行同一列表内每行严格等高。改这里之前先读 docs/HANDOFF.md 对应条目。 */
     .entry {
       position: relative;
       background: var(--card);
@@ -1496,30 +1496,48 @@
       font-variant-numeric: tabular-nums;
       text-align: right;
     }
-    /* 两行（默认）72px：第一行正文、第二行 #标签；右列上方时长（8–25px），下方动作链接
-       热区 26–70px，离行底留 2px——贴死行底时最底下半像素会落到下一行（v1.7.3 边缘点击
-       检查抓到）。44px 热区完整落在行内、不压正文、不叠时长。 */
-    .log[data-density="double"] .entry { height: 72px; align-items: start; }
-    .log[data-density="double"] .e-time { padding-top: 12px; }
-    .log[data-density="double"] .e-body {
+    /* v1.8.2 全文（默认）：v1.7.0 式内容撑高——正文保留换行、完整显示，#标签在正文下一行，
+       不省略；右列从上到下是时长、时长条、动作链接（链接热区仍 ≥44×44、在行内、不压正文）。
+       行高随内容，竖脊仍通高——长短不代表时长，时长看数字和时长条（维护者 2026-11-18 选定）。 */
+    .log[data-density="full"] .entry { height: auto; min-height: 52px; align-items: start; padding-block: 11px; }
+    .log[data-density="full"] .e-time { line-height: 22px; }
+    .log[data-density="full"] .e-body {
       flex-direction: column;
       flex-wrap: nowrap;
       align-items: stretch;
       height: auto;
-      padding-top: 10px;
+      overflow: visible;
       line-height: normal;
     }
-    .log[data-density="double"] .e-what { line-height: 22px; }
-    .log[data-density="double"] .e-tag { line-height: 18px; }
-    .log[data-density="double"] .e-side {
-      height: 72px;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 0;
-      padding: 8px 0 2px;
+    .log[data-density="full"] .e-what {
+      line-height: 22px;
+      white-space: pre-wrap;
+      overflow: visible;
+      overflow-wrap: anywhere;
+      text-overflow: clip;
     }
-    .log[data-density="double"] .e-side > :last-child:not(.e-dur) { margin-top: auto; }
-    .log[data-density="double"] .e-side .e-cta { line-height: var(--control-h); }
+    .log[data-density="full"] .e-tag { line-height: 18px; white-space: normal; overflow-wrap: anywhere; }
+    .log[data-density="full"] .e-side { flex-direction: column; align-items: flex-end; gap: 0; }
+    .log[data-density="full"] .e-dur { flex: none; max-width: 100%; line-height: 22px; }
+    .log[data-density="full"] .e-side .e-cta { line-height: 22px; }
+    .log[data-density="full"] .e-side .e-meta { margin-top: var(--sp-1); }
+    /* 时长条：固定刻度（满格 4h，ui.js TIMELINE_BAR_FULL_MINS），色＝竖脊同一桶色；未记录用
+       灰；超过 4h 满格并在末端留 2px 缺口。装饰性（aria-hidden），数字是可读真源。 */
+    .e-bar {
+      width: 56px;
+      max-width: 100%;
+      height: 4px;
+      margin-top: var(--sp-1);
+      border-radius: var(--r-pill);
+      background: var(--track);
+      overflow: hidden;
+    }
+    .e-bar > i { display: block; height: 100%; min-width: 2px; border-radius: var(--r-pill); background: var(--rail, var(--muted)); }
+    .entry[data-b="unrecorded"] .e-bar > i { background: var(--muted); opacity: 0.55; }
+    .e-bar.over > i {
+      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 6px), transparent calc(100% - 6px), transparent calc(100% - 4px), #000 calc(100% - 4px));
+      mask-image: linear-gradient(to right, #000 calc(100% - 6px), transparent calc(100% - 6px), transparent calc(100% - 4px), #000 calc(100% - 4px));
+    }
     /* 按时长：行高＝时长分钟数 px（--mins 由渲染写入），下限 52px 保证可点、放得下一行；
        内容贴在顶部 52px 的带里，时间对齐段的开始。计划行没有时长，按下限。 */
     .log[data-density="scaled"] .entry {

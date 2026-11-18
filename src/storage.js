@@ -53,14 +53,16 @@ export const VIEW_KEY = 'timelog.view';
 export const SELECTED_DATE_KEY = 'timelog.selectedDate';
 export const OPEN_DATE_KEY = 'timelog.openDate';
 export const RECORD_MODE_KEY = 'timelog.recordMode';
-// v1.8.1：日视图时间轴行布局（单行 / 两行 / 按时长比例），设备偏好，不进备份。
-// 缺失或非法值按默认「两行」——最接近 v1.7.5 以前的样子。
+// v1.8.1：日视图时间轴行布局，设备偏好，不进备份。v1.8.2 起为全文 / 单行 / 按时长比例：
+// 「全文」取代 v1.8.1 的「两行」并成为默认（维护者 2026-11-18 选定）。存量的 'double'
+// 按「全文」读，不改写存储；缺失或非法值同样按默认「全文」。
 export const TIMELINE_DENSITY_KEY = 'timelog.timelineDensity';
-export const TIMELINE_DENSITIES = ['single', 'double', 'scaled'];
-export const DEFAULT_TIMELINE_DENSITY = 'double';
+export const TIMELINE_DENSITIES = ['single', 'full', 'scaled'];
+export const DEFAULT_TIMELINE_DENSITY = 'full';
 
 /** @param {string | null | undefined} value @returns {string} */
 export function normalizeTimelineDensity(value) {
+  if (value === 'double') return 'full';
   return value && TIMELINE_DENSITIES.includes(value) ? value : DEFAULT_TIMELINE_DENSITY;
 }
 // SPEC-013：语言偏好。'' / 键缺失＝跟随系统。是**设备偏好不是用户数据**——

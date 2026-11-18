@@ -150,6 +150,9 @@ function bucketParts(totals) {
   }));
 }
 
+// v1.8.2「全文」布局时长条的满格分钟数（4h），见 renderTimeline 的 durBar。
+const TIMELINE_BAR_FULL_MINS = 240;
+
 // v56 文案单职责：标题说状态、tag 说桶、这里只说时长——「未记录/进行中」不再在
 // 时长里复读（旧版一行里「未记录」出现两次）。进行中用「已 X」，与 FAB 副文案同语。
 function timelineDurationLabel(mins, isOngoing, pendingConfirm) {
@@ -197,8 +200,15 @@ export function renderNowStrip(items, isToday, config = loadConfig()) {
 
 
 export function renderTimeline(items, opts = {}) {
-  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig(), density = 'double' } = opts;
+  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig(), density = 'full' } = opts;
   const el = document.getElementById('timeline');
+  const layout = normalizeTimelineDensity(density);
+  // v1.8.2 时长条：只在「全文」布局画（行高随正文变，竖脊长短不再代表时长，时长交给
+  // 数字和这根横条）。刻度固定——满格＝4h，跨天同长即同时长；超过 4h 满格并在末端留缺口。
+  // 纯装饰（aria-hidden），时长数字仍是可读真源；计划没有时长，不画。
+  const durBar = mins => layout === 'full'
+    ? `<div class="e-bar${mins > TIMELINE_BAR_FULL_MINS ? ' over' : ''}" aria-hidden="true"><i style="width:${Math.min(100, Math.max(0, mins) / TIMELINE_BAR_FULL_MINS * 100).toFixed(1)}%"></i></div>`
+    : '';
   // 桶色竖脊共用本帧配置，与统计同源；独立调用时才在上面读一次默认配置。
   const planned = (plannedItems || []).map(e => ({
     e,
@@ -266,6 +276,7 @@ export function renderTimeline(items, opts = {}) {
         </div>
         <div class="e-side">
           <div class="e-dur">${fmtMins(mins)}</div>
+          ${durBar(mins)}
           ${readOnly ? '' : `<span class="e-cta">${t('timeline.fillIn')}</span>`}
         </div>
       </div>`;
@@ -308,6 +319,7 @@ export function renderTimeline(items, opts = {}) {
       </div>
       <div class="e-side">
         <div class="e-dur">${durStr}</div>
+        ${durBar(mins)}
         ${confirmBtn || fillBtn ? `<div class="e-meta">${confirmBtn}${fillBtn}</div>` : ''}
       </div>
     </div>`;
@@ -319,7 +331,7 @@ export function renderTimeline(items, opts = {}) {
     rows.splice(planned.length, 0, `<div class="tl-now" role="separator" aria-label="${esc(t('timeline.nowAria', { time: nowLabel }))}"><span class="tl-now-dot"></span><span class="tl-now-label">${esc(t('timeline.now', { time: nowLabel }))}</span><span class="tl-now-line"></span></div>`);
   }
   // v1.8.1：行布局由「更多」里的偏好决定；--mins 只在「按时长」模式下参与行高。
-  el.innerHTML = `<div class="log" data-density="${esc(normalizeTimelineDensity(density))}">${rows.join('')}</div>`;
+  el.innerHTML = `<div class="log" data-density="${esc(layout)}">${rows.join('')}</div>`;
 }
 
 export function renderSummaryRows(rows) {
@@ -394,7 +406,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.8.1';
+export const APP_VERSION = '1.8.2';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -512,7 +524,7 @@ function renderMoreSheet(opts = {}) {
         </div>
         <div class="cell-row"><span>${t('more.timeline')}</span>
           <div class="seg theme-seg" id="density-seg" role="group" aria-label="${t('more.timelineAria')}">
-            ${densityBtn('single', t('density.single'))}${densityBtn('double', t('density.double'))}${densityBtn('scaled', t('density.scaled'))}
+            ${densityBtn('full', t('density.full'))}${densityBtn('single', t('density.single'))}${densityBtn('scaled', t('density.scaled'))}
           </div>
         </div>
         <div class="cell-row"><span>${t('more.language')}</span>

@@ -157,9 +157,10 @@ for (const theme of ['light', 'dark']) {
       await evidence(testInfo, 'controls', geometry);
       await screenshot(page, testInfo, 'pending-controls');
       expectIndependentLinks(geometry);
-      // v1.8.1：两枚链接在右列并排（旧版 320px 上下堆叠）；互不重叠已在上面检查。
-      // 默认「两行」布局每行 72px，与内容无关。
-      expect.soft(geometry.row.height).toBe(72);
+      // v1.8.1：两枚链接在右列并排（旧版 320px 上下堆叠）；互不重叠、落在行内已在上面检查。
+      // v1.8.2：默认改为「全文」布局，行高随正文变（不再固定 72px），改判正文完整不被裁。
+      await expect(page.locator('.log')).toHaveAttribute('data-density', 'full');
+      expect.soft(await row.locator('.e-what').evaluate(el => el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1)).toBe(true);
       await expectNoHorizontalOverflow(page);
       expect(await page.evaluate(() => getComputedStyle(document.body).overflowX)).not.toBe('hidden');
       await clickFillEdges(page, testInfo, before);
@@ -205,9 +206,11 @@ for (const width of [320, 390]) {
       await evidence(testInfo, 'label-pressure', geometry);
       await screenshot(page, testInfo, 'label-pressure');
       expectIndependentLinks(geometry);
-      // v1.8.1：行高固定，超长译文不再换行、单行省略（修订 v1.7.3 的换行保证）；默认两行布局仍是 72px。
+      // v1.8.1：超长链接译文不换行、单行省略（修订 v1.7.3 的换行保证）。v1.8.2：默认「全文」布局
+      // 行高随正文变（不再固定 72px），改判两行正文完整显示、不被裁。
       for (const control of geometry.controls) expect.soft(control.lines).toBe(1);
-      expect.soft(geometry.row.height).toBe(72);
+      await expect(page.locator('.log')).toHaveAttribute('data-density', 'full');
+      expect.soft(await row.locator('.e-what').evaluate(el => el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1)).toBe(true);
       await expectNoHorizontalOverflow(page);
       expect(await row.locator('.e-tag').textContent()).toBe('#' + tag);
       await clickBodyBottom(page, testInfo, before);

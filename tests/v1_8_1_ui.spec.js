@@ -79,10 +79,10 @@ test('v1.8.1: the backup sheet hint describes only what the sheet offers', async
   await expect(hint).toContainText('复制当前视图摘要');
 });
 
-// ── 时间轴行布局：单行 / 两行（默认）/ 按时长 ─────────────────────────────────────
-// 竖脊通高、行行相接，长度会被读成时长。单行与两行：同一列表内每行严格等高，与文字量、
-// 标签长短、行内链接个数无关；按时长：行高＝分钟数 px，下限 52px。判据量真实几何。
-const ROW_PX = { single: 52, double: 72 };
+// ── 时间轴行布局：单行 / 按时长（v1.8.2 起「两行」由「全文」取代，见 v1_8_2_timeline.spec.js）──
+// 单行：同一列表内每行严格等高，与文字量、标签长短、行内链接个数无关；按时长：行高＝
+// 分钟数 px，下限 52px。判据量真实几何。
+const ROW_PX = { single: 52 };
 const STATES = ['two-records', 'long-note', 'planned-only', 'pending-confirm-lunch', 'mid-placeholder', 'overnight-boundaries'];
 
 // 夹具每次加载都会 localStorage.clear()：偏好必须在夹具之后注册、再刷新一次才生效。
@@ -105,12 +105,12 @@ async function rows(page) {
   }));
 }
 
-for (const density of ['single', 'double']) {
+for (const density of ['single']) {
   for (const width of [320, 390, 768]) {
     for (const state of STATES) {
       test(`v1.8.1: ${density} rows are all ${ROW_PX[density]}px (${state}, ${width}px)`, async ({ page }) => {
         await boot(page, width, state, false, FIXED_NOW);
-        await applyDensity(page, density === 'double' ? null : density);
+        await applyDensity(page, density);
         await expect(page.locator('.log')).toHaveAttribute('data-density', density);
         const list = await rows(page);
         expect(list.length).toBeGreaterThan(0);
@@ -152,16 +152,17 @@ for (const width of [320, 390]) {
   });
 }
 
-test('v1.8.1: the More sheet switches the layout, persists it and keeps the default at two lines', async ({ page }) => {
+// v1.8.2：默认由「两行」改为「全文」（维护者选定），本用例随之改判默认值。
+test('v1.8.1: the More sheet switches the layout, persists it and keeps the default at full text', async ({ page }) => {
   await boot(page, 390, 'two-records', false, FIXED_NOW);
-  await expect(page.locator('.log')).toHaveAttribute('data-density', 'double');
+  await expect(page.locator('.log')).toHaveAttribute('data-density', 'full');
   expect(await page.evaluate(() => localStorage.getItem('timelog.timelineDensity'))).toBeNull();
   await openBackupMenu(page);
   const seg = page.locator('#density-seg');
-  await expect(seg.locator('[data-density="double"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(seg.locator('[data-density="full"]')).toHaveAttribute('aria-pressed', 'true');
   await seg.locator('[data-density="single"]').click();
   await expect(seg.locator('[data-density="single"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect(seg.locator('[data-density="double"]')).toHaveAttribute('aria-pressed', 'false');
+  await expect(seg.locator('[data-density="full"]')).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('.log')).toHaveAttribute('data-density', 'single');
   expect(await page.evaluate(() => localStorage.getItem('timelog.timelineDensity'))).toBe('single');
   // 夹具会在本页每次加载时清存储；另开一页（同源、无夹具脚本）验证偏好真的落盘并被读取。
@@ -174,19 +175,19 @@ test('v1.8.1: the More sheet switches the layout, persists it and keeps the defa
 
 test('v1.8.1: a refresh never restores a snapshot drawn with another layout', async ({ page }) => {
   await boot(page, 390, 'two-records', false, FIXED_NOW);
-  await expect(page.locator('.log')).toHaveAttribute('data-density', 'double');
-  // 快照按「两行」画好后，存储改成「按时长」（例如另一标签页改了偏好）再刷新。
+  await expect(page.locator('.log')).toHaveAttribute('data-density', 'full');
+  // 快照按默认布局画好后，存储改成「按时长」（例如另一标签页改了偏好）再刷新。
   await page.addInitScript(() => localStorage.setItem('timelog.timelineDensity', 'scaled'));
   await page.reload();
   await page.waitForFunction(() => document.body.classList.contains('app-ready'));
   await expect(page.locator('.log')).toHaveAttribute('data-density', 'scaled');
-  // 若旧快照被接回，init 不会首轮重绘（v53），这里会停在 double——上面的断言就是这道门的牙。
+  // 若旧快照被接回，init 不会首轮重绘（v53），这里会停在 full——上面的断言就是这道门的牙。
 });
 
-test('v1.8.1: an invalid stored layout falls back to two lines', async ({ page }) => {
+test('v1.8.1: an invalid stored layout falls back to the default (full text since v1.8.2)', async ({ page }) => {
   await boot(page, 390, 'two-records', false, FIXED_NOW);
   await applyDensity(page, 'tiny');
-  await expect(page.locator('.log')).toHaveAttribute('data-density', 'double');
+  await expect(page.locator('.log')).toHaveAttribute('data-density', 'full');
 });
 
 test('v1.8.1: single line shows a tag whole or not at all and ellipsises long text', async ({ page }) => {
@@ -217,14 +218,14 @@ test('v1.8.1: confirm keeps a short visible label and the full range for screen 
   await expect(confirm).toHaveAttribute('aria-label', /08:00/);
 });
 
-for (const density of ['single', 'double']) {
+for (const density of ['single']) {
   test(`v1.8.1: English ${density} rows keep the layout height and short link labels`, async ({ page }) => {
     await bootLocale(page, { width: 320, entries: [
       { id: 'lunch-start', ts: `${TODAY_KEY}T08:00`, what: 'Lunch', tags: ['Meals'] },
       { id: 'lunch-end', ts: `${TODAY_KEY}T12:00`, what: 'Afternoon work', tags: ['Work'] },
       { id: 'plan', ts: `${TODAY_KEY}T20:00`, what: 'Run', tags: ['Exercise'], planned: true }
     ], config: { version: 1, longReview: true, mainline: ['Work'], chips: [{ name: 'Meals', bucket: 'maintain', longOk: false }, { name: 'Exercise', bucket: 'maintain', longOk: false }] } });
-    await applyDensity(page, density === 'double' ? null : density);
+    await applyDensity(page, density);
     await expect(page.locator('.log')).toHaveAttribute('data-density', density);
     await expect(page.locator('.entry[data-id="lunch-start"] [data-action="confirm-segment"]')).toHaveText('Confirm');
     await expect(page.locator('.entry.planned [data-action="confirm-planned"]')).toHaveText('Mark as done');
