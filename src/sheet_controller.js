@@ -16,7 +16,7 @@ import {
   planOvernightContinuation,
   planSegmentSplit
 } from './entry_model.js';
-import { isPlaceholderEntry, comparePeriods, periodTrend, primaryTag, recordedDayCount, tagMinutes, formatPercent } from './stats.js';
+import { isPlaceholderEntry, comparePeriods, itemRanking, periodTrend, primaryTag, recordedDayCount, tagMinutes, formatPercent } from './stats.js';
 import { plural, t } from './i18n.js';
 import {
   BUCKETS,
@@ -60,7 +60,7 @@ import {
   validateTs,
   validateTsForMode
 } from './time.js';
-import { QUOTE_PACKS, bucketHint, configChipLabel, coverageDaysLabel, entriesCountLabel, quotePackPath, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderTagPicker, renderTagSuggestions } from './ui.js';
+import { QUOTE_PACKS, bucketHint, configChipLabel, coverageDaysLabel, entriesCountLabel, quotePackPath, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderAnalyticsItemsList, renderTagPicker, renderTagSuggestions } from './ui.js';
 
 export function createSheetController(deps) {
   let sheetScrollY = 0;
@@ -104,6 +104,10 @@ export function createSheetController(deps) {
   // v1.8.4：分析的锚定日期＝打开时主视图所看的日期（未来日期退回今天），周/月/年切换
   // 都取包含它的那一期；此前固定今天，翻到上周再打开看到的仍是本周。
   let analyticsAnchor = '';
+  // v1.9.0 事项排行：关键词、是否展开全部、展开日期的事项键。切换期/键时收起，关键词保留。
+  let analyticsQuery = '';
+  let analyticsItemsExpanded = false;
+  let analyticsOpenItemKey = '';
   let analyticsSelectedKey = ANALYTICS_DEFAULT_KEY;
   let analyticsPage = 0;
   let sheetStack = [];
@@ -1069,6 +1073,13 @@ export function createSheetController(deps) {
     });
   }
 
+  // 整层关闭：丢掉二级页返回栈再关。v1.9.0 从时间分析的事项排行跳到某天时用——
+  // 普通 closeForm 会沿栈回到「更多」，主视图虽已切到那天却仍被面板盖住。
+  function closeAllForms() {
+    sheetStack = [];
+    closeForm();
+  }
+
   function registerSheetDismissGesture() {
     const sheet = document.getElementById('form-sheet');
     if (!sheet) return;
@@ -1185,6 +1196,18 @@ export function createSheetController(deps) {
     const deltaByTag = {};
     cmp.deltaByTag.forEach((v, k) => { deltaByTag[k] = v; });
 
+    // 事项排行：有关键词时跨全部桶按正文筛选；否则跟随选中的键，未记录桶没有事项。
+    const query = analyticsQuery.trim();
+    const selectedBucket = analyticsSelectedKey.startsWith('b:') ? analyticsSelectedKey.slice(2) : '';
+    const selectedTag = analyticsSelectedKey.startsWith('t:') ? analyticsSelectedKey.slice(2) : '';
+    let itemsScopeKind = selectedBucket ? 'bucket' : 'tag';
+    let items = [];
+    if (query) items = itemRanking(entries, cur.start, cur.end, { config, now, query });
+    else if (selectedBucket === 'unrecorded') itemsScopeKind = 'none';
+    else if (selectedBucket) items = itemRanking(entries, cur.start, cur.end, { config, now, bucket: selectedBucket });
+    else items = itemRanking(entries, cur.start, cur.end, { config, now, tag: selectedTag });
+    if (analyticsOpenItemKey && !items.some(item => item.key === analyticsOpenItemKey)) analyticsOpenItemKey = '';
+
     // 趋势只对桶算（periodTrend 是桶级的）；选中标签时不给 spark。
     let trend = null;
     if (analyticsSelectedKey.startsWith('b:')) {
@@ -1210,7 +1233,13 @@ export function createSheetController(deps) {
       trend,
       selectedKey: analyticsSelectedKey,
       defaultKey: ANALYTICS_DEFAULT_KEY,
-      page: analyticsPage
+      page: analyticsPage,
+      items,
+      itemsQuery: query,
+      itemsScopeKind,
+      itemsScopeName: selectedBucket ? (BUCKETS[selectedBucket] || '') : `#${selectedTag}`,
+      itemsExpanded: analyticsItemsExpanded,
+      openItemKey: analyticsOpenItemKey
     };
   }
 
@@ -1222,6 +1251,9 @@ export function createSheetController(deps) {
     const today = todayStr();
     const selected = deps.state.selectedDate || today;
     analyticsAnchor = selected > today ? today : selected;
+    analyticsQuery = '';
+    analyticsItemsExpanded = false;
+    analyticsOpenItemKey = '';
     analyticsSelectedKey = ANALYTICS_DEFAULT_KEY;
     analyticsPage = 0;
     openFormSheet({ mode: 'analytics' });
@@ -1241,6 +1273,8 @@ export function createSheetController(deps) {
     analyticsView = view;
     analyticsSelectedKey = ANALYTICS_DEFAULT_KEY;
     analyticsPage = 0;
+    analyticsItemsExpanded = false;
+    analyticsOpenItemKey = '';
     refreshAnalytics();
   }
 
@@ -1248,6 +1282,8 @@ export function createSheetController(deps) {
     if (!key) return;
     // 再点选中项 → 回默认主线（与原型同）。
     analyticsSelectedKey = key === analyticsSelectedKey ? ANALYTICS_DEFAULT_KEY : key;
+    analyticsItemsExpanded = false;
+    analyticsOpenItemKey = '';
     refreshAnalytics();
   }
 
@@ -1258,6 +1294,41 @@ export function createSheetController(deps) {
     analyticsPage = n;
     analyticsSelectedKey = ANALYTICS_DEFAULT_KEY;
     refreshAnalytics();
+  }
+
+  // 只重渲事项列表：关键词输入时调用，输入框本身不动，焦点与光标位置保留。
+  function refreshAnalyticsItems() {
+    const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    if (!panel || panel.dataset.mode !== 'analytics') return;
+    const holder = panel.querySelector('[data-role="an-items-list"]');
+    if (holder) holder.innerHTML = renderAnalyticsItemsList(buildAnalyticsModel());
+  }
+
+  function analyticsSetQuery(value) {
+    const next = String(value || '');
+    if (next === analyticsQuery) return;
+    analyticsQuery = next;
+    analyticsItemsExpanded = false;
+    analyticsOpenItemKey = '';
+    refreshAnalyticsItems();
+  }
+
+  function analyticsToggleItems() {
+    analyticsItemsExpanded = !analyticsItemsExpanded;
+    refreshAnalyticsItems();
+  }
+
+  // 点开 / 收起某个多次出现的事项。index 是它在当前排行里的位置（键里含不可放进
+  // HTML 属性的分隔符，故不直接放键）；重渲后把焦点还给同一行。
+  function analyticsToggleItem(index) {
+    const n = Number(index);
+    const model = buildAnalyticsModel();
+    const item = Number.isInteger(n) ? model.items[n] : null;
+    if (!item) return;
+    analyticsOpenItemKey = analyticsOpenItemKey === item.key ? '' : item.key;
+    refreshAnalyticsItems();
+    const row = document.querySelector(`#form-sheet [data-action="analytics-item"][data-index="${n}"]`);
+    if (row) row.focus({ preventScroll: true });
   }
 
   // 本期摘要（「复制本期摘要」键）：本期四桶占比 + Top 标签，纯文本 markdown。
@@ -1312,6 +1383,19 @@ export function createSheetController(deps) {
           name: tag.name,
           bucket: BUCKETS[tag.bucket] || BUCKETS.job,
           dur: fmtPlainMins(tag.mins)
+        }));
+      });
+    }
+    // v1.9.0：附上当前范围（选中的键或关键词）的事项排行前 10，给 AI 复盘更细的素材。
+    if (model.items.length) {
+      const scope = model.itemsQuery ? t('analytics.summaryItemsQuery', { q: model.itemsQuery }) : model.itemsScopeName;
+      lines.push('', t('analytics.summaryItemsHead', { scope }));
+      model.items.slice(0, 10).forEach(item => {
+        lines.push(t('analytics.summaryItemRow', {
+          text: item.text || t('analytics.itemNoText'),
+          tag: item.tag,
+          dur: fmtPlainMins(item.mins),
+          times: item.count > 1 ? ` ${t('analytics.itemCount', { n: item.count })}` : ''
         }));
       });
     }
@@ -2108,6 +2192,7 @@ export function createSheetController(deps) {
     const panel = target && target.closest && target.closest('.form-sheet-panel');
     if (!panel) return;
     if (panel.dataset.mode === 'motto' && target.dataset.role === 'quotes-input') paintQuotesCount(panel);
+    if (panel.dataset.mode === 'analytics' && target.dataset.role === 'an-query') analyticsSetQuery(target.value);
     if (panel.dataset.mode === 'config') {
       if (target.dataset.role === 'cfg-search') filterConfigRows(panel);
       else if (target.closest('.cfg-row')) syncConfigRowFace(target.closest('.cfg-row'));
@@ -3003,6 +3088,9 @@ export function createSheetController(deps) {
     analyticsSetPeriod,
     analyticsPickKey,
     analyticsGoPage,
+    closeAllForms,
+    analyticsToggleItems,
+    analyticsToggleItem,
     copyAnalyticsSummary,
     toggleLongReview,
     openMoreSheet,

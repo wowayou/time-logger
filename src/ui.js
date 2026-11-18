@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-import { fmtMins, fmtPlainMins, hhmm, localDateTimeKey, minsBetweenDates, normalizeTimestamp } from './time.js';
+import { fmtMins, fmtPlainMins, hhmm, localDateTimeKey, minsBetweenDates, normalizeTimestamp, parseDateKey, shortDateLabel } from './time.js';
 import { formatPercent } from './stats.js';
 import { getLocale, plural, t } from './i18n.js';
 import {
@@ -755,6 +755,87 @@ function renderAnalyticsPad(model, keys) {
     ${pager}`;
 }
 
+// v1.9.0 事项排行：选中键（桶/标签）或关键词范围内，按「标签 + 正文」归并的时长排行。
+// 只出现一次的事项整行就是「查看那天」；出现多次的点开列出日期，每个日期都能跳过去。
+// 列表部分单独包在 [data-role=an-items-list]，输入关键词时只重渲它，输入框不丢焦点。
+const ANALYTICS_ITEMS_PREVIEW = 8;
+
+function analyticsItemDate(dateKey) {
+  const d = parseDateKey(dateKey);
+  return d ? shortDateLabel(d) : dateKey;
+}
+
+function analyticsItemRow(item, index, model, maxMins) {
+  const text = item.text || t('analytics.itemNoText');
+  const showTag = Boolean(model.itemsQuery) || model.itemsScopeKind === 'bucket';
+  const tagPart = showTag ? `#${item.tag}` : '';
+  const width = maxMins > 0 ? Math.max(2, Math.round(item.mins / maxMins * 100)) : 0;
+  const bar = `<span class="an-item-bar an-item-bar-${esc(item.bucket)}" aria-hidden="true"><i style="width:${width}%"></i></span>`;
+  const dur = fmtMins(item.mins);
+  if (item.count === 1) {
+    const date = analyticsItemDate(item.occurrences[0].date);
+    const meta = [tagPart, date].filter(Boolean).join(' · ');
+    const aria = t('analytics.itemDrillAria', { text, meta, dur });
+    return `<li class="an-item">
+      <button class="an-item-row" type="button" data-action="drill" data-date="${esc(item.occurrences[0].date)}" data-view="day" aria-label="${esc(aria)}">
+        <span class="an-item-text">${esc(text)}</span><span class="an-item-dur">${esc(dur)}</span>
+        <span class="an-item-meta">${esc(meta)}</span>${bar}
+      </button>
+    </li>`;
+  }
+  const open = model.openItemKey === item.key;
+  const countLabel = t('analytics.itemCount', { n: item.count });
+  const meta = [tagPart, countLabel].filter(Boolean).join(' · ');
+  const aria = t('analytics.itemExpandAria', { text, meta, dur });
+  const occ = open ? `<ul class="an-occ">${item.occurrences.map(o => {
+    const date = analyticsItemDate(o.date);
+    const odur = fmtMins(o.mins);
+    const times = o.count > 1 ? ` ${t('analytics.itemCount', { n: o.count })}` : '';
+    return `<li><button class="an-occ-row" type="button" data-action="drill" data-date="${esc(o.date)}" data-view="day" aria-label="${esc(t('analytics.occDrillAria', { date, dur: odur }))}"><span>${esc(date)}</span><span>${esc(odur)}${esc(times)}</span></button></li>`;
+  }).join('')}</ul>` : '';
+  return `<li class="an-item${open ? ' open' : ''}">
+      <button class="an-item-row" type="button" data-action="analytics-item" data-index="${index}" aria-expanded="${open}" aria-label="${esc(aria)}">
+        <span class="an-item-text">${esc(text)}</span><span class="an-item-dur">${esc(dur)}</span>
+        <span class="an-item-meta">${esc(meta)}<span class="an-item-caret" aria-hidden="true"></span></span>${bar}
+      </button>${occ}
+    </li>`;
+}
+
+export function renderAnalyticsItemsList(model) {
+  const items = model.items || [];
+  const total = items.reduce((n, item) => n + item.mins, 0);
+  const records = items.reduce((n, item) => n + item.count, 0);
+  let caption;
+  if (model.itemsQuery) {
+    caption = items.length
+      ? t('analytics.itemsQueryCaption', { q: model.itemsQuery, dur: fmtMins(total), n: records })
+      : t('analytics.itemsQueryEmpty', { q: model.itemsQuery });
+  } else if (model.itemsScopeKind === 'none') {
+    caption = t('analytics.itemsUnrecorded');
+  } else {
+    caption = items.length
+      ? t('analytics.itemsCaption', { name: model.itemsScopeName, n: items.length })
+      : t('analytics.itemsEmpty', { name: model.itemsScopeName });
+  }
+  const shown = model.itemsExpanded ? items : items.slice(0, ANALYTICS_ITEMS_PREVIEW);
+  const maxMins = items.length ? items[0].mins : 0;
+  const rows = shown.map((item, i) => analyticsItemRow(item, i, model, maxMins)).join('');
+  const more = items.length > ANALYTICS_ITEMS_PREVIEW
+    ? `<button class="an-items-more" type="button" data-action="analytics-items-toggle" aria-expanded="${Boolean(model.itemsExpanded)}">${esc(model.itemsExpanded ? t('analytics.itemsLess') : t('analytics.itemsAll', { n: items.length }))}</button>`
+    : '';
+  return `<div class="an-items-cap" aria-live="polite">${esc(caption)}</div>
+    ${rows ? `<ol class="an-items-ol">${rows}</ol>` : ''}
+    ${more}`;
+}
+
+function renderAnalyticsItems(model) {
+  return `<section class="an-items" aria-labelledby="an-items-head">
+      <h3 class="an-items-head" id="an-items-head">${esc(t('analytics.itemsHead'))}</h3>
+      <input class="inp an-query" type="search" data-role="an-query" value="${esc(model.itemsQuery || '')}" placeholder="${esc(t('analytics.queryPlaceholder'))}" aria-label="${esc(t('analytics.queryAria'))}" autocomplete="off" enterkeyhint="search">
+      <div data-role="an-items-list">${renderAnalyticsItemsList(model)}</div>
+    </section>`;
+}
+
 function renderAnalyticsPeriodSeg(view) {
   const btn = (value, label) =>
     `<button type="button" data-action="analytics-period" data-period="${value}" class="${view === value ? 'active' : ''}" aria-pressed="${view === value}">${esc(label)}</button>`;
@@ -771,7 +852,8 @@ export function renderAnalyticsContent(model) {
     ${renderAnalyticsPeriodSeg(model.view)}
     <div class="an-period-label">${esc(model.periodLabel || '')}</div>
     ${renderAnalyticsDisplay(model, keys)}
-    ${renderAnalyticsPad(model, keys)}`;
+    ${renderAnalyticsPad(model, keys)}
+    ${renderAnalyticsItems(model)}`;
 }
 
 export function renderAnalyticsSheet(model) {

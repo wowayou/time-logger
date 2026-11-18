@@ -320,7 +320,8 @@ import {
     state.view = view;
     setSelectedDate(dateKey);
     sheetController.closeEditSheet();
-    sheetController.closeForm();
+    // 事项排行从「更多 → 时间分析」里下钻：整层关掉，不沿返回栈回到「更多」。
+    sheetController.closeAllForms();
     render();
   }
 
@@ -1105,6 +1106,8 @@ import {
       if (action === 'analytics-pick') sheetController.analyticsPickKey(el.dataset.key);
       if (action === 'analytics-page') sheetController.analyticsGoPage(el.dataset.page);
       if (action === 'analytics-summary') sheetController.copyAnalyticsSummary();
+      if (action === 'analytics-items-toggle') sheetController.analyticsToggleItems();
+      if (action === 'analytics-item') sheetController.analyticsToggleItem(el.dataset.index);
       if (action === 'toggle-long-review') sheetController.toggleLongReview();
       if (action === 'save-tag-config') sheetController.saveTagConfig();
       if (action === 'confirm-tag-merge') sheetController.saveTagConfig({ confirmMerge: el.dataset.signature || '' });

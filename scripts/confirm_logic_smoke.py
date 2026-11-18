@@ -27,6 +27,8 @@ import {
   summarizeSegments,
   summarizeSegmentRows,
   tagMinutes as tagMinutesRaw,
+  itemRanking as itemRankingRaw,
+  itemTextKey,
   COMPARE
 } from './src/stats.js';
 import {
@@ -99,6 +101,7 @@ const confirmSegmentInData = (data, id, endTs, opts = {}) => confirmSegmentRaw(d
 const comparePeriods = (entries, view, dateKey, opts = {}) => comparePeriodsRaw(entries, view, dateKey, withReview(opts));
 const periodTrend = (entries, view, dateKey, opts = {}) => periodTrendRaw(entries, view, dateKey, withReview(opts));
 const tagMinutes = (entries, start, end, opts = {}) => tagMinutesRaw(entries, start, end, withReview(opts));
+const itemRanking = (entries, start, end, opts = {}) => itemRankingRaw(entries, start, end, withReview(opts));
 
 function p2(n) {
   return String(n).padStart(2, '0');
@@ -1175,6 +1178,42 @@ const centuryTail = buildRangeSegmentsFromEntries(centuryEntries, '2025-12-31T00
 assert(centuryTail.length === 6, 'last day in a century has five starts and previous-day carry');
 assert(centuryTail.reduce((n, seg) => n + seg.mins, 0) === 1440, 'last day of a century retains all 1440 minutes');
 assert(centuryEntries[0].ts === '1926-01-01T08:00' && centuryEntries.length === 182625, 'large-history reads never modify the source archive');
+
+// v1.9.0 事项排行：标签 + 规整正文归并；跨午夜的记录算一次、记在起始日；范围/桶/标签/关键词筛选。
+{
+  const rk = (id, ts, what, tag) => ({ id, ts, what, tags: tag ? [tag] : [] });
+  const items = [
+    rk('i1', '2026-11-01T09:00', '刷题：两道 DP', '求职推进'),
+    rk('i2', '2026-11-01T10:00', '投简历', '求职推进'),
+    rk('i3', '2026-11-01T11:00', '  投简历 ', '求职推进'),
+    rk('i4', '2026-11-01T12:00', '投简历', '刷手机'),
+    rk('i5', '2026-11-01T13:00', '改作品集', '求职推进'),
+    rk('i6', '2026-11-01T15:00', '', ''),
+    rk('i7', '2026-11-02T23:00', '投  简历', '求职推进'),
+    rk('i8', '2026-11-03T01:00', '', '')
+  ];
+  const snapshot = JSON.stringify(items);
+  const opts = { now: '2026-11-10T00:00' };
+  const all = itemRanking(items, '2026-11-01T00:00', '2026-11-04T00:00', opts);
+  assert(itemTextKey('  投  简历 ') === '投 简历' && itemTextKey('ABC') === 'abc', 'item text key trims, collapses spaces, lowercases');
+  const resumePlain = all.find(g => g.key.endsWith('\u0000投简历') && g.bucket === 'job');
+  assert(resumePlain && resumePlain.mins === 120 && resumePlain.count === 2, 'identical text after trimming merges within a tag (2 x 60min)');
+  assert(resumePlain.occurrences.length === 1 && resumePlain.occurrences[0].count === 2 && resumePlain.occurrences[0].date === '2026-11-01', 'same-day occurrences fold into one day row');
+  const overnight = all.find(g => g.key.endsWith('\u0000投 简历'));
+  assert(overnight && overnight.mins === 120 && overnight.count === 1 && overnight.occurrences[0].date === '2026-11-02', 'an entry crossing midnight counts once on its start day with both halves');
+  const leakResume = all.find(g => g.bucket === 'leak');
+  assert(leakResume && leakResume.mins === 60 && leakResume.text === '投简历', 'same text under another tag stays a separate item');
+  assert(all.every(g => g.bucket !== 'unrecorded'), 'unrecorded segments never become items');
+  assert(all[0].mins >= all[all.length - 1].mins && all.slice(1).every((g, i) => all[i].mins >= g.mins), 'items are sorted by minutes descending');
+  assert(itemRanking(items, '2026-11-01T00:00', '2026-11-04T00:00', { ...opts, bucket: 'leak' }).length === 1, 'bucket scope keeps only that bucket');
+  const tagScoped = itemRanking(items, '2026-11-01T00:00', '2026-11-04T00:00', { ...opts, tag: ' 求职推进 ' });
+  assert(tagScoped.length === 4 && tagScoped.every(g => g.tag === '求职推进'), 'tag scope matches by tagKey');
+  const q = itemRanking(items, '2026-11-01T00:00', '2026-11-04T00:00', { ...opts, query: ' 简历' });
+  assert(q.length === 3 && q.reduce((n, g) => n + g.mins, 0) === 300, 'keyword query matches normalized text across tags and buckets');
+  const partial = itemRanking(items, '2026-11-03T00:00', '2026-11-04T00:00', opts);
+  assert(partial.length === 1 && partial[0].mins === 60 && partial[0].occurrences[0].date === '2026-11-03', 'range clipping keeps only the in-range half and dates it inside the range');
+  assert(JSON.stringify(items) === snapshot, 'item ranking never mutates its input');
+}
 
 console.log('confirm_logic_smoke passed');
 '''

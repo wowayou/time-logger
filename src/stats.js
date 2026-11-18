@@ -17,7 +17,7 @@ import {
 // SPEC-013：保留标签 id 是数据（config 的键、随备份走），不是文案；显示名在 ui/io 层
 // 映射成 i18n 的 `tag.unknown`。本模块仍不访问 DOM / navigator / localStorage。
 import { RESERVED_UNKNOWN_TAG } from './storage.js';
-import { bucketForTag, longOkForTag, tagKnownForConfirmation } from './storage.js';
+import { bucketForTag, longOkForTag, tagKey, tagKnownForConfirmation } from './storage.js';
 
 export const GAP = 180;
 
@@ -382,6 +382,66 @@ export function tagMinutes(entries, start, end, opts = {}) {
     map.set(segment.tag, (map.get(segment.tag) || 0) + segment.mins);
   });
   return map;
+}
+
+// ── v1.9.0 事项排行（时间分析页）──
+// 「事项」＝同一标签下正文相同的记录。正文归并只做最保守的规整：去首尾空白、折叠
+// 连续空白、忽略大小写（与 tagKey 同用 toLowerCase，不随设备语言变）。不做前缀、
+// 关键词或模糊归并——2026-11-18 用维护者真实备份测过（scripts/what_repeat_stats.mjs）：
+// 主线正文多为描述句，前缀归并会把不同任务混在一起，宁可逐条列出。
+export function itemTextKey(what) {
+  return String(what || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * 区间内按「标签 + 正文」归并的已发生时长排行，不含未记录段。
+ * opts.bucket 只取该桶；opts.tag 只取该标签（按 tagKey）；opts.query 只取正文含该词的
+ * 记录（同样规整后比较）。每条记录只算一次出现：跨午夜被切成两段仍是一次，日期取它在
+ * 区间内第一段所在的自然日。显示正文与标签取最近一次出现的原文。不修改输入。
+ * @returns {Array<{key:string,text:string,tag:string,bucket:string,mins:number,count:number,occurrences:Array<{date:string,mins:number,count:number}>}>}
+ */
+export function itemRanking(entries, start, end, opts = {}) {
+  const scopeTag = opts.tag != null ? tagKey(opts.tag) : null;
+  const scopeBucket = opts.bucket || null;
+  const query = opts.query ? itemTextKey(opts.query) : '';
+  const perEntry = new Map();
+  buildRangeSegmentsFromEntries(entries, start, end, opts).forEach(seg => {
+    if (seg.unrecorded || !seg.e || seg.mins <= 0) return;
+    if (scopeBucket && seg.bucket !== scopeBucket) return;
+    if (scopeTag !== null && tagKey(seg.tag) !== scopeTag) return;
+    const hit = perEntry.get(seg.e);
+    if (hit) { hit.mins += seg.mins; return; }
+    perEntry.set(seg.e, { entry: seg.e, tag: seg.tag, bucket: seg.bucket, mins: seg.mins, date: localDateKey(seg.start) });
+  });
+  const groups = new Map();
+  perEntry.forEach(item => {
+    const text = typeof item.entry.what === 'string' ? item.entry.what.trim() : '';
+    if (query && !itemTextKey(text).includes(query)) return;
+    const key = `${tagKey(item.tag)}\u0000${itemTextKey(text)}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { key, text, tag: item.tag, bucket: item.bucket, mins: 0, count: 0, days: new Map(), latest: '' };
+      groups.set(key, group);
+    }
+    group.mins += item.mins;
+    group.count += 1;
+    const day = group.days.get(item.date) || { date: item.date, mins: 0, count: 0 };
+    day.mins += item.mins;
+    day.count += 1;
+    group.days.set(item.date, day);
+    if (item.entry.ts >= group.latest) {
+      group.latest = item.entry.ts;
+      group.text = text;
+      group.tag = item.tag;
+    }
+  });
+  const byText = (a, b) => (a.text < b.text ? -1 : a.text > b.text ? 1 : 0);
+  return [...groups.values()]
+    .map(g => ({
+      key: g.key, text: g.text, tag: g.tag, bucket: g.bucket, mins: g.mins, count: g.count,
+      occurrences: [...g.days.values()].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    }))
+    .sort((a, b) => (b.mins - a.mins) || (b.count - a.count) || byText(a, b));
 }
 
 function diffTagMaps(curMap, prevMap) {
