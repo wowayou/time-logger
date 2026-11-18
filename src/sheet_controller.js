@@ -101,6 +101,9 @@ export function createSheetController(deps) {
   const ANALYTICS_TAG_LIMIT = 16;
   // v1.3.0 拨号盘分析页的 UI 态（不落 storage，关 sheet 即弃）。
   let analyticsView = 'week';
+  // v1.8.4：分析的锚定日期＝打开时主视图所看的日期（未来日期退回今天），周/月/年切换
+  // 都取包含它的那一期；此前固定今天，翻到上周再打开看到的仍是本周。
+  let analyticsAnchor = '';
   let analyticsSelectedKey = ANALYTICS_DEFAULT_KEY;
   let analyticsPage = 0;
   let sheetStack = [];
@@ -1162,7 +1165,7 @@ export function createSheetController(deps) {
     const entries = deps.load().entries;
     const config = deps.loadConfig();
     const view = analyticsView;
-    const dateKey = todayStr();
+    const dateKey = analyticsAnchor || todayStr();
     const now = new Date();
     const cmp = comparePeriods(entries, view, dateKey, { config, now });
     const cur = periodRange(view, dateKey);
@@ -1212,7 +1215,13 @@ export function createSheetController(deps) {
   }
 
   function openAnalyticsSheet() {
-    analyticsView = 'week';
+    // 粒度跟主视图：周/月/年原样沿用，天视图没有对应的分析粒度，仍从周开始。
+    const mainView = deps.state.view;
+    analyticsView = mainView === 'month' || mainView === 'year' ? mainView : 'week';
+    // 未来的周期还没有已发生的记录可分析：所看日期晚于今天时锚到今天。
+    const today = todayStr();
+    const selected = deps.state.selectedDate || today;
+    analyticsAnchor = selected > today ? today : selected;
     analyticsSelectedKey = ANALYTICS_DEFAULT_KEY;
     analyticsPage = 0;
     openFormSheet({ mode: 'analytics' });

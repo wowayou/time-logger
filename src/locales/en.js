@@ -664,7 +664,7 @@ export default {
   'help.h8': 'Screen and privacy',
   'help.p8': 'This app does not keep the screen awake on its own; data lives only in the browser on this device.',
   'help.h9': 'Time analysis',
-  'help.p9': 'Time analysis, under More (···), shows for this week, month or year how much time went to each bucket and tag, how that compares with the same point last period, and the recent trend; it does not force a comparison when too few days were logged. At the bottom you can copy this period\'s summary as Markdown, ready to paste into an AI for review.',
+  'help.p9': 'Time analysis, under More (···), covers the week, month or year you are looking at: week, month and year views keep their period, and day view starts from that day\'s week, so paging back to last week and opening it shows last week; future dates fall back to the current period. It shows how much time went to each bucket and tag, how that compares with the previous period (a period still in progress is compared with the same point last period), and the trend over earlier periods; it does not force a comparison when too few days were logged. At the bottom you can copy this period\'s summary as Markdown, ready to paste into an AI for review.',
   'help.h10': 'Motto and rotating lines',
   'help.p10': 'A motto sits under the conclusion card in the day view; tap it to rewrite it, or clear and save to hide it. You can also switch to rotating lines: paste or import .txt / .md passages and one line shows each day, in order; after you edit the lines, reading continues from today\'s line. The lines stay on this device and are included in full backups.',
   'importUi.title': 'Import check',
