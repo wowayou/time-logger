@@ -3,6 +3,8 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
+**发布更新：2026-11-18。Web v1.8.2 已正式发布，两站均已部署；tag / Release 为 [v1.8.2](https://github.com/wowayou/time-logger/releases/tag/v1.8.2)，来源 `368f0fe`。两站 29/29 运行时与 tag 逐字节一致；线上主站真实 SW 检查通过。未刷新旧站文档，真机待验。**
+
 **发布更新：2026-11-17。Web v1.8.1 已正式发布，两站均已部署；tag / Release 为 [v1.8.1](https://github.com/wowayou/time-logger/releases/tag/v1.8.1)，来源 `a64510f`（功能提交 `41d2fb7`）。两站 29/29 运行时与 tag 逐字节一致，中英隐私页一致；线上主站真实 SW 检查通过。旧站未做功能检查、未刷新旧站文档，真机待验。**
 
 **发布更新：2026-11-17。Web v1.8.0 已正式发布，两站均已部署；tag / Release 为 [v1.8.0](https://github.com/wowayou/time-logger/releases/tag/v1.8.0)，来源 `d0dfe01`。两站 29 个运行时文件与 tag 逐字节一致，manifest / SW 缓存均为 1.8.0；线上主站真实 SW 检查通过。未做旧站文档刷新，真机待验。** 开工前 fetch 确认本地 main 落后远端 11 个提交，已快进到 `02f0948`（与远端、两站 v1.7.5 一致）后再改。
@@ -17,6 +19,7 @@
 
 ## DONE
 
+- **Web v1.8.2 已发布（2026-11-18）**：维护者要求「测完提交并发布」，费用边界沿用 v1.8.1（一次 tag 发布、失败即停不重跑、不刷新旧站文档）。推送前 fetch 确认远端 main 仍为 `94e66a2`；功能提交 `368f0fe`，tag / Release [v1.8.2](https://github.com/wowayou/time-logger/releases/tag/v1.8.2)。tag 触发的主站镜像发布 [44242092674](https://github.com/wowayou/time-logger/actions/runs/44242092674)、旧站 Pages [44242092673](https://github.com/wowayou/time-logger/actions/runs/44242092673)、镜像 Pages [44242113730](https://github.com/wowayou/time-logger-site/actions/runs/44242113730) 均首次 success。两站各 29/29 运行时与 tag 逐字节一致（带随机参数绕过边缘缓存）。线上主站 Chromium 临时上下文、两条合成记录、预置旧值 `double`：SW 接管、缓存 `timelog-v1.8.2`，布局为全文、时长条 2 根、长正文完整换行，偏好未被改写，无脚本/HTTP 错误。未核对主页/支持页、旧站功能与隐藏路径；产物大小与实际账单未核实；真机待验。
 - **v1.8.2 源码候选（2026-11-18，发布前记录）**：维护者要求时间轴正文换行、不点开就能看全文（「v1.7.0 原版的时间轴就不错」），并提出按时长铺底色。先出两轮对比图（私有 Artifact，示例数据）：8 个排布方案；再按「保留竖脊 + 时长条 + 像 Claude Code `/stats` 的热力底」调研——本机 Claude Code 2.1.327 程序代码显示其热力图为同色四档 + 灰点、按个人非零日 p25/p50/p75 分档；按两套主题真实色值算出最深档上灰字 3.5/2.7、链接 4.1/3.7 不达 4.5:1，相邻档底色对比仅 1.07–1.31——出 6 个热力方案。维护者选 P1：「全文」取代「两行」作默认（正文完整换行、标签在正文下，竖脊仍通高、明知长短不代表时长），时长由右列数字与固定刻度时长条表达（满格 4h、超出留缺口、未记录灰、计划不画、只在全文布局）；存量 `double` 按全文读不改写，快照门同规则。门禁：audit、逻辑 smoke、typecheck、`git diff --check` 通过；完整 UI **1191 passed / 1 skipped / 20 failed**（2196 秒，双引擎），20 条全是 v1.7.3 边界用例里写死的「默认 72px」软断言（有意行为变化），改判为「全文布局、正文不被裁」后该文件双引擎 **44/44**（关闭重试），其余运行时与测试文件哈希与全量运行时一致，未再跑一遍全量。新 spec 以 v1.8.1 运行时 22/24 红（Chromium）。唯一跳过为既有 WebKit 离线句库模拟限制。浏览器实看：390px 中文亮色、320px 英文暗色合成数据截图，链接在行内、≥44px、不压正文，无横向溢出；真机未验。
 
 - **Web v1.8.1 已发布（2026-11-17）**：维护者批准发布，费用边界沿用 v1.8.0（新增费用 ≤US$0.01、产物 ≤10 MiB、保留 1 天，一次 tag 发布、失败即停不重跑、不刷新旧站文档）。推送前 fetch 确认远端 main 仍为 `01dc6ee`、运行时/测试哈希与全绿门禁一致；tag 触发的主站镜像发布 [44101204130](https://github.com/wowayou/time-logger/actions/runs/44101204130)、旧站 Pages [44101204157](https://github.com/wowayou/time-logger/actions/runs/44101204157)、镜像 Pages [44101235291](https://github.com/wowayou/time-logger-site/actions/runs/44101235291) 均首次 success，镜像 `7118d97` 来源为 `a64510f`。两站各 29/29 运行时与 tag 逐字节一致（带随机参数绕过边缘缓存），中英隐私页一致且列出新键，缓存均为 `timelog-v1.8.1`。线上主站 Chromium 临时上下文、两条合成记录：新版接管，默认两行每行 72px，「更多」切单行后刷新保持、每行 52px，记录未改，无脚本/请求/HTTP 错误。2 份产物合计 **2,004,230 bytes**，约 1 天后到期，实际账单未核实。未核对主页/支持页与旧站文档兼容页、隐藏路径，旧站未做功能检查。
