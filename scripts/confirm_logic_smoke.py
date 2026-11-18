@@ -22,6 +22,7 @@ import {
   formatPercent,
   isKnownTag,
   periodTrend as periodTrendRaw,
+  periodBaseline as periodBaselineRaw,
   primaryTag,
   summarizeEntries as summarizeEntriesRaw,
   summarizeSegments,
@@ -100,6 +101,7 @@ const classifySegment = (entryValue, rawMins, endTs, isOngoing) => classifySegme
 const confirmSegmentInData = (data, id, endTs, opts = {}) => confirmSegmentRaw(data, id, endTs, withReview(opts));
 const comparePeriods = (entries, view, dateKey, opts = {}) => comparePeriodsRaw(entries, view, dateKey, withReview(opts));
 const periodTrend = (entries, view, dateKey, opts = {}) => periodTrendRaw(entries, view, dateKey, withReview(opts));
+const periodBaseline = (entries, view, dateKey, opts = {}) => periodBaselineRaw(entries, view, dateKey, withReview(opts));
 const tagMinutes = (entries, start, end, opts = {}) => tagMinutesRaw(entries, start, end, withReview(opts));
 const itemRanking = (entries, start, end, opts = {}) => itemRankingRaw(entries, start, end, withReview(opts));
 
@@ -951,6 +953,25 @@ const flatEntries = analyticsWeekdayEntries(new Date(2026, 4, 25), 6, 150, 0, 5)
 const flatTrend = periodTrend(flatEntries, 'week', '2026-06-24', { now: analyticsNow, bucket: 'job' });
 assert(flatTrend.direction === 'flat', `constant weeks should be flat, got ${flatTrend.direction}`);
 assert(flatTrend.runLength === 0, `flat trend must not report a run, got ${flatTrend.runLength}`);
+
+// v1.9.0：标签范围的趋势与桶范围同口径（本夹具主线只有一个标签，两者序列必须一致）。
+const tagTrend = periodTrend(risingEntries, 'week', '2026-06-24', { now: analyticsNow, tag: ' 求职推进 ' });
+assert(JSON.stringify(tagTrend.series) === JSON.stringify(trend.series) && tagTrend.direction === 'up' && tagTrend.tag === ' 求职推进 ', 'tag-scoped trend matches the bucket trend for a single-tag mainline');
+
+// v1.9.0 个人基线：此前已完成周期「同样走到周三 14:00」那一段的中位数。
+// 本周到周三 540；此前四周同段 450/360/270/180 → 中位 315 → 高于常态 225。
+const risingBase = periodBaseline(risingEntries, 'week', '2026-06-24', { now: analyticsNow, bucket: 'job' });
+assert(risingBase.verdict === 'above' && risingBase.median === 315 && risingBase.diff === 225 && risingBase.periods === 4 && risingBase.matched === true, `baseline uses the elapsed-matched median, got ${JSON.stringify(risingBase)}`);
+assert(periodBaseline(risingEntries, 'week', '2026-06-24', { now: analyticsNow, tag: '求职推进' }).median === 315, 'tag-scoped baseline matches the bucket baseline');
+const flatBase = periodBaseline(flatEntries, 'week', '2026-06-24', { now: analyticsNow, bucket: 'job' });
+assert(flatBase.verdict === 'near' && flatBase.median === 450, `constant weeks sit near their baseline, got ${JSON.stringify(flatBase)}`);
+// 已结束的周整期对整期：06/15 那周 750，对此前三整周 600/450/300 → 中位 450。
+const doneBase = periodBaseline(risingEntries, 'week', '2026-06-15', { now: analyticsNow, bucket: 'job' });
+assert(doneBase.matched === false && doneBase.current === 750 && doneBase.median === 450 && doneBase.periods === 3, `a completed week compares whole periods, got ${JSON.stringify(doneBase)}`);
+// 可比期不足三期、当期自身记录不足：都不下结论。
+assert(periodBaseline(risingEntries, 'week', '2026-06-08', { now: analyticsNow, bucket: 'job' }).verdict === 'insufficient', 'fewer than three comparable periods give no baseline');
+const underBase = periodBaseline(analyticsWeekdayEntries(new Date(2026, 4, 25), 6, 120, 30, 1), 'week', '2026-06-24', { now: analyticsNow, bucket: 'job' });
+assert(underBase.verdict === 'insufficient' && underBase.median === null, 'an under-recorded current period is not judged against its baseline');
 
 // 小样本守门（趋势侧）：每周只记 2 天，已完成周期覆盖 2/7 < 60% → 趋势不给方向。
 const sparseEntries = analyticsWeekdayEntries(new Date(2026, 4, 25), 6, 120, 30, 2);

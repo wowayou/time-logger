@@ -2901,6 +2901,8 @@
     .an-subline { color: var(--muted); font-size: var(--fs-ui); margin-top: 6px; }
     .an-subline b { color: var(--text); }
     .an-delta { color: var(--faint); font-size: var(--fs-cap); margin-top: 3px; min-height: 16px; }
+    .an-baseline, .an-activity { color: var(--muted); font-size: var(--fs-cap); margin-top: 2px; }
+    .an-baseline-basis { color: var(--faint); }
     .an-trend { color: var(--accent); font-size: var(--fs-cap); margin-top: 2px; }
     .an-coverage { color: var(--faint); font-size: var(--fs-cap); margin-top: var(--sp-1); }
     .an-spark { margin: var(--sp-2) 6px 0; }

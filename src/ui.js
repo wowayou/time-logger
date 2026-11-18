@@ -677,17 +677,56 @@ function analyticsSpark(series, name) {
         <div class="an-spark-cap" aria-hidden="true">${esc(caption)}</div>`;
 }
 
-// 顶部结论区：选中键的时长（大字）+ 占比 + 对比上期 delta +（桶才有的）趋势 spark。
+// v1.9.0 累计（只在「全部」）：这个桶/标签首次、最近出现的日子与出现过的天数。
+function analyticsActivityLine(activity) {
+  if (!activity) return '';
+  if (!activity.days) return `<div class="an-activity">${esc(t('analytics.activityNone'))}</div>`;
+  const first = parseDateKey(activity.first);
+  const last = parseDateKey(activity.last);
+  const vars = {
+    days: activity.days,
+    first: first ? shortDateLabel(first) : activity.first,
+    last: last ? shortDateLabel(last) : activity.last
+  };
+  const text = plural(activity.days, { one: t('analytics.activityOne', vars), other: t('analytics.activityOther', vars) });
+  return `<div class="an-activity">${esc(text)}</div>`;
+}
+
+// v1.9.0 常态：此前可比周期（同样走到这一点）的中位数；不足三期或本期记录不足时不显示。
+function analyticsBaselineLine(baseline) {
+  if (!baseline || baseline.verdict === 'insufficient') return '';
+  const median = fmtMins(baseline.median);
+  const basis = baseline.matched
+    ? t('analytics.baselineMatched', { n: baseline.periods, dur: median })
+    : t('analytics.baselineWhole', { n: baseline.periods, dur: median });
+  let verdict;
+  if (baseline.verdict === 'near') verdict = t('analytics.baselineNear');
+  else if (baseline.verdict === 'above') verdict = t('analytics.baselineAbove', { dur: fmtMins(baseline.diff) });
+  else verdict = t('analytics.baselineBelow', { dur: fmtMins(-baseline.diff) });
+  return `<div class="an-baseline">${esc(verdict)}<span class="an-baseline-basis">${esc(basis)}</span></div>`;
+}
+
+// 顶部结论区：选中键的时长（大字）+ 占比 + 对比上期 delta + 常态 + 趋势 spark（v1.9.0 起标签也有）。
 function renderAnalyticsDisplay(model, keys) {
   const total = model.total || 0;
   const selected = keys.find(k => k.key === model.selectedKey) || keys[0];
   const pct = formatPercent(selected.mins, total);
-  const subline = model.selectedKey === model.defaultKey
-    ? t('analytics.subline', { name: esc(selected.name), pct })
-    : t('analytics.sublineReselect', { name: esc(selected.name), pct });
+  const isAll = model.view === 'all';
+  let subline;
+  if (isAll) {
+    subline = model.selectedKey === model.defaultKey
+      ? t('analytics.sublineAll', { name: esc(selected.name), pct })
+      : t('analytics.sublineAllReselect', { name: esc(selected.name), pct });
+  } else {
+    subline = model.selectedKey === model.defaultKey
+      ? t('analytics.subline', { name: esc(selected.name), pct })
+      : t('analytics.sublineReselect', { name: esc(selected.name), pct });
+  }
 
   let delta;
-  if (!model.comparable) {
+  if (isAll) {
+    delta = '';
+  } else if (!model.comparable) {
     delta = t('analytics.deltaInsufficient');
   } else {
     const d = selected.kind === 'bucket'
@@ -700,7 +739,7 @@ function renderAnalyticsDisplay(model, keys) {
 
   let trendLine = '';
   let sparkHtml = '';
-  if (selected.kind === 'bucket' && model.trend && model.trend.bucket === selected.bucket) {
+  if (model.trend) {
     const tr = model.trend;
     // 方向由近半/前半均值定，runLength 只数末尾连续同向的期数：最后一期回落时方向
     // 仍可能是 up 而 runLength 为 0。不足 2 期不说「连续 N 期」（v1.5.6）。
@@ -716,7 +755,9 @@ function renderAnalyticsDisplay(model, keys) {
     <div class="an-display" data-role="an-display">
       <div class="an-headline" aria-live="polite">${fmtMins(selected.mins)}</div>
       <div class="an-subline">${subline}</div>
-      <div class="an-delta">${delta}</div>
+      ${delta ? `<div class="an-delta">${delta}</div>` : ''}
+      ${analyticsBaselineLine(model.baseline)}
+      ${analyticsActivityLine(model.activity)}
       ${trendLine ? `<div class="an-trend">${trendLine}</div>` : ''}
       <div class="an-coverage">${t('analytics.coverage', { fraction: coverageDaysLabel(model.coverage.logged, model.coverage.days), total: fmtMins(total) })}</div>
       ${sparkHtml ? `<div class="an-spark an-spark-${selected.bucket}">${sparkHtml}</div>` : ''}
@@ -808,13 +849,19 @@ export function renderAnalyticsItemsList(model) {
   let caption;
   if (model.itemsQuery) {
     caption = items.length
-      ? t('analytics.itemsQueryCaption', { q: model.itemsQuery, dur: fmtMins(total), n: records })
+      ? plural(records, {
+        one: t('analytics.itemsQueryCaptionOne', { q: model.itemsQuery, dur: fmtMins(total), n: records }),
+        other: t('analytics.itemsQueryCaptionOther', { q: model.itemsQuery, dur: fmtMins(total), n: records })
+      })
       : t('analytics.itemsQueryEmpty', { q: model.itemsQuery });
   } else if (model.itemsScopeKind === 'none') {
     caption = t('analytics.itemsUnrecorded');
   } else {
     caption = items.length
-      ? t('analytics.itemsCaption', { name: model.itemsScopeName, n: items.length })
+      ? plural(items.length, {
+        one: t('analytics.itemsCaptionOne', { name: model.itemsScopeName, n: items.length }),
+        other: t('analytics.itemsCaptionOther', { name: model.itemsScopeName, n: items.length })
+      })
       : t('analytics.itemsEmpty', { name: model.itemsScopeName });
   }
   const shown = model.itemsExpanded ? items : items.slice(0, ANALYTICS_ITEMS_PREVIEW);
@@ -840,7 +887,7 @@ function renderAnalyticsPeriodSeg(view) {
   const btn = (value, label) =>
     `<button type="button" data-action="analytics-period" data-period="${value}" class="${view === value ? 'active' : ''}" aria-pressed="${view === value}">${esc(label)}</button>`;
   return `<div class="an-period seg" role="group" aria-label="${esc(t('analytics.title'))}">
-    ${btn('week', t('period.week'))}${btn('month', t('period.month'))}${btn('year', t('period.year'))}
+    ${btn('week', t('period.week'))}${btn('month', t('period.month'))}${btn('year', t('period.year'))}${btn('all', t('analytics.periodAll'))}
   </div>`;
 }
 

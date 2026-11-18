@@ -155,3 +155,66 @@ test('320px 下展开日期后整页不横向溢出', async ({ page }) => {
   const box = await page.locator('#form-sheet .an-occ-row').first().boundingBox();
   expect(box.height).toBeGreaterThanOrEqual(44);
 });
+
+// ── 常态（个人基线）与标签趋势 ──
+// 本周到周三主线 630；此前 5 周同段 540/450/360/270/180 → 中位 360 → 多 4h30min。
+test('结论区给出常态：与此前同期中位数比', async ({ page }) => {
+  await boot(page, 390, 'analytics-weeks', false, WED_NOW);
+  await openAnalytics(page);
+  await expect(page.locator('#form-sheet .an-baseline')).toHaveText('比常态多 4h30min（此前 5 期同期中位 6h）');
+});
+
+// 上周已结束：900 对此前四整周 750/600/450/300 → 中位 525 → 多 6h15min，用整期口径。
+test('已结束的周按整期比常态', async ({ page }) => {
+  await boot(page, 390, 'analytics-weeks', false, WED_NOW, -7);
+  await openAnalytics(page);
+  await expect(page.locator('#form-sheet .an-baseline')).toHaveText('比常态多 6h15min（此前 4 期中位 8h45min）');
+});
+
+test('可比周期不足三期时不显示常态', async ({ page }) => {
+  await boot(page, 390, 'analytics-weeks', false, WED_NOW, -21);
+  await openAnalytics(page);
+  // 三周前那周之前只有两周有记录。
+  await expect(page.locator('#form-sheet .an-headline')).toBeVisible();
+  await expect(page.locator('#form-sheet .an-baseline')).toHaveCount(0);
+});
+
+test('选中标签也给出趋势、迷你柱图和常态', async ({ page }) => {
+  await boot(page, 390, 'analytics-weeks', false, WED_NOW);
+  await openAnalytics(page);
+  await page.locator('#form-sheet .an-tile[data-key="t:求职推进"]').click();
+  await expect(page.locator('#form-sheet .an-trend')).toContainText('求职推进');
+  await expect(page.locator('#form-sheet .an-trend')).toContainText('走高');
+  await expect(page.locator('#form-sheet .an-spark svg')).toHaveCount(1);
+  await expect(page.locator('#form-sheet .an-baseline')).toHaveText('比常态多 4h30min（此前 5 期同期中位 6h）');
+});
+
+// ── 「全部」：累计与历史检索 ──
+// 夹具从 5 周前的周一（05/18）起：5 个整周 (60+90+120+150+180)×5 = 3000，加本周到周三 630。
+test('「全部」显示自第一条记录以来的累计，不做对比与常态', async ({ page }) => {
+  await boot(page, 390, 'analytics-weeks', false, WED_NOW);
+  await openAnalytics(page);
+  await page.locator('#form-sheet [data-action="analytics-period"][data-period="all"]').click();
+  await expect(page.locator('#form-sheet [data-action="analytics-period"][data-period="all"]')).toHaveAttribute('aria-pressed', 'true');
+  const firstDay = await page.evaluate(async () => (await import('/src/time.js')).periodLabel('day', '2026-05-18'));
+  await expect(page.locator('#form-sheet .an-period-label')).toHaveText(`全部记录 · 自 ${firstDay} 起`);
+  await expect(page.locator('#form-sheet .an-headline')).toHaveText('60h30min');
+  await expect(page.locator('#form-sheet .an-subline')).toContainText('占全部');
+  await expect(page.locator('#form-sheet .an-activity')).toHaveText('记过 28 天 · 首次 5/18 周一 · 最近 6/24 周三');
+  await expect(page.locator('#form-sheet .an-delta')).toHaveCount(0);
+  await expect(page.locator('#form-sheet .an-baseline')).toHaveCount(0);
+  await expect(page.locator('#form-sheet .an-trend')).toHaveCount(0);
+});
+
+test('「全部」里按关键词检索全部历史，日期最近的在最上面', async ({ page }) => {
+  await boot(page, 390, 'analytics-weeks', false, WED_NOW);
+  await openAnalytics(page);
+  await page.locator('#form-sheet [data-action="analytics-period"][data-period="all"]').click();
+  await page.locator('#form-sheet [data-role="an-query"]').fill('代码');
+  await expect(page.locator('#form-sheet .an-items-cap')).toHaveText('含「代码」：共 60h30min · 28 条');
+  await rows(page).first().locator('.an-item-row').click();
+  const dates = page.locator('#form-sheet .an-occ-row');
+  await expect(dates).toHaveCount(28);
+  await expect(dates.first()).toHaveAttribute('data-date', '2026-06-24');
+  await expect(dates.last()).toHaveAttribute('data-date', '2026-05-18');
+});
