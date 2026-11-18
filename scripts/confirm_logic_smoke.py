@@ -1236,6 +1236,28 @@ assert(centuryEntries[0].ts === '1926-01-01T08:00' && centuryEntries.length === 
   assert(JSON.stringify(items) === snapshot, 'item ranking never mutates its input');
 }
 
+// v1.10.0「做了什么」联想：只取真实记录、规整去重、带最近原文与标签；开头匹配优先、组内按次数再按最近。
+{
+  const { whatSuggestionIndex, matchWhatSuggestions } = await import('./src/entry_model.js');
+  const se = (id, ts, what, tag, extra = {}) => ({ id, ts, what, tags: tag ? [tag] : [], ...extra });
+  const hist = [
+    se('w1', '2026-11-01T09:00', '刷题', '求职推进'), se('w2', '2026-11-02T09:00', '刷题', '求职推进'),
+    se('w3', '2026-11-03T09:00', '  刷题 ', '学习'), se('w4', '2026-11-03T10:00', '刷手机', '娱乐'),
+    se('w5', '2026-11-03T11:00', '晚上刷手机', '娱乐'), se('w6', '2026-11-03T12:00', '', ''),
+    se('w7', '2026-11-04T09:00', '刷牙', '', { planned: true })
+  ];
+  const before = JSON.stringify(hist);
+  const idx = whatSuggestionIndex(hist);
+  assert(idx.length === 3, 'suggestion index skips plans and empty placeholders and folds normalized duplicates');
+  const shua = matchWhatSuggestions(idx, '刷');
+  assert(shua.map(x => x.text).join('|') === '刷题|刷手机|晚上刷手机', 'prefix matches rank before contains, then by count');
+  assert(shua[0].count === 3 && shua[0].tag === '学习', 'a folded suggestion carries the latest tag and its count');
+  assert(matchWhatSuggestions(idx, '手机').map(x => x.text).join('|') === '晚上刷手机|刷手机', 'ties fall back to the most recent entry');
+  assert(matchWhatSuggestions(idx, ' 刷题 ').length === 0 && matchWhatSuggestions(idx, '   ').length === 0, 'an exact match or blank input yields nothing');
+  assert(matchWhatSuggestions(idx, '刷', 1).length === 1, 'the limit caps suggestions');
+  assert(JSON.stringify(hist) === before, 'suggestion helpers never mutate entries');
+}
+
 console.log('confirm_logic_smoke passed');
 '''
 

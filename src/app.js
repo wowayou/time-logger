@@ -1082,6 +1082,7 @@ import {
       if (action === 'toggle-edit-start-time') sheetController.toggleEditStartTime(el);
       if (action === 'pick-edit-end-mode') sheetController.pickEditEndMode(el);
       if (action === 'pick-form-tag') sheetController.pickTag(el);
+      if (action === 'pick-what-suggestion') sheetController.pickWhatSuggestion(el);
       if (action === 'pick-form-bucket') sheetController.pickBucket(el);
       if (action === 'adopt-tag-bucket') sheetController.adoptTagBucket(el);
       if (action === 'pick-record-mode') sheetController.pickRecordMode(el);

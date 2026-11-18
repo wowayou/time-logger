@@ -2961,6 +2961,18 @@
     .an-call:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     .an-call-label { color: var(--muted); font-size: var(--fs-cap); margin-top: 7px; }
 
+    /* v1.10.0「做了什么」联想：正文框下最多三条历史事项，单行省略；没有匹配时 hidden。 */
+    .what-suggest { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
+    .what-suggest[hidden] { display: none; }
+    .what-sug {
+      display: inline-flex; align-items: center; gap: var(--sp-1); max-width: 100%; min-height: 36px; padding: 0 var(--sp-3);
+      background: var(--input); border: 1px solid var(--border); border-radius: var(--r-pill);
+      font: inherit; font-size: var(--fs-ui); color: var(--text); cursor: pointer;
+    }
+    .what-sug:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .what-sug-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .what-sug-tag { flex: none; color: var(--muted); font-size: var(--fs-cap); }
+
     /* v1.9.0 事项排行：拨号盘下方的列表。行＝正文（单行省略）｜时长，下一行标签/日期/次数，
        再下一条按排行第一名归一的细条（aria-hidden，时长数字才是可读真源）。整行是按钮：
        只出现一次的事项直接跳到那天，多次的就地展开日期。 */

@@ -2,7 +2,7 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-import { isPlaceholderEntry, loggedEntriesFrom, primaryTag } from './stats.js';
+import { isPlaceholderEntry, itemTextKey, loggedEntriesFrom, primaryTag } from './stats.js';
 // SPEC-013：保留标签 id 是数据常量（不是文案），本模块仍不访问 DOM / localStorage。
 import { RESERVED_UNKNOWN_TAG } from './storage.js';
 import { t } from './i18n.js';
@@ -721,4 +721,44 @@ export function planDeleteEntry(entries, id, opts = {}) {
     endTs,
     message: t('txn.deleteToUnrecorded')
   });
+}
+
+// ── v1.10.0「做了什么」联想 ──
+// 候选来自历史真实记录（非计划、非占位、正文非空）；正文按事项排行同一规整（itemTextKey）
+// 归一，只留一条，带最近一次的原文与首标签。只读，不修改输入。
+/** @returns {Array<{key:string,text:string,tag:string,count:number,lastTs:string}>} */
+export function whatSuggestionIndex(entries) {
+  const map = new Map();
+  loggedEntriesFrom(entries).forEach(entry => {
+    if (isPlaceholderEntry(entry)) return;
+    const text = String(entry.what || '').trim();
+    if (!text) return;
+    const key = itemTextKey(text);
+    const hit = map.get(key) || { key, text, tag: '', count: 0, lastTs: '' };
+    hit.count += 1;
+    if (entry.ts >= hit.lastTs) {
+      const tag = primaryTag(entry);
+      hit.lastTs = entry.ts;
+      hit.text = text;
+      hit.tag = tag === RESERVED_UNKNOWN_TAG ? '' : tag;
+    }
+    map.set(key, hit);
+  });
+  return [...map.values()];
+}
+
+// 按输入匹配：以输入开头的排前，其次是包含；组内按次数、再按最近。与输入完全相同的
+// 不再推荐（已经写完了）。输入为空不给候选——表单打开时不多出任何东西。
+export function matchWhatSuggestions(index, input, limit = 3) {
+  const query = itemTextKey(input);
+  if (!query) return [];
+  const prefix = [];
+  const contains = [];
+  (index || []).forEach(item => {
+    if (item.key === query) return;
+    if (item.key.startsWith(query)) prefix.push(item);
+    else if (item.key.includes(query)) contains.push(item);
+  });
+  const rank = (a, b) => (b.count - a.count) || (a.lastTs < b.lastTs ? 1 : a.lastTs > b.lastTs ? -1 : 0);
+  return [...prefix.sort(rank), ...contains.sort(rank)].slice(0, limit);
 }

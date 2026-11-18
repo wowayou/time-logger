@@ -14,6 +14,8 @@ import {
   openPlaceholderForDate,
   planIntervalEdit,
   planOvernightContinuation,
+  matchWhatSuggestions,
+  whatSuggestionIndex,
   planSegmentSplit
 } from './entry_model.js';
 import { isPlaceholderEntry, comparePeriods, historyRange, itemRanking, periodBaseline, periodCoverage, periodTrend, scopeActivity, summarizeEntries, primaryTag, recordedDayCount, tagMinutes, formatPercent } from './stats.js';
@@ -61,7 +63,7 @@ import {
   validateTs,
   validateTsForMode
 } from './time.js';
-import { QUOTE_PACKS, bucketHint, configChipLabel, coverageDaysLabel, entriesCountLabel, quotePackPath, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderAnalyticsItemsList, renderTagPicker, renderTagSuggestions } from './ui.js';
+import { QUOTE_PACKS, bucketHint, configChipLabel, coverageDaysLabel, entriesCountLabel, quotePackPath, renderConfigRowDraft, renderFormSheet, renderAnalyticsContent, renderAnalyticsItemsList, renderTagPicker, renderTagSuggestions, renderWhatSuggestions } from './ui.js';
 
 export function createSheetController(deps) {
   let sheetScrollY = 0;
@@ -71,6 +73,9 @@ export function createSheetController(deps) {
   let sheetTrapController = null;
   let sheetResizeTimer = null;
   let formTag = '';
+  // v1.10.0「做了什么」联想：新建表单打开时从同一次 load() 建索引，输入时匹配。
+  let whatIndex = [];
+  let whatMatches = [];
   let formBucket = 'job';
   let editBucket = 'job';
   let formRecordMode = 'log';
@@ -722,6 +727,8 @@ export function createSheetController(deps) {
       deps.persistState();
       deps.setSheetEditId(null);
       formTag = '';
+      whatIndex = whatSuggestionIndex(loaded.entries);
+      whatMatches = [];
       formBucket = defaultBucketFromEntries(loaded.entries, config);
       formTargetDate = deps.state.selectedDate || todayStr();
       formDateMode = entryModeForDate(formTargetDate);
@@ -1076,6 +1083,44 @@ export function createSheetController(deps) {
 
   // 整层关闭：丢掉二级页返回栈再关。v1.9.0 从时间分析的事项排行跳到某天时用——
   // 普通 closeForm 会沿栈回到「更多」，主视图虽已切到那天却仍被面板盖住。
+  function paintWhatSuggestions(panel, value) {
+    const box = panel.querySelector('[data-role="what-suggest"]');
+    if (!box) return;
+    whatMatches = matchWhatSuggestions(whatIndex, value);
+    box.innerHTML = renderWhatSuggestions(whatMatches);
+    box.hidden = whatMatches.length === 0;
+  }
+
+  // 点联想：填入正文（最近一次的原文），并选回它上次的标签——只在该标签仍登记在
+  // 标签设置里时；按 tagKey 找到登记桶，先切桶再点同名 chip，与手动操作同一条路径，
+  // 归属提醒、预览刷新照旧。标签已不在设置里就只填正文，不替用户新建或改桶。
+  function pickWhatSuggestion(el) {
+    const panel = el.closest('.form-sheet-panel');
+    const item = whatMatches[Number(el.dataset.index)];
+    const whatEl = panel ? panel.querySelector('#form-what') : null;
+    if (!panel || !item || !whatEl) return;
+    whatEl.value = item.text;
+    autosizeTextareas(panel);
+    const bucket = item.tag ? configuredBucketForTag(item.tag, deps.loadConfig()) : '';
+    if (bucket) {
+      if (bucket !== formBucket) {
+        const segBtn = panel.querySelector(`[data-role="form-bucket-seg"] button[data-bucket="${bucket}"]`);
+        if (segBtn) pickBucket(segBtn);
+      }
+      const key = tagKey(item.tag);
+      const chip = [...panel.querySelectorAll('#form-chips .chip[data-action="pick-form-tag"]')].find(c => tagKey(c.dataset.tag || '') === key);
+      if (chip && !chip.classList.contains('sel')) pickTag(chip);
+    }
+    handleFormInput(whatEl);
+    // 选定后收起：此刻再按新正文匹配只会冒出以它开头的更长事项，是噪音；继续打字会重新联想。
+    whatMatches = [];
+    const box = panel.querySelector('[data-role="what-suggest"]');
+    if (box) { box.innerHTML = ''; box.hidden = true; }
+    whatEl.focus({ preventScroll: true });
+    const end = whatEl.value.length;
+    whatEl.setSelectionRange(end, end);
+  }
+
   function closeAllForms() {
     sheetStack = [];
     closeForm();
@@ -2230,6 +2275,7 @@ export function createSheetController(deps) {
     if (!panel) return;
     if (panel.dataset.mode === 'motto' && target.dataset.role === 'quotes-input') paintQuotesCount(panel);
     if (panel.dataset.mode === 'analytics' && target.dataset.role === 'an-query') analyticsSetQuery(target.value);
+    if (panel.dataset.mode === 'new' && target.id === 'form-what') paintWhatSuggestions(panel, target.value);
     if (panel.dataset.mode === 'config') {
       if (target.dataset.role === 'cfg-search') filterConfigRows(panel);
       else if (target.closest('.cfg-row')) syncConfigRowFace(target.closest('.cfg-row'));
@@ -3126,6 +3172,7 @@ export function createSheetController(deps) {
     analyticsPickKey,
     analyticsGoPage,
     closeAllForms,
+    pickWhatSuggestion,
     analyticsToggleItems,
     analyticsToggleItem,
     copyAnalyticsSummary,

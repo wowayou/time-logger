@@ -416,7 +416,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.9.0';
+export const APP_VERSION = '1.10.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -972,7 +972,8 @@ export function renderFormSheet(opts) {
     : '<input type="hidden" id="form-ts">';
   const whatInput = isEdit
     ? `<textarea class="inp ta edit-what-input" data-role="edit-what" rows="2" placeholder="${esc(whatPlaceholder)}">${esc(e.what)}</textarea>`
-    : `<textarea class="inp ta" id="form-what" rows="2" placeholder="${esc(whatPlaceholder)}"></textarea>`;
+    : `<textarea class="inp ta" id="form-what" rows="2" placeholder="${esc(whatPlaceholder)}"></textarea>
+      <div class="what-suggest" data-role="what-suggest" role="group" aria-label="${esc(t('form.whatSuggestAria'))}" hidden></div>`;
   const chipWrap = isEdit
     ? `<div data-role="edit-chips">${chips}</div>`
     : `<div id="form-chips">${chips}</div>`;
@@ -1140,6 +1141,15 @@ export function renderFormSheet(opts) {
       <div class="form-sheet-what form-lede">${whatText}</div>
       ${isEdit ? editBody : newBody}
     </div>`;
+}
+
+// v1.10.0「做了什么」联想：最多三条历史事项，点一下填入正文并选回它上次用的标签。
+export function renderWhatSuggestions(items) {
+  return items.map((item, i) => {
+    const tag = item.tag ? `<span class="what-sug-tag">#${esc(item.tag)}</span>` : '';
+    const aria = item.tag ? t('form.whatSuggestPickTag', { text: item.text, tag: item.tag }) : t('form.whatSuggestPick', { text: item.text });
+    return `<button class="what-sug" type="button" data-action="pick-what-suggestion" data-index="${i}" aria-label="${esc(aria)}"><span class="what-sug-text">${esc(item.text)}</span>${tag}</button>`;
+  }).join('');
 }
 
 export function renderTagSuggestions(config, bucket) {
