@@ -13,7 +13,7 @@
 
 安卓独立仓库为 `wowayou/time-logger-android`（本机相邻目录 `../time-logger-android`）；改跨仓接口先读本仓 [native-contract.json](../native-contract.json) 及安卓仓的 `CLAUDE.md`、`docs/DATA-CONTRACT.md`、`docs/release-checklist.md`。本仓测试通过不能替代安卓签名、打包或真机验收。
 
-历史研究材料 [产品方向假设](product-direction-validation-handoff.md)、[冻结边界](dogfood-freeze-handoff.md)、[冻结期候选](freeze-candidates.md) 仅供追溯，不决定当前工作。重复或失效的协作协议、外部评审包、v57 计划、压测基线、每日模板和交接存档已清理；原文可从 [清理前的 Git 快照](https://github.com/wowayou/time-logger/tree/d31519799b9cecfb8a10648a6c32fb9c69364da9) 查阅。
+历史研究材料 [冻结边界](dogfood-freeze-handoff.md) 仅供追溯，不决定当前工作（`CLAUDE.md` 仍引用它对「有效记录日」的定义）。[产品方向假设](https://github.com/wowayou/time-logger/blob/a11aa3d65c2e0835665f00e3dc44e15e9ff015c4/docs/product-direction-validation-handoff.md) 与 [冻结期候选](https://github.com/wowayou/time-logger/blob/a11aa3d65c2e0835665f00e3dc44e15e9ff015c4/docs/freeze-candidates.md) 已于 2026-11-18 从主分支删除，原文在 `a11aa3d` 快照；决策记录、历史版本里提到的路径都指这份快照。重复或失效的协作协议、外部评审包、v57 计划、压测基线、每日模板和交接存档已清理；原文可从 [清理前的 Git 快照](https://github.com/wowayou/time-logger/tree/d31519799b9cecfb8a10648a6c32fb9c69364da9) 查阅。
 
 ## 接手时最该知道的几件事
 

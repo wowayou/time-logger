@@ -45,5 +45,5 @@
 - **格言位置的文字轮播**：D31 放行最小版本（v1.5.0：粘贴/导入 .txt·.md，每天一句），收藏、出处、逐句管理、历史、按阶段切换、定时轮播仍不做，边界见 [D31](decisions.md)；不外推为其它功能的放行。
 
 - [SPEC-008 着陆页演示](specs/SPEC-008-landing-live-mocks.md) 仍暂停；没有证据表明落地页是转化瓶颈，不主动恢复。
-- [产品方向与外部验证假设](product-direction-validation-handoff.md) 是未执行的研究快照；恢复研究前重新确定样本、指标与停止条件，不沿用旧两周日历。
-- [冻结期候选](freeze-candidates.md) 留存当时的触发场景与评估。冻结已经结束，候选不自动转为待办；后续去向查 [决策记录](decisions.md) 和版本流水。
+- [产品方向与外部验证假设](https://github.com/wowayou/time-logger/blob/a11aa3d65c2e0835665f00e3dc44e15e9ff015c4/docs/product-direction-validation-handoff.md)（已从主分支删除，链接为快照）是未执行的研究快照；恢复研究前重新确定样本、指标与停止条件，不沿用旧两周日历。
+- [冻结期候选](https://github.com/wowayou/time-logger/blob/a11aa3d65c2e0835665f00e3dc44e15e9ff015c4/docs/freeze-candidates.md)（已从主分支删除，链接为快照）留存当时的触发场景与评估。冻结已经结束，候选不自动转为待办；后续去向查 [决策记录](decisions.md) 和版本流水。

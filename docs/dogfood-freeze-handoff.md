@@ -7,11 +7,11 @@
 > 冻结周期：2026-07-16 00:00 → 2026-07-29 23:59（GMT+8）
 > 阶段复盘：2026-07-30
 > 决策记录：`docs/decisions.md` D9
-> **2026-07-18 修订**：D10 定向提前处置（v67/v68 已发；非整体解冻，本文其余边界与复盘安排不变）——见 `docs/decisions.md` D10 与 `docs/freeze-candidates.md` 顶部状态注记。
+> **2026-07-18 修订**：D10 定向提前处置（v67/v68 已发；非整体解冻，本文其余边界与复盘安排不变）——见 `docs/decisions.md` D10 与 [冻结期候选](https://github.com/wowayou/time-logger/blob/a11aa3d65c2e0835665f00e3dc44e15e9ff015c4/docs/freeze-candidates.md) 顶部状态注记（该文件已从主分支删除，链接为快照）。
 
 > **2026-07-24 终止（`docs/decisions.md` D13）**：维护者**提前终止**本次冻结，转入「基础发版 + 上线推广」。因此冻结**没有跑满到 07-29**，**2026-07-30 的阶段复盘也没有发生**（复盘改为按事件触发，见 D16）。**本文自此是历史边界记录，不再是任何阶段的执行依据**——当前阶段看 `STATUS.md`。下面的条文原样保留，不改写。
 
-本文（在 2026-07-16 → 07-24 期间）是当时阶段的执行边界。它**取代** `docs/product-direction-validation-handoff.md` 作为当时两周的行动依据；后者仍是未来恢复外部验证时的决策输入，不删除、不改写。
+本文（在 2026-07-16 → 07-24 期间）是当时阶段的执行边界。它**取代** [产品方向假设](https://github.com/wowayou/time-logger/blob/a11aa3d65c2e0835665f00e3dc44e15e9ff015c4/docs/product-direction-validation-handoff.md) 作为当时两周的行动依据；后者是未来恢复外部验证时的决策输入，2026-11-18 起只保留在 Git 快照里、不改写。
 
 ---
 
@@ -129,7 +129,7 @@ iPhone 上的原始记录、原始 JSON 备份和原始时间字符串是**权�
 
 冻结期间的新想法**只记录为候选**，不排期、不估时、不顺手实现。格式最多包含：触发场景、当前损失、临时绕法、出现次数、14 天后是否仍然重要。
 
-技术性候选（非阻断缺陷、有复现证据、不含隐私数据）记入 [`docs/freeze-candidates.md`](freeze-candidates.md)；涉及真实活动内容的私人观察写在仓库外的每日副本里（模板见 [docs/dogfood-daily-template.md（历史原文）](https://github.com/wowayou/time-logger/blob/d31519799b9cecfb8a10648a6c32fb9c69364da9/docs/dogfood-daily-template.md)）。**记录不等于排期**，也不构成修复授权。
+技术性候选（非阻断缺陷、有复现证据、不含隐私数据）记入 [冻结期候选](https://github.com/wowayou/time-logger/blob/a11aa3d65c2e0835665f00e3dc44e15e9ff015c4/docs/freeze-candidates.md)（已从主分支删除，链接为快照）；涉及真实活动内容的私人观察写在仓库外的每日副本里（模板见 [docs/dogfood-daily-template.md（历史原文）](https://github.com/wowayou/time-logger/blob/d31519799b9cecfb8a10648a6c32fb9c69364da9/docs/dogfood-daily-template.md)）。**记录不等于排期**，也不构成修复授权。
 
 ---
 

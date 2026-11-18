@@ -2739,7 +2739,7 @@ test('a long unbreakable motto wraps instead of overflowing at 320px', async ({ 
   await expect(page.locator('#motto-line')).toHaveText('a'.repeat(60));
   // 点「完成」后指针停在原坐标，sheet 关闭后那个位置正好压在 header「···」上，触发它
   // 的 hover tooltip——该 tooltip 在 320px 下会把文档撑到 399px（**先于本功能就存在**
-  // 的缺陷，见 freeze-candidates C15）。先把指针移开，否则这里测到的是那个 bug 而不是格言。
+  // 的缺陷，见 Git 快照 a11aa3d 中 docs/freeze-candidates.md 的 C15）。先把指针移开，否则这里测到的是那个 bug 而不是格言。
   await page.mouse.move(5, 700);
 
   const metrics = await page.evaluate(() => {
