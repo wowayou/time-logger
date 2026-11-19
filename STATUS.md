@@ -3,10 +3,15 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**发布更新：2026-11-19。Web v1.12.0 已正式发布（tag [v1.12.0](https://github.com/wowayou/time-logger/releases/tag/v1.12.0)，来源 `2f3f832`；隐私政策同批上线）；此前 v1.11.0（来源 `9c92743`）已发布；此前 v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
+**发布更新：2026-11-19。Web v1.13.0 已正式发布（tag [v1.13.0](https://github.com/wowayou/time-logger/releases/tag/v1.13.0)，来源 `f9c27d1`；隐私政策同批上线）；此前 v1.12.0（`2f3f832`）已发布；此前 v1.11.0（来源 `9c92743`）已发布；此前 v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
 
 ## DONE
 
+- **Web v1.13.0 已发布（2026-11-19）**：首屏统计卡片「比例 ⇄ 分布」（日 / 周热力格、月 / 年按标签分的环形图），时间轴底部热力条与「更多」开关移除；新偏好键 `timelog.heroVisual`，`timelog.dayHeat` 启动时删除，中英隐私政策同批更新（`site/` 改动，随 tag 发布主站）。规则见 CLAUDE.md。
+  - **门禁**：audit（隐私政策漏列新键会变红）、逻辑 smoke（周格阈值 `>=` 改 `>` 会变红）、typecheck、`git diff --check` 通过；`tests/v1_13_0_hero_visual.spec.js` 双引擎 24/24，以 v1.12.0 运行时 24/24 红，去掉快照门后快照用例变红。完整 UI **1283 passed / 1 skipped / 0 failed**（38.8 分钟）。
+  - **浏览器核对**：Chromium 日/周/月/年 × 320/390px、亮暗：比例态卡片 102px（切换标签不占排版）、切换标签文字不压数字、格子与图例在卡片内、无横向溢出；点标签、点图形区、键盘 Enter 均可切换且焦点留在新按钮；旧键 `timelog.dayHeat` 启动后删除；零脚本错误。320px 下月/年环形图图例换到环下方，卡片约 420–440px 高。未做真机核对。
+  - **发布**：维护者 2026-11-19 授权「跑完后提交并发版」。推送前远端 main 为 `023c2b0`；功能提交 `f9c27d1`，tag / [Release](https://github.com/wowayou/time-logger/releases/tag/v1.13.0)。publish-site [44531952171](https://github.com/wowayou/time-logger/actions/runs/44531952171)、旧站 Pages [44531952196](https://github.com/wowayou/time-logger/actions/runs/44531952196) 均成功。
+  - **线上核对**：两站按 `sw.js` FILES 30/30 与 tag 逐字节一致；中英隐私页列出 `timelog.heroVisual` 与 `timelog.dayHeat`。主站 Chromium 全新临时上下文、390px、两条合成记录并预置旧键：SW `activated`、缓存只有 `timelog-v1.13.0`、旧键启动后删除、默认比例、无底部热力条；切到分布后日 96 格、周 168 格、月为「标签」环形图，偏好写为 `detail`；无脚本错误或 HTTP ≥400。未核对旧站功能；实际账单未核实。
 - **Web v1.12.0 已发布（2026-11-19）**：全天热力条改为「更多」里的可选功能（默认显示），全文/单行/按时长三种布局都可显示；新增偏好键 `timelog.dayHeat`，中英隐私政策同批更新（`site/` 改动，需随 tag 发布主站）。规则见 CLAUDE.md 时间轴条与版本表。
   - **门禁**：audit（删掉隐私政策里的新键会变红）、逻辑 smoke、typecheck、`git diff --check` 通过；`tests/v1_12_0_heat_toggle.spec.js` 双引擎 14/14，以 v1.11.0 运行时 10/14 红（余 4 为否定断言），去掉快照门后快照用例变红。完整 UI **1285 passed / 1 skipped / 1 failed**（39.0 分钟）：唯一失败是 `v84_polish` 的「更多」行数护栏（新增开关 12→13），按新增行改判后该文件与两份热力条用例 42/42。
   - **浏览器核对**：Chromium 320px 中/英、390px 暗色：全文与单行布局底部显示热力条，「更多」开关行不溢出、按钮与既有分段同高（26px）、零脚本错误。未做真机核对。
@@ -47,11 +52,6 @@
 - **安卓代码侧发版防护已就绪**：独立仓库已实现内嵌运行时、签名缺失即拒绝 Release、`sync_runtime.py --release` 预检及从 Web 三段式版本派生版本号；不代表已上架。
 
 ## OPEN
-
-- **Web v1.13.0 发版中（2026-11-19）**：首屏统计卡片「比例 ⇄ 分布」（日 / 周热力格、月 / 年按标签分的环形图），时间轴底部热力条与「更多」开关移除；新偏好键 `timelog.heroVisual`，`timelog.dayHeat` 启动时删除，中英隐私政策同批更新（`site/` 改动，随 tag 发布主站）。规则见 CLAUDE.md。
-  - **门禁**：audit（隐私政策漏列新键会变红）、逻辑 smoke（周格阈值 `>=` 改 `>` 会变红）、typecheck、`git diff --check` 通过；`tests/v1_13_0_hero_visual.spec.js` 双引擎 24/24，以 v1.12.0 运行时 24/24 红，去掉快照门后快照用例变红。完整 UI **1283 passed / 1 skipped / 0 failed**（38.8 分钟）。
-  - **浏览器核对**：Chromium 日/周/月/年 × 320/390px、亮暗：比例态卡片 102px（切换标签不占排版）、切换标签文字不压数字、格子与图例在卡片内、无横向溢出；点标签、点图形区、键盘 Enter 均可切换且焦点留在新按钮；旧键 `timelog.dayHeat` 启动后删除；零脚本错误。320px 下月/年环形图图例换到环下方，卡片约 420–440px 高。未做真机核对。
-  - **发布**：维护者 2026-11-19 授权「跑完后提交并发版」。
 
 - **v1.7.5 发布验证尚有缺口（2026-11-13）**：两站已部署且线上运行时、功能已核对；主站实际 artifact 下载遭遇 TLS 握手超时，未重试，独立归档字节验证未完成。已有镜像 41/41、线上 40/40 字节证据，不能冒充该项完成。旧站 `.gitignore` 本轮为 503，未取得 404 证据；其余四个隐藏探测为 404，实际旧站部署包隐藏元数据文件 0。为遵守失败即停，本轮不再下载/部署，也不使用可选旧站文档刷新；旧站候选状态文档与源码发布回执存在已说明差异。证据见 `memory/2026-11-13-v1.7.5-release/` 及 [发布回执](docs/reviews/2026-11-13-v1.7.5-release.md)。
 
