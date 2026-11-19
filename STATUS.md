@@ -3,7 +3,7 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**发布更新：2026-11-19。Web v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；未做线上 SW 接管核对。真机待验。**
+**发布更新：2026-11-19。Web v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
 
 ## DONE
 
@@ -15,7 +15,8 @@
 - **Web v1.10.0 已发布（2026-11-19）**：「做了什么」联想（规则见 CLAUDE.md 版本表与「录入时的标签归属」一条）。
   - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过；`tests/v1_10_0_what_suggest.spec.js` 双引擎 10/10，以 v1.9.0 运行时 8/10 红（余 2 为否定断言）。完整 UI **1259 passed / 1 skipped / 0 failed**（36.2 分钟，含 v1.9.0 全部改动与已改的 v1.8.1 分段用例；worktree 独立端口、无其它负载）。
   - **浏览器核对**：Chromium 390/768px 亮暗，输入「刷」出三条联想、单行省略、表单布局不变、无横向溢出、零脚本错误；未做真机核对（软键盘下联想行出现时的滚动与遮挡尤其要看），未实测记录耗时变化。
-  - **发布**：tag v1.10.0 → `d366841`（其后 `75592e3` 只改 STATUS）。publish-site [44489832993](https://github.com/wowayou/time-logger/actions/runs/44489832993)、旧站 Pages [44489832978](https://github.com/wowayou/time-logger/actions/runs/44489832978)、镜像 Pages [44489852872](https://github.com/wowayou/time-logger-site/actions/runs/44489852872) 均首次 success；两站运行时各 30/30、中英主页与 tag 逐字节一致。发版前在 `75592e3` 上重跑 audit、逻辑 smoke、typecheck、diff 检查通过，未重跑全量 UI（运行时与上述 1259/1/0 那轮相同）。未做线上 SW 接管与真机核对；实际账单未核实。
+  - **发布**：tag v1.10.0 → `d366841`（其后 `75592e3` 只改 STATUS）。publish-site [44489832993](https://github.com/wowayou/time-logger/actions/runs/44489832993)、旧站 Pages [44489832978](https://github.com/wowayou/time-logger/actions/runs/44489832978)、镜像 Pages [44489852872](https://github.com/wowayou/time-logger-site/actions/runs/44489852872) 均首次 success；两站运行时各 30/30、中英主页与 tag 逐字节一致。发版前在 `75592e3` 上重跑 audit、逻辑 smoke、typecheck、diff 检查通过，未重跑全量 UI（运行时与上述 1259/1/0 那轮相同）。未做真机核对；实际账单未核实。
+  - **线上 SW 接管核对（2026-11-19）**：Chromium 全新临时上下文、390px。两站 SW `activated` 并接管页面，缓存只有 `timelog-v1.10.0`、按 `sw.js` FILES 30/30 无缺无多，manifest 1.10.0，无脚本错误、无 HTTP ≥400 或失败请求。主站另写入 6 条合成记录后断网打开 `/app/`：应用正常启动，新建表单输入「写」出现联想「写代码 #求职推进」，时间分析有周/月/年/全部四项，记录条数未变，无横向溢出。首轮断网用的是带查询参数的地址，SW 按完整 URL 匹配缓存所以未命中；这是测试写法问题，`start_url` 为 `./` 在缓存内，改用无参数地址后通过。只测了全新安装，未测从旧版缓存升级的接管路径，也未测 WebKit 与旧站离线。
 
 - **Web v1.8.4 已发布（2026-11-19）**：时间分析跟随所看周期（主视图周/月/年沿用粒度、天视图从所在周开始，未来日期退回今天），此前固定今天、无法复盘已结束的周期。
   - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过；新用例 `tests/v1_8_4_analytics_period.spec.js` 双引擎 12/12，以 v1.8.3 运行时 8/12 红（余 4 条为改动前后都应绿的哨兵）。完整 UI **1223 passed / 1 skipped / 2 failed**（38.6 分钟）：两条失败均为 `stress.spec.js`「小压 500 条」启动增量（Chromium 87ms、WebKit 92ms，预算 80ms），当时本机另在 worktree 并行跑用例与截图。随后无并行负载下 v1.8.4 / v1.8.3 交替各两轮（每轮双引擎）共 8/8 通过，增量 −96～79ms、基线 300–620ms 波动，本版不改启动路径，判为负载噪声，未改预算或断言。
