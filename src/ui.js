@@ -12,6 +12,8 @@ import {
   THEME_KEY,
   TIMELINE_DENSITY_KEY,
   normalizeTimelineDensity,
+  DAY_HEAT_KEY,
+  normalizeDayHeat,
   bucketForTag,
   chipGroups,
   configuredBucketForTag,
@@ -206,7 +208,8 @@ export function renderNowStrip(items, isToday, config = loadConfig()) {
 }
 
 
-// v1.11.0 全天热力条（维护者看过对比图后选定 B1，只在「按时长」布局、接在时间轴底部）：
+// v1.11.0 全天热力条（维护者看过对比图后选定 B1，接在时间轴底部；v1.12.0 起是「更多」里的
+// 可选功能、默认开启，全文 / 单行 / 按时长三种布局都显示）：
 // 一列＝1 小时，列内从上到下 4 格＝4 个刻钟，每 6 小时一组、组间宽缝，刻度对齐组起点。
 // 上色与深浅的规则只在 stats.js dayHeatCells；这里只把时间轴的段映射成桶段并出模板。
 // 装饰性（aria-hidden）：时间轴各行与时长数字仍是可读真源。将来的日子没有已发生的段，
@@ -238,7 +241,7 @@ function renderDayHeat(items, config, isToday, now) {
 }
 
 export function renderTimeline(items, opts = {}) {
-  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig(), density = 'full', now = new Date() } = opts;
+  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig(), density = 'full', dayHeat = true, now = new Date() } = opts;
   const el = document.getElementById('timeline');
   const layout = normalizeTimelineDensity(density);
   // v1.8.3 尺子刻度（取代 v1.8.2 的 4h 满格时长条）：只在「全文」布局画（行高随正文变，
@@ -371,8 +374,8 @@ export function renderTimeline(items, opts = {}) {
   if (isToday) {
     rows.splice(planned.length, 0, `<div class="tl-now" role="separator" aria-label="${esc(t('timeline.nowAria', { time: nowLabel }))}"><span class="tl-now-dot"></span><span class="tl-now-label">${esc(t('timeline.now', { time: nowLabel }))}</span><span class="tl-now-line"></span></div>`);
   }
-  // v1.11.0：「按时长」布局在最后一行之后接全天热力条。
-  if (layout === 'scaled') rows.push(renderDayHeat(items, config, isToday, now));
+  // v1.11.0 起在最后一行之后接全天热力条；v1.12.0 起由开关决定，与布局无关。
+  if (dayHeat) rows.push(renderDayHeat(items, config, isToday, now));
   // v1.8.1：行布局由「更多」里的偏好决定；--mins 只在「按时长」模式下参与行高。
   el.innerHTML = `<div class="log" data-density="${esc(layout)}">${rows.join('')}</div>`;
 }
@@ -449,7 +452,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.11.0';
+export const APP_VERSION = '1.12.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -545,6 +548,9 @@ function renderMoreSheet(opts = {}) {
   const densityPref = normalizeTimelineDensity(readUiPreference(TIMELINE_DENSITY_KEY));
   const densityBtn = (value, label) =>
     `<button type="button" data-action="set-density" data-density="${value}" class="${densityPref === value ? 'active' : ''}" aria-pressed="${densityPref === value}" aria-label="${esc(t('density.aria', { label }))}">${esc(label)}</button>`;
+  const dayHeatPref = normalizeDayHeat(readUiPreference(DAY_HEAT_KEY));
+  const dayHeatBtn = (value, label) =>
+    `<button type="button" data-action="set-day-heat" data-day-heat="${value}" class="${dayHeatPref === value ? 'active' : ''}" aria-pressed="${dayHeatPref === value}" aria-label="${esc(t('dayHeat.aria', { label }))}">${esc(label)}</button>`;
   const isLegacyOrigin = Boolean(opts.isLegacyOrigin);
   const privacyHref = PRIVACY_URL[getLocale()] || PRIVACY_URL.zh;
   return `
@@ -568,6 +574,11 @@ function renderMoreSheet(opts = {}) {
         <div class="cell-row"><span>${t('more.timeline')}</span>
           <div class="seg theme-seg" id="density-seg" role="group" aria-label="${t('more.timelineAria')}">
             ${densityBtn('full', t('density.full'))}${densityBtn('single', t('density.single'))}${densityBtn('scaled', t('density.scaled'))}
+          </div>
+        </div>
+        <div class="cell-row"><span>${t('more.dayHeat')}</span>
+          <div class="seg theme-seg" id="day-heat-seg" role="group" aria-label="${t('more.dayHeatAria')}">
+            ${dayHeatBtn('on', t('dayHeat.on'))}${dayHeatBtn('off', t('dayHeat.off'))}
           </div>
         </div>
         <div class="cell-row"><span>${t('more.language')}</span>

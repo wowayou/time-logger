@@ -65,6 +65,14 @@ export function normalizeTimelineDensity(value) {
   if (value === 'double') return 'full';
   return value && TIMELINE_DENSITIES.includes(value) ? value : DEFAULT_TIMELINE_DENSITY;
 }
+// v1.12.0：全天热力条开关（时间轴底部，三种布局都可显示），设备偏好，不进备份。
+// 只认 'off' 为关闭；缺失或非法值＝默认开启（维护者要求「可选功能，默认启用」）。
+export const DAY_HEAT_KEY = 'timelog.dayHeat';
+
+/** @param {string | null | undefined} value @returns {'on' | 'off'} */
+export function normalizeDayHeat(value) {
+  return value === 'off' ? 'off' : 'on';
+}
 // SPEC-013：语言偏好。'' / 键缺失＝跟随系统。是**设备偏好不是用户数据**——
 // 不进备份、导入不得改语言（与 timelog.theme 同类）。
 export const LOCALE_KEY = 'timelog.locale';

@@ -336,7 +336,9 @@
         // 缺失/非法＝全文）。
         || snapshot.timelineDensity !== (localStorage.getItem('timelog.timelineDensity') === 'double' ? 'full'
           : ['single', 'full', 'scaled'].includes(localStorage.getItem('timelog.timelineDensity'))
-            ? localStorage.getItem('timelog.timelineDensity') : 'full')) {
+            ? localStorage.getItem('timelog.timelineDensity') : 'full')
+        // v1.12.0：全天热力条开关门（与 storage.normalizeDayHeat 一致：只有 'off' 是关闭）。
+        || snapshot.dayHeat !== (localStorage.getItem('timelog.dayHeat') === 'off' ? 'off' : 'on')) {
         setSnapshotState('rejected:state');
         return;
       }

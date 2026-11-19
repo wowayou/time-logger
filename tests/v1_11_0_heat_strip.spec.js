@@ -1,5 +1,6 @@
-// v1.11.0 · 「按时长」布局底部的全天热力条（维护者看过对比图选定 B1：一列 1 小时、列内 4 个刻钟、
-// 6 小时一组；只在按时长布局显示、放在时间轴底部；将来的日子不显示）。
+// v1.11.0 · 时间轴底部的全天热力条（维护者看过对比图选定 B1：一列 1 小时、列内 4 个刻钟、
+// 6 小时一组；放在时间轴底部；将来的日子不显示）。v1.11.0 只在按时长布局显示，v1.12.0 起
+// 三种布局都显示、由「更多」开关控制（见 v1_12_0_heat_toggle.spec.js）。
 import { expect, test } from './startup_fixture.js';
 import { boot, FIXED_NOW, expectNoHorizontalOverflow } from './ui_fixture.js';
 
@@ -61,14 +62,18 @@ test('v1.11.0: the to-scale layout ends with a 96-cell heat strip that follows t
   expect(list.filter(x => x.fut)).toHaveLength(96 - q('12:45'));
 });
 
+// v1.12.0 起热力条与布局无关（维护者要求三种布局都可显示，默认开启）：本用例由
+// 「全文/单行没有热力条」改判为「默认也在最后一行之后」。
 for (const density of ['full', 'single']) {
-  test(`v1.11.0: the ${density} layout has no heat strip`, async ({ page }) => {
+  test(`v1.11.0: the ${density} layout also ends with the heat strip by default (v1.12.0)`, async ({ page }) => {
     await boot(page, 390, 'empty', false, FIXED_NOW);
     await applyDensity(page, density);
     await seed(page, TODAY_ENTRIES);
     await expect(page.locator('.entry[data-id="c"]')).toBeVisible();
     await expect(page.locator('.log')).toHaveAttribute('data-density', density);
-    await expect(page.locator('.day-heat')).toHaveCount(0);
+    await expect(page.locator('.log > .day-heat')).toHaveCount(1);
+    expect(await page.evaluate(() => document.querySelector('.log').lastElementChild.classList.contains('day-heat'))).toBe(true);
+    expect(await cells(page)).toHaveLength(96);
   });
 }
 

@@ -22,7 +22,9 @@ test('v84: the more sheet keeps 9 rows; backup and ops move one level down', asy
   // 「时间分析」页入口（v1.5.1 前名「时间拨号盘」），10→11。v84 的「面板别太长」约束仍在：备份四项与运维
   // 两项依旧下钻到二级页，主面板只多这两条只读入口。v1.8.1 维护者裁定把「时间轴」行布局
   // 切换放在「更多」里、与主题并列（一行分段控件），11→12；备份与运维仍在二级页（下方断言不变）。
-  await expect(page.locator('.more-body .cell-btn, .more-body .cell-row')).toHaveCount(12);
+  // v1.12.0 维护者要求全天热力条做成可选功能，开关紧挨「时间轴」一行（同为分段控件），12→13。
+  await expect(page.locator('.more-body .cell-btn, .more-body .cell-row')).toHaveCount(13);
+  await expect(page.locator('.more-body #day-heat-seg')).toHaveCount(1);
   await expect(page.locator('.more-body #density-seg')).toHaveCount(1);
   await expect(page.locator('.more-body a[href*="eigentime.org/support"]')).toHaveCount(1);
   await expect(page.locator('.more-body [data-action="open-analytics"]')).toHaveCount(1);
