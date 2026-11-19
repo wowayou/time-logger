@@ -3,10 +3,15 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**发布更新：2026-11-19。Web v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
+**发布更新：2026-11-19。Web v1.11.0 已正式发布（tag [v1.11.0](https://github.com/wowayou/time-logger/releases/tag/v1.11.0)，来源 `9c92743`）；此前 v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
 
 ## DONE
 
+- **Web v1.11.0 已发布（2026-11-19）**：「按时长」布局底部的全天热力条，规则见 CLAUDE.md 时间轴条与版本表。维护者看过对比图（私有 Artifact）选定 B1、只在按时长布局、放底部；「将来的日子不显示」是我取的默认，维护者未明确表态。
+  - **门禁**：audit、逻辑 smoke（阈值 11→10 会变红）、typecheck、`git diff --check` 通过；`tests/v1_11_0_heat_strip.spec.js` 双引擎 14/14，以 v1.10.0 运行时 8/14 红（余 6 为全文/单行/将来日子「没有热力条」的否定断言）。完整 UI **1273 passed / 1 skipped / 0 failed**（37.9 分钟）。
+  - **浏览器核对**：Chromium 320/390/430/768px 亮暗：格子在卡片内、无横向溢出、滚到底时 FAB 不压图例、分钟刷新后「现在」格前移、零脚本错误；768px 格边长 20px，热力条偏高。未做真机核对。
+  - **发布**：维护者 2026-11-19 授权「跑完后提交并发版」。推送前远端 main 为 `20e852c`；功能提交 `9c92743`，tag / [Release](https://github.com/wowayou/time-logger/releases/tag/v1.11.0)。publish-site [44506665051](https://github.com/wowayou/time-logger/actions/runs/44506665051)、旧站 Pages [44506665105](https://github.com/wowayou/time-logger/actions/runs/44506665105) 均成功。
+  - **线上核对**：两站按 `sw.js` FILES 30/30 与 tag 逐字节一致（带随机参数）。主站 Chromium 全新临时上下文、390px、两条合成记录：SW `activated` 并接管、缓存只有 `timelog-v1.11.0`、按时长布局底部热力条 96 格、无脚本错误或 HTTP ≥400。未核对旧站功能与主页/支持页；实际账单未核实。
 - **Web v1.9.0 已发布（2026-11-19）**：时间分析加入事项排行、关键词汇总、常态（此前可比周期同一时点的中位数）、标签趋势与「全部」累计/历史检索；从分析页下钻改为整层关闭。规则见 CLAUDE.md 版本表。
   - **依据**：维护者 2026-11-18 要「某类标签下每件事分别花了多长时间」与长期复利功能，并以 D37 取消功能扩张门槛。归并规则用维护者真实备份评估（`scripts/what_repeat_stats.mjs`，只出聚合数字）：主线正文全文相同只覆盖 8% 时长、前缀归并会混淆不同任务，故只做规整后全文归并、单次事项逐条列出。
   - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过；`tests/v1_9_0_analytics_items.spec.js` 双引擎 24/24，以 v1.8.4 运行时 22/24 红（余 2 为否定断言）。完整 UI **1247 passed / 1 skipped / 2 failed**（35.3 分钟，worktree 独立端口、本机无其它负载）：两条失败均为 `v1_8_1_ui.spec.js` 写死「分段 3 个按钮」，本版新增第四项「全部」所致；改为 4 项并保留原不变量（选中底色不同、其余相同、居中、≥36px），另加「全部」选中断言后该文件双引擎 58/58。未重跑全量。
@@ -37,11 +42,6 @@
 - **安卓代码侧发版防护已就绪**：独立仓库已实现内嵌运行时、签名缺失即拒绝 Release、`sync_runtime.py --release` 预检及从 Web 三段式版本派生版本号；不代表已上架。
 
 ## OPEN
-
-- **Web v1.11.0 发版中（2026-11-19）**：「按时长」布局底部的全天热力条，规则见 CLAUDE.md 时间轴条与版本表。维护者看过对比图（私有 Artifact）选定 B1、只在按时长布局、放底部；「将来的日子不显示」是我取的默认，维护者未明确表态。
-  - **门禁**：audit、逻辑 smoke（阈值 11→10 会变红）、typecheck、`git diff --check` 通过；`tests/v1_11_0_heat_strip.spec.js` 双引擎 14/14，以 v1.10.0 运行时 8/14 红（余 6 为全文/单行/将来日子「没有热力条」的否定断言）。完整 UI **1273 passed / 1 skipped / 0 failed**（37.9 分钟）。
-  - **浏览器核对**：Chromium 320/390/430/768px 亮暗：格子在卡片内、无横向溢出、滚到底时 FAB 不压图例、分钟刷新后「现在」格前移、零脚本错误；768px 格边长 20px，热力条偏高。未做真机核对。
-  - **发布**：维护者 2026-11-19 授权「跑完后提交并发版」。
 
 - **v1.7.5 发布验证尚有缺口（2026-11-13）**：两站已部署且线上运行时、功能已核对；主站实际 artifact 下载遭遇 TLS 握手超时，未重试，独立归档字节验证未完成。已有镜像 41/41、线上 40/40 字节证据，不能冒充该项完成。旧站 `.gitignore` 本轮为 503，未取得 404 证据；其余四个隐藏探测为 404，实际旧站部署包隐藏元数据文件 0。为遵守失败即停，本轮不再下载/部署，也不使用可选旧站文档刷新；旧站候选状态文档与源码发布回执存在已说明差异。证据见 `memory/2026-11-13-v1.7.5-release/` 及 [发布回执](docs/reviews/2026-11-13-v1.7.5-release.md)。
 
