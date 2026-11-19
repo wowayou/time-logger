@@ -337,8 +337,8 @@
         || snapshot.timelineDensity !== (localStorage.getItem('timelog.timelineDensity') === 'double' ? 'full'
           : ['single', 'full', 'scaled'].includes(localStorage.getItem('timelog.timelineDensity'))
             ? localStorage.getItem('timelog.timelineDensity') : 'full')
-        // v1.12.0：全天热力条开关门（与 storage.normalizeDayHeat 一致：只有 'off' 是关闭）。
-        || snapshot.dayHeat !== (localStorage.getItem('timelog.dayHeat') === 'off' ? 'off' : 'on')) {
+        // v1.13.0：首屏卡片图形门（与 storage.normalizeHeroVisual 一致：只有 'detail' 是分布图）。
+        || snapshot.heroVisual !== (localStorage.getItem('timelog.heroVisual') === 'detail' ? 'detail' : 'ratio')) {
         setSnapshotState('rejected:state');
         return;
       }

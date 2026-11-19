@@ -2,9 +2,9 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-import { fmtMins, fmtPlainMins, hhmm, localDateTimeKey, minsBetweenDates, normalizeTimestamp, parseDateKey, shortDateLabel, startOfDay } from './time.js';
-import { dayHeatCells, formatPercent } from './stats.js';
-import { getLocale, plural, t } from './i18n.js';
+import { fmtMins, fmtPlainMins, hhmm, localDateTimeKey, minsBetweenDates, normalizeTimestamp, parseDateKey, shortDateLabel } from './time.js';
+import { dayHeatCells, formatPercent, tagShares, weekHeatCells } from './stats.js';
+import { getLocale, plural, t, tList } from './i18n.js';
 import {
   BUCKETS,
   BUCKET_ORDER,
@@ -12,8 +12,6 @@ import {
   THEME_KEY,
   TIMELINE_DENSITY_KEY,
   normalizeTimelineDensity,
-  DAY_HEAT_KEY,
-  normalizeDayHeat,
   bucketForTag,
   chipGroups,
   configuredBucketForTag,
@@ -79,7 +77,7 @@ export function setButtonTip(el, text, ariaLabel) {
 // v1.8.0：周/月/年总览与日视图同一张结论卡——主线大数字 + 偏航次要数字 + 比例条 +
 // 辅助行。旧版是「比例条 + 四桶百分比 + 总时长」平铺，总时长挤在图例末尾换行；四桶
 // 分钟仍是权威值，百分比不再上卡（明细行保留）。
-export function renderRuler(totals, hasItems, view) {
+export function renderRuler(totals, hasItems, view, opts = {}) {
   const el = document.getElementById('ruler');
   if (!hasItems || !totals.total) {
     const text = (hasItems && !totals.total && view === 'day')
@@ -88,7 +86,7 @@ export function renderRuler(totals, hasItems, view) {
     el.innerHTML = `<p class="muted-note">${text}</p>`;
     return;
   }
-  el.innerHTML = heroCard(totals, t('hero.job'), [t('hero.total', { dur: fmtMins(totals.total) })]);
+  el.innerHTML = heroCard(totals, t('hero.job'), [t('hero.total', { dur: fmtMins(totals.total) })], periodVisual(view, opts));
 }
 
 // R4（v47）：日视图尺子从「四桶清单」改「结论卡」——主线净时长是屏幕唯一大数字，
@@ -96,17 +94,90 @@ export function renderRuler(totals, hasItems, view) {
 // 共用同一张 heroCard，只是标签与辅助行末项不同（「截至」换成「共」）。
 export function renderDayHero(totals, hasItems, opts = {}) {
   const el = document.getElementById('ruler');
-  const { isToday = false, asOf = '' } = opts;
+  const { isToday = false, asOf = '', segments = [], dayStart = null, now = new Date(), visual = 'ratio' } = opts;
   if (!hasItems || !totals.total) {
     const text = (hasItems && !totals.total) ? t('hero.planOnly') : t('hero.emptyDay');
     el.innerHTML = `<p class="muted-note">${text}</p>`;
     return;
   }
-  el.innerHTML = heroCard(totals, isToday ? t('hero.jobToday') : t('hero.job'), [isToday && asOf ? t('hero.asOf', { time: asOf }) : '']);
+  const detail = visual === 'detail' && dayStart ? dayHeatHtml(dayHeatCells(heatSpans(segments), dayStart, now)) : '';
+  el.innerHTML = heroCard(totals, isToday ? t('hero.jobToday') : t('hero.job'), [isToday && asOf ? t('hero.asOf', { time: asOf }) : ''], { visual, kind: 'heat', detail });
+}
+
+// v1.13.0 首屏卡片的图形切换（维护者看过对比图选定）：比例条 ⇄ 分布图，日 / 周为热力格、
+// 月 / 年为按标签分的环形图；日周月年共用一个选择（timelog.heroVisual，默认比例）。
+// 规则只在 stats.js（dayHeatCells / weekHeatCells / tagShares），这里只出模板。
+// 分布图是装饰性的（aria-hidden）：数字、明细行与图例文字仍是可读真源。
+function heatSpans(segments) {
+  return (segments || [])
+    .filter(seg => seg && seg.start instanceof Date && seg.end instanceof Date)
+    .map(seg => ({ start: seg.start, end: seg.end, bucket: seg.unrecorded ? 'unrecorded' : seg.bucket }));
+}
+function heatCell(c) {
+  return c.future
+    ? '<i class="fut"></i>'
+    : `<i data-b="${c.bucket}"${c.level ? ` data-l="${c.level}"` : ''}${c.now ? ' class="now"' : ''}></i>`;
+}
+const HEAT_AXIS = '<div class="hh-axis"><span>00</span><span>06</span><span>12</span><span><span>18</span><span>24</span></span></div>';
+// 日：一列＝1 小时，列内 4 格＝4 个刻钟，6 小时一组（v1.11.0 B1）。
+function dayHeatHtml(cells) {
+  const groups = [0, 1, 2, 3].map(g => `<div class="hh-grp">${Array.from({ length: 6 }, (_, i) => {
+    const h = g * 6 + i;
+    return `<div class="hh-col">${cells.slice(h * 4, h * 4 + 4).map(heatCell).join('')}</div>`;
+  }).join('')}</div>`).join('');
+  return `<div class="hero-heat hh-day" aria-hidden="true"><div class="hh-row">${groups}</div>${HEAT_AXIS}</div>`;
+}
+// 周：一行＝1 天，一格＝1 小时，6 小时一组；行首是星期。
+function weekHeatHtml(cells, weekStart) {
+  const names = tList('date.weekdayNarrow');
+  const rows = Array.from({ length: 7 }, (_, r) => {
+    const day = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + r);
+    const row = cells.slice(r * 24, r * 24 + 24);
+    const groups = [0, 1, 2, 3].map(g => `<div class="hh-grp">${row.slice(g * 6, g * 6 + 6).map(heatCell).join('')}</div>`).join('');
+    return `<span class="hh-lab">${esc(names[day.getDay()] || '')}</span><div class="hh-row">${groups}</div>`;
+  }).join('');
+  return `<div class="hero-heat hh-week" aria-hidden="true">${rows}<span></span>${HEAT_AXIS}</div>`;
+}
+// 月 / 年：按标签分的环形图。同桶标签用同一色系、越小越浅；图例列占时最多的 6 块。
+const TAG_RING_SHADES = [100, 72, 50, 34, 24];
+const TAG_RING_LEGEND = 6;
+function tagRingHtml(shares) {
+  const { total, slices } = shares;
+  if (!total || !slices.length) return '';
+  const color = slice => slice.bucket === 'unrecorded'
+    ? 'var(--track)'
+    : `color-mix(in srgb, var(${bucketColorVar(slice.bucket)}) ${TAG_RING_SHADES[Math.min(slice.rank, TAG_RING_SHADES.length - 1)]}%, var(--card))`;
+  let acc = 0;
+  const stops = slices.map(slice => {
+    const from = acc / total * 360;
+    acc += slice.mins;
+    return `${color(slice)} ${from.toFixed(2)}deg ${(acc / total * 360).toFixed(2)}deg`;
+  }).join(', ');
+  const top = [...slices].sort((a, b) => b.mins - a.mins);
+  const rest = top.length - TAG_RING_LEGEND;
+  const legend = top.slice(0, TAG_RING_LEGEND).map(slice => {
+    const name = slice.bucket === 'unrecorded' ? t('bucket.unrecorded') : slice.tag;
+    return `<div class="tr-item"><b style="background:${color(slice)}"></b><span class="tr-name">${esc(name)}</span><span class="tr-val">${esc(fmtPlainMins(slice.mins))} · ${esc(formatPercent(slice.mins, total))}</span></div>`;
+  }).join('') + (rest > 0 ? `<div class="tr-item tr-rest"><b></b><span class="tr-name">${esc(t('hero.tagsRest', { n: rest }))}</span><span></span></div>` : '');
+  return `<div class="hero-ring"><div class="tr-ring" aria-hidden="true" style="background:conic-gradient(${stops})"></div><div class="tr-legend">${legend}</div></div>`;
+}
+function bucketColorVar(bucket) {
+  return { job: '--accent', maintain: '--maintain', leak: '--leak' }[bucket] || '--track';
+}
+function periodVisual(view, opts) {
+  const { segments = [], rangeStart = null, now = new Date(), visual = 'ratio' } = opts;
+  if (view === 'week') {
+    const detail = visual === 'detail' && rangeStart ? weekHeatHtml(weekHeatCells(heatSpans(segments), rangeStart, now), rangeStart) : '';
+    return { visual, kind: 'heat', detail };
+  }
+  if (view === 'month' || view === 'year') {
+    return { visual, kind: 'tags', detail: visual === 'detail' ? tagRingHtml(tagShares(segments)) : '' };
+  }
+  return null;
 }
 
 // 结论卡上的桶分钟恰为 0 时写「0min」而不是「<1min」——后者暗示有过一点时长。
-function heroCard(totals, label, extraAux) {
+function heroCard(totals, label, extraAux, switchable = null) {
   const parts = bucketParts(totals);
   const bar = parts.map(part => {
     // 维持段 .55 透明度（设计稿：主线/偏航为焦点，维持退到背景）。
@@ -130,10 +201,22 @@ function heroCard(totals, label, extraAux) {
           <div class="hero-label">${t('hero.leak')}</div>
           <div class="hero-leak">${fmtPlainMins(totals.leak)}</div>
         </div>
+        ${switchable ? heroSwitch(switchable) : ''}
       </div>
-      <div class="hero-bar">${bar}</div>
+      ${switchable && switchable.visual === 'detail' && switchable.detail
+        ? `<div class="hero-visual" data-action="toggle-hero-visual">${switchable.detail}</div>`
+        : `<div class="hero-bar"${switchable ? ' data-action="toggle-hero-visual"' : ''}>${bar}</div>`}
       <div class="hero-aux">${aux}</div>
     </div>`;
+}
+
+// 右上角状态标签：写「当前显示的是什么」，点它或点图形区就切换；读屏名说明现在和下一步。
+function heroSwitch({ visual, kind, detail }) {
+  const detailName = kind === 'tags' ? t('hero.visualTags') : t('hero.visualHeat');
+  const showingDetail = visual === 'detail' && detail;
+  const current = showingDetail ? detailName : t('hero.visualRatio');
+  const next = showingDetail ? t('hero.visualRatio') : detailName;
+  return `<button class="hero-switch" type="button" data-action="toggle-hero-visual" aria-label="${esc(t('hero.switchAria', { current, next }))}">${esc(current)}<span aria-hidden="true"> ⇄</span></button>`;
 }
 
 function bucketParts(totals) {
@@ -208,40 +291,8 @@ export function renderNowStrip(items, isToday, config = loadConfig()) {
 }
 
 
-// v1.11.0 全天热力条（维护者看过对比图后选定 B1，接在时间轴底部；v1.12.0 起是「更多」里的
-// 可选功能、默认开启，全文 / 单行 / 按时长三种布局都显示）：
-// 一列＝1 小时，列内从上到下 4 格＝4 个刻钟，每 6 小时一组、组间宽缝，刻度对齐组起点。
-// 上色与深浅的规则只在 stats.js dayHeatCells；这里只把时间轴的段映射成桶段并出模板。
-// 装饰性（aria-hidden）：时间轴各行与时长数字仍是可读真源。将来的日子没有已发生的段，
-// 时间轴本身为空，热力条随之不出现。
-function renderDayHeat(items, config, isToday, now) {
-  const segs = (items || []).filter(it => it && it.start instanceof Date && it.end instanceof Date);
-  if (!segs.length) return '';
-  const spans = segs.map(it => {
-    const placeholder = it.e && typeof it.e.what === 'string' && it.e.what.trim() === '';
-    const bucket = !it.e || placeholder || it.unrecorded ? 'unrecorded' : bucketForTag(it.tag, config);
-    return { start: it.start, end: it.end, bucket };
-  });
-  const cells = dayHeatCells(spans, startOfDay(segs[0].start), now);
-  const cell = c => c.future
-    ? '<i class="fut"></i>'
-    : `<i data-b="${c.bucket}"${c.level ? ` data-l="${c.level}"` : ''}${c.now ? ' class="now"' : ''}></i>`;
-  const groups = [0, 1, 2, 3].map(g => `<div class="dh-grp">${Array.from({ length: 6 }, (_, i) => {
-    const h = g * 6 + i;
-    return `<div class="dh-col">${cells.slice(h * 4, h * 4 + 4).map(cell).join('')}</div>`;
-  }).join('')}</div>`).join('');
-  const legend = ['job', 'maintain', 'leak', 'unrecorded']
-    .map(b => `<span><i data-b="${b}" data-l="3"></i>${esc(t(`bucket.${b}`))}</span>`).join('');
-  return `<div class="day-heat" aria-hidden="true">
-    <div class="dh-head"><span class="dh-title">${esc(isToday ? t('heat.titleToday') : t('heat.titleDay'))}</span><span class="dh-unit">${esc(t('heat.unit'))}</span></div>
-    <div class="dh-grid">${groups}</div>
-    <div class="dh-axis"><span>00</span><span>06</span><span>12</span><span><span>18</span><span>24</span></span></div>
-    <div class="dh-legend">${legend}</div>
-  </div>`;
-}
-
 export function renderTimeline(items, opts = {}) {
-  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig(), density = 'full', dayHeat = true, now = new Date() } = opts;
+  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig(), density = 'full' } = opts;
   const el = document.getElementById('timeline');
   const layout = normalizeTimelineDensity(density);
   // v1.8.3 尺子刻度（取代 v1.8.2 的 4h 满格时长条）：只在「全文」布局画（行高随正文变，
@@ -374,8 +425,6 @@ export function renderTimeline(items, opts = {}) {
   if (isToday) {
     rows.splice(planned.length, 0, `<div class="tl-now" role="separator" aria-label="${esc(t('timeline.nowAria', { time: nowLabel }))}"><span class="tl-now-dot"></span><span class="tl-now-label">${esc(t('timeline.now', { time: nowLabel }))}</span><span class="tl-now-line"></span></div>`);
   }
-  // v1.11.0 起在最后一行之后接全天热力条；v1.12.0 起由开关决定，与布局无关。
-  if (dayHeat) rows.push(renderDayHeat(items, config, isToday, now));
   // v1.8.1：行布局由「更多」里的偏好决定；--mins 只在「按时长」模式下参与行高。
   el.innerHTML = `<div class="log" data-density="${esc(layout)}">${rows.join('')}</div>`;
 }
@@ -452,7 +501,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.12.0';
+export const APP_VERSION = '1.13.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -548,9 +597,6 @@ function renderMoreSheet(opts = {}) {
   const densityPref = normalizeTimelineDensity(readUiPreference(TIMELINE_DENSITY_KEY));
   const densityBtn = (value, label) =>
     `<button type="button" data-action="set-density" data-density="${value}" class="${densityPref === value ? 'active' : ''}" aria-pressed="${densityPref === value}" aria-label="${esc(t('density.aria', { label }))}">${esc(label)}</button>`;
-  const dayHeatPref = normalizeDayHeat(readUiPreference(DAY_HEAT_KEY));
-  const dayHeatBtn = (value, label) =>
-    `<button type="button" data-action="set-day-heat" data-day-heat="${value}" class="${dayHeatPref === value ? 'active' : ''}" aria-pressed="${dayHeatPref === value}" aria-label="${esc(t('dayHeat.aria', { label }))}">${esc(label)}</button>`;
   const isLegacyOrigin = Boolean(opts.isLegacyOrigin);
   const privacyHref = PRIVACY_URL[getLocale()] || PRIVACY_URL.zh;
   return `
@@ -574,11 +620,6 @@ function renderMoreSheet(opts = {}) {
         <div class="cell-row"><span>${t('more.timeline')}</span>
           <div class="seg theme-seg" id="density-seg" role="group" aria-label="${t('more.timelineAria')}">
             ${densityBtn('full', t('density.full'))}${densityBtn('single', t('density.single'))}${densityBtn('scaled', t('density.scaled'))}
-          </div>
-        </div>
-        <div class="cell-row"><span>${t('more.dayHeat')}</span>
-          <div class="seg theme-seg" id="day-heat-seg" role="group" aria-label="${t('more.dayHeatAria')}">
-            ${dayHeatBtn('on', t('dayHeat.on'))}${dayHeatBtn('off', t('dayHeat.off'))}
           </div>
         </div>
         <div class="cell-row"><span>${t('more.language')}</span>

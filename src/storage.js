@@ -65,13 +65,21 @@ export function normalizeTimelineDensity(value) {
   if (value === 'double') return 'full';
   return value && TIMELINE_DENSITIES.includes(value) ? value : DEFAULT_TIMELINE_DENSITY;
 }
-// v1.12.0：全天热力条开关（时间轴底部，三种布局都可显示），设备偏好，不进备份。
-// 只认 'off' 为关闭；缺失或非法值＝默认开启（维护者要求「可选功能，默认启用」）。
-export const DAY_HEAT_KEY = 'timelog.dayHeat';
+// v1.13.0：首屏统计卡片的图形——比例条（ratio，默认）或分布图（detail：日 / 周为热力格，
+// 月 / 年为标签环形图）；日周月年共用一个选择。设备偏好，不进备份；只认 'detail'，
+// 缺失或非法＝比例。取代 v1.12.0 的 timelog.dayHeat（时间轴底部热力条开关），旧键在
+// 启动时删除（dropLegacyDayHeatPreference）。
+export const HERO_VISUAL_KEY = 'timelog.heroVisual';
+export const LEGACY_DAY_HEAT_KEY = 'timelog.dayHeat';
 
-/** @param {string | null | undefined} value @returns {'on' | 'off'} */
-export function normalizeDayHeat(value) {
-  return value === 'off' ? 'off' : 'on';
+/** @param {string | null | undefined} value @returns {'ratio' | 'detail'} */
+export function normalizeHeroVisual(value) {
+  return value === 'detail' ? 'detail' : 'ratio';
+}
+
+/** v1.12.0 遗留的界面偏好已无读者；删不掉（权限、隐私模式）也不影响任何功能。 */
+export function dropLegacyDayHeatPreference() {
+  try { localStorage.removeItem(LEGACY_DAY_HEAT_KEY); } catch {}
 }
 // SPEC-013：语言偏好。'' / 键缺失＝跟随系统。是**设备偏好不是用户数据**——
 // 不进备份、导入不得改语言（与 timelog.theme 同类）。

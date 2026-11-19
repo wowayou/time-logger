@@ -18,8 +18,9 @@ import {
   THEME_KEY,
   TIMELINE_DENSITY_KEY,
   normalizeTimelineDensity,
-  DAY_HEAT_KEY,
-  normalizeDayHeat,
+  HERO_VISUAL_KEY,
+  normalizeHeroVisual,
+  dropLegacyDayHeatPreference,
   VIEW_KEY,
   appendBootDiagSample,
   ensureFirstUsedDate,
@@ -217,19 +218,16 @@ import {
     });
     render();
   }
-  // v1.12.0：全天热力条开关，与时间轴布局同一降级路径；默认开启。
-  function currentDayHeat() {
-    return normalizeDayHeat(readUiPreference(DAY_HEAT_KEY));
+  // v1.13.0：首屏卡片图形（比例 ⇄ 分布），日周月年共用；与时间轴布局同一降级路径，默认比例。
+  function currentHeroVisual() {
+    return normalizeHeroVisual(readUiPreference(HERO_VISUAL_KEY));
   }
-  function setDayHeat(value) {
-    const dayHeat = normalizeDayHeat(value);
-    saveUiPreference(DAY_HEAT_KEY, dayHeat);
-    document.querySelectorAll('#day-heat-seg button').forEach(btn => {
-      const selected = btn.dataset.dayHeat === dayHeat;
-      btn.classList.toggle('active', selected);
-      btn.setAttribute('aria-pressed', String(selected));
-    });
+  function toggleHeroVisual() {
+    // 从键盘切换时焦点在旧按钮上，重绘后它被替换——把焦点交给新按钮，不让它掉回 body。
+    const hadFocus = document.activeElement instanceof HTMLElement && document.activeElement.classList.contains('hero-switch');
+    saveUiPreference(HERO_VISUAL_KEY, currentHeroVisual() === 'detail' ? 'ratio' : 'detail');
     render();
+    if (hadFocus) document.querySelector('#ruler .hero-switch')?.focus({ preventScroll: true });
   }
   function setThemePref(pref) {
     saveUiPreference(THEME_KEY, pref);
@@ -384,6 +382,10 @@ import {
       const isToday = state.selectedDate === todayStr();
       renderDayHero(day.totals, day.timeline.length || day.planned.length || day.totals.total, {
         isToday,
+        segments: day.timeline,
+        dayStart: periodRange('day', state.selectedDate).start,
+        now: new Date(),
+        visual: currentHeroVisual(),
         asOf: nowStr().slice(11, 16)
       });
       renderNowStrip(day.timeline, isToday, config);
@@ -396,8 +398,7 @@ import {
         // SPEC-002：旧 origin 只读——行不可点开编辑、不渲染补一下/标记已发生/确认
         // 等写入口，左滑轨道因缺少 data-action="start-edit" 锚点而自然不启用。
         readOnly: isLegacyOrigin(),
-        density: currentTimelineDensity(),
-        dayHeat: currentDayHeat() === 'on'
+        density: currentTimelineDensity()
       });
       if (focusedEntryId) {
         const row = Array.from(document.querySelectorAll('.entry[data-id][tabindex]'))
@@ -411,7 +412,7 @@ import {
     const { start, end } = periodRange();
     // 总览与各行只分段一次；按日切好的分段也能直接按月汇总成年视图的 12 行。
     const segments = buildRangeSegmentsFromEntries(entries, start, end, { config });
-    renderRuler(summarizeSegments(segments, config), 1, state.view);
+    renderRuler(summarizeSegments(segments, config), 1, state.view, { segments, rangeStart: start, now: new Date(), visual: currentHeroVisual() });
     renderNowStrip([], false, config);
     renderSummaryRows(summarizeSegmentRows(segments, summaryRows(), config));
     lastIntervalSignature = dataSignature(entries);
@@ -445,8 +446,8 @@ import {
         recordMode: readUiPreference(RECORD_MODE_KEY),
         // v1.8.1：实际画出的时间轴布局（已归一化）；index.html 按同一归一化比对存储。
         timelineDensity: currentTimelineDensity(),
-        // v1.12.0：实际画出的热力条开关（已归一化）；index.html 按同一归一化比对存储。
-        dayHeat: currentDayHeat(),
+        // v1.13.0：实际画出的卡片图形（已归一化）；index.html 按同一归一化比对存储。
+        heroVisual: currentHeroVisual(),
         today: todayStr()
       }));
     } catch {}
@@ -1075,7 +1076,7 @@ import {
       const action = el.dataset.action;
       if (action === 'theme') setThemePref(el.dataset.theme);
       if (action === 'set-density') setTimelineDensity(el.dataset.density);
-      if (action === 'set-day-heat') setDayHeat(el.dataset.dayHeat);
+      if (action === 'toggle-hero-visual') toggleHeroVisual();
       if (action === 'set-locale') setLocalePref(el.dataset.locale || '');
       if (action === 'view') setView(el.dataset.view);
       if (action === 'shift-period') shiftPeriod(Number(el.dataset.delta || 0));
@@ -1604,6 +1605,8 @@ import {
     // 结果，覆盖回去以防两者因任何原因不一致。
     document.documentElement.lang = getLocale();
     markBootTrace('init_start');
+    // v1.13.0：v1.12.0 的时间轴底部热力条开关已移除，旧偏好不再有读者。
+    dropLegacyDayHeatPreference();
     updateMigrationNotice();
     const today = todayStr();
     // 只做诊断：写下本机首用日备查，不再驱动任何用户可见里程碑。

@@ -1122,6 +1122,67 @@
       overflow: hidden;
       gap: 2px;
     }
+    /* v1.13.0 卡片图形切换（维护者看过对比图选定）：右上角状态标签写「当前显示什么」，
+       点它或点图形区切换。标签绝对定位、不参与排版——放进 hero-nums 的 flex 流时 44px
+       命中区挤不下会自成一行，默认比例态卡片因此高出 56px。文字只占卡片顶行（与「今日
+       主线」同高）；偏航与大数字底对齐，它的标签起点低于这一行，所以不相压（有用例守）。
+       热力格轨道一律 minmax(0,1fr)：格子是正方形，让内容撑轨道会在窄屏把整块撑出卡片
+       （v1.11.0 原型在 320px 踩过）。 */
+    .day-hero { position: relative; }
+    .hero-switch {
+      position: absolute;
+      top: -16px;
+      right: -8px;
+      display: flex;
+      align-items: center;
+      min-height: var(--control-h);
+      min-width: var(--control-h);
+      padding: 0 var(--sp-2);
+      border: 0;
+      background: none;
+      font: inherit;
+      font-size: var(--fs-cap);
+      font-weight: 600;
+      color: var(--accent);
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .hero-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: -6px; border-radius: var(--r-sm); }
+    .hero-bar[data-action], .hero-visual { cursor: pointer; }
+    .hero-heat { display: grid; gap: 2px var(--sp-2); }
+    .hero-heat.hh-week { grid-template-columns: auto minmax(0, 1fr); align-items: center; }
+    .hh-row, .hh-axis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 4px; }
+    .hh-grp { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2px; align-self: start; }
+    .hh-col { display: grid; gap: 2px; }
+    .hh-lab { font-size: var(--fs-cap); line-height: 1; color: var(--muted); }
+    .hero-heat i { display: block; aspect-ratio: 1; border-radius: 3px; background: var(--track); } /* raw: 格边长 8–12px，--r-sm(8px) 会把方格变成圆点 */
+    .hero-heat i[data-b="job"] { --c: var(--accent); }
+    .hero-heat i[data-b="maintain"] { --c: var(--maintain); }
+    .hero-heat i[data-b="leak"] { --c: var(--leak); }
+    .hero-heat i[data-l="1"] { background: color-mix(in srgb, var(--c) 35%, var(--card)); }
+    .hero-heat i[data-l="2"] { background: color-mix(in srgb, var(--c) 65%, var(--card)); }
+    .hero-heat i[data-l="3"] { background: var(--c); }
+    .hero-heat i[data-b="unrecorded"] { background: var(--track); }
+    .hero-heat i.fut { background: none; box-shadow: inset 0 0 0 1px var(--border); }
+    .hero-heat i.now { box-shadow: 0 0 0 1.5px var(--card), 0 0 0 3px var(--accent); }
+    .hh-axis { margin-top: var(--sp-1); font-size: var(--fs-cap); color: var(--muted); font-variant-numeric: tabular-nums; }
+    .hh-axis > span:last-child { display: flex; justify-content: space-between; }
+    .hero-ring { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3) var(--sp-4); }
+    .tr-ring {
+      flex: none;
+      width: 104px;
+      height: 104px;
+      border-radius: 50%;
+      -webkit-mask: radial-gradient(circle, transparent 30px, #000 31px);
+      mask: radial-gradient(circle, transparent 30px, #000 31px);
+    }
+    /* 图例保底 190px（标签名 + 「264h20min · 34.7%」）；放不下就换到环下方占满一行，不把名字挤成一个字。 */
+    .tr-legend { flex: 1 1 190px; min-width: 0; display: grid; gap: 3px; font-size: var(--fs-cap); color: var(--muted); }
+    .tr-item { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 6px; }
+    .tr-item b { width: 10px; height: 10px; border-radius: 3px; } /* raw: 与热力格同为小方块色标 */
+    .tr-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tr-rest .tr-name { color: var(--muted); }
+    .tr-val { font-variant-numeric: tabular-nums; white-space: nowrap; }
     .hero-bar div:first-child { border-radius: var(--r-pill) 0 0 var(--r-pill); }
     .hero-bar div:last-child { border-radius: 0 var(--r-pill) var(--r-pill) 0; }
     .hero-aux {
@@ -1544,32 +1605,6 @@
       grid-template-rows: 52px;
       align-content: start;
     }
-    /* v1.11.0 全天热力条（只在按时长布局、接在最后一行之后；维护者看过对比图选定 B1）：
-       一列＝1 小时、列内 4 格＝4 个刻钟，6 小时一组、组间 4px 缝，刻度对齐组起点。
-       色相＝桶，深浅＝该桶在这 15 分钟里占几分钟（规则在 stats.js dayHeatCells）；
-       未记录灰格、未来空心格、现在所在格外描 accent 圈。轨道一律 minmax(0,1fr)：
-       格子是正方形，若让内容撑轨道，窄屏会把整条撑出卡片（原型在 320px 踩过）。 */
-    .day-heat { position: relative; display: grid; gap: var(--sp-2); padding: 14px 14px 14px var(--sp-4); }
-    .dh-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-cap); color: var(--muted); }
-    .dh-title { font-size: var(--fs-ui); font-weight: 600; color: var(--text); }
-    .dh-grid, .dh-axis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 4px; }
-    .dh-grp { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2px; align-self: start; }
-    .dh-col { display: grid; gap: 2px; }
-    .day-heat i { display: block; aspect-ratio: 1; border-radius: 3px; background: var(--track); } /* raw: 格边长 8–12px，--r-sm(8px) 会把方格变成圆点 */
-    .day-heat i[data-b="job"] { --c: var(--accent); }
-    .day-heat i[data-b="maintain"] { --c: var(--maintain); }
-    .day-heat i[data-b="leak"] { --c: var(--leak); }
-    .day-heat i[data-l="1"] { background: color-mix(in srgb, var(--c) 35%, var(--card)); }
-    .day-heat i[data-l="2"] { background: color-mix(in srgb, var(--c) 65%, var(--card)); }
-    .day-heat i[data-l="3"] { background: var(--c); }
-    .day-heat i[data-b="unrecorded"] { background: var(--track); }
-    .day-heat i.fut { background: none; box-shadow: inset 0 0 0 1px var(--border); }
-    .day-heat i.now { box-shadow: 0 0 0 1.5px var(--card), 0 0 0 3px var(--accent); }
-    .dh-axis { font-size: var(--fs-cap); color: var(--muted); font-variant-numeric: tabular-nums; margin-top: calc(-1 * var(--sp-1)); }
-    .dh-axis > span:last-child { display: flex; justify-content: space-between; }
-    .dh-legend { display: flex; flex-wrap: wrap; gap: var(--sp-1) 10px; font-size: var(--fs-cap); color: var(--muted); }
-    .dh-legend span { display: inline-flex; align-items: center; gap: var(--sp-1); }
-    .dh-legend i { width: 10px; }
     /* gap 行的「补一下」纯提示（整行即补录动作）——素色文字链形态，与 mini-btn 同语。 */
     .e-cta {
       font-size: var(--fs-cap);

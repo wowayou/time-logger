@@ -293,37 +293,30 @@ export function buildRangeSegmentsFromEntries(inputEntries, start, end, opts = {
   return segments;
 }
 
-// v1.11.0 全天热力条（只在「按时长」布局渲染，见 ui.js renderDayHeat）：把一个自然日切成
-// 96 个 15 分钟格。每格按占时最多的桶上色，深浅只看这个桶在本格里占了几分钟——
-// 满 11 分钟为 3 档（实色）、6–10 分钟 2 档、不足 6 分钟 1 档，所以浅格只出现在段的
-// 交界处；没有任何桶分钟的格是未记录，起点不早于 now 的格是未来，含 now 的格标 now。
-// 并列时按 job → maintain → leak 取第一个，结果与输入顺序无关。格界按本地壁钟
-// （new Date(y, m, d, 0, q*15)）取，夏令时日不按毫秒累加，与统计的本地自然日一致。
+// 首屏统计卡片的「分布」图（v1.11.0 起的全天热力，v1.13.0 移进卡片并加周视图）。
+// 一格＝一个本地壁钟时段：日视图 96 个 15 分钟格，周视图 7 天 × 24 个 1 小时格。每格按
+// 占时最多的桶上色，深浅只看这个桶在本格里占了几分钟（阈值按格长给：15 分钟格 ≥11
+// 实色、≥6 为 2 档；1 小时格 ≥44 实色、≥24 为 2 档；其余有分钟为 1 档），所以浅格
+// 多出现在段的交界处；没有任何桶分钟的格是未记录，起点不早于 now 的格是未来，含 now
+// 的格标 now。并列时按 job → maintain → leak 取第一个，结果与输入顺序无关。格界用
+// new Date(y, m, d, h, min) 取，夏令时日不按毫秒累加，与统计的本地自然日一致。
 // spans 只需桶段：未记录、占位与过短空隙都不必传——它们本来就落成未记录格。
 const HEAT_BUCKETS = ['job', 'maintain', 'leak'];
 export const DAY_HEAT_CELLS = 96;
+export const WEEK_HEAT_CELLS = 7 * 24;
 
 /**
  * @param {Array<{ start: Date, end: Date, bucket: string }>} spans
- * @param {Date} dayStart 当天本地 00:00
+ * @param {Array<[number, number]>} slots 每格的 [起, 止) 毫秒
  * @param {Date} now
+ * @param {[number, number]} thresholds [实色下限, 2 档下限]（分钟）
  * @returns {Array<{ bucket: string, level: number, future: boolean, now: boolean }>}
  */
-export function dayHeatCells(spans, dayStart, now) {
-  const y = dayStart.getFullYear();
-  const m = dayStart.getMonth();
-  const d = dayStart.getDate();
+function slotHeatCells(spans, slots, now, thresholds) {
   const nowMs = +now;
   const live = (spans || []).filter(span => HEAT_BUCKETS.includes(span.bucket) && +span.end > +span.start);
-  const cells = [];
-  for (let q = 0; q < DAY_HEAT_CELLS; q += 1) {
-    const a = +new Date(y, m, d, 0, q * 15);
-    const z = +new Date(y, m, d, 0, (q + 1) * 15);
-    const isNow = a <= nowMs && nowMs < z;
-    if (a >= nowMs) {
-      cells.push({ bucket: 'future', level: 0, future: true, now: false });
-      continue;
-    }
+  return slots.map(([a, z]) => {
+    if (a >= nowMs) return { bucket: 'future', level: 0, future: true, now: false };
     const mins = { job: 0, maintain: 0, leak: 0 };
     for (const span of live) {
       const overlap = Math.min(z, +span.end, nowMs) - Math.max(a, +span.start);
@@ -334,10 +327,71 @@ export function dayHeatCells(spans, dayStart, now) {
     for (const b of HEAT_BUCKETS) {
       if (mins[b] > best) { best = mins[b]; bucket = b; }
     }
-    const level = bucket === 'unrecorded' ? 0 : best >= 11 ? 3 : best >= 6 ? 2 : 1;
-    cells.push({ bucket, level, future: false, now: isNow });
+    const level = bucket === 'unrecorded' ? 0 : best >= thresholds[0] ? 3 : best >= thresholds[1] ? 2 : 1;
+    return { bucket, level, future: false, now: a <= nowMs && nowMs < z };
+  });
+}
+
+/**
+ * @param {Array<{ start: Date, end: Date, bucket: string }>} spans
+ * @param {Date} dayStart 当天本地 00:00
+ * @param {Date} now
+ */
+export function dayHeatCells(spans, dayStart, now) {
+  const y = dayStart.getFullYear();
+  const m = dayStart.getMonth();
+  const d = dayStart.getDate();
+  /** @type {Array<[number, number]>} */
+  const slots = [];
+  for (let q = 0; q < DAY_HEAT_CELLS; q += 1) slots.push([+new Date(y, m, d, 0, q * 15), +new Date(y, m, d, 0, (q + 1) * 15)]);
+  return slotHeatCells(spans, slots, now, [11, 6]);
+}
+
+/**
+ * 周视图：按「第 r 天 × 第 h 小时」行优先排列，共 168 格。
+ * @param {Array<{ start: Date, end: Date, bucket: string }>} spans
+ * @param {Date} weekStart 本周第一天本地 00:00
+ * @param {Date} now
+ */
+export function weekHeatCells(spans, weekStart, now) {
+  const y = weekStart.getFullYear();
+  const m = weekStart.getMonth();
+  const d = weekStart.getDate();
+  /** @type {Array<[number, number]>} */
+  const slots = [];
+  for (let r = 0; r < 7; r += 1) {
+    for (let h = 0; h < 24; h += 1) slots.push([+new Date(y, m, d + r, h), +new Date(y, m, d + r, h + 1)]);
   }
-  return cells;
+  return slotHeatCells(spans, slots, now, [44, 24]);
+}
+
+// 月 / 年视图的「标签」环形图（v1.13.0）：按 tagKey 归并有桶标签的分钟；未记录桶
+// （空隙、占位、孤儿标签）合成一块，放在最后。各块之和等于 summarizeSegments 的 total。
+// 排序：先按桶 job → maintain → leak，同桶内按分钟降序（同桶相邻，才能用同一色系分深浅）。
+/**
+ * @param {Array<{ mins: number, tag: string, bucket: string, unrecorded: boolean }>} segments
+ * @returns {{ total: number, slices: Array<{ tag: string, bucket: string, mins: number, rank: number }> }}
+ */
+export function tagShares(segments) {
+  /** @type {Map<string, { tag: string, bucket: string, mins: number, rank: number }>} */
+  const groups = new Map();
+  let unrecorded = 0;
+  let total = 0;
+  for (const seg of segments || []) {
+    if (!(seg.mins > 0)) continue;
+    total += seg.mins;
+    if (seg.unrecorded || !HEAT_BUCKETS.includes(seg.bucket)) { unrecorded += seg.mins; continue; }
+    const key = `${seg.bucket}\u0000${tagKey(seg.tag)}`;
+    const g = groups.get(key);
+    if (g) g.mins += seg.mins;
+    else groups.set(key, { tag: seg.tag, bucket: seg.bucket, mins: seg.mins, rank: 0 });
+  }
+  const slices = [...groups.values()].sort((a, b) => HEAT_BUCKETS.indexOf(a.bucket) - HEAT_BUCKETS.indexOf(b.bucket) || b.mins - a.mins);
+  /** @type {Record<string, number>} */
+  const seen = {};
+  for (const slice of slices) { slice.rank = seen[slice.bucket] = (seen[slice.bucket] ?? -1) + 1; }
+  if (unrecorded > 0) slices.push({ tag: '', bucket: 'unrecorded', mins: unrecorded, rank: 0 });
+  return { total, slices };
 }
 
 // 统计累计只认分段产出的分钟与标记。主渲染可让时间轴、总览与明细共用同一份

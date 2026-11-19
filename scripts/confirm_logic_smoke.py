@@ -1293,6 +1293,49 @@ assert(centuryEntries[0].ts === '1926-01-01T08:00' && centuryEntries.length === 
   assert(JSON.stringify(spans) === before, 'heat cells never mutate their input');
 }
 
+// v1.13.0 首屏卡片：周热力 7×24 小时格（阈值 44/24）与按标签分的环形图份额。
+{
+  const { weekHeatCells, WEEK_HEAT_CELLS, tagShares } = await import('./src/stats.js');
+  const at = s => new Date(`2026-06-${s}`);
+  const sp = (a, z, bucket) => ({ start: at(a), end: at(z), bucket });
+  const week = weekHeatCells([
+    sp('29T08:00', '29T08:44', 'job'),
+    sp('29T09:00', '29T09:30', 'leak'), sp('29T09:30', '29T09:50', 'job'),
+    sp('29T10:00', '29T10:23', 'maintain'),
+    sp('29T12:00', '29T12:24', 'leak'), sp('29T13:00', '29T13:44', 'leak'),
+    sp('30T00:00', '30T07:00', 'maintain')
+  ], at('29T00:00'), at('30T10:20'));
+  assert(week.length === WEEK_HEAT_CELLS && WEEK_HEAT_CELLS === 168, 'a week has 7 x 24 hour cells');
+  assert(week[8].bucket === 'job' && week[8].level === 3, '44 minutes in an hour is solid');
+  assert(week[9].bucket === 'leak' && week[9].level === 2, '30 leak minutes beat 20 job minutes and reach level 2 (>= 24)');
+  assert(week[10].bucket === 'maintain' && week[10].level === 1, '23 minutes stays level 1');
+  assert(week[12].level === 2 && week[13].level === 3, 'exactly 24 minutes is level 2 and exactly 44 is solid (thresholds are inclusive)');
+  assert(week[24 + 3].bucket === 'maintain' && week[24 + 3].level === 3, 'the second row starts at the next local midnight');
+  assert(week[24 + 10].now && !week[24 + 10].future && week[24 + 11].future && week[167].future, 'now and future cells follow the clock across days');
+  assert(week[11].bucket === 'unrecorded' && !week[11].future, 'an empty past hour is unrecorded');
+
+  const segs = [
+    { mins: 240, tag: '求职推进', bucket: 'job', unrecorded: false },
+    { mins: 60, tag: 'Sleep', bucket: 'maintain', unrecorded: false },
+    { mins: 30, tag: ' sleep ', bucket: 'maintain', unrecorded: false },
+    { mins: 120, tag: '吃饭', bucket: 'maintain', unrecorded: false },
+    { mins: 50, tag: '娱乐', bucket: 'leak', unrecorded: false },
+    { mins: 40, tag: '', bucket: 'unrecorded', unrecorded: true },
+    { mins: 20, tag: '孤儿', bucket: 'unrecorded', unrecorded: true },
+    { mins: 0, tag: '空', bucket: 'job', unrecorded: false }
+  ];
+  const snap = JSON.stringify(segs);
+  const shares = tagShares(segs);
+  assert(shares.total === 560 && shares.slices.reduce((n, x) => n + x.mins, 0) === 560, 'slices add up to the total');
+  assert(shares.slices.map(x => x.bucket).join(',') === 'job,maintain,maintain,leak,unrecorded', 'slices are grouped by bucket with unrecorded last');
+  const sleep = shares.slices.find(x => x.bucket === 'maintain' && x.rank === 1);
+  assert(sleep && sleep.mins === 90 && sleep.tag === 'Sleep', 'tags merge by tagKey and keep the first spelling; smaller tags in a bucket rank lower');
+  assert(shares.slices[1].tag === '吃饭' && shares.slices[1].rank === 0, 'the largest tag in a bucket has rank 0');
+  assert(shares.slices[4].mins === 60 && shares.slices[4].tag === '', 'gaps and orphan tags merge into one unrecorded slice');
+  assert(tagShares([]).total === 0 && tagShares([]).slices.length === 0, 'no segments give no slices');
+  assert(JSON.stringify(segs) === snap, 'tag shares never mutate their input');
+}
+
 console.log('confirm_logic_smoke passed');
 '''
 
