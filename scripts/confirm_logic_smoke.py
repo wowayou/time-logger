@@ -1258,6 +1258,41 @@ assert(centuryEntries[0].ts === '1926-01-01T08:00' && centuryEntries.length === 
   assert(JSON.stringify(hist) === before, 'suggestion helpers never mutate entries');
 }
 
+// v1.11.0 全天热力条：96 格、占时最多的桶上色、按该桶分钟数分三档深浅、未来与现在。
+{
+  const { dayHeatCells, DAY_HEAT_CELLS } = await import('./src/stats.js');
+  const at = hm => new Date(`2026-06-29T${hm}`);
+  const sp = (a, z, bucket) => ({ start: at(a), end: at(z), bucket });
+  const q = hm => { const [h, m] = hm.split(':').map(Number); return h * 4 + m / 15; };
+  const spans = [
+    sp('00:00', '07:40', 'maintain'),
+    sp('07:40', '08:00', 'leak'),
+    sp('08:00', '08:07', 'job'), sp('08:07', '08:15', 'leak'),
+    sp('09:00', '09:03', 'job'),
+    sp('10:00', '10:07:30', 'job'), sp('10:07:30', '10:15', 'maintain'),
+    sp('11:00', '11:15', 'unrecorded'),
+    sp('17:00', '18:00', 'job')
+  ];
+  const before = JSON.stringify(spans);
+  const today = dayHeatCells(spans, at('00:00'), at('17:40:30'));
+  assert(today.length === DAY_HEAT_CELLS && DAY_HEAT_CELLS === 96, 'a day has 96 quarter-hour cells');
+  assert(today[q('03:00')].bucket === 'maintain' && today[q('03:00')].level === 3, 'a fully covered quarter is solid');
+  assert(today[q('07:30')].bucket === 'maintain' && today[q('07:30')].level === 2 && today[q('07:45')].bucket === 'leak' && today[q('07:45')].level === 3, 'the bucket with most minutes wins a boundary quarter (maintain 10 vs leak 5) and sets level 2');
+  assert(today[q('08:00')].bucket === 'leak' && today[q('08:00')].level === 2, '8 leak minutes beat 7 job minutes');
+  assert(today[q('09:00')].bucket === 'job' && today[q('09:00')].level === 1, 'a few minutes of a bucket is level 1, not unrecorded');
+  assert(today[q('10:00')].bucket === 'job', 'an exact tie goes to job before maintain, independent of input order');
+  assert(dayHeatCells([...spans].reverse(), at('00:00'), at('17:40:30'))[q('10:00')].bucket === 'job', 'tie-break does not depend on span order');
+  assert(today[q('11:00')].bucket === 'unrecorded' && today[q('11:00')].level === 0 && today[q('12:00')].bucket === 'unrecorded', 'unrecorded spans and empty quarters are gray');
+  const nowCell = today[q('17:30')];
+  assert(nowCell.now && !nowCell.future && nowCell.bucket === 'job' && nowCell.level === 2, 'the quarter holding now counts only elapsed minutes (10.5) and is flagged now');
+  assert(today[q('17:45')].future && today[95].future && today.filter(c => c.now).length === 1, 'quarters after now are future and exactly one cell is now');
+  const exact = dayHeatCells(spans, at('00:00'), at('17:45'));
+  assert(exact[q('17:45')].future && !exact[q('17:45')].now && exact[q('17:30')].level === 3, 'a quarter starting exactly at now is future, the one before it is complete');
+  const past = dayHeatCells(spans, at('00:00'), new Date('2026-06-30T09:00'));
+  assert(past.every(c => !c.future && !c.now) && past[q('17:45')].level === 3 && past[q('18:00')].bucket === 'unrecorded', 'a past day has no future or now cells');
+  assert(JSON.stringify(spans) === before, 'heat cells never mutate their input');
+}
+
 console.log('confirm_logic_smoke passed');
 '''
 

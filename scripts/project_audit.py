@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # v1.0.0 起是三段式（此前是单整数，v1–v93）。判据必须**只认三段式**：写回单整数
 # 会让 android 仓的 versionCode 派生与 publish-site 的 tag 校验重新分叉，那两处
 # 现在都按三段式解析。历史 tag 与 docs/CHANGELOG.md 的单整数条目不受影响。
-EXPECTED_VERSION = "1.10.0"
+EXPECTED_VERSION = "1.11.0"
 VERSION_PATTERN = r"\d+\.\d+\.\d+"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
@@ -612,7 +612,7 @@ def audit_chrome_surface_layering(errors: list[str]) -> None:
 # （或 inherit / 0 / 50%）。确属例外的裸值在**同一行**附 `raw: 理由` 注释，并且
 # 例外条数**精确**等于下面的上限：新增例外要来这里改数字（diff 里看得见），
 # 消掉例外也要把上限下调，免得空出来的名额被悄悄占用。
-CSS_RAW_EXCEPTION_COUNTS = {"font-size": 5, "border-radius": 1}
+CSS_RAW_EXCEPTION_COUNTS = {"font-size": 5, "border-radius": 2}
 _CSS_SIZE_DECL = re.compile(
     r"(?<![-\w])(?P<prop>font-size|font|border(?:-(?:top|bottom)-(?:left|right))?-radius)\s*:\s*(?P<value>[^;{}]+)"
 )

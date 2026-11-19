@@ -293,6 +293,53 @@ export function buildRangeSegmentsFromEntries(inputEntries, start, end, opts = {
   return segments;
 }
 
+// v1.11.0 全天热力条（只在「按时长」布局渲染，见 ui.js renderDayHeat）：把一个自然日切成
+// 96 个 15 分钟格。每格按占时最多的桶上色，深浅只看这个桶在本格里占了几分钟——
+// 满 11 分钟为 3 档（实色）、6–10 分钟 2 档、不足 6 分钟 1 档，所以浅格只出现在段的
+// 交界处；没有任何桶分钟的格是未记录，起点不早于 now 的格是未来，含 now 的格标 now。
+// 并列时按 job → maintain → leak 取第一个，结果与输入顺序无关。格界按本地壁钟
+// （new Date(y, m, d, 0, q*15)）取，夏令时日不按毫秒累加，与统计的本地自然日一致。
+// spans 只需桶段：未记录、占位与过短空隙都不必传——它们本来就落成未记录格。
+const HEAT_BUCKETS = ['job', 'maintain', 'leak'];
+export const DAY_HEAT_CELLS = 96;
+
+/**
+ * @param {Array<{ start: Date, end: Date, bucket: string }>} spans
+ * @param {Date} dayStart 当天本地 00:00
+ * @param {Date} now
+ * @returns {Array<{ bucket: string, level: number, future: boolean, now: boolean }>}
+ */
+export function dayHeatCells(spans, dayStart, now) {
+  const y = dayStart.getFullYear();
+  const m = dayStart.getMonth();
+  const d = dayStart.getDate();
+  const nowMs = +now;
+  const live = (spans || []).filter(span => HEAT_BUCKETS.includes(span.bucket) && +span.end > +span.start);
+  const cells = [];
+  for (let q = 0; q < DAY_HEAT_CELLS; q += 1) {
+    const a = +new Date(y, m, d, 0, q * 15);
+    const z = +new Date(y, m, d, 0, (q + 1) * 15);
+    const isNow = a <= nowMs && nowMs < z;
+    if (a >= nowMs) {
+      cells.push({ bucket: 'future', level: 0, future: true, now: false });
+      continue;
+    }
+    const mins = { job: 0, maintain: 0, leak: 0 };
+    for (const span of live) {
+      const overlap = Math.min(z, +span.end, nowMs) - Math.max(a, +span.start);
+      if (overlap > 0) mins[span.bucket] += overlap / 60000;
+    }
+    let bucket = 'unrecorded';
+    let best = 0;
+    for (const b of HEAT_BUCKETS) {
+      if (mins[b] > best) { best = mins[b]; bucket = b; }
+    }
+    const level = bucket === 'unrecorded' ? 0 : best >= 11 ? 3 : best >= 6 ? 2 : 1;
+    cells.push({ bucket, level, future: false, now: isNow });
+  }
+  return cells;
+}
+
 // 统计累计只认分段产出的分钟与标记。主渲染可让时间轴、总览与明细共用同一份
 // 分段，不再为每一行重新排序全部记录、计算全部边界；不缓存跨帧的可变对象。
 export function summarizeSegments(segments, config = undefined) {

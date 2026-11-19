@@ -2,8 +2,8 @@
 // Copyright © 2026 wowayou — https://github.com/wowayou/time-logger
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Commercial licensing available on request; contact via the repository above.
-import { fmtMins, fmtPlainMins, hhmm, localDateTimeKey, minsBetweenDates, normalizeTimestamp, parseDateKey, shortDateLabel } from './time.js';
-import { formatPercent } from './stats.js';
+import { fmtMins, fmtPlainMins, hhmm, localDateTimeKey, minsBetweenDates, normalizeTimestamp, parseDateKey, shortDateLabel, startOfDay } from './time.js';
+import { dayHeatCells, formatPercent } from './stats.js';
 import { getLocale, plural, t } from './i18n.js';
 import {
   BUCKETS,
@@ -206,8 +206,39 @@ export function renderNowStrip(items, isToday, config = loadConfig()) {
 }
 
 
+// v1.11.0 全天热力条（维护者看过对比图后选定 B1，只在「按时长」布局、接在时间轴底部）：
+// 一列＝1 小时，列内从上到下 4 格＝4 个刻钟，每 6 小时一组、组间宽缝，刻度对齐组起点。
+// 上色与深浅的规则只在 stats.js dayHeatCells；这里只把时间轴的段映射成桶段并出模板。
+// 装饰性（aria-hidden）：时间轴各行与时长数字仍是可读真源。将来的日子没有已发生的段，
+// 时间轴本身为空，热力条随之不出现。
+function renderDayHeat(items, config, isToday, now) {
+  const segs = (items || []).filter(it => it && it.start instanceof Date && it.end instanceof Date);
+  if (!segs.length) return '';
+  const spans = segs.map(it => {
+    const placeholder = it.e && typeof it.e.what === 'string' && it.e.what.trim() === '';
+    const bucket = !it.e || placeholder || it.unrecorded ? 'unrecorded' : bucketForTag(it.tag, config);
+    return { start: it.start, end: it.end, bucket };
+  });
+  const cells = dayHeatCells(spans, startOfDay(segs[0].start), now);
+  const cell = c => c.future
+    ? '<i class="fut"></i>'
+    : `<i data-b="${c.bucket}"${c.level ? ` data-l="${c.level}"` : ''}${c.now ? ' class="now"' : ''}></i>`;
+  const groups = [0, 1, 2, 3].map(g => `<div class="dh-grp">${Array.from({ length: 6 }, (_, i) => {
+    const h = g * 6 + i;
+    return `<div class="dh-col">${cells.slice(h * 4, h * 4 + 4).map(cell).join('')}</div>`;
+  }).join('')}</div>`).join('');
+  const legend = ['job', 'maintain', 'leak', 'unrecorded']
+    .map(b => `<span><i data-b="${b}" data-l="3"></i>${esc(t(`bucket.${b}`))}</span>`).join('');
+  return `<div class="day-heat" aria-hidden="true">
+    <div class="dh-head"><span class="dh-title">${esc(isToday ? t('heat.titleToday') : t('heat.titleDay'))}</span><span class="dh-unit">${esc(t('heat.unit'))}</span></div>
+    <div class="dh-grid">${groups}</div>
+    <div class="dh-axis"><span>00</span><span>06</span><span>12</span><span><span>18</span><span>24</span></span></div>
+    <div class="dh-legend">${legend}</div>
+  </div>`;
+}
+
 export function renderTimeline(items, opts = {}) {
-  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig(), density = 'full' } = opts;
+  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig(), density = 'full', now = new Date() } = opts;
   const el = document.getElementById('timeline');
   const layout = normalizeTimelineDensity(density);
   // v1.8.3 尺子刻度（取代 v1.8.2 的 4h 满格时长条）：只在「全文」布局画（行高随正文变，
@@ -340,6 +371,8 @@ export function renderTimeline(items, opts = {}) {
   if (isToday) {
     rows.splice(planned.length, 0, `<div class="tl-now" role="separator" aria-label="${esc(t('timeline.nowAria', { time: nowLabel }))}"><span class="tl-now-dot"></span><span class="tl-now-label">${esc(t('timeline.now', { time: nowLabel }))}</span><span class="tl-now-line"></span></div>`);
   }
+  // v1.11.0：「按时长」布局在最后一行之后接全天热力条。
+  if (layout === 'scaled') rows.push(renderDayHeat(items, config, isToday, now));
   // v1.8.1：行布局由「更多」里的偏好决定；--mins 只在「按时长」模式下参与行高。
   el.innerHTML = `<div class="log" data-density="${esc(layout)}">${rows.join('')}</div>`;
 }
@@ -416,7 +449,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.10.0';
+export const APP_VERSION = '1.11.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
