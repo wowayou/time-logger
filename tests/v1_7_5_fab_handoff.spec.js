@@ -139,7 +139,10 @@ test('a close-and-reopen during the handoff cannot leave the launcher faded or c
   await expect(page.locator('#form-sheet')).toBeHidden();
   await expect(page.locator('#add-btn')).toHaveCSS('opacity', '1');
   await page.locator('#add-btn').click();
-  await expect(page.locator('#form-what')).toHaveValue('');
+  // v1.15.0：取消后的新建草稿只留在内存，再打开时原样填回（此前是清空）。这里仍锁
+  // 「快速关开不弄坏草稿、不写存储」：内容逐字不变、提示行出现、存储一字未改。
+  await expect(page.locator('#form-what')).toHaveValue('合成快速重开草稿');
+  await expect(page.locator('#form-sheet [data-role="draft-note"]')).toBeVisible();
   expect(await raw(page)).toBe(before);
 });
 

@@ -726,6 +726,26 @@ export function saveConfigChecked(config, expectedRaw) {
   }
 }
 
+/**
+ * v1.15.0：撤销一条新建记录时，把这次保存顺带登记的新标签一并撤掉——把 config 还原成
+ * 写入前的**原始字符串**（'' ＝ 键原本不存在，就删键，不把出厂种子钉死成存量）。
+ * CAS 同 saveConfigChecked：此后 config 被别处改过就拒绝，调用方保留现状即可（只会
+ * 多一个零记录标签，不丢数据）。
+ * @param {string} beforeRaw
+ * @param {string} expectedRaw
+ * @returns {{ ok: true, raw: string } | StorageWriteFailure}
+ */
+export function restoreConfigRawChecked(beforeRaw, expectedRaw) {
+  try {
+    if ((localStorage.getItem(CONFIG_KEY) || '') !== expectedRaw) return { ok: false, reason: 'concurrent' };
+    if (beforeRaw) localStorage.setItem(CONFIG_KEY, beforeRaw);
+    else localStorage.removeItem(CONFIG_KEY);
+    return { ok: true, raw: beforeRaw };
+  } catch (e) {
+    return storageWriteFailure(e);
+  }
+}
+
 function addMainlineTag(tag) {
   const name = cleanName(tag);
   if (!name || name === RESERVED_UNKNOWN_TAG) return loadConfig();

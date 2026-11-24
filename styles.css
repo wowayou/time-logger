@@ -407,14 +407,16 @@
     }
     .list-fade[hidden] { display: none; }
 
-    /* Unified command tooltip */
+    /* Unified command tooltip。v1.15.0：气泡按 --tip-dx 水平平移进视口（ui.js placeTooltip
+       在悬停/聚焦前按文字宽度算好）；只有 data-tip-ready（已定位）的按钮才展开、显示气泡——
+       未定位时宁可不显示，也不让隐藏的宽盒子撑宽页面。箭头（::before）仍对准按钮中心。 */
     button[data-tip] { position: relative; }
     button[data-tip]::after {
       content: attr(data-tip);
       position: absolute;
       left: 50%;
       bottom: calc(100% + 8px);
-      transform: translateX(-50%);
+      transform: translateX(calc(-50% + var(--tip-dx, 0px)));
       z-index: 40;
       width: 0;
       max-width: 0;
@@ -461,34 +463,40 @@
       border-bottom-color: var(--text);
     }
     @media (hover: hover) and (pointer: fine) {
-      button[data-tip]:hover::after,
-      button[data-tip]:hover::before {
+      button[data-tip][data-tip-ready]:hover::after,
+      button[data-tip][data-tip-ready]:hover::before {
         opacity: 1;
         visibility: visible;
         transition-delay: 800ms, 800ms;
       }
-      button[data-tip]:hover::after {
+      button[data-tip][data-tip-ready]:hover::after {
         width: max-content;
         max-width: min(260px, calc(100vw - 32px));
         padding: 7px 9px;
       }
-      button[data-tip]:hover::before {
+      button[data-tip][data-tip-ready]:hover::before {
         border-width: 5px;
       }
     }
-    button[data-tip]:focus-visible::after,
-    button[data-tip]:focus-visible::before {
+    button[data-tip][data-tip-ready]:focus-visible::after,
+    button[data-tip][data-tip-ready]:focus-visible::before {
       opacity: 1;
       visibility: visible;
       transition-delay: 0s, 0s;
     }
-    button[data-tip]:focus-visible::after {
+    button[data-tip][data-tip-ready]:focus-visible::after {
       width: max-content;
       max-width: min(260px, calc(100vw - 32px));
       padding: 7px 9px;
     }
-    button[data-tip]:focus-visible::before {
+    button[data-tip][data-tip-ready]:focus-visible::before {
       border-width: 5px;
+    }
+    /* ui.js placeTooltip 量宽度用：同步加上、读完即撤，不会被渲染。 */
+    button[data-tip][data-tip-measure]::after {
+      width: max-content;
+      max-width: min(260px, calc(100vw - 32px));
+      padding: 7px 9px;
     }
 
     /* View controls */
@@ -3043,6 +3051,12 @@
     .auto-tag-note::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
     .auto-tag-note[data-b="maintain"]::before { background: var(--maintain); }
     .auto-tag-note[data-b="leak"]::before { background: var(--leak); }
+    /* v1.15.0 新建草稿：正文框上方一行灰字「已恢复上次没保存的内容」+「清空」，44px 行高同上。 */
+    .draft-note {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-2); min-height: var(--control-h);
+      color: var(--muted); font-size: var(--fs-cap); line-height: 1.35;
+    }
+    .draft-note[hidden] { display: none; }
 
     /* v1.9.0 事项排行：拨号盘下方的列表。行＝正文（单行省略）｜时长，下一行标签/日期/次数，
        再下一条按排行第一名归一的细条（aria-hidden，时长数字才是可读真源）。整行是按钮：

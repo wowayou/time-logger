@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # v1.0.0 起是三段式（此前是单整数，v1–v93）。判据必须**只认三段式**：写回单整数
 # 会让 android 仓的 versionCode 派生与 publish-site 的 tag 校验重新分叉，那两处
 # 现在都按三段式解析。历史 tag 与 docs/CHANGELOG.md 的单整数条目不受影响。
-EXPECTED_VERSION = "1.14.0"
+EXPECTED_VERSION = "1.15.0"
 VERSION_PATTERN = r"\d+\.\d+\.\d+"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
@@ -333,10 +333,13 @@ def audit_index(errors: list[str]) -> None:
             continue
         fail(errors, "index.html may only contain the app module script and approved early boot scripts")
 
-    if not re.search(r"button\[data-tip\]:hover::after,\s*\n\s*button\[data-tip\]:hover::before\s*\{[^}]*transition-delay:\s*" + re.escape(EXPECTED_TOOLTIP_DELAY), css, re.DOTALL):
+    # v1.15.0：显示规则只对已定位（data-tip-ready，ui.js placeTooltip）的按钮生效，延迟口径不变。
+    if not re.search(r"button\[data-tip\]\[data-tip-ready\]:hover::after,\s*\n\s*button\[data-tip\]\[data-tip-ready\]:hover::before\s*\{[^}]*transition-delay:\s*" + re.escape(EXPECTED_TOOLTIP_DELAY), css, re.DOTALL):
         fail(errors, f"desktop hover tooltip must use a {EXPECTED_TOOLTIP_DELAY} show delay")
-    if not re.search(r"button\[data-tip\]:focus-visible::after,\s*\n\s*button\[data-tip\]:focus-visible::before\s*\{[^}]*transition-delay:\s*0s", css, re.DOTALL):
+    if not re.search(r"button\[data-tip\]\[data-tip-ready\]:focus-visible::after,\s*\n\s*button\[data-tip\]\[data-tip-ready\]:focus-visible::before\s*\{[^}]*transition-delay:\s*0s", css, re.DOTALL):
         fail(errors, "keyboard focus-visible tooltip must show without delay")
+    if "translateX(calc(-50% + var(--tip-dx, 0px)))" not in css:
+        fail(errors, "tooltip bubble must shift by --tip-dx so it stays inside the viewport")
     if "window.__timelogTest" in app or "window.__TIMELOG_TEST__" in app:
         fail(errors, "src/app.js must not carry a test-only runtime branch")
     if re.search(r"\b(?:alert|confirm|prompt)\(", app + io_actions):

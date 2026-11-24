@@ -132,6 +132,8 @@ test('「不选」撤回自动选择、焦点回到正文，此后不再自动�
   await page.getByRole('button', { name: '取消新增记录' }).click();
   await expect(page.locator('#form-sheet')).toBeHidden();
   await page.locator('#add-btn').click();
+  // v1.15.0：重开会恢复上一张的草稿（连同「不选」的决定），先清空成一张新表单。
+  await page.getByRole('button', { name: '清空恢复的草稿' }).click();
   await what.fill('刷手机');
   await chip(page, '刷手机').click();
   await expect(chip(page, '刷手机')).toHaveAttribute('aria-pressed', 'false');

@@ -71,8 +71,43 @@ export function iconSvg(name) {
 
 export function setButtonTip(el, text, ariaLabel) {
   if (!el) return;
+  const changed = el.dataset.tip !== text;
   el.dataset.tip = text;
   if (ariaLabel) el.setAttribute('aria-label', ariaLabel);
+  if (changed && el.dataset.tipReady) placeTooltip(el);
+}
+
+// v1.15.0 tooltip 不出界：气泡默认以按钮为中心展开，贴边的按钮（「···」、年、下一段…）会
+// 伸出视口；而且悬停时宽度就已生效（只是 800ms 后才可见），隐藏的盒子照样撑宽页面。
+// 打开前量出气泡的真实宽度，水平平移进 [TIP_EDGE, 视口宽 − TIP_EDGE]，写进 --tip-dx，
+// 并标记 data-tip-ready；CSS 只给已定位的按钮展开气泡——布局变了而指针没动、没有
+// pointerover 可接时，宁可不显示也不撑宽页面。量宽度用 data-tip-measure 临时套上与显示
+// 时相同的宽度规则（styles.css），同步读完即撤，中间不渲染；canvas 估算在 WebKit 中文
+// 回退字体下会窄约 15px（实测），不可靠。
+const TIP_EDGE = 8;
+
+export function placeTooltip(btn) {
+  if (!(btn instanceof HTMLElement) || !btn.dataset.tip) return;
+  btn.setAttribute('data-tip-measure', '');
+  const style = getComputedStyle(btn, '::after');
+  const width = (parseFloat(style.width) || 0) + (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+  btn.removeAttribute('data-tip-measure');
+  // 可用宽度：html 自身宽度与 clientWidth 取小——scrollbar-gutter: stable 预留滚动条槽时，
+  // Chromium 的 clientWidth 仍报整个视口宽（实测 1280 vs 1265）。
+  const root = document.documentElement;
+  const vw = Math.min(root.clientWidth || window.innerWidth, root.getBoundingClientRect().width || Infinity);
+  const rect = btn.getBoundingClientRect();
+  const left = rect.left + rect.width / 2 - width / 2;
+  const lo = TIP_EDGE;
+  const hi = vw - TIP_EDGE - width;
+  const dx = left < lo ? lo - left : (left > hi ? hi - left : 0);
+  btn.style.setProperty('--tip-dx', `${Math.round(dx)}px`);
+  btn.dataset.tipReady = '1';
+}
+
+// 渲染或视口变化后，按新布局重算**已定位过**的按钮（正悬停着的气泡跟着挪，不会消失）。
+export function refreshTooltipPlacement(root = document) {
+  root.querySelectorAll('button[data-tip-ready]').forEach(placeTooltip);
 }
 
 // v1.8.0：周/月/年总览与日视图同一张结论卡——主线大数字 + 偏航次要数字 + 比例条 +
@@ -502,7 +537,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.14.0';
+export const APP_VERSION = '1.15.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -1058,7 +1093,11 @@ export function renderFormSheet(opts) {
     : '<input type="hidden" id="form-ts">';
   const whatInput = isEdit
     ? `<textarea class="inp ta edit-what-input" data-role="edit-what" rows="2" placeholder="${esc(whatPlaceholder)}">${esc(e.what)}</textarea>`
-    : `<textarea class="inp ta" id="form-what" rows="2" placeholder="${esc(whatPlaceholder)}"></textarea>
+    : `<div class="draft-note" data-role="draft-note" role="status" hidden>
+        <span>${t('form.draftRestored')}</span>
+        <button class="mini-btn" type="button" data-action="discard-draft" aria-label="${esc(t('form.draftDiscardAria'))}">${t('form.draftDiscard')}</button>
+      </div>
+      <textarea class="inp ta" id="form-what" rows="2" placeholder="${esc(whatPlaceholder)}"></textarea>
       <div class="auto-tag-note" data-role="auto-tag-note" role="status" hidden>
         <span data-role="auto-tag-text"></span>
         <button class="mini-btn" type="button" data-action="clear-auto-tag"></button>
@@ -1081,6 +1120,7 @@ export function renderFormSheet(opts) {
       <div class="fl">
         <div class="fl-label">${t('form.labelTag')}</div>
         ${chipWrap}
+        <div class="form-hint" data-role="no-tag-hint" hidden></div>
       </div>
       <div class="fl">
         <div class="fl-label">${t('form.labelCustomTag')}</div>

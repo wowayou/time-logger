@@ -46,6 +46,8 @@ import {
   save,
   saveChecked,
   saveConfigChecked,
+  restoreConfigRawChecked,
+  RESERVED_UNKNOWN_TAG,
   uid,
   validateImportData,
   loadLocalePref,
@@ -93,7 +95,9 @@ import {
   renderRuler,
   renderSummaryRows,
   renderTimeline,
-  setButtonTip
+  setButtonTip,
+  placeTooltip,
+  refreshTooltipPlacement
 } from './ui.js';
 
   const bootTrace = window.__timelogBootTrace || null;
@@ -406,6 +410,7 @@ import {
         if (row) row.focus({ preventScroll: true });
       }
       lastIntervalSignature = dataSignature(entries);
+      refreshTooltipPlacement();
       saveBootSnapshot();
       return;
     }
@@ -416,6 +421,7 @@ import {
     renderNowStrip([], false, config);
     renderSummaryRows(summarizeSegmentRows(segments, summaryRows(), config));
     lastIntervalSignature = dataSignature(entries);
+    refreshTooltipPlacement();
     saveBootSnapshot();
   }
 
@@ -706,17 +712,40 @@ import {
     };
   }
 
-  function showUndoToast(beforeData, afterRevision) {
+  // 删除与（v1.15.0 起）新建记录共用同一个撤销窗口：横幅在＝还能撤销，8 秒、做别的事即收起、
+  // 别处改过数据即失效。opts 只给新建用：message 换文案；configBeforeRaw/configAfterRaw
+  // 表示这次保存顺带登记了新标签，撤销时在 config 未被改过的前提下一并还原；draft 是
+  // 保存时的表单内容，撤销后放回内存草稿，再点「记一条」接着改。
+  function showUndoToast(beforeData, afterRevision, opts = {}) {
     hideUndoToast();
     const toast = document.getElementById('undo-toast');
     if (!toast) return;
     const message = toast.querySelector('[data-role="undo-message"]');
     const button = toast.querySelector('[data-action="undo-delete"]');
-    if (message) message.textContent = t('toast.deleted');
+    if (message) message.textContent = opts.message || t('toast.deleted');
     if (button) button.hidden = false;
     toast.hidden = false;
     const timer = setTimeout(hideUndoToast, 8000);
-    undoDeleteState = { beforeData, afterRevision, timer, detach: armUndoDismissOnInteraction() };
+    undoDeleteState = {
+      beforeData,
+      afterRevision,
+      timer,
+      detach: armUndoDismissOnInteraction(),
+      configBeforeRaw: opts.configBeforeRaw,
+      configAfterRaw: opts.configAfterRaw || null,
+      draft: opts.draft || null
+    };
+  }
+
+  // v1.15.0：新建记录（含计划、补录/切分、过夜续记）保存成功后由 sheetController 调用。
+  function offerSaveUndo({ beforeData, afterEntries, configBeforeRaw, configAfterRaw, draft, tag, plan }) {
+    const shown = tag && tag !== RESERVED_UNKNOWN_TAG ? tag : t('tag.unknown');
+    showUndoToast(JSON.parse(JSON.stringify(beforeData)), entriesRevision(afterEntries), {
+      message: plan ? t('toast.savedPlan', { tag: shown }) : t('toast.savedEntry', { tag: shown }),
+      configBeforeRaw,
+      configAfterRaw: configAfterRaw !== configBeforeRaw ? configAfterRaw : null,
+      draft
+    });
   }
 
   function cancelUndoForConflict() {
@@ -820,8 +849,17 @@ import {
       // available for recovery; never extend its eight-second lifetime.
       return;
     }
+    // 新建撤销：这次保存顺带登记的新标签一并撤掉；config 此后被别处改过就保留现状
+    // （只多一个零记录标签，不丢数据），不为它让整次撤销失败。
+    if (pending.configAfterRaw !== null && pending.configAfterRaw !== undefined) {
+      restoreConfigRawChecked(pending.configBeforeRaw || '', pending.configAfterRaw);
+    }
     hideUndoToast();
     render();
+    if (pending.draft) {
+      sheetController.parkDraft(pending.draft);
+      showInfoToast(t('toast.saveUndone'));
+    }
   }
 
   function confirmPlanned(id) {
@@ -896,6 +934,7 @@ import {
     render,
     renderChrome,
     celebrateMilestone,
+    offerSaveUndo,
     isLegacyOrigin,
     // v82：删掉一个零记录标签后，还挂着的「撤销删除」会把引用它的记录放回来，
     // 那条记录就成了孤儿标签。与跨标签页修改同一处理：让撤销失效并明说。
@@ -1070,6 +1109,14 @@ import {
     // 注入，因为它是 index.html 静态壳里的按钮，不像其它图标按钮那样走 JS 模板渲染）。
     const moreBtn = document.querySelector('[data-action="open-more"]');
     if (moreBtn) moreBtn.innerHTML = iconSvg('more');
+    // v1.15.0 tooltip 不出界（ui.js placeTooltip）：指针移入或获得焦点时、在悬停/聚焦样式
+    // 生效的同一帧之前按当前布局定位气泡。
+    const placeTipFrom = e => {
+      const btn = e.target instanceof Element ? e.target.closest('button[data-tip]') : null;
+      if (btn) placeTooltip(btn);
+    };
+    document.addEventListener('pointerover', placeTipFrom, { passive: true });
+    document.addEventListener('focusin', placeTipFrom);
     // v1.14.0 连点防穿透（判据在 sheetController）：捕获阶段、先于一切委托处理。
     window.addEventListener('pointerdown', e => sheetController.notePointerDown(e), { capture: true, passive: true });
     window.addEventListener('click', e => {
@@ -1112,6 +1159,7 @@ import {
       if (action === 'pick-form-tag') sheetController.pickTag(el);
       if (action === 'pick-what-suggestion') sheetController.pickWhatSuggestion(el);
       if (action === 'clear-auto-tag') sheetController.clearAutoTag(el);
+      if (action === 'discard-draft') sheetController.discardDraft(el);
       if (action === 'pick-form-bucket') sheetController.pickBucket(el);
       if (action === 'adopt-tag-bucket') sheetController.adoptTagBucket(el);
       if (action === 'pick-record-mode') sheetController.pickRecordMode(el);
@@ -1217,6 +1265,7 @@ import {
       // 通知随宽度/语言换行，不用固定像素猜高度；只借用既有 resize 事件。
       syncCrossTabSpace();
       sheetController.handleResponsiveResize();
+      refreshTooltipPlacement();
     };
     window.addEventListener('resize', onResponsiveResize, { passive: true });
     window.addEventListener('orientationchange', onResponsiveResize, { passive: true });
@@ -1748,6 +1797,8 @@ import {
   }
 
   registerActions();
+  // 快照命中时不会首轮 render：恢复的壳里可能带着上次会话的定位，按当前视口重算。
+  refreshTooltipPlacement();
   registerCardSwipe();
   registerServiceWorker();
   initVvDebugHud();

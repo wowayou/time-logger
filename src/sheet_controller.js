@@ -90,6 +90,14 @@ export function createSheetController(deps) {
   // 别处或同一处都是有意的，不能吞（参见打开时不抢焦点那条「第二次点击偶发消失」）。
   let lastPointer = null;
   let closeClickGuard = null;
+  // v1.15.0 新建草稿：点遮罩/取消/Esc 关掉新建表单时，没保存的正文与标签选择**只留在内存**
+  // （不写 localStorage、不进快照与备份），同一页面里再打开同一种新建表单（同一天的普通
+  // 新建 / 同一段补录 / 同一天的过夜续记）时填回并给「清空」。保存成功即作废；撤销保存
+  // 会把内容放回这里。只留一份，超过 DRAFT_MAX_MS 不再恢复。
+  let newDraft = null;
+  let skipDraftCapture = false;
+  let formDefaultBucket = 'job';
+  const DRAFT_MAX_MS = 60 * 60 * 1000;
   let formBucket = 'job';
   let editBucket = 'job';
   let formRecordMode = 'log';
@@ -747,6 +755,7 @@ export function createSheetController(deps) {
       formTagManual = false;
       formBucketManual = false;
       formBucket = defaultBucketFromEntries(loaded.entries, config);
+      formDefaultBucket = formBucket;
       formTargetDate = deps.state.selectedDate || todayStr();
       formDateMode = entryModeForDate(formTargetDate);
       formRecordMode = formDateMode.forcedMode || loadRecordModePref();
@@ -906,8 +915,10 @@ export function createSheetController(deps) {
       const ctagEl = panel.querySelector('#form-ctag');
       if (whatEl) whatEl.value = '';
       if (ctagEl) ctagEl.value = '';
+      restoreNewDraft(panel);
       deps.renderChrome();
     }
+    if (mode === 'new' || mode === 'edit') paintNoTagHint(panel);
     if (mode === 'motto') paintQuotesCount(panel, quoteSnapshot.lib);
     autosizeTextareas(panel);
     trapFocus(sheet);
@@ -1023,6 +1034,8 @@ export function createSheetController(deps) {
     const panel = sheet ? sheet.querySelector('.form-sheet-panel') : null;
     const wasOpen = Boolean(sheet && panel && !sheet.hidden && !sheet.classList.contains('sheet-closing'));
     const mode = wasOpen ? panel.dataset.mode || '' : '';
+    // 必须在清空面板（减少动效时同步）与重置表单状态之前取草稿。
+    if (wasOpen && mode === 'new' && !skipDraftCapture) keepNewDraft(panel);
     if (sheetTrapController) {
       sheetTrapController.abort();
       sheetTrapController = null;
@@ -1240,6 +1253,128 @@ export function createSheetController(deps) {
     if (bucket) formBucketManual = true;
     formAutoTag = null;
     paintAutoTagNote(panel);
+  }
+
+  function newDraftKey() {
+    if (formBackfill) return `fill|${formBackfillKind}|${formFrozenStart}|${formFrozenEnd}|${formSourceId}`;
+    if (formOvernightContext) return `overnight|${formTargetDate}`;
+    return `new|${formTargetDate}`;
+  }
+
+  function captureNewDraft(panel) {
+    const whatEl = panel ? panel.querySelector('#form-what') : null;
+    const ctagEl = panel ? panel.querySelector('#form-ctag') : null;
+    const what = whatEl ? whatEl.value : '';
+    const ctag = ctagEl ? ctagEl.value : '';
+    if (!what.trim() && !ctag.trim()) return null;
+    return {
+      key: newDraftKey(),
+      at: Date.now(),
+      what,
+      ctag,
+      tag: formTag,
+      bucket: formBucket,
+      auto: formAutoTag ? { ...formAutoTag } : null,
+      tagManual: formTagManual,
+      bucketManual: formBucketManual
+    };
+  }
+
+  // 关掉的是空表单：只清掉**同一种**表单的旧草稿（用户把恢复的内容删光了再关），
+  // 别的入口留下的草稿不动。
+  function keepNewDraft(panel) {
+    const draft = captureNewDraft(panel);
+    if (draft) newDraft = draft;
+    else if (newDraft && newDraft.key === newDraftKey()) newDraft = null;
+  }
+
+  // 撤销保存后由 app.js 调用：把保存时的内容放回草稿，重新计时。
+  function parkDraft(draft) {
+    newDraft = draft ? { ...draft, at: Date.now() } : null;
+  }
+
+  function restoreNewDraft(panel) {
+    const draft = newDraft;
+    if (!draft || draft.key !== newDraftKey()) return;
+    newDraft = null;
+    if (Date.now() - draft.at > DRAFT_MAX_MS) return;
+    const whatEl = panel.querySelector('#form-what');
+    const ctagEl = panel.querySelector('#form-ctag');
+    if (!whatEl) return;
+    const config = deps.loadConfig();
+    whatEl.value = draft.what;
+    if (ctagEl) ctagEl.value = draft.ctag;
+    // 草稿留下后标签可能已在设置里被删：只填正文，不替用户复活它。
+    const tagOk = Boolean(draft.tag && configuredBucketForTag(draft.tag, config));
+    formTag = tagOk ? draft.tag : '';
+    formBucket = safeBucket(draft.bucket);
+    formAutoTag = tagOk && draft.auto ? { ...draft.auto } : null;
+    formTagManual = Boolean(draft.tagManual);
+    formBucketManual = Boolean(draft.bucketManual);
+    refreshFormTagArea(panel);
+    const chipWrap = panel.querySelector('#form-chips');
+    if (chipWrap && draft.ctag.trim()) chipWrap.innerHTML = renderTagPicker('form', draft.ctag.trim(), config, formBucket);
+    paintAutoTagNote(panel);
+    const note = panel.querySelector('[data-role="draft-note"]');
+    if (note) note.hidden = false;
+    if (formBackfill) refreshSplitPreview(panel);
+    if (formOvernightContext) refreshOvernightPreview(panel);
+  }
+
+  // 「清空」：丢掉恢复的草稿，表单回到刚打开的样子（桶回默认），焦点回正文。
+  function discardDraft(el) {
+    const panel = el.closest('.form-sheet-panel');
+    if (!panel) return;
+    const whatEl = panel.querySelector('#form-what');
+    const ctagEl = panel.querySelector('#form-ctag');
+    if (whatEl) whatEl.value = '';
+    if (ctagEl) ctagEl.value = '';
+    formTag = '';
+    formBucket = formDefaultBucket;
+    formAutoTag = null;
+    formTagManual = false;
+    formBucketManual = false;
+    newDraft = null;
+    paintWhatSuggestions(panel, '');
+    refreshFormTagArea(panel);
+    paintAutoTagNote(panel);
+    const note = panel.querySelector('[data-role="draft-note"]');
+    if (note) note.hidden = true;
+    autosizeTextareas(panel);
+    if (formBackfill) refreshSplitPreview(panel);
+    if (formOvernightContext) refreshOvernightPreview(panel);
+    if (whatEl) whatEl.focus({ preventScroll: true });
+  }
+
+  // v1.15.0：标签区「没选标签」提示。写了正文、却既没点 chip 也没填自定义标签时，这条会
+  // 记成保留标签「未知」并计入未记录——只提示、不拦保存。新建与编辑共用。
+  function paintNoTagHint(panel) {
+    const hint = panel ? panel.querySelector('[data-role="no-tag-hint"]') : null;
+    if (!hint) return;
+    const isEdit = panel.dataset.mode === 'edit';
+    const whatEl = panel.querySelector(isEdit ? '[data-role="edit-what"]' : '#form-what');
+    const tag = selectedTag(panel, isEdit ? 'edit' : 'form');
+    const show = Boolean(whatEl && whatEl.value.trim()) && (!tag || tag === RESERVED_UNKNOWN_TAG);
+    hint.hidden = !show;
+    if (show) hint.textContent = t('form.noTagHint', { unknown: t('tag.unknown'), bucket: BUCKETS.unrecorded });
+  }
+
+  // v1.15.0：新建记录（含计划、补录/切分、过夜续记）写入成功后的统一收尾：按保存时的表单
+  // 内容留一份草稿交给撤销（撤销后放回），关表单时不再捕获草稿（保存了就不是草稿），再给
+  // 8 秒撤销。计划不新增记录日，沿用不庆祝里程碑的旧收尾。
+  function closeAfterNewWrite(panel, { beforeData, entries, configBeforeRaw, tag, plan = false }) {
+    const draft = captureNewDraft(panel);
+    const close = () => {
+      skipDraftCapture = true;
+      try {
+        closeForm();
+      } finally {
+        skipDraftCapture = false;
+      }
+    };
+    if (plan) teardownNow(() => { close(); deps.render(); });
+    else closeAfterRecordWrite(close, beforeData);
+    deps.offerSaveUndo({ beforeData, afterEntries: entries, configBeforeRaw, configAfterRaw: deps.readConfigRaw(), draft, tag, plan });
   }
 
   function closeAllForms() {
@@ -1653,6 +1788,7 @@ export function createSheetController(deps) {
     });
     if (wasSelected) {
       formTag = '';
+      paintNoTagHint(panel);
       if (panel && panel.dataset.mode === 'edit') refreshEditPreview(panel);
       if (panel && panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
       if (panel && panel.dataset.mode === 'new' && formOvernightContext) refreshOvernightPreview(panel);
@@ -1875,6 +2011,7 @@ export function createSheetController(deps) {
   // 「主线已有阅读、在维持里又敲阅读」完全无提示，保存后静默记进主线——已登记标签
   // 从不因录入改桶（v30），这条规则不变，变的是让用户在保存前看见它。
   function paintTagHint(panel) {
+    paintNoTagHint(panel);
     const hint = panel ? panel.querySelector('[data-role="mainline-hint"]') : null;
     if (!hint) return;
     const isEdit = panel.dataset.mode === 'edit';
@@ -2019,7 +2156,7 @@ export function createSheetController(deps) {
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
     const staysYesterday = latest.kind === 'overnight-day-end' && startTs < formOvernightContext.midnightTs;
     deps.setSelectedDate(staysYesterday ? formOvernightContext.yesterdayKey : formOvernightContext.todayKey);
-    closeAfterRecordWrite(closeForm, beforeData);
+    closeAfterNewWrite(panel, { beforeData, entries: d.entries, configBeforeRaw: configSnapshot.raw, tag });
   }
 
   function saveEntry() {
@@ -2090,7 +2227,7 @@ export function createSheetController(deps) {
       }
       if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
       deps.setSelectedDate(checked.ts.slice(0, 10));
-      teardownNow(() => { closeForm(); deps.render(); });
+      closeAfterNewWrite(panel, { beforeData, entries: d.entries, configBeforeRaw: configSnapshot.raw, tag, plan: true });
       return;
     }
     if (placeholder) {
@@ -2112,7 +2249,7 @@ export function createSheetController(deps) {
     }
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
     deps.setSelectedDate(checked.ts.slice(0, 10));
-    closeAfterRecordWrite(closeForm, beforeData);
+    closeAfterNewWrite(panel, { beforeData, entries: d.entries, configBeforeRaw: configSnapshot.raw, tag });
   }
 
   // Bounded backfill into a segment: plan [start, end) as the new label and
@@ -2173,7 +2310,7 @@ export function createSheetController(deps) {
     }
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
     deps.setSelectedDate(startChecked.ts.slice(0, 10));
-    closeAfterRecordWrite(closeForm, beforeData);
+    closeAfterNewWrite(panel, { beforeData, entries: d.entries, configBeforeRaw: configSnapshot.raw, tag });
   }
 
   function getEditingBox(id = deps.getSheetEditId()) {
@@ -2407,6 +2544,7 @@ export function createSheetController(deps) {
       if (target.dataset.role === 'cfg-search') filterConfigRows(panel);
       else if (target.closest('.cfg-row')) syncConfigRowFace(target.closest('.cfg-row'));
     }
+    if (panel.dataset.mode === 'new' || panel.dataset.mode === 'edit') paintNoTagHint(panel);
     if (panel.dataset.mode === 'edit') refreshEditPreview(panel);
     if (panel.dataset.mode === 'new' && formBackfill) refreshSplitPreview(panel);
     if (panel.dataset.mode === 'new' && formOvernightContext) refreshOvernightPreview(panel);
@@ -3301,6 +3439,8 @@ export function createSheetController(deps) {
     closeAllForms,
     pickWhatSuggestion,
     clearAutoTag,
+    discardDraft,
+    parkDraft,
     notePointerDown,
     isGhostClick,
     analyticsToggleItems,
