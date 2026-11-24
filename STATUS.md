@@ -3,10 +3,16 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**发布中：2026-11-24 v1.15.0「新建防错三件 + tooltip 贴边不出界」（见 OPEN 首条）。** **发布更新：2026-11-24。Web v1.14.0 已正式发布（tag [v1.14.0](https://github.com/wowayou/time-logger/releases/tag/v1.14.0)，来源 `89b3781`；正文自动选标签 + 连点防穿透）；此前 2026-11-19 Web v1.13.0 已正式发布（tag [v1.13.0](https://github.com/wowayou/time-logger/releases/tag/v1.13.0)，来源 `f9c27d1`；隐私政策同批上线）；此前 v1.12.0（`2f3f832`）已发布；此前 v1.11.0（来源 `9c92743`）已发布；此前 v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
+**发布更新：2026-11-24。Web v1.15.0 已正式发布（tag [v1.15.0](https://github.com/wowayou/time-logger/releases/tag/v1.15.0)，来源 `792bf6f`；新建草稿不丢、保存可撤销、未选标签提示、tooltip 贴边不出界）；同日稍早 Web v1.14.0 已正式发布（tag [v1.14.0](https://github.com/wowayou/time-logger/releases/tag/v1.14.0)，来源 `89b3781`；正文自动选标签 + 连点防穿透）；此前 2026-11-19 Web v1.13.0 已正式发布（tag [v1.13.0](https://github.com/wowayou/time-logger/releases/tag/v1.13.0)，来源 `f9c27d1`；隐私政策同批上线）；此前 v1.12.0（`2f3f832`）已发布；此前 v1.11.0（来源 `9c92743`）已发布；此前 v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
 
 ## DONE
 
+- **Web v1.15.0：新建防错三件 + tooltip 贴边不出界（2026-11-24，已发布）**：维护者看过体验优化清单后选「先做 1–3，跑完直接发版」，随后要求「顺手把 tooltip 溢出也修了」。规则见 CLAUDE.md UI 红线「新建防错三件」与 tooltip 条。
+  - **内容**：① 误关新建表单时没保存的内容只留在内存，再打开同一种新建表单时填回、可「清空」；② 新建记录（含计划、补录/切分、过夜续记）保存后 8 秒内可撤销，顺带登记的新标签在 config 未被改过时一并还原，撤销后内容回到草稿；③ 写了正文却没选标签时提示会记为「未知」。④ tooltip 贴边出界：v1.14.0 浏览器核对时发现，390px 悬停 header「···」scrollWidth 390→481（悬停宽度立即生效、隐藏的气泡照样撑宽页面；保存后指针停在「完成」原处即触发），v1.13.0/v1.14.0 同样存在。
+  - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过；audit 的 tooltip 检查改按 `data-tip-ready` 选择器并新增 `--tip-dx` 检查，把悬停延迟改 0ms 或去掉平移会变红。`tests/v1_15_0_record_safety.spec.js` 双引擎 22/22，以 v1.14.0 运行时 22/22 红；去掉 config 还原的 CAS、或保存时也捕获草稿，对应用例变红。`tests/v1_15_0_tooltip_edges.spec.js` 双引擎 14/14，以 v1.14.0 运行时 12/14 红（余 2 为 1280px 哨兵）。tooltip 第一版用 canvas 估宽，WebKit 下中文窄约 15px、新用例红；又发现 `scrollbar-gutter: stable` 下 Chromium 的 clientWidth 含滚动条槽（1280 vs html 1265）；改为同步量真实宽度、取两者较小可用宽度后通过。既有用例两处按新行为改判（`v1_7_5_fab_handoff` 重开后正文由空改为草稿原样恢复且存储不变；`v1_14_0_auto_tag` 重开后先清空恢复的草稿）。完整 UI **1349 passed / 1 skipped / 0 failed**（40.8 分钟）。
+  - **浏览器核对**：Chromium 320/390/768px × 亮暗、合成数据：草稿提示行 44px 高；未选标签提示与草稿提示 12px 字对比度 5.70（亮）/ 7.03（暗）；撤销横幅文字 12.65 / 14.77，「撤销」按钮按半透明底合成后 5.87 / 6.41（首轮脚本未合成半透明底，暗色误报 1.41，已纠正）；无脚本错误。390px 暗色悬停「···」气泡完整在视口内、右侧留 8px、scrollWidth 390。未做真机核对。
+  - **发布**：维护者 2026-11-24 授权「先做 1–3，跑完直接发版」「顺手把 tooltip 溢出也修了」「跑完直接发版」。推送前远端 main 为 `6d337a9`；功能提交 `792bf6f`，tag / [Release](https://github.com/wowayou/time-logger/releases/tag/v1.15.0)。publish-site [45341995272](https://github.com/wowayou/time-logger/actions/runs/45341995272)、旧站 Pages [45341995388](https://github.com/wowayou/time-logger/actions/runs/45341995388)、镜像 Pages [45342026680](https://github.com/wowayou/time-logger-site/actions/runs/45342026680) 均首次 success。
+  - **线上核对**：两站按 `sw.js` FILES 与 tag 逐字节一致 60/60（带随机参数）。主站 Chromium 全新临时上下文、390px、两条合成记录：SW `activated` 并接管、缓存只有 `timelog-v1.15.0`；未选标签提示文案正确；取消后重开草稿填回且提示行可见；保存后横幅「已记录 #睡觉」，点撤销后 `timelog.v1` 与写入前逐字一致；悬停「···」scrollWidth 390；无脚本错误或 HTTP ≥400。未核对旧站功能；未做真机核对；实际账单未核实。
 - **Web v1.14.0：正文自动选标签 + 连点防穿透（2026-11-24，已发布）**：维护者问「用户输入的就是已有标签的内容时直接默认选中对应标签是不是会更好」并要求做类似的体验增强；随后要求「顺手修双击问题，然后提交并发版」。规则见 CLAUDE.md「录入时的标签归属」「连点防穿透」与版本表。
   - **对齐核对（改动前）**：本地 main＝origin/main＝`5bb4bd2`，tag/Release v1.13.0 → `f9c27d1`；主站 `/app/` 与旧站按 `sw.js` FILES 各 30/30 与 tag 逐字节一致（带随机参数），共 60/60。
   - **双击穿透（既有问题，本版修复）**：390px 下双击「完成」，第一下保存并关闭表单，第二下落到正下方 header「···」打开「更多」；记录只写一条。首轮全量里 WebKit `v1_7_2_record_integrity.spec.js:53`（R01）因此失败；同条件 `--repeat-each=20` 对照：改动前工作区 14/20 失败、v1.13.0 运行时 11/20 失败，失败快照同为「更多」面板，故判为既有。减少动效时 sheet 同步隐藏，鼠标双击与触摸连点必现。修复后 R01 WebKit ×10 全过。
@@ -59,11 +65,6 @@
 - **安卓代码侧发版防护已就绪**：独立仓库已实现内嵌运行时、签名缺失即拒绝 Release、`sync_runtime.py --release` 预检及从 Web 三段式版本派生版本号；不代表已上架。
 
 ## OPEN
-
-- **Web v1.15.0：新建防错三件 + tooltip 贴边不出界（2026-11-24，发布中）**：维护者看过体验优化清单后选「先做 1–3，跑完直接发版」，随后要求「顺手把 tooltip 溢出也修了」。规则见 CLAUDE.md UI 红线「新建防错三件」与 tooltip 条。
-  - **内容**：① 误关新建表单时没保存的内容只留在内存，再打开同一种新建表单时填回、可「清空」；② 新建记录（含计划、补录/切分、过夜续记）保存后 8 秒内可撤销，顺带登记的新标签在 config 未被改过时一并还原，撤销后内容回到草稿；③ 写了正文却没选标签时提示会记为「未知」。④ tooltip 贴边出界：v1.14.0 浏览器核对时发现，390px 悬停 header「···」scrollWidth 390→481（悬停宽度立即生效、隐藏的气泡照样撑宽页面；保存后指针停在「完成」原处即触发），v1.13.0/v1.14.0 同样存在。
-  - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过；audit 的 tooltip 检查改按 `data-tip-ready` 选择器并新增 `--tip-dx` 检查，把悬停延迟改 0ms 或去掉平移会变红。`tests/v1_15_0_record_safety.spec.js` 双引擎 22/22，以 v1.14.0 运行时 22/22 红；去掉 config 还原的 CAS、或保存时也捕获草稿，对应用例变红。`tests/v1_15_0_tooltip_edges.spec.js` 双引擎 14/14，以 v1.14.0 运行时 12/14 红（余 2 为 1280px 哨兵）。tooltip 第一版用 canvas 估宽，WebKit 下中文窄约 15px、新用例红；又发现 `scrollbar-gutter: stable` 下 Chromium 的 clientWidth 含滚动条槽（1280 vs html 1265）；改为同步量真实宽度、取两者较小可用宽度后通过。既有用例两处按新行为改判（`v1_7_5_fab_handoff` 重开后正文由空改为草稿原样恢复且存储不变；`v1_14_0_auto_tag` 重开后先清空恢复的草稿）。完整 UI **1349 passed / 1 skipped / 0 failed**（40.8 分钟）。
-  - **浏览器核对**：Chromium 320/390/768px × 亮暗、合成数据：草稿提示行 44px 高；未选标签提示与草稿提示 12px 字对比度 5.70（亮）/ 7.03（暗）；撤销横幅文字 12.65 / 14.77，「撤销」按钮按半透明底合成后 5.87 / 6.41（首轮脚本未合成半透明底，暗色误报 1.41，已纠正）；无脚本错误。390px 暗色悬停「···」气泡完整在视口内、右侧留 8px、scrollWidth 390。未做真机核对。
 
 - **v1.7.5 发布验证尚有缺口（2026-11-13）**：两站已部署且线上运行时、功能已核对；主站实际 artifact 下载遭遇 TLS 握手超时，未重试，独立归档字节验证未完成。已有镜像 41/41、线上 40/40 字节证据，不能冒充该项完成。旧站 `.gitignore` 本轮为 503，未取得 404 证据；其余四个隐藏探测为 404，实际旧站部署包隐藏元数据文件 0。为遵守失败即停，本轮不再下载/部署，也不使用可选旧站文档刷新；旧站候选状态文档与源码发布回执存在已说明差异。证据见 `memory/2026-11-13-v1.7.5-release/` 及 [发布回执](docs/reviews/2026-11-13-v1.7.5-release.md)。
 
