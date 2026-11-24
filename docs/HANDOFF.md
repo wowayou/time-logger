@@ -40,6 +40,8 @@
 21. **里程碑庆祝是写入路径上的显式调用**（v1.6.0，D32）：值不值得庆祝取决于谁在写，所以不能包在 `saveChecked` 上（会把导入、撤销、回滚一起算进去）。新增记录写入路径时记得接 `celebrateMilestone`。
 22. **结果签名保护不了被草稿覆盖或删除的原记录**（v1.6.1）：草稿先套到最新数据上再比 `resultSignature`，原记录的新文字可能已被覆盖、两个结果反而一样。先比打开时的原记录，再做预览重算与写前检查；删除另存源记录签名。测试要直接断言另一标签页的新原文没被写掉，不能只看签名或提示框。见 [SPEC-018](specs/SPEC-018-reliability-and-summary.md)。
 23. **Pages 手动部署成功不证明 tag 发布可用**（D34）：`github-pages` 环境按分支/tag 分别放行，workflow glob 与环境模式语法也不同；两站 workflow 独立，tag 后分别验收。命令与回退只在 [上线操作单](launch-runbook.md#a1a-旧-origin-的-pages-actionsd34)。
+24. **正文自动选标签靠「谁动过」三个状态，不靠区分调用来源**（v1.14.0）：`sheet_controller.js` 的 `formAutoTag` / `formTagManual` / `formBucketManual`。`pickTag` / `pickBucket` 既被点击调用、也被联想与「改选 X」程序调用，两者都算用户亲手选（`markTagChoice`）；自动预选本身**不走**这两个函数，只改状态后 `refreshFormTagArea` 重画。所以新增任何「替用户选标签」的入口都不能经 `pickTag`，否则会把自己锁成手动。切桶后**不要**立即按正文重算——既有用例「先点维持再点睡觉」会被重算点亮后再点掉；只在下一次正文输入时重算。
+25. **sheet 关闭后的第二下会落到下面的控件**（v1.14.0）：减少动效时 sheet 同步隐藏，默认动效下关闭兜底定时器也可能先于排队的第二下输入执行，双击/连点的第二下于是命中刚露出的控件。防护按「同一处 + 短时 + 双击或触摸」判，鼠标单击必须放行；指针类型取 pointerdown 的，WebKit 触摸合成的 click 自称 `mouse`。复现用减少动效最稳（`tests/v1_14_0_double_activation.spec.js`），默认动效只是概率性。
 
 ## 已知坑（踩过的，别再踩）
 

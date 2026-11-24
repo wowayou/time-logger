@@ -4,7 +4,7 @@
 // Commercial licensing available on request; contact via the repository above.
 import { isPlaceholderEntry, itemTextKey, loggedEntriesFrom, primaryTag } from './stats.js';
 // SPEC-013：保留标签 id 是数据常量（不是文案），本模块仍不访问 DOM / localStorage。
-import { RESERVED_UNKNOWN_TAG } from './storage.js';
+import { RESERVED_UNKNOWN_TAG, canonicalTagName, configuredBucketForTag } from './storage.js';
 import { t } from './i18n.js';
 import {
   addDays,
@@ -761,4 +761,31 @@ export function matchWhatSuggestions(index, input, limit = 3) {
   });
   const rank = (a, b) => (b.count - a.count) || (a.lastTs < b.lastTs ? 1 : a.lastTs > b.lastTs ? -1 : 0);
   return [...prefix.sort(rank), ...contains.sort(rank)].slice(0, limit);
+}
+
+// ── v1.14.0 正文自动选标签 ──
+// 正文本身就指向一个**已登记**标签时，新建表单替用户预选它（是否采用由 sheet 决定：用户
+// 自己选过标签就不动）。先看正文是否与某个已登记标签同名，再看它是否与以前记过的某件事
+// 完全相同、取那件事最近一次用的标签；两者都按 itemTextKey 规整（大小写、首尾与连续空白
+// 不敏感）。标签须仍登记在 config 里——已删除的标签不替用户复活，也从不新建或改桶。
+// 返回权威拼写（与保存时 canonicalTagName 一致）与它所在的桶；没有返回 null。不修改输入。
+/**
+ * @param {string} input
+ * @param {Array<{key:string,tag:string}>} index whatSuggestionIndex 的结果
+ * @param {import('./storage.js').TagConfig} config
+ * @returns {{tag:string,bucket:'job'|'maintain'|'leak',source:'tag'|'history'}|null}
+ */
+export function autoTagForWhat(input, index, config) {
+  const key = itemTextKey(input);
+  if (!key || !config) return null;
+  const pick = (name, source) => {
+    const bucket = configuredBucketForTag(name, config);
+    return bucket ? { tag: canonicalTagName(name, config), bucket, source } : null;
+  };
+  const sameName = [...config.mainline, ...config.chips.map(chip => chip.name)]
+    .find(name => itemTextKey(name) === key);
+  const byName = sameName ? pick(sameName, 'tag') : null;
+  if (byName) return byName;
+  const hit = (index || []).find(item => item.key === key);
+  return hit && hit.tag ? pick(hit.tag, 'history') : null;
 }

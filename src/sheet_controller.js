@@ -14,6 +14,7 @@ import {
   openPlaceholderForDate,
   planIntervalEdit,
   planOvernightContinuation,
+  autoTagForWhat,
   matchWhatSuggestions,
   whatSuggestionIndex,
   planSegmentSplit
@@ -76,6 +77,19 @@ export function createSheetController(deps) {
   // v1.10.0「做了什么」联想：新建表单打开时从同一次 load() 建索引，输入时匹配。
   let whatIndex = [];
   let whatMatches = [];
+  // v1.14.0 正文自动选标签：formAutoTag 是当前由正文预选的 {tag,bucket,source,prevBucket}；
+  // 用户亲手点过 chip / 敲过自定义标签 / 点过「不选」后 formTagManual，自动预选再不碰标签；
+  // 亲手切过桶后 formBucketManual，自动预选只在这个桶里找、不替用户换桶。
+  let formAutoTag = null;
+  let formTagManual = false;
+  let formBucketManual = false;
+  // v1.14.0 连点防穿透：关闭 sheet 的那一下若是指针点的，在原处留 GHOST_CLICK_MS 的防护——
+  // 同一处紧跟着的第二下（鼠标双击的第二击、触摸/笔连点）不再落到 sheet 下面刚露出来的
+  // 控件上。390px 下「完成」正下方就是 header 的「···」，双击保存会顺手打开「更多」；
+  // 减少动效时 sheet 同步隐藏，几乎必现。鼠标单击（detail 1）一律放行：关掉后立刻点
+  // 别处或同一处都是有意的，不能吞（参见打开时不抢焦点那条「第二次点击偶发消失」）。
+  let lastPointer = null;
+  let closeClickGuard = null;
   let formBucket = 'job';
   let editBucket = 'job';
   let formRecordMode = 'log';
@@ -729,6 +743,9 @@ export function createSheetController(deps) {
       formTag = '';
       whatIndex = whatSuggestionIndex(loaded.entries);
       whatMatches = [];
+      formAutoTag = null;
+      formTagManual = false;
+      formBucketManual = false;
       formBucket = defaultBucketFromEntries(loaded.entries, config);
       formTargetDate = deps.state.selectedDate || todayStr();
       formDateMode = entryModeForDate(formTargetDate);
@@ -969,6 +986,37 @@ export function createSheetController(deps) {
     sheetCloseCleanup = cleanup;
   }
 
+  const GHOST_CLICK_MS = 500;
+  const GHOST_CLICK_PX = 30;
+
+  // app.js 在 window 捕获阶段转发每次 pointerdown：记下最近一次指针按下的位置与类型。
+  function notePointerDown(e) {
+    lastPointer = { x: e.clientX, y: e.clientY, type: e.pointerType || 'mouse', t: performance.now() };
+  }
+
+  // 只有「刚由指针触发」的关闭才布防（1s 内有过 pointerdown）；Esc 等键盘关闭不布防。
+  function armCloseClickGuard() {
+    const now = performance.now();
+    closeClickGuard = lastPointer && now - lastPointer.t <= 1000
+      ? { x: lastPointer.x, y: lastPointer.y, until: now + GHOST_CLICK_MS }
+      : null;
+  }
+
+  // app.js 在 window 捕获阶段对每次 click 询问；返回 true 时由它吞掉这一击。
+  function isGhostClick(e) {
+    const guard = closeClickGuard;
+    if (!guard) return false;
+    if (performance.now() > guard.until) {
+      closeClickGuard = null;
+      return false;
+    }
+    if (Math.hypot(e.clientX - guard.x, e.clientY - guard.y) > GHOST_CLICK_PX) return false;
+    // 类型以这一击自己的 pointerdown 为准：WebKit 由触摸合成的 click 报 pointerType
+    // 'mouse'、detail 1（实测），只有 pointerdown 如实报 'touch'。
+    const type = (lastPointer && lastPointer.type) || e.pointerType || 'mouse';
+    return e.detail >= 2 || type !== 'mouse';
+  }
+
   function closeFormSheet(opts = {}) {
     const restoreFocus = opts.restoreFocus !== false;
     const sheet = document.getElementById('form-sheet');
@@ -983,6 +1031,7 @@ export function createSheetController(deps) {
       if (prefersReducedMotion()) finishSheetClose(sheet, panel);
       else animateSheetClose(sheet, panel);
       unlockBodyForSheet();
+      armCloseClickGuard();
     }
     deps.setSheetEditId(null);
     sheetTimeMounted = false;
@@ -1103,6 +1152,8 @@ export function createSheetController(deps) {
     autosizeTextareas(panel);
     const bucket = item.tag ? configuredBucketForTag(item.tag, deps.loadConfig()) : '';
     if (bucket) {
+      // 点联想＝用户亲手选了「这件事 + 它的标签」，此后改正文也不该被自动预选改回去。
+      markTagChoice(panel, { tag: true });
       if (bucket !== formBucket) {
         const segBtn = panel.querySelector(`[data-role="form-bucket-seg"] button[data-bucket="${bucket}"]`);
         if (segBtn) pickBucket(segBtn);
@@ -1119,6 +1170,76 @@ export function createSheetController(deps) {
     whatEl.focus({ preventScroll: true });
     const end = whatEl.value.length;
     whatEl.setSelectionRange(end, end);
+  }
+
+  // v1.14.0：正文改动后重算自动预选。只在新建表单、用户还没亲手定过标签时生效；
+  // 换成别的匹配或不再匹配时，先撤回上一次自动预选（桶回到预选前），再套用新的。
+  // 走 refreshFormTagArea 重画 chip，保存时读的 formTag 与界面上点亮的 chip 是同一个。
+  function syncAutoTag(panel, value) {
+    if (!panel || panel.dataset.mode !== 'new' || formTagManual) return;
+    let match = autoTagForWhat(value, whatIndex, deps.loadConfig());
+    if (match && formBucketManual && match.bucket !== formBucket) match = null;
+    if (match && formAutoTag && match.tag === formAutoTag.tag && match.bucket === formAutoTag.bucket) {
+      if (match.source !== formAutoTag.source) {
+        formAutoTag.source = match.source;
+        paintAutoTagNote(panel);
+      }
+      return;
+    }
+    if (!match && !formAutoTag) return;
+    if (formAutoTag) {
+      formBucket = formAutoTag.prevBucket;
+      formTag = '';
+    }
+    formAutoTag = match ? { ...match, prevBucket: formBucket } : null;
+    if (match) {
+      formBucket = match.bucket;
+      formTag = match.tag;
+    }
+    refreshFormTagArea(panel);
+    paintAutoTagNote(panel);
+  }
+
+  function paintAutoTagNote(panel) {
+    const note = panel ? panel.querySelector('[data-role="auto-tag-note"]') : null;
+    if (!note) return;
+    note.hidden = !formAutoTag;
+    if (!formAutoTag) return;
+    const { tag, bucket, source } = formAutoTag;
+    note.dataset.b = bucket;
+    const vars = { tag, bucket: BUCKETS[bucket] };
+    note.querySelector('[data-role="auto-tag-text"]').textContent = source === 'tag'
+      ? t('form.autoTagSame', vars)
+      : t('form.autoTagHistory', vars);
+    const btn = note.querySelector('[data-action="clear-auto-tag"]');
+    btn.textContent = t('form.autoTagClear');
+    btn.setAttribute('aria-label', t('form.autoTagClearAria', { tag }));
+  }
+
+  // 「不选」：撤回自动预选（桶回到预选前），并记为用户已表态——继续打字也不再自动选。
+  // 按钮随提示一起隐藏，焦点交回正文框，免得掉到 body。
+  function clearAutoTag(el) {
+    const panel = el.closest('.form-sheet-panel');
+    if (!panel || !formAutoTag) return;
+    formBucket = formAutoTag.prevBucket;
+    formTag = '';
+    formAutoTag = null;
+    formTagManual = true;
+    refreshFormTagArea(panel);
+    paintAutoTagNote(panel);
+    if (formBackfill) refreshSplitPreview(panel);
+    if (formOvernightContext) refreshOvernightPreview(panel);
+    const whatEl = panel.querySelector('#form-what');
+    if (whatEl) whatEl.focus({ preventScroll: true });
+  }
+
+  // 亲手选标签 / 切桶 / 敲自定义标签后：清掉自动预选的记账与提示（界面状态由调用方负责）。
+  function markTagChoice(panel, { tag = false, bucket = false } = {}) {
+    if (!panel || panel.dataset.mode !== 'new') return;
+    if (tag) formTagManual = true;
+    if (bucket) formBucketManual = true;
+    formAutoTag = null;
+    paintAutoTagNote(panel);
   }
 
   function closeAllForms() {
@@ -1524,6 +1645,7 @@ export function createSheetController(deps) {
   function pickTag(el) {
     const wasSelected = el.classList.contains('sel');
     const panel = el.closest('.form-sheet-panel');
+    markTagChoice(panel, { tag: true });
     const chipRoot = panel ? panel.querySelector('#form-chips, [data-role="edit-chips"]') : null;
     if (chipRoot) chipRoot.querySelectorAll('.chip').forEach(c => {
       c.classList.remove('sel');
@@ -1564,6 +1686,7 @@ export function createSheetController(deps) {
   function pickBucket(el) {
     const panel = el.closest('.form-sheet-panel');
     const bucket = el.dataset.bucket || 'job';
+    markTagChoice(panel, { bucket: true });
     if (panel && panel.dataset.mode === 'edit') editBucket = bucket;
     else formBucket = bucket;
     formTag = '';
@@ -1819,6 +1942,7 @@ export function createSheetController(deps) {
     const isEdit = panel.dataset.mode === 'edit';
     const chipRoot = panel.querySelector('#form-chips, [data-role="edit-chips"]');
     if (!chipRoot) return;
+    markTagChoice(panel, { tag: true });
     formTag = '';
     chipRoot.innerHTML = renderTagPicker(isEdit ? 'edit' : 'form', input.value.trim(), deps.loadConfig(), isEdit ? editBucket : formBucket);
     if (isEdit) refreshEditPreview(panel);
@@ -2275,7 +2399,10 @@ export function createSheetController(deps) {
     if (!panel) return;
     if (panel.dataset.mode === 'motto' && target.dataset.role === 'quotes-input') paintQuotesCount(panel);
     if (panel.dataset.mode === 'analytics' && target.dataset.role === 'an-query') analyticsSetQuery(target.value);
-    if (panel.dataset.mode === 'new' && target.id === 'form-what') paintWhatSuggestions(panel, target.value);
+    if (panel.dataset.mode === 'new' && target.id === 'form-what') {
+      paintWhatSuggestions(panel, target.value);
+      syncAutoTag(panel, target.value);
+    }
     if (panel.dataset.mode === 'config') {
       if (target.dataset.role === 'cfg-search') filterConfigRows(panel);
       else if (target.closest('.cfg-row')) syncConfigRowFace(target.closest('.cfg-row'));
@@ -3173,6 +3300,9 @@ export function createSheetController(deps) {
     analyticsGoPage,
     closeAllForms,
     pickWhatSuggestion,
+    clearAutoTag,
+    notePointerDown,
+    isGhostClick,
     analyticsToggleItems,
     analyticsToggleItem,
     copyAnalyticsSummary,

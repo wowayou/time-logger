@@ -13,6 +13,7 @@ import {
   TIMELINE_DENSITY_KEY,
   normalizeTimelineDensity,
   bucketForTag,
+  canonicalTagName,
   chipGroups,
   configuredBucketForTag,
   countEntriesWithTag,
@@ -501,7 +502,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.13.0';
+export const APP_VERSION = '1.14.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -1058,6 +1059,10 @@ export function renderFormSheet(opts) {
   const whatInput = isEdit
     ? `<textarea class="inp ta edit-what-input" data-role="edit-what" rows="2" placeholder="${esc(whatPlaceholder)}">${esc(e.what)}</textarea>`
     : `<textarea class="inp ta" id="form-what" rows="2" placeholder="${esc(whatPlaceholder)}"></textarea>
+      <div class="auto-tag-note" data-role="auto-tag-note" role="status" hidden>
+        <span data-role="auto-tag-text"></span>
+        <button class="mini-btn" type="button" data-action="clear-auto-tag"></button>
+      </div>
       <div class="what-suggest" data-role="what-suggest" role="group" aria-label="${esc(t('form.whatSuggestAria'))}" hidden></div>`;
   const chipWrap = isEdit
     ? `<div data-role="edit-chips">${chips}</div>`
@@ -1248,14 +1253,19 @@ export function renderTagPicker(prefix, selectedTag, config = loadConfig(), buck
   const action = prefix === 'edit' ? 'pick-edit-tag' : 'pick-form-tag';
   const groups = chipGroups(config);
   const mainline = config.mainline.map(name => ({ name, bucket: 'job' }));
-  const chipBtn = item => `<button class="chip chip-${item.bucket}${item.name === selectedTag ? ' sel' : ''}" type="button" data-action="${action}" data-tag="${esc(item.name)}" data-bucket="${item.bucket}" aria-pressed="${item.name === selectedTag}" aria-label="${esc(t('chip.selectAria', { name: item.name }))}">${esc(item.name)}</button>`;
   const draftName = String(selectedTag || '').trim();
+  // v1.14.0：自定义输入只差大小写（敲 sleep、设置里是 Sleep）时点亮那个已登记 chip，
+  // 不再另画一个草稿——保存时本来就按 canonicalTagName 存成 Sleep（v85 同一性按 tagKey）。
+  // 逐字相同的优先：存量里并存的 sleep 与 Sleep 各点各的，不会一点亮两个。
+  const allNames = [...config.mainline, ...config.chips.map(chip => chip.name)];
+  const shownName = !draftName || allNames.includes(draftName) ? draftName : canonicalTagName(draftName, config);
+  const chipBtn = item => `<button class="chip chip-${item.bucket}${shownName && item.name === shownName ? ' sel' : ''}" type="button" data-action="${action}" data-tag="${esc(item.name)}" data-bucket="${item.bucket}" aria-pressed="${Boolean(shownName) && item.name === shownName}" aria-label="${esc(t('chip.selectAria', { name: item.name }))}">${esc(item.name)}</button>`;
   // 「已知」＝本栏（所选桶）里就有这个 chip，会直接高亮它、不另画草稿。v1.5.0 前是「任
   // 意桶里有」，于是在「维持」里敲一个主线名时本栏什么都不显示。
   const listed = name => (bucketFilter === 'job' ? config.mainline.includes(name)
     : bucketFilter ? config.chips.some(chip => chip.name === name && chip.bucket === bucketFilter)
       : config.mainline.includes(name) || config.chips.some(chip => chip.name === name));
-  const known = !draftName || listed(draftName);
+  const known = !draftName || listed(shownName);
   // v1.5.0：输入的名字已是**别的桶**的标签（大小写不敏感）时，草稿 chip 用它真正归属
   // 的桶色——在「维持」一栏里冒出一个主线色的 chip，与下方的归属提醒互相印证。
   const owner = known ? '' : configuredBucketForTag(draftName, config);

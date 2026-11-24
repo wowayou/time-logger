@@ -3033,6 +3033,16 @@
     .what-sug:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .what-sug-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .what-sug-tag { flex: none; color: var(--muted); font-size: var(--fs-cap); }
+    /* v1.14.0 正文自动选标签：正文框下一行灰字「已选中 #X（桶）：为什么」+「不选」。小点与
+       chip 同色相（装饰，桶名在文字里）；行高给足 44px，「不选」的扩展命中区不压到正文框。 */
+    .auto-tag-note {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-2); min-height: var(--control-h);
+      color: var(--muted); font-size: var(--fs-cap); line-height: 1.35;
+    }
+    .auto-tag-note[hidden] { display: none; }
+    .auto-tag-note::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    .auto-tag-note[data-b="maintain"]::before { background: var(--maintain); }
+    .auto-tag-note[data-b="leak"]::before { background: var(--leak); }
 
     /* v1.9.0 事项排行：拨号盘下方的列表。行＝正文（单行省略）｜时长，下一行标签/日期/次数，
        再下一条按排行第一名归一的细条（aria-hidden，时长数字才是可读真源）。整行是按钮：

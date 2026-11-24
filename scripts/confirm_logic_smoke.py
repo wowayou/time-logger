@@ -1256,6 +1256,25 @@ assert(centuryEntries[0].ts === '1926-01-01T08:00' && centuryEntries.length === 
   assert(matchWhatSuggestions(idx, ' 刷题 ').length === 0 && matchWhatSuggestions(idx, '   ').length === 0, 'an exact match or blank input yields nothing');
   assert(matchWhatSuggestions(idx, '刷', 1).length === 1, 'the limit caps suggestions');
   assert(JSON.stringify(hist) === before, 'suggestion helpers never mutate entries');
+
+  // v1.14.0 正文自动选标签：同名标签优先，其次与历史事项完全相同取它最近的标签；只认仍登记的标签。
+  const { autoTagForWhat } = await import('./src/entry_model.js');
+  const cfg = {
+    version: 1, mainline: ['求职推进'],
+    chips: [{ name: 'Sleep', bucket: 'maintain', longOk: true }, { name: '娱乐', bucket: 'leak', longOk: false }, { name: '刷题', bucket: 'leak', longOk: false }, { name: '学习', bucket: 'maintain', longOk: false }]
+  };
+  const cfgBefore = JSON.stringify(cfg);
+  const auto = (text, index = idx) => JSON.stringify(autoTagForWhat(text, index, cfg));
+  assert(auto(' sleep ') === JSON.stringify({ tag: 'Sleep', bucket: 'maintain', source: 'tag' }), 'a what text equal to a tag name picks its canonical spelling and bucket');
+  assert(auto('求职推进') === JSON.stringify({ tag: '求职推进', bucket: 'job', source: 'tag' }), 'mainline names count as tags');
+  assert(auto('刷手机') === JSON.stringify({ tag: '娱乐', bucket: 'leak', source: 'history' }), 'an exact past item picks the tag it used last time');
+  assert(auto('刷题') === JSON.stringify({ tag: '刷题', bucket: 'leak', source: 'tag' }), 'a same-name tag wins over the (registered, different) tag that text used last time');
+  assert(autoTagForWhat('刷', idx, cfg) === null && autoTagForWhat('刷手机吧', idx, cfg) === null, 'prefixes and longer texts never auto-pick');
+  const stale = whatSuggestionIndex([se('s1', '2026-11-05T09:00', '读旧书', '已删除')]);
+  assert(autoTagForWhat('读旧书', stale, cfg) === null, 'a tag no longer in the config is never revived');
+  assert(autoTagForWhat('未知', idx, { ...cfg, chips: [...cfg.chips, { name: '未知', bucket: 'maintain', longOk: false }] }) === null, 'the reserved unknown tag is never auto-picked');
+  assert(autoTagForWhat('   ', idx, cfg) === null, 'blank input picks nothing');
+  assert(JSON.stringify(cfg) === cfgBefore && JSON.stringify(hist) === before, 'auto-pick never mutates config or entries');
 }
 
 // v1.11.0 全天热力条：96 格、占时最多的桶上色、按该桶分钟数分三档深浅、未来与现在。

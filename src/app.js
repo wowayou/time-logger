@@ -1070,6 +1070,13 @@ import {
     // 注入，因为它是 index.html 静态壳里的按钮，不像其它图标按钮那样走 JS 模板渲染）。
     const moreBtn = document.querySelector('[data-action="open-more"]');
     if (moreBtn) moreBtn.innerHTML = iconSvg('more');
+    // v1.14.0 连点防穿透（判据在 sheetController）：捕获阶段、先于一切委托处理。
+    window.addEventListener('pointerdown', e => sheetController.notePointerDown(e), { capture: true, passive: true });
+    window.addEventListener('click', e => {
+      if (!sheetController.isGhostClick(e)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }, true);
     document.addEventListener('click', e => {
       const el = e.target.closest('[data-action]');
       if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
@@ -1104,6 +1111,7 @@ import {
       if (action === 'pick-edit-end-mode') sheetController.pickEditEndMode(el);
       if (action === 'pick-form-tag') sheetController.pickTag(el);
       if (action === 'pick-what-suggestion') sheetController.pickWhatSuggestion(el);
+      if (action === 'clear-auto-tag') sheetController.clearAutoTag(el);
       if (action === 'pick-form-bucket') sheetController.pickBucket(el);
       if (action === 'adopt-tag-bucket') sheetController.adoptTagBucket(el);
       if (action === 'pick-record-mode') sheetController.pickRecordMode(el);
