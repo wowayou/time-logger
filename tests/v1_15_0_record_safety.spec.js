@@ -218,7 +218,12 @@ test('② 计划用「已加入计划」；别处改过记录则撤销失效；�
   await page.locator('[data-role="edit-what"]').fill('合成编辑后');
   await page.locator('#form-sheet [data-action="commit-edit"]').click();
   await expect(page.locator('#form-sheet')).toBeHidden();
-  await expect(undoToast(page)).toBeHidden();
+  // 否定断言用一次性读取：撤销横幅会自己消失（8 秒、或做别的事即收起），带自动重试的
+  // toBeHidden() 会等它过期再判过。提交是同步的——表单收起时横幅若要出现已经出现了；
+  // 此刻可能仍挂着上面「撤销已取消」的 3 秒提示，所以只看文案不是「已记录」。
+  const shown = await undoToast(page).isVisible();
+  const message = await undoToast(page).locator('[data-role="undo-message"]').textContent();
+  expect(shown && /^已记录|^已加入计划/.test(message || '')).toBe(false);
 });
 
 test('② 撤销横幅不压「记一条」、不溢出（320 / 390px）', async ({ page }) => {
