@@ -3,10 +3,17 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**发布中：2026-11-24 v1.14.0「正文自动选标签 + 连点防穿透」（见 OPEN 首条）。** **发布更新：2026-11-19。Web v1.13.0 已正式发布（tag [v1.13.0](https://github.com/wowayou/time-logger/releases/tag/v1.13.0)，来源 `f9c27d1`；隐私政策同批上线）；此前 v1.12.0（`2f3f832`）已发布；此前 v1.11.0（来源 `9c92743`）已发布；此前 v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
+**发布更新：2026-11-24。Web v1.14.0 已正式发布（tag [v1.14.0](https://github.com/wowayou/time-logger/releases/tag/v1.14.0)，来源 `89b3781`；正文自动选标签 + 连点防穿透）；此前 2026-11-19 Web v1.13.0 已正式发布（tag [v1.13.0](https://github.com/wowayou/time-logger/releases/tag/v1.13.0)，来源 `f9c27d1`；隐私政策同批上线）；此前 v1.12.0（`2f3f832`）已发布；此前 v1.11.0（来源 `9c92743`）已发布；此前 v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
 
 ## DONE
 
+- **Web v1.14.0：正文自动选标签 + 连点防穿透（2026-11-24，已发布）**：维护者问「用户输入的就是已有标签的内容时直接默认选中对应标签是不是会更好」并要求做类似的体验增强；随后要求「顺手修双击问题，然后提交并发版」。规则见 CLAUDE.md「录入时的标签归属」「连点防穿透」与版本表。
+  - **对齐核对（改动前）**：本地 main＝origin/main＝`5bb4bd2`，tag/Release v1.13.0 → `f9c27d1`；主站 `/app/` 与旧站按 `sw.js` FILES 各 30/30 与 tag 逐字节一致（带随机参数），共 60/60。
+  - **双击穿透（既有问题，本版修复）**：390px 下双击「完成」，第一下保存并关闭表单，第二下落到正下方 header「···」打开「更多」；记录只写一条。首轮全量里 WebKit `v1_7_2_record_integrity.spec.js:53`（R01）因此失败；同条件 `--repeat-each=20` 对照：改动前工作区 14/20 失败、v1.13.0 运行时 11/20 失败，失败快照同为「更多」面板，故判为既有。减少动效时 sheet 同步隐藏，鼠标双击与触摸连点必现。修复后 R01 WebKit ×10 全过。
+  - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过；逻辑 smoke 把「同名优先」改成「历史优先」、或放行已删除标签，各自变红（第一版断言数据两种优先级结果相同、没牙，补冲突数据后重证）。`tests/v1_14_0_auto_tag.spec.js` 双引擎 20/20，以 v1.13.0 运行时 18/20 红（余 2 为「编辑表单不预选」否定哨兵）；`tests/v1_14_0_double_activation.spec.js` 双引擎 10/10、WebKit ×10 全过，以 v1.13.0 运行时 5/10 红（余为 4 条单击哨兵与 Chromium 默认动效的概率性一条）。第一版判据用 click 自带的 pointerType，WebKit 触摸用例仍红——实测 WebKit 触摸合成的 click 报 `mouse`/detail 1，改取 pointerdown 的类型后通过。修复前首轮完整 UI 1302/1/1（唯一失败即上述 R01），修复后完整 UI **1313 passed / 1 skipped / 0 failed**（39.8 分钟）。
+  - **浏览器核对**：Chromium 320/390/768px × 亮暗，合成数据：提示行 44px 高、在面板内、无横向溢出；12px 提示字对比度 5.70（亮）/ 7.03（暗），「不选」6.82 / 7.73；从正文框 Tab 一次到「不选」，Enter 撤回后焦点回正文框；零脚本错误。未做真机核对（软键盘下提示行出现/消失时的位移、真机连点的手感尤其要看），未实测记录耗时变化。
+  - **发布**：维护者 2026-11-24 授权「顺手修双击问题，然后提交并发版」「跑完直接发版」。推送前远端 main 为 `5bb4bd2`；功能提交 `89b3781`，tag / [Release](https://github.com/wowayou/time-logger/releases/tag/v1.14.0)。publish-site [45322454728](https://github.com/wowayou/time-logger/actions/runs/45322454728)、镜像 Pages [45322470931](https://github.com/wowayou/time-logger-site/actions/runs/45322470931) 首次 success。旧站 tag 触发的 [45322454672](https://github.com/wowayou/time-logger/actions/runs/45322454672) 失败：同一 run 内 `github-pages` 产物 03:52:33 已上传（1.6MB），部署步骤 03:52:34 查询元数据得到 0 个，属产物元数据未就绪；当时旧站仍为 v1.13.0。按上线操作单手动触发一次（`--ref main -f release_tag=v1.14.0`，main 与 tag 同为 `89b3781`）[45322609033](https://github.com/wowayou/time-logger/actions/runs/45322609033) success，未再重跑；多产生一份 1 天保留的同尺寸产物，实际账单未核实。
+  - **线上核对**：两站按 `sw.js` FILES 与 tag 逐字节一致 60/60（首轮旧站 `styles.css` 1 项不一致，取回头为部署后数十秒内，随后三次取回均与 tag 一致、整轮重比 60/60）。主站 Chromium 全新临时上下文、390px、减少动效、两条合成记录：SW `activated` 并接管、缓存只有 `timelog-v1.14.0`；输入「刷手机」切到偏航并选中、提示文字正确；双击「完成」后表单关闭、未打开「更多」、只保存一条；无脚本错误或 HTTP ≥400。未核对旧站功能；未做真机核对。
 - **Web v1.13.0 已发布（2026-11-19）**：首屏统计卡片「比例 ⇄ 分布」（日 / 周热力格、月 / 年按标签分的环形图），时间轴底部热力条与「更多」开关移除；新偏好键 `timelog.heroVisual`，`timelog.dayHeat` 启动时删除，中英隐私政策同批更新（`site/` 改动，随 tag 发布主站）。规则见 CLAUDE.md。
   - **门禁**：audit（隐私政策漏列新键会变红）、逻辑 smoke（周格阈值 `>=` 改 `>` 会变红）、typecheck、`git diff --check` 通过；`tests/v1_13_0_hero_visual.spec.js` 双引擎 24/24，以 v1.12.0 运行时 24/24 红，去掉快照门后快照用例变红。完整 UI **1283 passed / 1 skipped / 0 failed**（38.8 分钟）。
   - **浏览器核对**：Chromium 日/周/月/年 × 320/390px、亮暗：比例态卡片 102px（切换标签不占排版）、切换标签文字不压数字、格子与图例在卡片内、无横向溢出；点标签、点图形区、键盘 Enter 均可切换且焦点留在新按钮；旧键 `timelog.dayHeat` 启动后删除；零脚本错误。320px 下月/年环形图图例换到环下方，卡片约 420–440px 高。未做真机核对。
@@ -52,12 +59,6 @@
 - **安卓代码侧发版防护已就绪**：独立仓库已实现内嵌运行时、签名缺失即拒绝 Release、`sync_runtime.py --release` 预检及从 Web 三段式版本派生版本号；不代表已上架。
 
 ## OPEN
-
-- **Web v1.14.0：正文自动选标签 + 连点防穿透（2026-11-24，发布中）**：维护者问「用户输入的就是已有标签的内容时直接默认选中对应标签是不是会更好」并要求做类似的体验增强；随后要求「顺手修双击问题，然后提交并发版」。规则见 CLAUDE.md「录入时的标签归属」「连点防穿透」与版本表。
-  - **对齐核对（改动前）**：本地 main＝origin/main＝`5bb4bd2`，tag/Release v1.13.0 → `f9c27d1`；主站 `/app/` 与旧站按 `sw.js` FILES 各 30/30 与 tag 逐字节一致（带随机参数），共 60/60。
-  - **双击穿透（既有问题，本版修复）**：390px 下双击「完成」，第一下保存并关闭表单，第二下落到正下方 header「···」打开「更多」；记录只写一条。首轮全量里 WebKit `v1_7_2_record_integrity.spec.js:53`（R01）因此失败；同条件 `--repeat-each=20` 对照：改动前工作区 14/20 失败、v1.13.0 运行时 11/20 失败，失败快照同为「更多」面板，故判为既有。减少动效时 sheet 同步隐藏，鼠标双击与触摸连点必现。修复后 R01 WebKit ×10 全过。
-  - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过；逻辑 smoke 把「同名优先」改成「历史优先」、或放行已删除标签，各自变红（第一版断言数据两种优先级结果相同、没牙，补冲突数据后重证）。`tests/v1_14_0_auto_tag.spec.js` 双引擎 20/20，以 v1.13.0 运行时 18/20 红（余 2 为「编辑表单不预选」否定哨兵）；`tests/v1_14_0_double_activation.spec.js` 双引擎 10/10、WebKit ×10 全过，以 v1.13.0 运行时 5/10 红（余为 4 条单击哨兵与 Chromium 默认动效的概率性一条）。第一版判据用 click 自带的 pointerType，WebKit 触摸用例仍红——实测 WebKit 触摸合成的 click 报 `mouse`/detail 1，改取 pointerdown 的类型后通过。修复前首轮完整 UI 1302/1/1（唯一失败即上述 R01），修复后完整 UI **1313 passed / 1 skipped / 0 failed**（39.8 分钟）。
-  - **浏览器核对**：Chromium 320/390/768px × 亮暗，合成数据：提示行 44px 高、在面板内、无横向溢出；12px 提示字对比度 5.70（亮）/ 7.03（暗），「不选」6.82 / 7.73；从正文框 Tab 一次到「不选」，Enter 撤回后焦点回正文框；零脚本错误。未做真机核对（软键盘下提示行出现/消失时的位移、真机连点的手感尤其要看），未实测记录耗时变化。
 
 - **v1.7.5 发布验证尚有缺口（2026-11-13）**：两站已部署且线上运行时、功能已核对；主站实际 artifact 下载遭遇 TLS 握手超时，未重试，独立归档字节验证未完成。已有镜像 41/41、线上 40/40 字节证据，不能冒充该项完成。旧站 `.gitignore` 本轮为 503，未取得 404 证据；其余四个隐藏探测为 404，实际旧站部署包隐藏元数据文件 0。为遵守失败即停，本轮不再下载/部署，也不使用可选旧站文档刷新；旧站候选状态文档与源码发布回执存在已说明差异。证据见 `memory/2026-11-13-v1.7.5-release/` 及 [发布回执](docs/reviews/2026-11-13-v1.7.5-release.md)。
 
