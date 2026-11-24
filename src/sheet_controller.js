@@ -92,8 +92,8 @@ export function createSheetController(deps) {
   let closeClickGuard = null;
   // v1.15.0 新建草稿：点遮罩/取消/Esc 关掉新建表单时，没保存的正文与标签选择**只留在内存**
   // （不写 localStorage、不进快照与备份），同一页面里再打开同一种新建表单（同一天的普通
-  // 新建 / 同一段补录 / 同一天的过夜续记）时填回并给「清空」。保存成功即作废；撤销保存
-  // 会把内容放回这里。只留一份，超过 DRAFT_MAX_MS 不再恢复。
+  // 新建 / 同一段补录 / 同一天的过夜续记）时填回并给「清空」。保存成功即作废。
+  // 只留一份，超过 DRAFT_MAX_MS 不再恢复。
   let newDraft = null;
   let skipDraftCapture = false;
   let formDefaultBucket = 'job';
@@ -1288,11 +1288,6 @@ export function createSheetController(deps) {
     else if (newDraft && newDraft.key === newDraftKey()) newDraft = null;
   }
 
-  // 撤销保存后由 app.js 调用：把保存时的内容放回草稿，重新计时。
-  function parkDraft(draft) {
-    newDraft = draft ? { ...draft, at: Date.now() } : null;
-  }
-
   function restoreNewDraft(panel) {
     const draft = newDraft;
     if (!draft || draft.key !== newDraftKey()) return;
@@ -1359,11 +1354,10 @@ export function createSheetController(deps) {
     if (show) hint.textContent = t('form.noTagHint', { unknown: t('tag.unknown'), bucket: BUCKETS.unrecorded });
   }
 
-  // v1.15.0：新建记录（含计划、补录/切分、过夜续记）写入成功后的统一收尾：按保存时的表单
-  // 内容留一份草稿交给撤销（撤销后放回），关表单时不再捕获草稿（保存了就不是草稿），再给
-  // 8 秒撤销。计划不新增记录日，沿用不庆祝里程碑的旧收尾。
-  function closeAfterNewWrite(panel, { beforeData, entries, configBeforeRaw, tag, plan = false }) {
-    const draft = captureNewDraft(panel);
+  // v1.15.0：新建记录（含计划、补录/切分、过夜续记）写入成功后的统一收尾：关表单时不再
+  // 捕获草稿（保存了就不是草稿）。计划不新增记录日，沿用不庆祝里程碑的旧收尾。
+  // v1.15.1 维护者要求去掉新建撤销：这里不再给撤销横幅，撤销窗口只属于删除。
+  function closeAfterNewWrite(beforeData, { plan = false } = {}) {
     const close = () => {
       skipDraftCapture = true;
       try {
@@ -1374,7 +1368,6 @@ export function createSheetController(deps) {
     };
     if (plan) teardownNow(() => { close(); deps.render(); });
     else closeAfterRecordWrite(close, beforeData);
-    deps.offerSaveUndo({ beforeData, afterEntries: entries, configBeforeRaw, configAfterRaw: deps.readConfigRaw(), draft, tag, plan });
   }
 
   function closeAllForms() {
@@ -2156,7 +2149,7 @@ export function createSheetController(deps) {
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
     const staysYesterday = latest.kind === 'overnight-day-end' && startTs < formOvernightContext.midnightTs;
     deps.setSelectedDate(staysYesterday ? formOvernightContext.yesterdayKey : formOvernightContext.todayKey);
-    closeAfterNewWrite(panel, { beforeData, entries: d.entries, configBeforeRaw: configSnapshot.raw, tag });
+    closeAfterNewWrite(beforeData);
   }
 
   function saveEntry() {
@@ -2227,7 +2220,7 @@ export function createSheetController(deps) {
       }
       if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
       deps.setSelectedDate(checked.ts.slice(0, 10));
-      closeAfterNewWrite(panel, { beforeData, entries: d.entries, configBeforeRaw: configSnapshot.raw, tag, plan: true });
+      closeAfterNewWrite(beforeData, { plan: true });
       return;
     }
     if (placeholder) {
@@ -2249,7 +2242,7 @@ export function createSheetController(deps) {
     }
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
     deps.setSelectedDate(checked.ts.slice(0, 10));
-    closeAfterNewWrite(panel, { beforeData, entries: d.entries, configBeforeRaw: configSnapshot.raw, tag });
+    closeAfterNewWrite(beforeData);
   }
 
   // Bounded backfill into a segment: plan [start, end) as the new label and
@@ -2310,7 +2303,7 @@ export function createSheetController(deps) {
     }
     if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
     deps.setSelectedDate(startChecked.ts.slice(0, 10));
-    closeAfterNewWrite(panel, { beforeData, entries: d.entries, configBeforeRaw: configSnapshot.raw, tag });
+    closeAfterNewWrite(beforeData);
   }
 
   function getEditingBox(id = deps.getSheetEditId()) {
@@ -3440,7 +3433,6 @@ export function createSheetController(deps) {
     pickWhatSuggestion,
     clearAutoTag,
     discardDraft,
-    parkDraft,
     notePointerDown,
     isGhostClick,
     analyticsToggleItems,

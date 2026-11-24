@@ -3,10 +3,14 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**发布更新：2026-11-24。Web v1.15.0 已正式发布（tag [v1.15.0](https://github.com/wowayou/time-logger/releases/tag/v1.15.0)，来源 `792bf6f`；新建草稿不丢、保存可撤销、未选标签提示、tooltip 贴边不出界）；同日稍早 Web v1.14.0 已正式发布（tag [v1.14.0](https://github.com/wowayou/time-logger/releases/tag/v1.14.0)，来源 `89b3781`；正文自动选标签 + 连点防穿透）；此前 2026-11-19 Web v1.13.0 已正式发布（tag [v1.13.0](https://github.com/wowayou/time-logger/releases/tag/v1.13.0)，来源 `f9c27d1`；隐私政策同批上线）；此前 v1.12.0（`2f3f832`）已发布；此前 v1.11.0（来源 `9c92743`）已发布；此前 v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
+**发布中：2026-11-24 v1.15.1「去掉新建记录的撤销」（见 DONE 首条）。** **发布更新：2026-11-24。Web v1.15.0 已正式发布（tag [v1.15.0](https://github.com/wowayou/time-logger/releases/tag/v1.15.0)，来源 `792bf6f`；新建草稿不丢、保存可撤销、未选标签提示、tooltip 贴边不出界）；同日稍早 Web v1.14.0 已正式发布（tag [v1.14.0](https://github.com/wowayou/time-logger/releases/tag/v1.14.0)，来源 `89b3781`；正文自动选标签 + 连点防穿透）；此前 2026-11-19 Web v1.13.0 已正式发布（tag [v1.13.0](https://github.com/wowayou/time-logger/releases/tag/v1.13.0)，来源 `f9c27d1`；隐私政策同批上线）；此前 v1.12.0（`2f3f832`）已发布；此前 v1.11.0（来源 `9c92743`）已发布；此前 v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
 
 ## DONE
 
+- **Web v1.15.1：去掉新建记录的撤销（2026-11-24，发布中）**：维护者要求「新建记录的撤销不要做 去掉」，随后「跑完直接提交并发版」。规则见 CLAUDE.md UI 红线「新建防错三件」②。
+  - **内容**：新建记录（含计划、补录/切分、过夜续记）保存后不再出「已记录 #X · 撤销」横幅，撤销窗口只属于删除；v1.15.0 的草稿不丢、未选标签提示与 tooltip 贴边不变。删 3 个 i18n 键、改说明 1 处（中英对等），零新增运行时资产、存储键或备份字段，隐私政策不变。
+  - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过（退出码逐个核对）。`tests/v1_15_0_record_safety.spec.js` 双引擎 16/16；新哨兵（普通、计划、补录保存后都没有撤销横幅，新标签留在 config）以 v1.15.0 运行时双引擎红、其余 14 条仍绿，改为 soft 断言后三处各自红。完整 UI **1343 passed / 1 skipped / 0 failed**（43.0 分钟，无重试；跳过为既有 WebKit 离线句库模拟限制）。删除撤销由既有用例（`ui_smoke` 撤销恢复与冲突取消、`v84_polish` 交互即收起）守，全量通过。
+  - **未做**：无 CSS/布局改动，未另做手动浏览器矩阵；未做真机核对（验收单已加一行）。
 - **Web v1.15.0：新建防错三件 + tooltip 贴边不出界（2026-11-24，已发布）**：维护者看过体验优化清单后选「先做 1–3，跑完直接发版」，随后要求「顺手把 tooltip 溢出也修了」。规则见 CLAUDE.md UI 红线「新建防错三件」与 tooltip 条。
   - **内容**：① 误关新建表单时没保存的内容只留在内存，再打开同一种新建表单时填回、可「清空」；② 新建记录（含计划、补录/切分、过夜续记）保存后 8 秒内可撤销，顺带登记的新标签在 config 未被改过时一并还原，撤销后内容回到草稿；③ 写了正文却没选标签时提示会记为「未知」。④ tooltip 贴边出界：v1.14.0 浏览器核对时发现，390px 悬停 header「···」scrollWidth 390→481（悬停宽度立即生效、隐藏的气泡照样撑宽页面；保存后指针停在「完成」原处即触发），v1.13.0/v1.14.0 同样存在。
   - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过；audit 的 tooltip 检查改按 `data-tip-ready` 选择器并新增 `--tip-dx` 检查，把悬停延迟改 0ms 或去掉平移会变红。`tests/v1_15_0_record_safety.spec.js` 双引擎 22/22，以 v1.14.0 运行时 22/22 红；去掉 config 还原的 CAS、或保存时也捕获草稿，对应用例变红。`tests/v1_15_0_tooltip_edges.spec.js` 双引擎 14/14，以 v1.14.0 运行时 12/14 红（余 2 为 1280px 哨兵）。tooltip 第一版用 canvas 估宽，WebKit 下中文窄约 15px、新用例红；又发现 `scrollbar-gutter: stable` 下 Chromium 的 clientWidth 含滚动条槽（1280 vs html 1265）；改为同步量真实宽度、取两者较小可用宽度后通过。既有用例两处按新行为改判（`v1_7_5_fab_handoff` 重开后正文由空改为草稿原样恢复且存储不变；`v1_14_0_auto_tag` 重开后先清空恢复的草稿）。完整 UI **1349 passed / 1 skipped / 0 failed**（40.8 分钟）。
@@ -88,7 +92,7 @@
 - **其他历史输入／启动异常不合并结案**：P40 已用控制时序复现并修复一条与原 `ui_smoke:293` 起点显示未更新相符的因果链，原失败与早期对照片段证据保留在 [P40](docs/postmortems.md#p40--时间选择器延迟聚焦打断输入webkit-补录起点仍是旧值v171-本地)。原批量失败缺少完整输入事件栈，不能逐次倒推均为此因；更早的起点异常、Chromium 启动超时仍按各自证据保留，不因发布前的全量通过关闭。
 
 - **真机验收待闭合**：自动化与线上桌面检查不代替真机结论；各版按 [真机验收单](docs/device-acceptance.md) 逐项填写，未执行的步骤保持待验，不能由上线代填。
-  - v1.14.0–v1.15.0：自动选标签与草稿提示行在软键盘下的表现、保存撤销横幅、连点「完成」、主屏应用升级、贴边 tooltip（[小节](docs/device-acceptance.md#v1140v1150-录入防错与连点已发布待真机)）。
+  - v1.14.0–v1.15.1：自动选标签与草稿提示行在软键盘下的表现、保存后不再出撤销横幅（v1.15.1）、连点「完成」、主屏应用升级、贴边 tooltip（[小节](docs/device-acceptance.md#v1140v1150-录入防错与连点已发布待真机)）。
   - v1.9.0–v1.13.0：联想行与软键盘、时间分析跳转与输入、首屏分布图（[小节](docs/device-acceptance.md#v190v1130-时间分析联想与首屏分布图已发布待真机)）。
   - v1.8.1–v1.8.3：时间轴三种布局、全文长正文换行、尺子刻度在 iPhone 上是否清楚（[小节](docs/device-acceptance.md)中时间轴一行）。
   - v1.7.0：主屏应用升级、离线添加句库（WebKit 离线自动化无法覆盖）、英文界面、旧站入口（[小节](docs/device-acceptance.md#v170-主题句库内置d36)）。

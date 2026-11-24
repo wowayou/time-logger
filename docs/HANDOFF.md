@@ -42,7 +42,7 @@
 23. **Pages 手动部署成功不证明 tag 发布可用**（D34）：`github-pages` 环境按分支/tag 分别放行，workflow glob 与环境模式语法也不同；两站 workflow 独立，tag 后分别验收。命令与回退只在 [上线操作单](launch-runbook.md#a1a-旧-origin-的-pages-actionsd34)。
 24. **正文自动选标签靠「谁动过」三个状态，不靠区分调用来源**（v1.14.0）：`sheet_controller.js` 的 `formAutoTag` / `formTagManual` / `formBucketManual`。`pickTag` / `pickBucket` 既被点击调用、也被联想与「改选 X」程序调用，两者都算用户亲手选（`markTagChoice`）；自动预选本身**不走**这两个函数，只改状态后 `refreshFormTagArea` 重画。所以新增任何「替用户选标签」的入口都不能经 `pickTag`，否则会把自己锁成手动。切桶后**不要**立即按正文重算——既有用例「先点维持再点睡觉」会被重算点亮后再点掉；只在下一次正文输入时重算。
 25. **sheet 关闭后的第二下会落到下面的控件**（v1.14.0）：减少动效时 sheet 同步隐藏，默认动效下关闭兜底定时器也可能先于排队的第二下输入执行，双击/连点的第二下于是命中刚露出的控件。防护按「同一处 + 短时 + 双击或触摸」判，鼠标单击必须放行；指针类型取 pointerdown 的，WebKit 触摸合成的 click 自称 `mouse`。复现用减少动效最稳（`tests/v1_14_0_double_activation.spec.js`），默认动效只是概率性。
-26. **新建表单的收尾只走 `closeAfterNewWrite`**（v1.15.0）：它先按保存时的内容留一份草稿交给撤销，再以 `skipDraftCapture` 关表单（否则 `closeFormSheet` 会把刚保存的内容当成草稿留下，重开又填回来），最后 `deps.offerSaveUndo`。新增任何新建写入路径都要接它；编辑保存不接。草稿只在内存——任何「顺手持久化草稿」都会触及隐私政策与快照规则，先改政策再说。撤销与删除共用一个窗口，后来者顶掉前者。
+26. **新建表单的收尾只走 `closeAfterNewWrite`**（v1.15.0；v1.15.1 去掉新建撤销）：它以 `skipDraftCapture` 关表单（否则 `closeFormSheet` 会把刚保存的内容当成草稿留下，重开又填回来）。新增任何新建写入路径都要接它；编辑保存不接。草稿只在内存——任何「顺手持久化草稿」都会触及隐私政策与快照规则，先改政策再说。撤销横幅只属于删除；v1.15.0 曾让新建共用，维护者要求去掉。
 27. **tooltip 出界要看 scrollWidth，不只看可见气泡**（v1.15.0）：悬停样式里的 `width: max-content` 立即生效，800ms 延迟只管可见性，`visibility:hidden` 的盒子照样撑宽页面；所以「看不到气泡」不等于没出界。定位只能量真实宽度，别回到 canvas 估算。窄屏核对时若 scrollWidth 莫名变大，先把鼠标移开再测——指针停在右上角就会触发「···」的悬停（这次就是这样被发现的）。
 
 ## 已知坑（踩过的，别再踩）

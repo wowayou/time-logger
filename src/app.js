@@ -46,8 +46,6 @@ import {
   save,
   saveChecked,
   saveConfigChecked,
-  restoreConfigRawChecked,
-  RESERVED_UNKNOWN_TAG,
   uid,
   validateImportData,
   loadLocalePref,
@@ -712,40 +710,19 @@ import {
     };
   }
 
-  // 删除与（v1.15.0 起）新建记录共用同一个撤销窗口：横幅在＝还能撤销，8 秒、做别的事即收起、
-  // 别处改过数据即失效。opts 只给新建用：message 换文案；configBeforeRaw/configAfterRaw
-  // 表示这次保存顺带登记了新标签，撤销时在 config 未被改过的前提下一并还原；draft 是
-  // 保存时的表单内容，撤销后放回内存草稿，再点「记一条」接着改。
-  function showUndoToast(beforeData, afterRevision, opts = {}) {
+  // 撤销窗口只给删除：横幅在＝还能撤销，8 秒、做别的事即收起、别处改过数据即失效。
+  // （v1.15.0 曾让新建记录共用它，v1.15.1 维护者要求去掉。）
+  function showUndoToast(beforeData, afterRevision) {
     hideUndoToast();
     const toast = document.getElementById('undo-toast');
     if (!toast) return;
     const message = toast.querySelector('[data-role="undo-message"]');
     const button = toast.querySelector('[data-action="undo-delete"]');
-    if (message) message.textContent = opts.message || t('toast.deleted');
+    if (message) message.textContent = t('toast.deleted');
     if (button) button.hidden = false;
     toast.hidden = false;
     const timer = setTimeout(hideUndoToast, 8000);
-    undoDeleteState = {
-      beforeData,
-      afterRevision,
-      timer,
-      detach: armUndoDismissOnInteraction(),
-      configBeforeRaw: opts.configBeforeRaw,
-      configAfterRaw: opts.configAfterRaw || null,
-      draft: opts.draft || null
-    };
-  }
-
-  // v1.15.0：新建记录（含计划、补录/切分、过夜续记）保存成功后由 sheetController 调用。
-  function offerSaveUndo({ beforeData, afterEntries, configBeforeRaw, configAfterRaw, draft, tag, plan }) {
-    const shown = tag && tag !== RESERVED_UNKNOWN_TAG ? tag : t('tag.unknown');
-    showUndoToast(JSON.parse(JSON.stringify(beforeData)), entriesRevision(afterEntries), {
-      message: plan ? t('toast.savedPlan', { tag: shown }) : t('toast.savedEntry', { tag: shown }),
-      configBeforeRaw,
-      configAfterRaw: configAfterRaw !== configBeforeRaw ? configAfterRaw : null,
-      draft
-    });
+    undoDeleteState = { beforeData, afterRevision, timer, detach: armUndoDismissOnInteraction() };
   }
 
   function cancelUndoForConflict() {
@@ -849,17 +826,8 @@ import {
       // available for recovery; never extend its eight-second lifetime.
       return;
     }
-    // 新建撤销：这次保存顺带登记的新标签一并撤掉；config 此后被别处改过就保留现状
-    // （只多一个零记录标签，不丢数据），不为它让整次撤销失败。
-    if (pending.configAfterRaw !== null && pending.configAfterRaw !== undefined) {
-      restoreConfigRawChecked(pending.configBeforeRaw || '', pending.configAfterRaw);
-    }
     hideUndoToast();
     render();
-    if (pending.draft) {
-      sheetController.parkDraft(pending.draft);
-      showInfoToast(t('toast.saveUndone'));
-    }
   }
 
   function confirmPlanned(id) {
@@ -934,7 +902,6 @@ import {
     render,
     renderChrome,
     celebrateMilestone,
-    offerSaveUndo,
     isLegacyOrigin,
     // v82：删掉一个零记录标签后，还挂着的「撤销删除」会把引用它的记录放回来，
     // 那条记录就成了孤儿标签。与跨标签页修改同一处理：让撤销失效并明说。
