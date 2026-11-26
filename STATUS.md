@@ -3,6 +3,10 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
+**最新状态：2026-11-26，[v1.15.4](https://github.com/wowayou/time-logger/releases/tag/v1.15.4) 正式发布。主站已上线，旧只读站仍为 v1.15.3。** 来源 `931057c`，与 RC1 运行时相同。[镜像组装](https://github.com/wowayou/time-logger/actions/runs/45775171681)、[主站 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45775195635) 成功；主站 30/30 运行时清单项与标签逐字节一致，Chromium 已验版本、SW 接管、断网重开、说明问答与返回。S23 实测见[真机验收单](docs/device-acceptance.md)；[#45](https://github.com/wowayou/time-logger/issues/45) 已回复并关闭。
+
+**OPEN · 旧站部署未完成**：[旧站 Pages](https://github.com/wowayou/time-logger/actions/runs/45775171693) 第一次查询不到产物，API 确认已有未过期 github-pages 产物（1,645,836 字节）；同一 run 仅重试一次后，部署步骤报告有两个同名产物，已停止。旧站 manifest 实测仍为 1.15.3，未改发布流程或计费设置。以下为此前发布记录。
+
 **发布更新：2026-11-26。Web [v1.15.3](https://github.com/wowayou/time-logger/releases/tag/v1.15.3) 已发布，两站已核对；不含 #45。此前 2026-11-24，Web v1.15.1 已正式发布（tag [v1.15.1](https://github.com/wowayou/time-logger/releases/tag/v1.15.1)，来源 `3b9a4b7`；去掉新建记录的撤销）；同日稍早 Web v1.15.0 已正式发布（tag [v1.15.0](https://github.com/wowayou/time-logger/releases/tag/v1.15.0)，来源 `792bf6f`；新建草稿不丢、保存可撤销、未选标签提示、tooltip 贴边不出界）；同日稍早 Web v1.14.0 已正式发布（tag [v1.14.0](https://github.com/wowayou/time-logger/releases/tag/v1.14.0)，来源 `89b3781`；正文自动选标签 + 连点防穿透）；此前 2026-11-19 Web v1.13.0 已正式发布（tag [v1.13.0](https://github.com/wowayou/time-logger/releases/tag/v1.13.0)，来源 `f9c27d1`；隐私政策同批上线）；此前 v1.12.0（`2f3f832`）已发布；此前 v1.11.0（来源 `9c92743`）已发布；此前 v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
 
 ## DONE
