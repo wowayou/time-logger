@@ -3,9 +3,12 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**发布更新：2026-11-24。Web v1.15.1 已正式发布（tag [v1.15.1](https://github.com/wowayou/time-logger/releases/tag/v1.15.1)，来源 `3b9a4b7`；去掉新建记录的撤销）；同日稍早 Web v1.15.0 已正式发布（tag [v1.15.0](https://github.com/wowayou/time-logger/releases/tag/v1.15.0)，来源 `792bf6f`；新建草稿不丢、保存可撤销、未选标签提示、tooltip 贴边不出界）；同日稍早 Web v1.14.0 已正式发布（tag [v1.14.0](https://github.com/wowayou/time-logger/releases/tag/v1.14.0)，来源 `89b3781`；正文自动选标签 + 连点防穿透）；此前 2026-11-19 Web v1.13.0 已正式发布（tag [v1.13.0](https://github.com/wowayou/time-logger/releases/tag/v1.13.0)，来源 `f9c27d1`；隐私政策同批上线）；此前 v1.12.0（`2f3f832`）已发布；此前 v1.11.0（来源 `9c92743`）已发布；此前 v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
+**发布更新：2026-11-26。Web [v1.15.3](https://github.com/wowayou/time-logger/releases/tag/v1.15.3) 已发布，两站已核对；不含 #45。此前 2026-11-24，Web v1.15.1 已正式发布（tag [v1.15.1](https://github.com/wowayou/time-logger/releases/tag/v1.15.1)，来源 `3b9a4b7`；去掉新建记录的撤销）；同日稍早 Web v1.15.0 已正式发布（tag [v1.15.0](https://github.com/wowayou/time-logger/releases/tag/v1.15.0)，来源 `792bf6f`；新建草稿不丢、保存可撤销、未选标签提示、tooltip 贴边不出界）；同日稍早 Web v1.14.0 已正式发布（tag [v1.14.0](https://github.com/wowayou/time-logger/releases/tag/v1.14.0)，来源 `89b3781`；正文自动选标签 + 连点防穿透）；此前 2026-11-19 Web v1.13.0 已正式发布（tag [v1.13.0](https://github.com/wowayou/time-logger/releases/tag/v1.13.0)，来源 `f9c27d1`；隐私政策同批上线）；此前 v1.12.0（`2f3f832`）已发布；此前 v1.11.0（来源 `9c92743`）已发布；此前 v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
 
 ## DONE
+
+- **v1.15.3 说明精简（已发布）**：仅基于已发布的 v1.15.1 运行时制作，不含 #45 / v1.15.2。中文默认正文由 2,027 字符减为 124 字符（均不含标题）；默认展示记录、纠错和备份，四个问题以原生折叠项离线阅读。双引擎定向 8/8，涵盖中英、320/375/1024px、首屏与键盘操作；不代替真机或用户可理解性证据。双引擎全量 0 重试 1349 passed / 1 skipped / 0 failed（10.8 分钟）。期间 audit 发现动态 i18n 键无法静态追踪，改回显式键后，对最终模板再跑定向 8/8、audit、typecheck、diff 检查。逻辑 smoke、旧站组装测试 26 项和回环站点 SW 实际接管、断网重开与说明核对通过。记录在本机 `memory/help-1.15.3/`。
+  - 发布回执：tag `v1.15.3` → `0b6ec11`；[主站组装](https://github.com/wowayou/time-logger/actions/runs/45753694021)、[部署镜像 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45753710798)、[旧站 Pages](https://github.com/wowayou/time-logger/actions/runs/45753694011) 首轮成功，未重试。主站 `/app/` 与只读旧站按 SW 清单与 tag 比对 **60/60 字节一致**。两站各用全新 Chromium、375×667，核对版本与 SW 接管后断网重载，打开说明、展开备份问题、Esc 返回更多，无页面异常。机器回执保存在同一证据目录。未测已安装设备升级、安卓系统手势或读屏。未改计费设置，实际账单未核实。
 
 - **Web v1.15.1：去掉新建记录的撤销（2026-11-24，已发布）**：维护者要求「新建记录的撤销不要做 去掉」，随后「跑完直接提交并发版」。规则见 CLAUDE.md UI 红线「新建防错三件」②。
   - **内容**：新建记录（含计划、补录/切分、过夜续记）保存后不再出「已记录 #X · 撤销」横幅，撤销窗口只属于删除；v1.15.0 的草稿不丢、未选标签提示与 tooltip 贴边不变。删 3 个 i18n 键、改说明 1 处（中英对等），零新增运行时资产、存储键或备份字段，隐私政策不变。
@@ -71,8 +74,6 @@
 - **安卓代码侧发版防护已就绪**：独立仓库已实现内嵌运行时、签名缺失即拒绝 Release、`sync_runtime.py --release` 预检及从 Web 三段式版本派生版本号；不代表已上架。
 
 ## OPEN
-
-- **v1.15.3 说明精简（本地候选）**：仅基于已发布的 v1.15.1 运行时制作，不含 #45 / v1.15.2。中文默认正文由 2,027 字符减为 124 字符（均不含标题）；默认展示记录、纠错和备份，四个问题以原生折叠项离线阅读。双引擎定向 8/8，涵盖中英、320/375/1024px、首屏与键盘操作；不代替真机或用户可理解性证据。双引擎全量 0 重试 1349 passed / 1 skipped / 0 failed（10.8 分钟）。期间 audit 发现动态 i18n 键无法静态追踪，改回显式键后，对最终模板再跑定向 8/8、audit、typecheck、diff 检查。逻辑 smoke、旧站组装测试 26 项和回环站点 SW 实际接管、断网重开与说明核对通过。记录在本机 `memory/help-1.15.3/`。
 
 - **v1.7.5 发布验证尚有缺口（2026-11-13）**：两站已部署且线上运行时、功能已核对；主站实际 artifact 下载遭遇 TLS 握手超时，未重试，独立归档字节验证未完成。已有镜像 41/41、线上 40/40 字节证据，不能冒充该项完成。旧站 `.gitignore` 本轮为 503，未取得 404 证据；其余四个隐藏探测为 404，实际旧站部署包隐藏元数据文件 0。为遵守失败即停，本轮不再下载/部署，也不使用可选旧站文档刷新；旧站候选状态文档与源码发布回执存在已说明差异。证据见 `memory/2026-11-13-v1.7.5-release/` 及 [发布回执](docs/reviews/2026-11-13-v1.7.5-release.md)。
 
