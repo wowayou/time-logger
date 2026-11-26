@@ -878,7 +878,20 @@ import {
     sheetController.openFormSheet({ mode: 'config' });
   }
 
+  // 用户取消 ≠ 写入成功收尾 ≠ 跳到某天：后两者不经过此入口。
+  function cancelCurrentSheet() {
+    const mode = sheetController.getSheetMode();
+    if (!mode || document.getElementById('form-sheet').classList.contains('sheet-closing')) return false;
+    if (mode === 'delete-confirm') cancelDelete();
+    else if (mode === 'import-shift') ioActions.cancelImportShift();
+    else if (mode === 'edit') sheetController.cancelEdit();
+    else sheetController.closeForm();
+    renderIfCrossTabPending();
+    return true;
+  }
+
   const sheetController = createSheetController({
+    cancelCurrentSheet,
     state,
     load,
     loadSnapshotChecked,
@@ -1132,18 +1145,13 @@ import {
       if (action === 'pick-record-mode') sheetController.pickRecordMode(el);
       if (action === 'pick-overnight-end-mode') sheetController.pickOvernightEndMode(el);
       if (action === 'save-entry') sheetController.saveEntry();
-      if (action === 'close-form') {
-        if (sheetController.getSheetMode() === 'delete-confirm') cancelDelete();
-        else sheetController.closeForm();
-        renderIfCrossTabPending();
-      }
+      if (['close-form', 'cancel-edit', 'cancel-delete', 'cancel-import-shift'].includes(action)) cancelCurrentSheet();
       if (action === 'use-conflict-plus-new' || action === 'use-conflict-plus-edit') sheetController.useConflictPlusMinute(el);
       if (action === 'edit-conflict-entry') sheetController.editConflictEntry(el.dataset.id);
       if (action === 'start-edit') sheetController.startEdit(el.dataset.id);
       if (action === 'pick-edit-tag') sheetController.pickEditTag(el);
       if (action === 'pick-edit-bucket') sheetController.pickBucket(el);
       if (action === 'commit-edit') sheetController.commitEdit(el.dataset.id || sheetEditId);
-      if (action === 'cancel-edit') sheetController.cancelEdit();
       if (action === 'open-backup') sheetController.openBackupSheet();
       if (action === 'open-advanced') sheetController.openAdvancedSheet();
       if (action === 'open-analytics') sheetController.openAnalyticsSheet();
@@ -1171,14 +1179,12 @@ import {
       if (action === 'confirm-segment') confirmSegment(el.dataset.id, el.dataset.end);
       if (action === 'request-delete') requestDelete(el.dataset.id);
       if (action === 'confirm-delete') confirmDelete(el.dataset.id);
-      if (action === 'cancel-delete') cancelDelete();
       if (action === 'undo-delete') undoDelete();
       if (action === 'drill') drill(el.dataset.date, el.dataset.view);
       if (action === 'copy-summary') ioActions.copyCurrentViewSummary();
       if (action === 'copy-json') ioActions.copyJSON();
       if (action === 'download-json') ioActions.downloadJSON();
       if (action === 'import-json') ioActions.importJSON();
-      if (action === 'cancel-import-shift') ioActions.cancelImportShift();
       if (action === 'confirm-import-shift') ioActions.confirmImportShift();
       if (action === 'retry-import-preview') ioActions.retryImportPreview();
       if (action === 'resolve-import-conflict') ioActions.resolveImportConflict(el.dataset.key, el.dataset.resolution);
@@ -1216,13 +1222,7 @@ import {
     });
 
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') {
-        const mode = sheetController.getSheetMode();
-        if (mode === 'delete-confirm') cancelDelete();
-        else if (mode === 'edit') sheetController.cancelEdit();
-        else sheetController.closeForm();
-        renderIfCrossTabPending();
-      }
+      if (e.key === 'Escape' && !e.defaultPrevented && cancelCurrentSheet()) e.preventDefault();
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         if (sheetEditId) { sheetController.commitEdit(sheetEditId); return; }
         if (sheetController.isFormOpen()) sheetController.saveEntry();

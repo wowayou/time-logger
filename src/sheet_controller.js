@@ -139,6 +139,20 @@ export function createSheetController(deps) {
   let analyticsSelectedKey = ANALYTICS_DEFAULT_KEY;
   let analyticsPage = 0;
   let sheetStack = [];
+  // 一个可见面板只持有一个系统关闭请求监听，不拷贝菜单栈、不修改浏览历史。
+  let closeWatcher = null;
+  function watchSheetClose(sheet) {
+    if (closeWatcher || typeof window.CloseWatcher !== 'function') return;
+    closeWatcher = new window.CloseWatcher();
+    closeWatcher.onclose = () => {
+      closeWatcher = null; // 原生 close 已消费本次 watcher。
+      const picker = sheet.querySelector('.dt-pop:not([hidden])');
+      if (picker) picker.dispatchEvent(new Event('dismiss-picker'));
+      else deps.cancelCurrentSheet();
+      // 返回父菜单、从删除确认回编辑或只收起日历，仍有面板接收下一次返回。
+      if (!sheet.hidden && !sheet.classList.contains('sheet-closing')) watchSheetClose(sheet);
+    };
+  }
   // R1：sheet 关闭走 class 驱动过渡；未收尾前的清理函数存这里，供重入保护调用。
   let sheetCloseCleanup = null;
   let sheetDismissDrag = null;
@@ -743,7 +757,8 @@ export function createSheetController(deps) {
     const config = configSnapshot ? configSnapshot.config : deps.loadConfig();
     const entry = mode === 'edit' ? loaded.entries.find(e => e.id === id) : null;
     if (mode === 'edit' && !entry) return;
-    sheetLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!currentMode) sheetLastFocus = opener;
     if (mode === 'new') {
       deps.state.view = 'day';
       deps.persistState();
@@ -817,7 +832,7 @@ export function createSheetController(deps) {
       // 原地重渲染同一层（切主题/切语言/开关启动诊断/设为当前主线都走这条）：栈不动。
       // 少了这一条，每按一次开关就会往栈里压一层，返回时要按同样多次才出得来。
     } else if (SUB_MODES.includes(mode) && CONTAINER_MODES.includes(prevMode)) {
-      sheetStack.push(prevMode);
+      sheetStack.push({ mode: prevMode, action: opener?.dataset.action });
     } else {
       // 新开一条路径（记一条/编辑/删除确认/直接开更多），旧的返回栈作废。
       sheetStack = [];
@@ -880,6 +895,7 @@ export function createSheetController(deps) {
     // 写一次 --kb 供正文 scroll-padding。
     lockBodyForSheet();
     sheet.hidden = false;
+    watchSheetClose(sheet);
     if (mode === 'more' && window.__vvlog) {
       // P24 取证：真机开「更多」时把分享按钮的自渲染状态打进 HUD——若这里报 hidden=false
       // disp=flex 而屏幕上没有，则页面外抑制实锤（cosmetic filter / VPN 过滤），代码侧已尽。
@@ -1029,6 +1045,8 @@ export function createSheetController(deps) {
   }
 
   function closeFormSheet(opts = {}) {
+    closeWatcher?.destroy();
+    closeWatcher = null;
     const restoreFocus = opts.restoreFocus !== false;
     const sheet = document.getElementById('form-sheet');
     const panel = sheet ? sheet.querySelector('.form-sheet-panel') : null;
@@ -1132,7 +1150,9 @@ export function createSheetController(deps) {
       const back = sheetStack.pop();
       const active = document.activeElement;
       if (active && typeof active.blur === 'function') active.blur();
-      openFormSheet({ mode: back, restore: true });
+      openFormSheet({ mode: back.mode, restore: true });
+      if (back.action) Array.from(document.querySelectorAll('#form-sheet button[data-action]'))
+        .find(btn => btn.dataset.action === back.action)?.focus({ preventScroll: true });
       return;
     }
     // Cancel/backdrop/Esc with the keyboard up had the same two-jump close as
@@ -1443,7 +1463,7 @@ export function createSheetController(deps) {
       drag.panel.style.removeProperty('transform');
       const backdrop = sheet.querySelector('.form-sheet-backdrop');
       if (backdrop) backdrop.style.removeProperty('opacity');
-      closeForm();
+      deps.cancelCurrentSheet();
     };
     sheet.addEventListener('pointerup', finish);
     sheet.addEventListener('pointercancel', finish);

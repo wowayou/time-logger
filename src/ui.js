@@ -537,7 +537,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.15.3';
+export const APP_VERSION = '1.15.4';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -1330,15 +1330,18 @@ export function renderTagPicker(prefix, selectedTag, config = loadConfig(), buck
 
 function renderHelpSheet() {
   // tabindex keeps native summary controls in the sheet's keyboard focus trap.
-  const faq = (question, answer) => `<details><summary tabindex="0">${question}</summary><p>${answer}</p></details>`;
+  const faq = (question, answer) => `<details><summary class="cell-btn" tabindex="0"><span>${question}</span>${cellChevron}</summary>
+    <p>${answer}</p></details>`;
   return `
     ${sheetHead({ title: t('help.title'), cancelText: t('more.close'), cancelAction: 'close-form', cancelAria: t('help.closeAria') })}
     <div class="form-sheet-body help-body">
       <section><h2>${t('help.startTitle')}</h2><p>${t('help.start')}</p><p>${t('help.edit')}</p><p>${t('help.migrate')}</p></section>
+      <div class="cell-group help-topics">
       ${faq(t('help.bucketsQ'), t('help.bucketsA'))}
       ${faq(t('help.timeQ'), t('help.timeA'))}
       ${faq(t('help.reviewQ'), t('help.reviewA'))}
       ${faq(t('help.backupQ'), t('help.backupA'))}
+      </div>
     </div>`;
 }
 

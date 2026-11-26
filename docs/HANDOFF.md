@@ -71,6 +71,8 @@
 
 ## 验收与发布
 
+v1.15.4 联合候选包括 #45：用户关闭请求由 `cancelCurrentSheet` 分派；不要把保存成功或分析下钻接到取消入口。`node scripts/check_browser_journey.mjs v1.15.3` 可复跑浏览器迁移和离线写入验证。预发布标签 `rc-1.15.4.1` 不触发两站发布，安卓主屏按 `docs/device-acceptance.md` 实测后再考虑正式 tag。
+
 说明页的双引擎交互回归见 `tests/help_quickstart.spec.js`。发布后分别手动执行 `node scripts/check_help_release.mjs <应用地址> <版本>`；它会开全新临时 Chromium 上下文，核对版本和缓存，断网重载后走「更多 → 说明 → 备份问题 → 返回」。仅成功时输出带时间和地址的 JSON 回执；失败返回非零，不自动重试，不新增 CI。
 
 完整命令和版本仪式只维护在 [CLAUDE.md](../CLAUDE.md#改动自测清单)，不要在交接页写死用例数、版本号或复制发布步骤。

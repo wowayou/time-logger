@@ -591,10 +591,11 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb, { showNow = t
     popEl.hidden = false;
     ac = new AbortController();
     const { signal } = ac;
+    popEl.addEventListener('dismiss-picker', () => closePop(), { signal });
     document.addEventListener('keydown', e => {
       if (!document.contains(wrap)) { closePop(false); return; }
       if (popEl.hidden) return;
-      if (e.key === 'Escape') { e.stopPropagation(); closePop(); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePop(); }
     }, { capture: true, signal });
     // 文档流中的面板收起会挪动后续控件；外部点击须先完成动作，再收起。
     document.addEventListener('click', e => {
