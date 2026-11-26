@@ -2,7 +2,7 @@
 
 > Status: active · 已上线，可日常使用；进度与待办见 [STATUS.md](STATUS.md)
 >
-> Release: v1.15.4 RC1（说明折叠和系统返回联合测试，正式站仍为 v1.15.3；安卓步骤见 [真机验收单](docs/device-acceptance.md)）。
+> Release: v1.15.4（说明问答与安卓系统返回；发布状态见 [STATUS.md](STATUS.md)，适用范围见[真机验收单](docs/device-acceptance.md)）。
 >
 > Updated: 2026-11-26
 >
