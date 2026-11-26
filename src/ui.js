@@ -537,7 +537,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.15.1';
+export const APP_VERSION = '1.15.3';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -1329,19 +1329,16 @@ export function renderTagPicker(prefix, selectedTag, config = loadConfig(), buck
 }
 
 function renderHelpSheet() {
+  // tabindex keeps native summary controls in the sheet's keyboard focus trap.
+  const faq = (question, answer) => `<details><summary tabindex="0">${question}</summary><p>${answer}</p></details>`;
   return `
     ${sheetHead({ title: t('help.title'), cancelText: t('more.close'), cancelAction: 'close-form', cancelAria: t('help.closeAria') })}
     <div class="form-sheet-body help-body">
-      <section><h2>${t('help.h1')}</h2><p>${t('help.p1')}</p></section>
-      <section><h2>${t('help.h2')}</h2><p>${t('help.p2a')}</p><p>${t('help.p2b')}</p></section>
-      <section><h2>${t('help.h3')}</h2><p>${t('help.p3')}</p></section>
-      <section><h2>${t('help.h4')}</h2><p>${t('help.p4')}</p></section>
-      <section><h2>${t('help.h5')}</h2><p>${t('help.p5')}</p></section>
-      <section><h2>${t('help.h6')}</h2><p>${t('help.p6')}</p></section>
-      <section><h2>${t('help.h7')}</h2><p>${t('help.p7')}</p></section>
-      <section><h2>${t('help.h8')}</h2><p>${t('help.p8')}</p></section>
-      <section><h2>${t('help.h9')}</h2><p>${t('help.p9')}</p></section>
-      <section><h2>${t('help.h10')}</h2><p>${t('help.p10')}</p></section>
+      <section><h2>${t('help.startTitle')}</h2><p>${t('help.start')}</p><p>${t('help.edit')}</p><p>${t('help.migrate')}</p></section>
+      ${faq(t('help.bucketsQ'), t('help.bucketsA'))}
+      ${faq(t('help.timeQ'), t('help.timeA'))}
+      ${faq(t('help.reviewQ'), t('help.reviewA'))}
+      ${faq(t('help.backupQ'), t('help.backupA'))}
     </div>`;
 }
 

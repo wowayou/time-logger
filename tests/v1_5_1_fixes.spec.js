@@ -189,8 +189,9 @@ test('v1.5.1 ⑤: help explains time analysis and the motto / rotating lines', a
   await page.locator('[data-action="open-more"]').click();
   await page.locator('[data-action="open-help"]').click();
   const help = page.locator('.help-body');
-  await expect(help.locator('h2', { hasText: '时间分析' })).toBeVisible();
-  await expect(help.locator('h2', { hasText: '格言与文字轮播' })).toBeVisible();
-  await expect(help).toContainText('接着今天这一句往下读');
-  await expect(help).toContainText('一键改选');
+  await help.locator('summary', { hasText: '这周的时间' }).click();
+  await expect(help.locator('details[open] p')).toContainText('时间分析');
+  await expect(help.locator('details[open] p')).toContainText('点格言可编辑，也可用文字轮播');
+  await help.locator('summary', { hasText: '四个桶' }).click();
+  await expect(help.locator('details[open] p').filter({ hasText: '一键改选' })).toBeVisible();
 });
