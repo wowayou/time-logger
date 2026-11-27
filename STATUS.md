@@ -3,7 +3,7 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**最新状态：2026-11-27，v1.16.1（导入冲突三选一键高 44）本地门禁通过、待发布；发布结果见 DONE 首条。** 同日稍早 [v1.16.0](https://github.com/wowayou/time-logger/releases/tag/v1.16.0)（SPEC-016 D 期）与 v1.15.5–v1.15.9 已发布；设计系统 A–D 完成，E 期真机验收待维护者，七版均未做真机。
+**最新状态：2026-11-27，[v1.16.1](https://github.com/wowayou/time-logger/releases/tag/v1.16.1) 已在主站与旧只读站上线（导入冲突三选一键高 44）。** 运行时来源 `aecabee`；[主站组装](https://github.com/wowayou/time-logger/actions/runs/45980977990)、[部署镜像 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45980996752)、[旧站 Pages](https://github.com/wowayou/time-logger/actions/runs/45980977967) 首轮成功；两站 60/60 与 tag 逐字节一致。同日稍早 v1.15.5–v1.16.0 已发布（设计系统 A–D 完成，E 期真机验收待维护者），七版均未做真机。详见 DONE。
 
 **此前（2026-11-26）**：[v1.15.4](https://github.com/wowayou/time-logger/releases/tag/v1.15.4) 已在主站与旧只读站上线，运行时来源 `931057c`，与 RC1 相同。[镜像组装](https://github.com/wowayou/time-logger/actions/runs/45775171681)、[主站 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45775195635) 成功；主站 30/30 运行时清单项与标签逐字节一致，Chromium 已验版本、SW 接管、断网重开、说明问答与返回。S23 实测见[真机验收单](docs/device-acceptance.md)；[#45](https://github.com/wowayou/time-logger/issues/45) 已回复并关闭。
 
@@ -16,6 +16,7 @@
 - **Web v1.16.1：导入冲突三选一键高 44（2026-11-27）**：维护者要「冲突按钮改到 44px，跑完直接发版」。来源是 v1.16.0 发版后补截导入页时量到的 38px（见 v1.16.0「发版后补核」③）。规则见 CLAUDE.md「按钮组件清单」末句。
   - **内容**：`.import-conflict-actions button` 的 `min-height` 由写死的 38px 改为 `var(--control-h)`（44）；字号、内边距、三列等宽、选中态不变，字号放大时仍随内容长高。38px 自 v52（2026-07-10）起，达到 2.5.8 AA、低于项目 44 基线。零新增运行时资产、i18n 键、存储键或备份字段；对外表面不涉及。
   - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过（退出码逐个核对）。`tests/v1_16_1_conflict_buttons.spec.js` 双引擎 6/6，以 v1.16.0 运行时 4/6 红（中文 390 为 38、320px 英文为 42；200% 字号令牌那条本就随内容长高，是哨兵）；把高度写死成 44，200% 用例两引擎红在裁字；加 `pointer-events:none`，四角命中断言红。截图对照（v1.16.0 对本版）：导入两页 36 张（两引擎）只有冲突卡长 6px 带来的位移，冲突键量得 38 → 44、无横向溢出 / 出界 / 裁字；72 张常规界面（Chromium）66 张逐像素相同，6 张是 sheet 顶部、合并提示、周视图已知的 2–8px 噪声。完整 UI **1441 passed / 5 skipped / 0 failed（20.0 分钟，0 重试；比 v1.16.0 多的 6 条即新用例）**，运行前后源码与测试文件哈希一致。未做真机。
+  - **发布与线上核对**：维护者授权「跑完直接发版」。推送前远端 main 为 `ede345a`；功能提交 `aecabee`，tag / [Release](https://github.com/wowayou/time-logger/releases/tag/v1.16.1)；三个 workflow 首轮 success，镜像提交 `publish: v1.16.1 from wowayou/time-logger@aecabee…`。两站按 `sw.js` FILES 与 tag 逐字节一致 60/60（带随机参数）。Chromium 全新上下文、390×844、合成记录：主站 SW 接管、缓存只有 `timelog-v1.16.1`、manifest 1.16.1；用合成备份制造两种冲突，6 个三选一键均 44 高、无横向溢出，取消导入后 `timelog.v1` 与写入种子逐字相同。旧站同样只有 `timelog-v1.16.1`、无导入入口（只读）。无脚本错误或 HTTP ≥400。未测 WebKit 线上与真机。Actions 用量见 v1.16.0「发版后补核」②（本版各多一次三个 workflow，未单独再查账单）。
 
 - **Web v1.16.0：SPEC-016 D 期——空状态与成功反馈（2026-11-27）**：P3 第三期，至此 SPEC-016 A–D 完成，E 期真机验收待维护者。执行记录见 [SPEC-016 §10](docs/specs/SPEC-016-design-system.md)，规则见 CLAUDE.md「空状态与成功反馈」。版本号用 1.16.0 而非 1.15.10：发版时以为本机无法核实安卓仓 versionCode 能否处理两位数补丁号而避开；发版后已核实 1.15.10 本也可用（见下方「发版后补核」）。workflow 的 tag 匹配两者都接。
   - **内容**：① 日视图时间轴空状态此前一律叫人点「＋ 记一条」——+1…+7 日与今天偏好计划时 FAB 是「＋ 计划一条」，+8 日起 FAB 隐藏；现由 `newEntryMode` 与 FAB 共用一处判断，新增「计划」一句，不能新增时时间轴只写「切换日期可查看其它日子。」（首屏卡片已写「这一天还没有记录」；第一版两处各说一遍，发版前截图发现后改）。② 按钮内成功反馈统一「✓ 已…」（「已完成存储」→「✓ 已存储备份」，分享 / 下载补 ✓）；桌面下载仍写「请在下载项确认」。i18n 新增 1 键、改 4 处（中英对等）；对外表面（主页、支持页、隐私政策、README 功能列表、《使用与理念》）都不含这些句子，无需改。零新增运行时资产、存储键或备份字段。
