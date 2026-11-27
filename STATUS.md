@@ -3,7 +3,7 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**最新状态：2026-11-27，[v1.15.8](https://github.com/wowayou/time-logger/releases/tag/v1.15.8) 已在主站与旧只读站上线（SPEC-016 B 期：按钮组件清单与收敛）。** 运行时来源 `6fd211b`；[主站组装](https://github.com/wowayou/time-logger/actions/runs/45955291792)、[部署镜像 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45955314035)、[旧站 Pages](https://github.com/wowayou/time-logger/actions/runs/45955291658) 首轮成功；两站 60/60 与 tag 逐字节一致。同日稍早 v1.15.5–v1.15.7 已发布。详见 DONE。
+**最新状态：2026-11-27，[v1.15.9](https://github.com/wowayou/time-logger/releases/tag/v1.15.9) 已在主站与旧只读站上线（SPEC-016 C 期：层级表与动效）。** 运行时来源 `840479c`；[主站组装](https://github.com/wowayou/time-logger/actions/runs/45958391264)、[部署镜像 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45958406883)、[旧站 Pages](https://github.com/wowayou/time-logger/actions/runs/45958391250) 首轮成功；两站 60/60 与 tag 逐字节一致。同日稍早 v1.15.5–v1.15.8 已发布。详见 DONE。
 
 **此前（2026-11-26）**：[v1.15.4](https://github.com/wowayou/time-logger/releases/tag/v1.15.4) 已在主站与旧只读站上线，运行时来源 `931057c`，与 RC1 相同。[镜像组装](https://github.com/wowayou/time-logger/actions/runs/45775171681)、[主站 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45775195635) 成功；主站 30/30 运行时清单项与标签逐字节一致，Chromium 已验版本、SW 接管、断网重开、说明问答与返回。S23 实测见[真机验收单](docs/device-acceptance.md)；[#45](https://github.com/wowayou/time-logger/issues/45) 已回复并关闭。
 
@@ -16,6 +16,7 @@
 - **Web v1.15.9：SPEC-016 C 期——层级表与动效（2026-11-27）**：P3 第二期。执行记录见 [SPEC-016 §9](docs/specs/SPEC-016-design-system.md)，规则见 CLAUDE.md「层级表与动效时长」。
   - **内容**：全局 z-index 收成 8 个 `--z-*` 令牌，数值不变；新增 `--t-base` 200ms、`--t-move` 250ms（取 sheet 与信息提示原值），其余 5 处时长写 `raw:` 理由；导入分组箭头 120 → 140ms 是唯一时长改动。计划的「两档」做成三档：改两档会改 sheet 进出节奏，收益说不清。新写的减少动效扫描在两引擎都扫出三处漏网——时间分析圆盘键按下缩放、明细与首屏比例条伸缩、导入分组箭头旋转——已关闭。零新增运行时资产、i18n 键、存储键或备份字段。
   - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过（退出码逐个核对）。`audit_css_layers_motion` 红灯：裸层级、裸时长、删掉例外标记、多加例外四种各自变红。`tests/v1_15_9_layers_motion.spec.js` 双引擎 4/4，以 v1.15.8 运行时 4/4 红；`--z-notice` 改到 sheet 之下，层级用例红在「信息提示应在 sheet 之上」。完整 UI **1421 passed / 5 skipped / 0 failed**（19.9 分钟，0 重试）。截图对照 72 张相对 v1.15.8 仅合并提示 1–3px 已知噪声（截图在减少动效下拍，默认动效下的节奏未改）。未做真机。
+  - **发布与线上核对**：推送前远端 main 为 `8416119`；功能提交 `840479c`，tag / [Release](https://github.com/wowayou/time-logger/releases/tag/v1.15.9)；三个 workflow 首轮 success，镜像提交 `publish: v1.15.9 from 840479c`。两站按 `sw.js` FILES 与 tag 逐字节一致 60/60。主站与旧站 Chromium 全新上下文、减少动效、周视图合成记录：缓存只有 `timelog-v1.15.9`，遮罩 / FAB / sheet / 信息提示层级 60 / 70 / 80 / 85，比例条过渡为 none；无脚本错误或 HTTP ≥400。实际账单未核实。
 
 - **Web v1.15.8：SPEC-016 B 期——按钮组件清单与收敛（2026-11-27）**：维护者要「P3 也按你的建议做，跑完直接发版」；P3 按 SPEC-016 分 B / C / D 三期各发一版，本版 B。范围按转来的评审意见收：只收敛实际触碰的组件，不批量替换 §7 的 169 处间距，真机补丁保留。执行记录见 [SPEC-016 §8](docs/specs/SPEC-016-design-system.md)，规则见 CLAUDE.md「按钮组件清单」。
   - **内容**：新增 [组件清单](docs/components.md)（7 家族、35 类）与 `audit_button_inventory`（双向硬拦）；整行动作 `.cell-action` / `.cell-danger` 合成一个基类并补两侧 12px 内边距，「复制本期摘要」并入（44 高胶囊 → 48 高、15px、12px 圆角）；标签设置两组并排键 44 → 48 高、共用排法，删去重复的焦点环与内边距；`.mini-btn` / `.range-snap` 共用基础声明；16 类按下无反馈的按钮补 0.75 变淡。`.wheel-now-btn` 未并入文字动作（与滚轮并排需要按钮可辨性）。零新增运行时资产、i18n 键、存储键或备份字段。
