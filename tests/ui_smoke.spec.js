@@ -1657,7 +1657,8 @@ test('share prefers files, survives canShare exceptions, and preserves cell stru
   });
   await openBackupSheet(page);
   await page.locator('#backup-send-btn').click();
-  await expect(page.locator('#backup-send-btn [data-role="cell-label"]')).toHaveText('已分享备份');
+  // v1.16.0（SPEC-016 D）：按钮内成功反馈统一为「✓ 已…」。
+  await expect(page.locator('#backup-send-btn [data-role="cell-label"]')).toHaveText('✓ 已分享备份');
   await expect(page.locator('#backup-send-btn .cell-chevron')).toHaveCount(1);
   expect(await page.evaluate(() => window.__shareCalls)).toEqual([{ files: false, text: true }]);
 

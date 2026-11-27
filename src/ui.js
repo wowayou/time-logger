@@ -332,7 +332,7 @@ export function renderNowStrip(items, isToday, config = loadConfig()) {
 
 
 export function renderTimeline(items, opts = {}) {
-  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig(), density = 'full' } = opts;
+  const { sheetEditId = null, plannedItems = [], isToday = false, nowLabel = '', readOnly = false, config = loadConfig(), density = 'full', emptyMode = 'log' } = opts;
   const el = document.getElementById('timeline');
   const layout = normalizeTimelineDensity(density);
   // v1.8.3 尺子刻度（取代 v1.8.2 的 4h 满格时长条）：只在「全文」布局画（行高随正文变，
@@ -358,10 +358,12 @@ export function renderTimeline(items, opts = {}) {
     planned: true
   }));
   const allItems = [...items, ...planned];
+  // v1.16.0：空状态的指引跟着 FAB 走——能记录叫人点「＋ 记一条」，只能计划叫人点
+  // 「＋ 计划一条」，不能新增（只读旧站、+8 日起，FAB 已隐藏）只说没有记录。
   if (!allItems.length) {
-    el.innerHTML = readOnly
-      ? `<div class="empty-tip">${t('timeline.emptyOtherDay')}</div>`
-      : `<div class="empty-tip">${t('timeline.emptyToday')}</div>`;
+    const tip = readOnly || emptyMode === 'none' ? t('timeline.emptyOtherDay')
+      : emptyMode === 'plan' ? t('timeline.emptyPlan') : t('timeline.emptyToday');
+    el.innerHTML = `<div class="empty-tip">${tip}</div>`;
     return;
   }
   // R6（v47）：点整卡即编辑（删除在编辑 sheet 内）。卡片 div 带 data-action（click
@@ -547,7 +549,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.15.9';
+export const APP_VERSION = '1.16.0';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};

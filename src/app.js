@@ -272,6 +272,15 @@ import {
   }
   // v1.15.6：current 标出含今天的那一行（周/月列日→今天，年列月→本月），只认本地自然日；
   // 历史周期没有。跨午夜由 dataSignature 里的 today 触发重渲。
+  // v1.16.0（SPEC-016 D）：所看这天能怎么新增——FAB 的显隐与主文案、时间轴空状态的
+  // 指引共用这一处判断。'none'＝不能新增（只读旧站、+8 日起），'plan'＝FAB 是「计划一条」
+  // （+1…+7 日强制计划，或今天偏好计划），否则 'log'。此前空状态一律叫人点「＋ 记一条」。
+  function newEntryMode(dateMode = entryModeForDate(state.selectedDate)) {
+    if (!dateMode.canCreate || isLegacyOrigin()) return 'none';
+    const preferPlan = readUiPreference(RECORD_MODE_KEY) === 'plan';
+    return dateMode.forcedMode === 'plan' || (dateMode.kind === 'today' && preferPlan) ? 'plan' : 'log';
+  }
+
   function summaryRows() {
     const { start } = periodRange();
     const today = todayStr();
@@ -407,6 +416,7 @@ import {
         // SPEC-002：旧 origin 只读——行不可点开编辑、不渲染补一下/标记已发生/确认
         // 等写入口，左滑轨道因缺少 data-action="start-edit" 锚点而自然不启用。
         readOnly: isLegacyOrigin(),
+        emptyMode: newEntryMode(),
         density: currentTimelineDensity()
       });
       if (focusedEntryId) {
@@ -535,12 +545,12 @@ import {
     // （尾点是 23:59 的真实记录），当天没有任何合法的新增起点——与其给一个点
     // 进去必然报冲突的按钮，不如按既有惯例隐藏 FAB（切一刀/编辑仍可从行进入）。
     const fabStart = isDay ? defaultFormTs(entries) : '';
-    const canCreate = isDay && dateMode.canCreate && !isLegacyOrigin() && fabStart !== '';
+    const entryMode = newEntryMode(dateMode);
+    const canCreate = isDay && entryMode !== 'none' && fabStart !== '';
     addBtn.hidden = !canCreate;
     if (listFade) listFade.hidden = !canCreate;
     if (canCreate) {
-      const preferPlan = readUiPreference(RECORD_MODE_KEY) === 'plan';
-      const isPlan = dateMode.forcedMode === 'plan' || (dateMode.kind === 'today' && preferPlan);
+      const isPlan = entryMode === 'plan';
       const mainLabel = isPlan ? t('chrome.fabPlan') : t('chrome.fabLog');
       const sub = fabSubCopy(fabStart, entries);
       addBtn.innerHTML = `<span class="fab-main">${mainLabel}</span>${sub ? `<span class="fab-sub">${esc(sub)}</span>` : ''}`;
