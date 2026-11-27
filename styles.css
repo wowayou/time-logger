@@ -2014,7 +2014,14 @@
     .form-lede {
       color: var(--muted);
       font-size: var(--fs-ui);
+      /* v1.15.5：overflow:hidden 使它成为滚动容器，网格项的自动最小高度随之归零——
+         正文排不下时 .form-sheet-body 的网格先把这一行压扁（计划表单 390×820 下两引擎
+         都压到 0，375×667 普通新建压到 15.8px、字被拦腰裁掉，与 P34 同一机制）。clip 不建
+         滚动容器，行高按内容算，排不下交给正文滚动；省略号照常。min-height:min-content
+         试过：WebKit 无效，Chromium 只撑开元素不撑开网格行、会叠到下一行上。不支持 clip
+         的旧浏览器退回 hidden（即旧行为）。 */
       overflow: hidden;
+      overflow: clip;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -2942,6 +2949,28 @@
       padding: 0 14px;
       font-size: var(--fs-ui);
     }
+    /* v1.15.5：归类分段的选中项带桶色圆点，与标签 chip、首屏比例条同色；不辨颜色时仍靠
+       选中底、字重与 aria-pressed 区分。圆点画在加宽的左内边距里（绝对定位），三个按钮
+       同样留位、换桶不跳宽；每个只比原来宽 4px——第一版用行内占位多出 14px，200% 字号
+       令牌下 320px 编辑表单横向溢出 5px（R06）。 */
+    .bucket-seg button {
+      position: relative;
+      padding-inline: 22px 10px;
+    }
+    .bucket-seg button::before {
+      content: '';
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      margin-top: -4px;
+      border-radius: 50%;
+      background: transparent;
+    }
+    .bucket-seg button.active[data-bucket="job"]::before { background: var(--accent); }
+    .bucket-seg button.active[data-bucket="maintain"]::before { background: var(--maintain); }
+    .bucket-seg button.active[data-bucket="leak"]::before { background: var(--leak); }
     /* v1.8.0：没有可统计时长的日/月只占一行，退到背景，不与有数据的行抢视线。 */
     .sum-row .ruler-bar { margin-bottom: var(--sp-2); }
     .sum-row.is-empty {

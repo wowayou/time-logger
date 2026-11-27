@@ -33,8 +33,10 @@ for (const width of [375, 390]) {
     expect(Math.max(...m.slack.map(Math.abs)), `stretched rows: ${m.slack}`).toBeLessThanOrEqual(1);
     expect(m.segToTime).toBeLessThanOrEqual(28);
     expect(m.segWidth).toBeLessThan(m.bodyWidth / 2);
-    expect(m.modeButton).toBeGreaterThanOrEqual(36);
-    expect(m.bucketButton).toBeGreaterThanOrEqual(36);
+    // 进场过渡里面板带小数 translateY，变换后的盒高有 1e-5 级浮点误差：v1.15.5 去掉说明行后
+    // 位置一变，Chromium 量到 35.99999。容差 0.01px，任何真实的按钮变矮（≥1px）照样红。
+    expect(m.modeButton).toBeGreaterThanOrEqual(36 - 0.01);
+    expect(m.bucketButton).toBeGreaterThanOrEqual(36 - 0.01);
   });
 }
 

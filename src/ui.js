@@ -537,7 +537,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.15.4';
+export const APP_VERSION = '1.15.5';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -1083,6 +1083,11 @@ export function renderFormSheet(opts) {
   const whatText = isEdit
     ? (esc(e.what) || t('timeline.emptyWhat'))
     : (isBackfill || isOvernight ? t('form.hintOtherDay') : (isPlan ? t('form.hintPlan') : (isToday ? t('form.hintToday') : t('form.hintOtherDay'))));
+  // v1.15.5：今天「已发生」的普通新建里，标题「记一条 · 刚才这一阵」、字段名「做了什么」
+  // 与占位例句已说清要写什么，说明行只是第三遍复述，却把归类与常用标签往键盘下推约
+  // 32px。只在这一种表单里隐藏；编辑（显示原正文）、计划、补录、过夜续记的说明行含义
+  // 不同，照常显示。切到「计划」时由 sheet_controller.pickRecordMode 恢复。
+  const hideLede = !isEdit && !isBackfill && !isOvernight && !isPlan && isToday;
   const whatFieldLabel = isPlan || isEditPlanned ? t('form.whatLabelPlan') : t('form.whatLabelLog');
   const whatPlaceholder = isPlan || isEditPlanned ? t('form.whatPlaceholderPlan') : (isEdit ? t('form.editWhatPlaceholder') : t('form.whatPlaceholderLog'));
   const saveAction = isEdit ? 'commit-edit' : 'save-entry';
@@ -1268,7 +1273,7 @@ export function renderFormSheet(opts) {
       doneId: saveId
     })}
     <div class="form-sheet-body">
-      <div class="form-sheet-what form-lede">${whatText}</div>
+      <div class="form-sheet-what form-lede"${hideLede ? ' hidden' : ''}>${whatText}</div>
       ${isEdit ? editBody : newBody}
     </div>`;
 }

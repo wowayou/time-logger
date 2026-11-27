@@ -2,9 +2,9 @@
 
 > Status: active · 已上线，可日常使用；进度与待办见 [STATUS.md](STATUS.md)
 >
-> Release: v1.15.4（说明问答与安卓系统返回；发布状态见 [STATUS.md](STATUS.md)，适用范围见[真机验收单](docs/device-acceptance.md)）。
+> Release: v1.15.5（「记一条」表单瘦身与说明行不再被压扁；发布状态见 [STATUS.md](STATUS.md)，适用范围见[真机验收单](docs/device-acceptance.md)）。
 >
-> Updated: 2026-11-26
+> Updated: 2026-11-27
 >
 > Intended user: 需要记录每天时间去向并进行每日复盘的个人使用者。
 >

@@ -1887,7 +1887,11 @@ export function createSheetController(deps) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(formTargetDate || '');
     const daySummary = m ? t('form.daySummary', { m: Number(m[2]), d: Number(m[3]) }) : t('form.thisDay');
     if (title) title.textContent = formRecordMode === 'plan' ? t('form.titlePlan', { day: daySummary }) : t('form.titleLog', { when: formTargetDate === todayStr() ? t('form.whenJustNow') : t('form.whenBackfill') });
-    if (what) what.textContent = formRecordMode === 'plan' ? t('form.hintPlan') : (formTargetDate === todayStr() ? t('form.hintToday') : t('form.hintOtherDay'));
+    if (what) {
+      what.textContent = formRecordMode === 'plan' ? t('form.hintPlan') : (formTargetDate === todayStr() ? t('form.hintToday') : t('form.hintOtherDay'));
+      // v1.15.5：与 ui.js renderFormSheet 的 hideLede 同一规则——今天已发生不显示说明行。
+      what.hidden = formRecordMode !== 'plan' && formTargetDate === todayStr();
+    }
     const whatLabel = panel.querySelector('[data-role="what-label"]');
     if (whatLabel) whatLabel.textContent = formRecordMode === 'plan' ? t('form.whatLabelPlan') : t('form.whatLabelLog');
     const whatInput = panel.querySelector('#form-what');
