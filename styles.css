@@ -26,7 +26,15 @@
          走 raw 例外，不进字阶。
        - 间距：4px 刻度 --sp-1…--sp-6（4/8/12/16/24/32），A 期只把恰好落在刻度上的值
          换成令牌；2/6/10/14 等半档与奇数值暂保留原值，留待 B 期按组件收敛（见 SPEC-016）。
-       - 字重：600 / 700 两档为主（A 期把 650 并入 600），500/400 各有零星用处。 */
+       - 字重：600 / 700 两档为主（A 期把 650 并入 600），500/400 各有零星用处。
+       - 层级（SPEC-016 C，v1.15.9）：全局浮层一张表，从低到高 tip 40（提示气泡）< scrim 60
+         （状态栏遮罩）< fade 65（列表底部渐隐）< float 70（记一条 FAB 与撤销提示同层，靠 DOM
+         顺序）< banner 75（更新横幅）< sheet 80（表单 / 菜单）< notice 85（信息提示，须盖过
+         sheet，见 #info-toast 注释）< cross-tab 90（跨标签横幅）。组件内部的 0–5 是局部堆叠，
+         照写数字；≥ 10 一律用令牌（audit_css_tokens）。
+       - 时长：fast 140ms 控件反馈与行淡入 / base 200ms 表面淡入淡出 / move 250ms 表面位移
+         （sheet、信息提示）。其余时长写在同一行 raw: 理由里并封顶条数；减少动效时位移类过渡
+         与动画一律关掉（tests/v1_15_9_layers_motion）。 */
     :root {
       --r-sm: 8px;
       --r-ctl: 12px;
@@ -46,6 +54,16 @@
       --sp-5: 24px;
       --sp-6: 32px;
       --t-fast: 140ms ease-out;
+      --t-base: 200ms ease;
+      --t-move: 250ms ease-out;
+      --z-tip: 40;
+      --z-scrim: 60;
+      --z-fade: 65;
+      --z-float: 70;
+      --z-banner: 75;
+      --z-sheet: 80;
+      --z-notice: 85;
+      --z-cross-tab: 90;
       --control-h: 44px;
     }
     /* v84：`color-scheme` 与四处令牌块一一配对（默认暗 / 跟随系统亮 / 显式亮 / 显式暗）。
@@ -203,7 +221,7 @@
        first render() (render runs before app-ready, so they reveal already
        correct — including add-btn hidden on non-day views). */
     body:not(.app-ready):not(.boot-restored) :is(#add-btn, .ruler, .tl-head, #timeline) { opacity: 0; }
-    :is(#add-btn, .list-fade, .ruler, .tl-head, #timeline) { transition: opacity 0.18s ease; }
+    :is(#add-btn, .list-fade, .ruler, .tl-head, #timeline) { transition: opacity 0.18s ease; } /* raw: v1.7.5 维护者定的 180ms 交接——FAB 与渐隐层先于 sheet（250ms）退场 */
     @media (prefers-reduced-motion: reduce) {
       :is(#add-btn, .list-fade, .ruler, .tl-head, #timeline) { transition: none; }
     }
@@ -361,7 +379,7 @@
       position: fixed;
       right: max(16px, calc(50vw - 284px));
       bottom: calc(16px + env(safe-area-inset-bottom));
-      z-index: 70;
+      z-index: var(--z-float);
       display: flex;
       flex-direction: column;
       align-items: flex-start;
@@ -397,7 +415,7 @@
       right: 0;
       bottom: 0;
       height: 56px;
-      z-index: 65;
+      z-index: var(--z-fade);
       pointer-events: none;
       background: linear-gradient(to bottom, transparent, var(--bg));
     }
@@ -413,7 +431,7 @@
       left: 50%;
       bottom: calc(100% + 8px);
       transform: translateX(calc(-50% + var(--tip-dx, 0px)));
-      z-index: 40;
+      z-index: var(--z-tip);
       width: 0;
       max-width: 0;
       padding: 0;
@@ -430,7 +448,7 @@
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
-      transition: opacity 0.12s ease, visibility 0s linear 0.12s;
+      transition: opacity 0.12s ease, visibility 0s linear 0.12s; /* raw: 气泡收起要快于控件反馈，visibility 延迟与之成对 */
       transition-delay: 0s;
     }
     button[data-tip]::before {
@@ -439,13 +457,13 @@
       left: 50%;
       bottom: calc(100% + 3px);
       transform: translateX(-50%);
-      z-index: 41;
+      z-index: calc(var(--z-tip) + 1);
       border: 0 solid transparent;
       border-top-color: var(--text);
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
-      transition: opacity 0.12s ease, visibility 0s linear 0.12s;
+      transition: opacity 0.12s ease, visibility 0s linear 0.12s; /* raw: 同上（气泡箭头） */
       transition-delay: 0s;
     }
     button[data-tip][data-tip-pos="bottom"]::after {
@@ -1065,7 +1083,7 @@
       margin-bottom: 9px;
       gap: 2px;
     }
-    .ruler-bar div { transition: flex 0.3s; }
+    .ruler-bar div { transition: flex 0.3s; } /* raw: 比例条随数据伸缩，比表面进出慢一档才看得出变化；减少动效时关闭 */
     .ruler-bar div:first-child { border-radius: var(--r-pill) 0 0 var(--r-pill); }
     .ruler-bar div:last-child { border-radius: 0 var(--r-pill) var(--r-pill) 0; }
     .ruler-text {
@@ -1379,7 +1397,7 @@
       border-radius: 50%;
       background: var(--accent);
       flex: 0 0 auto;
-      animation: tl-now-pulse 2.4s ease-in-out infinite;
+      animation: tl-now-pulse 2.4s ease-in-out infinite; /* raw: 「现在」呼吸点的环境节奏，不是交互反馈；减少动效时静止 */
     }
     .tl-now-label {
       font-size: var(--fs-cap);
@@ -1469,7 +1487,7 @@
          transform，因为 transform 是左滑手势的驱动属性；一旦两者共用 transition 声明，
          手势 touchstart 清空内联 transition 后会退回这条 CSS 规则，把 1:1 跟手拖拽
          变成带延迟的动画。opacity 与 transform 完全独立，互不干扰。 */
-      transition: opacity 0.14s ease-out;
+      transition: opacity var(--t-fast);
       will-change: transform;
     }
     @starting-style {
@@ -1700,7 +1718,7 @@
       right: 0;
       height: env(safe-area-inset-top, 0px);
       background: var(--bg);
-      z-index: 60;
+      z-index: var(--z-scrim);
       pointer-events: none;
     }
     /* v76 (SPEC-011 retro): real-machine screenshots showed the scrim's hard
@@ -1784,7 +1802,7 @@
       transform: translateX(-50%);
       /* iOS standalone 会把 sticky 与 fixed FAB 放进不同合成层，视觉上错开但 FAB
          仍可能截走按钮命中区。提示改为真正的 fixed 层，明确位于 FAB 之上、sheet 之下。 */
-      z-index: 75;
+      z-index: var(--z-banner);
       width: min(600px, calc(100% - 24px));
       margin: 0;
       display: flex;
@@ -1829,7 +1847,7 @@
       top: 0;
       left: 0;
       right: 0;
-      z-index: 90;
+      z-index: var(--z-cross-tab);
       display: flex;
       align-items: center;
       gap: 10px;
@@ -1849,7 +1867,7 @@
       position: fixed;
       left: 50%;
       bottom: calc(88px + env(safe-area-inset-bottom));
-      z-index: 70;
+      z-index: var(--z-float);
       width: min(360px, calc(100% - 32px));
       min-height: 48px;
       transform: translateX(-50%);
@@ -1882,8 +1900,8 @@
        实测坐实：z:70 时 elementFromPoint 命中的是 .more-body 而不是 toast）。仍低于
        z-index 90 的 .cross-tab-banner，不影响既有层级红线。 */
     #info-toast {
-      z-index: 85;
-      transition: opacity 0.2s ease, transform 0.25s ease-out;
+      z-index: var(--z-notice);
+      transition: opacity var(--t-base), transform var(--t-move);
     }
     @starting-style {
       #info-toast:not([hidden]) {
@@ -1913,7 +1931,7 @@
          盖住底部，焦点控件靠正文滚动避开——面板几何全程不动，没有可跳的东西。 */
       position: fixed;
       inset: 0;
-      z-index: 80;
+      z-index: var(--z-sheet);
       display: grid;
       align-items: end;
       padding-top: var(--cross-tab-height, 0px);
@@ -1924,7 +1942,7 @@
       position: fixed;
       inset: 0;
       background: rgba(0,0,0,0.42);
-      transition: opacity 0.2s ease;
+      transition: opacity var(--t-base);
     }
     .form-sheet-panel {
       position: relative;
@@ -1946,7 +1964,7 @@
       background: var(--card);
       padding: 0 var(--sp-4);
       box-shadow: var(--shadow-3);
-      transition: transform 0.25s ease-out, opacity 0.2s ease;
+      transition: transform var(--t-move), opacity var(--t-base);
     }
     /* v43: 会召唤软键盘的表单（新建/编辑/标签设置）用定高高 sheet——头部置顶保存 ✓
        常在、内容从顶部流下、焦点控件滚到键盘上方；面板几何不随键盘变。短 sheet
@@ -2331,7 +2349,7 @@
       color: var(--muted);
     }
     .import-group-head::-webkit-details-marker { display: none; }
-    .import-group-head::after { content: '\203a'; float: right; color: var(--faint); transition: transform 120ms ease; }
+    .import-group-head::after { content: '\203a'; float: right; color: var(--faint); transition: transform var(--t-fast); }
     .import-group[open] .import-group-head::after { transform: rotate(90deg); }
     .import-item-list { border-top: 1px solid var(--border); }
     .import-item {
@@ -3148,3 +3166,8 @@
     .an-occ-row span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; }
     .an-items-more { display: block; min-height: 44px; margin: var(--sp-1) auto 0; padding: 0 var(--sp-3); background: none; border: 0; color: var(--accent); font: inherit; font-size: var(--fs-ui); cursor: pointer; }
     @media (prefers-reduced-motion: reduce) { .an-item-caret { transition: none; } }
+    /* SPEC-016 C（v1.15.9）：tests/v1_15_9_layers_motion 扫出减少动效下仍在动的三处——圆盘键
+       按下缩放、明细与首屏比例条伸缩、导入分组箭头旋转。 */
+    @media (prefers-reduced-motion: reduce) {
+      .an-disc, .ruler-bar div, .import-group-head::after { transition: none; }
+    }

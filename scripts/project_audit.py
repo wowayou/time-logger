@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # v1.0.0 起是三段式（此前是单整数，v1–v93）。判据必须**只认三段式**：写回单整数
 # 会让 android 仓的 versionCode 派生与 publish-site 的 tag 校验重新分叉，那两处
 # 现在都按三段式解析。历史 tag 与 docs/CHANGELOG.md 的单整数条目不受影响。
-EXPECTED_VERSION = "1.15.8"
+EXPECTED_VERSION = "1.15.9"
 VERSION_PATTERN = r"\d+\.\d+\.\d+"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
@@ -680,6 +680,43 @@ FORBIDDEN_SOCIAL_PROOF_PHRASES = (
 )
 
 
+# SPEC-016 C：全局层级与动效时长走令牌（styles.css 令牌块注释里有层级表）。
+CSS_RAW_MOTION_EXCEPTIONS = 5
+_CSS_Z_DECL = re.compile(r"(?<![\w-])z-index\s*:\s*(?P<value>[^;}]+)")
+_CSS_MOTION_DECL = re.compile(r"(?<![\w-])(?P<prop>transition|transition-duration|animation|animation-duration)\s*:\s*(?P<value>[^;}]+)")
+_CSS_TIME = re.compile(r"(?<![\w.-])(\d*\.?\d+)(ms|s)\b")
+
+
+def audit_css_layers_motion(errors: list[str]) -> None:
+    css = read_text("styles.css")
+    code = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), css, flags=re.DOTALL)
+    raw_lines = css.splitlines()
+    z_seen = motion_seen = raw_motion = 0
+    for no, line in enumerate(code.splitlines(), 1):
+        for m in _CSS_Z_DECL.finditer(line):
+            z_seen += 1
+            value = m.group("value").strip()
+            if re.fullmatch(r"[0-5]", value) or "--z-" in value:
+                continue
+            fail(errors, f"styles.css:{no} uses raw z-index: {value} — global layers use a --z-* token "
+                 "(table in the token block); only 0–5 local stacking may stay literal (SPEC-016 C)")
+        for m in _CSS_MOTION_DECL.finditer(line):
+            motion_seen += 1
+            times = [t for t in _CSS_TIME.findall(m.group("value")) if float(t[0]) != 0]
+            if not times:
+                continue
+            if _CSS_RAW_MARKER.search(raw_lines[no - 1]):
+                raw_motion += 1
+                continue
+            fail(errors, f"styles.css:{no} uses a raw {m.group('prop')} duration: {m.group('value').strip()} — use --t-fast/--t-base/--t-move, "
+                 "or mark a justified exception with a same-line `raw:` comment (SPEC-016 C)")
+    if z_seen < 15 or motion_seen < 15:
+        fail(errors, f"CSS layer/motion audit only saw {z_seen} z-index and {motion_seen} motion declarations — its parser has lost its input")
+    if raw_motion != CSS_RAW_MOTION_EXCEPTIONS:
+        fail(errors, f"styles.css has {raw_motion} raw-marked motion durations, expected exactly {CSS_RAW_MOTION_EXCEPTIONS} — "
+             "update CSS_RAW_MOTION_EXCEPTIONS only together with a reviewed reason")
+
+
 BUTTON_INVENTORY_DOC = "docs/components.md"
 # 只有状态类、没有自身类的按钮＝分段控件里的按钮（外观由 .seg button 决定）。
 BUTTON_STATE_ONLY_CLASSES = {"active"}
@@ -1245,6 +1282,7 @@ def main() -> int:
     audit_wcag_contrast(errors)
     audit_chrome_surface_layering(errors)
     audit_css_tokens(errors)
+    audit_css_layers_motion(errors)
     audit_button_inventory(errors)
     audit_site_honesty_guard(errors)
     audit_site_en_terminology_guard(errors)
