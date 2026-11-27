@@ -547,7 +547,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.15.7';
+export const APP_VERSION = '1.15.8';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -1030,7 +1030,7 @@ function renderAnalyticsPeriodSeg(view) {
 // 现查节点，不持有旧节点。按钮子元素在无障碍树里是展示性的，读屏反馈走旁边的 status。
 function renderAnalyticsCopy() {
   return `<div class="an-copy-row">
-      <button class="an-copy" type="button" data-action="analytics-summary" aria-label="${esc(t('analytics.callAria'))}"><span data-role="an-call-label">${esc(t('analytics.call'))}</span></button>
+      <button class="cell-action an-copy" type="button" data-action="analytics-summary" aria-label="${esc(t('analytics.callAria'))}"><span data-role="an-call-label">${esc(t('analytics.call'))}</span></button>
       <span class="an-copy-status" data-role="an-copy-status" role="status"></span>
     </div>`;
 }

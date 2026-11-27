@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # v1.0.0 起是三段式（此前是单整数，v1–v93）。判据必须**只认三段式**：写回单整数
 # 会让 android 仓的 versionCode 派生与 publish-site 的 tag 校验重新分叉，那两处
 # 现在都按三段式解析。历史 tag 与 docs/CHANGELOG.md 的单整数条目不受影响。
-EXPECTED_VERSION = "1.15.7"
+EXPECTED_VERSION = "1.15.8"
 VERSION_PATTERN = r"\d+\.\d+\.\d+"
 EXPECTED_TOOLTIP_DELAY = "800ms"
 REQUIRED_RUNTIME_ASSETS = [
@@ -680,6 +680,58 @@ FORBIDDEN_SOCIAL_PROOF_PHRASES = (
 )
 
 
+BUTTON_INVENTORY_DOC = "docs/components.md"
+# 只有状态类、没有自身类的按钮＝分段控件里的按钮（外观由 .seg button 决定）。
+BUTTON_STATE_ONLY_CLASSES = {"active"}
+_FIRST_CLASS = re.compile(r"[a-z][a-z0-9-]*")
+
+
+def _template_button_classes(errors: list[str]) -> dict[str, set[str]]:
+    """运行时模板里每个按钮的第一个静态类名 → 出现的文件。以 ${ 开头的动态类跳过。"""
+    found: dict[str, set[str]] = {}
+    created = matched = 0
+    for path in sorted((ROOT / "src").glob("*.js")) + [ROOT / "index.html"]:
+        text = path.read_text(encoding="utf-8")
+        rel = path.relative_to(ROOT).as_posix()
+        for m in re.finditer(r'<button\b[^>]*?\bclass="([^"]*)"', text):
+            first = _FIRST_CLASS.match(m.group(1))
+            if first:
+                found.setdefault(first.group(0), set()).add(rel)
+        created += len(re.findall(r"document\.createElement\('button'\)", text))
+        for m in re.finditer(
+            r"(\w+)\s*=\s*document\.createElement\('button'\);(?:(?!createElement)[\s\S]){0,400}?\b\1\.className\s*=\s*'([^']*)'",
+            text,
+        ):
+            matched += 1
+            first = _FIRST_CLASS.match(m.group(2))
+            if first:
+                found.setdefault(first.group(0), set()).add(rel)
+        # 没有自身类、只切换 active 的动态按钮＝分段式选择（如导入冲突三选一）。
+        matched += len(re.findall(
+            r"(\w+)\s*=\s*document\.createElement\('button'\);(?:(?!createElement|className)[\s\S]){0,600}?\b\1\.classList\.toggle\('active'",
+            text,
+        ))
+    if created != matched:
+        fail(errors, f"button inventory: {created} createElement('button') calls but only {matched} set a className nearby — "
+             "give every created button a class (and register it in docs/components.md)")
+    return found
+
+
+def audit_button_inventory(errors: list[str]) -> None:
+    """SPEC-016 B：模板里的按钮类必须登记在组件清单里，清单不得登记已不存在的类。"""
+    doc = read_text(BUTTON_INVENTORY_DOC)
+    registered = set(re.findall(r"^\| `([a-z][a-z0-9-]*)` \|", doc, flags=re.MULTILINE))
+    found = _template_button_classes(errors)
+    if len(found) < 25 or len(registered) < 25:
+        fail(errors, f"button inventory parser lost its input (template classes {len(found)}, registered {len(registered)})")
+        return
+    for cls in sorted(set(found) - registered - BUTTON_STATE_ONLY_CLASSES):
+        fail(errors, f"button class `{cls}` ({', '.join(sorted(found[cls]))}) is not registered in {BUTTON_INVENTORY_DOC} — "
+             "pick its family there (SPEC-016 B) before adding a new button look")
+    for cls in sorted(registered - set(found)):
+        fail(errors, f"{BUTTON_INVENTORY_DOC} registers `{cls}` but no runtime template creates such a button — remove the stale row")
+
+
 def audit_site_favicon(errors: list[str]) -> None:
     """site 四页此前没有任何 favicon 声明（只有 hero <img>）。判据按**部署镜像**
     解析——build_site.py 把 site/ 主页映到根、运行时映到 /app/，所以 favicon 的
@@ -1193,6 +1245,7 @@ def main() -> int:
     audit_wcag_contrast(errors)
     audit_chrome_surface_layering(errors)
     audit_css_tokens(errors)
+    audit_button_inventory(errors)
     audit_site_honesty_guard(errors)
     audit_site_en_terminology_guard(errors)
     audit_site_hreflang(errors)

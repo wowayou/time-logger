@@ -2,7 +2,7 @@
 
 > Status: active · 已上线，可日常使用；进度与待办见 [STATUS.md](STATUS.md)
 >
-> Release: v1.15.7（顶部字样按视图、「正在做」并入时间轴标题行等首屏微调；发布状态见 [STATUS.md](STATUS.md)，适用范围见[真机验收单](docs/device-acceptance.md)）。
+> Release: v1.15.8（按钮组件清单与收敛，SPEC-016 B 期；发布状态见 [STATUS.md](STATUS.md)，适用范围见[真机验收单](docs/device-acceptance.md)）。
 >
 > Updated: 2026-11-27
 >

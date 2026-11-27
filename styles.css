@@ -1648,18 +1648,24 @@
     }
     /* v56：mini-btn（补一下/确认/标记已发生）从实心胶囊降为素色文字链——安静台账里
        只有真正指向缺口/待办的动作保留 accent 文字；触控热区仍由透明伪元素补足。 */
+    /* SPEC-016 B（v1.15.8）：次要文字动作＝无底主色 600 字的文字链，按下变淡；字号与热区
+       按所在位置各自保留——.mini-btn 在时间轴行与表单提示里（--fs-cap、::before 扩到 44×44），
+       .range-snap 在切一刀的段首/段尾捷径（--fs-ui、自身 44 高）。 */
+    :is(.mini-btn, .range-snap) {
+      border: none;
+      background: none;
+      color: var(--accent);
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    :is(.mini-btn, .range-snap):active { opacity: 0.75; }
     .mini-btn {
       position: relative;
       min-width: 0;
       padding: 0;
-      border: none;
-      background: none;
-      color: var(--accent);
       font-size: var(--fs-cap);
-      font-weight: 600;
-      font-family: inherit;
       line-height: 1.4;
-      cursor: pointer;
       white-space: normal;
       overflow-wrap: anywhere;
     }
@@ -1679,7 +1685,6 @@
     }
     /* Log links already reserve the target: keep it inside that footprint. */
     .e-meta > .mini-btn::before { width: 100%; height: 100%; }
-    .mini-btn:active { opacity: 0.75; }
     /* SPEC-011: fixed scrim over the safe-area status bar strip. standalone +
        black-translucent + viewport-fit=cover lets scrolled content run under the
        system status bar and visually collide with its clock/carrier glyphs; this
@@ -2106,33 +2111,30 @@
     .cell-row { flex-wrap: wrap; }
     .cell-row > span { flex: 1 0 auto; }
     .cell-row .theme-seg { flex-wrap: wrap; max-width: 100%; }
-    /* v56：编辑 sheet 内的「切一刀」——切分入口从时间轴行内迁到这里（行内逐行常显
-       的动作词是列表噪音）。与 cell-danger 同形态、accent 色。 */
-    .cell-action {
+    /* SPEC-016 B（v1.15.8）：整行动作＝一个基类 + 两个变体（组件清单见 docs/components.md）。
+       高 48、圆角 --r-ctl、正文字号 600、两侧 --sp-3 内边距、按下变淡；焦点环用全局
+       :where(button…):focus-visible。变体：.cell-action 主色浅底（v56「切一刀」起），
+       .cell-danger 危险浅底。此前两条规则逐字重复、都没写水平内边距（全局 * 重置为 0）。 */
+    :is(.cell-action, .cell-danger) {
       min-height: 48px;
+      padding: 0 var(--sp-3);
       border: none;
       border-radius: var(--r-ctl);
+      font-size: var(--fs-body);
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    :is(.cell-action, .cell-danger):active { opacity: 0.75; }
+    .cell-action {
       background: color-mix(in srgb, var(--accent) 10%, transparent);
       color: var(--accent);
-      font-size: var(--fs-body);
-      font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
       margin-bottom: 10px;
     }
-    .cell-action:active { opacity: 0.75; }
     .cell-danger {
-      min-height: 48px;
-      border: none;
-      border-radius: var(--r-ctl);
       background: color-mix(in srgb, var(--danger) 10%, transparent);
       color: var(--danger);
-      font-size: var(--fs-body);
-      font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
     }
-    .cell-danger:active { opacity: 0.75; }
     .interval-editor { display: grid; gap: var(--sp-3); }
     .boundary-picker { display: grid; gap: 6px; min-width: 0; }
     .boundary-limits {
@@ -2282,18 +2284,11 @@
       margin-top: 2px;
     }
     .range-snap {
-      min-height: 44px;
+      min-height: var(--control-h);
       padding: 0 2px;
-      border: none;
-      background: none;
-      color: var(--accent);
-      font-family: inherit;
       font-size: var(--fs-ui);
-      font-weight: 600;
       font-variant-numeric: tabular-nums;
-      cursor: pointer;
     }
-    .range-snap:active { opacity: 0.75; }
     .range-snap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
     .range-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
     .range-field { display: grid; gap: var(--sp-1); color: var(--muted); font-size: var(--fs-cap); }
@@ -2744,24 +2739,14 @@
        右「添加」保留 accent 浅底作主按钮，顺序与合并提示一致。不用 accent 实心底白字：
        暗色 --accent（#a99fff）上白字对比度约 2.4:1。cell-action 自带的 10px 下边距保留
        （v1.4.2 起由用例守着）。 */
-    .cfg-defaults-actions {
-      display: flex;
-      gap: var(--sp-2);
-      margin-top: 6px;
-    }
-    .cfg-defaults-actions > button {
-      flex: 1 1 0;
-      min-width: 0;
-      min-height: var(--control-h);
-      padding: 0 var(--sp-3);
-    }
+    /* SPEC-016 B：两处并排键共用「等宽两键」排法，高度随整行动作基类为 48（此前两处各写
+       44）；水平内边距与焦点环已在基类与全局规则里，局部不再重复。 */
+    :is(.cfg-defaults-actions, .cfg-merge-actions) { display: flex; gap: var(--sp-2); }
+    :is(.cfg-defaults-actions, .cfg-merge-actions) > button { flex: 1 1 0; min-width: 0; }
+    .cfg-defaults-actions { margin-top: 6px; }
     .cfg-defaults-actions > [data-action="cancel-locale-defaults"] {
       background: var(--chrome);
       color: var(--text);
-    }
-    .cfg-defaults-actions > button:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
     }
     /* 合并提示两键（v1.5.4，真机反馈「显示一般」）：原来直接沿用 cell-action / cell-danger——
        没有水平内边距，缩成两颗贴字、宽窄不一、靠左的小胶囊；10% 色调底放在同样是 danger
@@ -2771,17 +2756,11 @@
        不用实心红底白字：暗色 --danger 上白字对比度约 3.6:1，不到正文 4.5:1。
        只作用于这一处；整行按钮的全局收敛归 SPEC-016 B 期。 */
     .cfg-merge-actions {
-      display: flex;
       flex: 1 1 100%;
-      gap: var(--sp-2);
       margin-top: var(--sp-1);
     }
     .cfg-merge-actions > button {
-      flex: 1 1 0;
-      min-width: 0;
-      min-height: var(--control-h);
       margin: 0;
-      padding: 0 var(--sp-3);
       background: var(--card);
     }
     .cfg-merge-actions > .cell-action {
@@ -2791,10 +2770,6 @@
     .cfg-merge-actions > .cell-danger {
       color: var(--danger);
       box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 55%, transparent);
-    }
-    .cfg-merge-actions > button:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
     }
     .cfg-line {
       display: flex;
@@ -3096,20 +3071,14 @@
     /* v1.15.6：「复制本期摘要」普通文字按钮，在本期结论之下、键之上，取代排行之后的
        绿色听筒圆钮。读屏反馈的 status 视觉隐藏（按钮文字已是看得见的反馈）。 */
     .an-copy-row { display: flex; justify-content: center; padding: var(--sp-1) 0 var(--sp-2); }
-    .an-copy {
-      min-height: var(--control-h);
-      padding: 0 var(--sp-4);
-      border: none;
-      border-radius: var(--r-pill);
-      background: color-mix(in srgb, var(--accent) 10%, transparent);
-      color: var(--accent);
-      font-size: var(--fs-ui);
-      font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
-    }
-    .an-copy:active { opacity: 0.75; }
-    .an-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* SPEC-016 B：它就是一枚整行动作（.cell-action 主色浅底），只是按内容宽、居中、不带下边距。 */
+    .an-copy { margin-bottom: 0; }
+    /* SPEC-016 B：组件清单逐类核对「按下」状态时，这些按钮按下毫无反馈——补上与整行动作
+       同款的变淡；静止态像素不变（截图对照 0 差异）。已有自己按下态的（fab、an-tile、
+       hdr-action-btn、start-time-trigger、dt-* 等）不在此列。 */
+    :is(.chip, .cfg-chip, .cfg-add, .cfg-fold, .an-item-row, .an-occ-row, .an-items-more,
+      .what-sug, .undo-btn, .update-btn, .wheel-now-btn, .swipe-action, .hero-switch,
+      .an-arrow:not(:disabled), .an-dot, .motto-line):active { opacity: 0.75; }
     .an-copy-status {
       position: absolute;
       width: 1px;

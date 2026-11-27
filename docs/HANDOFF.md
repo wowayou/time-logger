@@ -7,7 +7,7 @@
 1. [STATUS.md](../STATUS.md)：当前进度与证据边界。
 2. [CLAUDE.md](../CLAUDE.md)：维护规范唯一真源；改动前必读。
 3. [CONTRIBUTING.md](../CONTRIBUTING.md)：改动判断清单、测试与真机调试。
-4. 按任务读 [决策记录](decisions.md)、[故障记录](postmortems.md)、[候选路线图](roadmap.md)、[上线操作单](launch-runbook.md) 或 [真机验收单](device-acceptance.md)。
+4. 按任务读 [决策记录](decisions.md)、[故障记录](postmortems.md)、[候选路线图](roadmap.md)、[上线操作单](launch-runbook.md)、[真机验收单](device-acceptance.md) 或 [按钮组件清单](components.md)（新增按钮前先登记，audit 双向硬拦）。
 
 版本流水只写在 `CLAUDE.md` 最近三版表与 [CHANGELOG 历史归档](CHANGELOG.md)。`docs/specs/` 中已完成规格记录当时的实现与验收约定；SPEC-008 仍暂停，不是可直接认领的队列。
 
