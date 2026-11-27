@@ -3,7 +3,7 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**最新状态：2026-11-27，[v1.15.9](https://github.com/wowayou/time-logger/releases/tag/v1.15.9) 已在主站与旧只读站上线（SPEC-016 C 期：层级表与动效）。** 运行时来源 `840479c`；[主站组装](https://github.com/wowayou/time-logger/actions/runs/45958391264)、[部署镜像 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45958406883)、[旧站 Pages](https://github.com/wowayou/time-logger/actions/runs/45958391250) 首轮成功；两站 60/60 与 tag 逐字节一致。同日稍早 v1.15.5–v1.15.8 已发布。详见 DONE。
+**最新状态：2026-11-27，[v1.16.0](https://github.com/wowayou/time-logger/releases/tag/v1.16.0) 已在主站与旧只读站上线（SPEC-016 D 期：空状态与成功反馈；设计系统 A–D 完成，E 期真机验收待维护者）。** 运行时来源 `d072660`；[主站组装](https://github.com/wowayou/time-logger/actions/runs/45964058593)、[部署镜像 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45964079595)、[旧站 Pages](https://github.com/wowayou/time-logger/actions/runs/45964058630) 首轮成功；两站 60/60 与 tag 逐字节一致。同日稍早 v1.15.5–v1.15.9 已发布，六版均未做真机。详见 DONE。
 
 **此前（2026-11-26）**：[v1.15.4](https://github.com/wowayou/time-logger/releases/tag/v1.15.4) 已在主站与旧只读站上线，运行时来源 `931057c`，与 RC1 相同。[镜像组装](https://github.com/wowayou/time-logger/actions/runs/45775171681)、[主站 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45775195635) 成功；主站 30/30 运行时清单项与标签逐字节一致，Chromium 已验版本、SW 接管、断网重开、说明问答与返回。S23 实测见[真机验收单](docs/device-acceptance.md)；[#45](https://github.com/wowayou/time-logger/issues/45) 已回复并关闭。
 
@@ -16,6 +16,7 @@
 - **Web v1.16.0：SPEC-016 D 期——空状态与成功反馈（2026-11-27）**：P3 第三期，至此 SPEC-016 A–D 完成，E 期真机验收待维护者。执行记录见 [SPEC-016 §10](docs/specs/SPEC-016-design-system.md)，规则见 CLAUDE.md「空状态与成功反馈」。版本号用 1.16.0 而非 1.15.10：本机没有安卓仓，无法核实其 versionCode 派生能否正确处理两位数补丁号，避开不验证的风险；workflow 的 tag 匹配两者都接。
   - **内容**：① 日视图时间轴空状态此前一律叫人点「＋ 记一条」——+1…+7 日与今天偏好计划时 FAB 是「＋ 计划一条」，+8 日起 FAB 隐藏；现由 `newEntryMode` 与 FAB 共用一处判断，新增「计划」一句，不能新增时时间轴只写「切换日期可查看其它日子。」（首屏卡片已写「这一天还没有记录」；第一版两处各说一遍，发版前截图发现后改）。② 按钮内成功反馈统一「✓ 已…」（「已完成存储」→「✓ 已存储备份」，分享 / 下载补 ✓）；桌面下载仍写「请在下载项确认」。i18n 新增 1 键、改 4 处（中英对等）；对外表面（主页、支持页、隐私政策、README 功能列表、《使用与理念》）都不含这些句子，无需改。零新增运行时资产、存储键或备份字段。
   - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过（退出码逐个核对）。`tests/v1_16_0_copy_states.spec.js` 双引擎 14/14，以 v1.15.9 运行时 8/14 红（余 6 为本就一致的今天记录、昨天补记与桌面下载哨兵）；iPhone 存储用例第一版被 boot 夹具后装的 `navigator.share` 覆盖、走了下载分支，改为启动后再装分享能力并断言调用一次。`ui_smoke` 分享反馈断言改判为「✓ 已分享备份」。完整 UI **1435 passed / 5 skipped / 0 failed（20.1 分钟，0 重试；改句前一轮同为 1435 / 5 / 0）**。未做真机。
+  - **发布与线上核对**：推送前远端 main 为 `c2cc17f`；功能提交 `d072660`，tag / [Release](https://github.com/wowayou/time-logger/releases/tag/v1.16.0)；三个 workflow 首轮 success，镜像提交 `publish: v1.16.0 from d072660`。两站按 `sw.js` FILES 与 tag 逐字节一致 60/60。Chromium 全新上下文、390×844：主站缓存只有 `timelog-v1.16.0`，+3 日空状态点名「＋ 计划一条」与 FAB 一致；旧站（只读）FAB 隐藏、空状态只写「切换日期可查看其它日子。」；无脚本错误或 HTTP ≥400。实际账单未核实。
 
 - **Web v1.15.9：SPEC-016 C 期——层级表与动效（2026-11-27）**：P3 第二期。执行记录见 [SPEC-016 §9](docs/specs/SPEC-016-design-system.md)，规则见 CLAUDE.md「层级表与动效时长」。
   - **内容**：全局 z-index 收成 8 个 `--z-*` 令牌，数值不变；新增 `--t-base` 200ms、`--t-move` 250ms（取 sheet 与信息提示原值），其余 5 处时长写 `raw:` 理由；导入分组箭头 120 → 140ms 是唯一时长改动。计划的「两档」做成三档：改两档会改 sheet 进出节奏，收益说不清。新写的减少动效扫描在两引擎都扫出三处漏网——时间分析圆盘键按下缩放、明细与首屏比例条伸缩、导入分组箭头旋转——已关闭。零新增运行时资产、i18n 键、存储键或备份字段。
