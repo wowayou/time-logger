@@ -3,7 +3,7 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**最新状态：2026-11-27，[v1.16.0](https://github.com/wowayou/time-logger/releases/tag/v1.16.0) 已在主站与旧只读站上线（SPEC-016 D 期：空状态与成功反馈；设计系统 A–D 完成，E 期真机验收待维护者）。** 运行时来源 `d072660`；[主站组装](https://github.com/wowayou/time-logger/actions/runs/45964058593)、[部署镜像 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45964079595)、[旧站 Pages](https://github.com/wowayou/time-logger/actions/runs/45964058630) 首轮成功；两站 60/60 与 tag 逐字节一致。同日稍早 v1.15.5–v1.15.9 已发布，六版均未做真机。详见 DONE。
+**最新状态：2026-11-27，v1.16.1（导入冲突三选一键高 44）本地门禁通过、待发布；发布结果见 DONE 首条。** 同日稍早 [v1.16.0](https://github.com/wowayou/time-logger/releases/tag/v1.16.0)（SPEC-016 D 期）与 v1.15.5–v1.15.9 已发布；设计系统 A–D 完成，E 期真机验收待维护者，七版均未做真机。
 
 **此前（2026-11-26）**：[v1.15.4](https://github.com/wowayou/time-logger/releases/tag/v1.15.4) 已在主站与旧只读站上线，运行时来源 `931057c`，与 RC1 相同。[镜像组装](https://github.com/wowayou/time-logger/actions/runs/45775171681)、[主站 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45775195635) 成功；主站 30/30 运行时清单项与标签逐字节一致，Chromium 已验版本、SW 接管、断网重开、说明问答与返回。S23 实测见[真机验收单](docs/device-acceptance.md)；[#45](https://github.com/wowayou/time-logger/issues/45) 已回复并关闭。
 
@@ -13,11 +13,15 @@
 
 ## DONE
 
+- **Web v1.16.1：导入冲突三选一键高 44（2026-11-27）**：维护者要「冲突按钮改到 44px，跑完直接发版」。来源是 v1.16.0 发版后补截导入页时量到的 38px（见 v1.16.0「发版后补核」③）。规则见 CLAUDE.md「按钮组件清单」末句。
+  - **内容**：`.import-conflict-actions button` 的 `min-height` 由写死的 38px 改为 `var(--control-h)`（44）；字号、内边距、三列等宽、选中态不变，字号放大时仍随内容长高。38px 自 v52（2026-07-10）起，达到 2.5.8 AA、低于项目 44 基线。零新增运行时资产、i18n 键、存储键或备份字段；对外表面不涉及。
+  - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过（退出码逐个核对）。`tests/v1_16_1_conflict_buttons.spec.js` 双引擎 6/6，以 v1.16.0 运行时 4/6 红（中文 390 为 38、320px 英文为 42；200% 字号令牌那条本就随内容长高，是哨兵）；把高度写死成 44，200% 用例两引擎红在裁字；加 `pointer-events:none`，四角命中断言红。截图对照（v1.16.0 对本版）：导入两页 36 张（两引擎）只有冲突卡长 6px 带来的位移，冲突键量得 38 → 44、无横向溢出 / 出界 / 裁字；72 张常规界面（Chromium）66 张逐像素相同，6 张是 sheet 顶部、合并提示、周视图已知的 2–8px 噪声。完整 UI **1441 passed / 5 skipped / 0 failed（20.0 分钟，0 重试；比 v1.16.0 多的 6 条即新用例）**，运行前后源码与测试文件哈希一致。未做真机。
+
 - **Web v1.16.0：SPEC-016 D 期——空状态与成功反馈（2026-11-27）**：P3 第三期，至此 SPEC-016 A–D 完成，E 期真机验收待维护者。执行记录见 [SPEC-016 §10](docs/specs/SPEC-016-design-system.md)，规则见 CLAUDE.md「空状态与成功反馈」。版本号用 1.16.0 而非 1.15.10：发版时以为本机无法核实安卓仓 versionCode 能否处理两位数补丁号而避开；发版后已核实 1.15.10 本也可用（见下方「发版后补核」）。workflow 的 tag 匹配两者都接。
   - **内容**：① 日视图时间轴空状态此前一律叫人点「＋ 记一条」——+1…+7 日与今天偏好计划时 FAB 是「＋ 计划一条」，+8 日起 FAB 隐藏；现由 `newEntryMode` 与 FAB 共用一处判断，新增「计划」一句，不能新增时时间轴只写「切换日期可查看其它日子。」（首屏卡片已写「这一天还没有记录」；第一版两处各说一遍，发版前截图发现后改）。② 按钮内成功反馈统一「✓ 已…」（「已完成存储」→「✓ 已存储备份」，分享 / 下载补 ✓）；桌面下载仍写「请在下载项确认」。i18n 新增 1 键、改 4 处（中英对等）；对外表面（主页、支持页、隐私政策、README 功能列表、《使用与理念》）都不含这些句子，无需改。零新增运行时资产、存储键或备份字段。
   - **门禁**：audit、逻辑 smoke、typecheck、`git diff --check` 通过（退出码逐个核对）。`tests/v1_16_0_copy_states.spec.js` 双引擎 14/14，以 v1.15.9 运行时 8/14 红（余 6 为本就一致的今天记录、昨天补记与桌面下载哨兵）；iPhone 存储用例第一版被 boot 夹具后装的 `navigator.share` 覆盖、走了下载分支，改为启动后再装分享能力并断言调用一次。`ui_smoke` 分享反馈断言改判为「✓ 已分享备份」。完整 UI **1435 passed / 5 skipped / 0 failed（20.1 分钟，0 重试；改句前一轮同为 1435 / 5 / 0）**。未做真机。
   - **发布与线上核对**：推送前远端 main 为 `c2cc17f`；功能提交 `d072660`，tag / [Release](https://github.com/wowayou/time-logger/releases/tag/v1.16.0)；三个 workflow 首轮 success，镜像提交 `publish: v1.16.0 from d072660`。两站按 `sw.js` FILES 与 tag 逐字节一致 60/60。Chromium 全新上下文、390×844：主站缓存只有 `timelog-v1.16.0`，+3 日空状态点名「＋ 计划一条」与 FAB 一致；旧站（只读）FAB 隐藏、空状态只写「切换日期可查看其它日子。」；无脚本错误或 HTTP ≥400。实际账单未核实（已于发版后补核，见下一条）。
-  - **发版后补核（2026-11-27，只读，未改运行时）**：① **安卓 versionCode**：本机没有 `../time-logger-android`，读远端 main `aab025d`（2026-09-12）：`app/build.gradle.kts` 为 `major*10_000_000 + minor*100_000 + patch*1_000 + revision`，安卓仓 audit 在 minor 或 patch > 99 时拦下——两位数补丁号可用，1.16.0 编为 11_600_000 + revision，比任何 1.15.x 都大。这条公式本就记在 `docs/CHANGELOG.md` 的 v1.0.0 行，发版前没查到。② **Actions 计费**：账单接口（截至查询时）本月 `time-logger` Linux 69 分钟、`time-logger-site` 78 分钟（今天各 18 分钟），全部在免费额度内，净额 0；三个 workflow 都是 `ubuntu-latest`。③ **导入两页截图**（B 期未截到的）：合成数据 × 冲突 / 冲突已选 / 读取被拒「重试」× 320/390/768 × 亮暗 × 两引擎共 36 张，v1.15.7 对 v1.16.0：22 张逐像素相同；12 张差异只在「重新读取并预览」键——宽 105 → 129px、内边距 0 → 12px（原来文字贴着底色边，现在居中），即 B 期的有意变化；其余 2 张是 sheet 顶部或冲突卡内 3–7px 的零星像素，v1.16.0 自身复跑也出现同类差异（其中一张位置完全相同），属噪声。两版都没有横向溢出、键伸出面板或文字被裁。顺带看到冲突三选一键高 38px，v1.15.7 就是这样：达到 2.5.8 AA，但低于项目 44px 主要基线，未改。
+  - **发版后补核（2026-11-27，只读，未改运行时）**：① **安卓 versionCode**：本机没有 `../time-logger-android`，读远端 main `aab025d`（2026-09-12）：`app/build.gradle.kts` 为 `major*10_000_000 + minor*100_000 + patch*1_000 + revision`，安卓仓 audit 在 minor 或 patch > 99 时拦下——两位数补丁号可用，1.16.0 编为 11_600_000 + revision，比任何 1.15.x 都大。这条公式本就记在 `docs/CHANGELOG.md` 的 v1.0.0 行，发版前没查到。② **Actions 计费**：账单接口（截至查询时）本月 `time-logger` Linux 69 分钟、`time-logger-site` 78 分钟（今天各 18 分钟），全部在免费额度内，净额 0；三个 workflow 都是 `ubuntu-latest`。③ **导入两页截图**（B 期未截到的）：合成数据 × 冲突 / 冲突已选 / 读取被拒「重试」× 320/390/768 × 亮暗 × 两引擎共 36 张，v1.15.7 对 v1.16.0：22 张逐像素相同；12 张差异只在「重新读取并预览」键——宽 105 → 129px、内边距 0 → 12px（原来文字贴着底色边，现在居中），即 B 期的有意变化；其余 2 张是 sheet 顶部或冲突卡内 3–7px 的零星像素，v1.16.0 自身复跑也出现同类差异（其中一张位置完全相同），属噪声。两版都没有横向溢出、键伸出面板或文字被裁。顺带看到冲突三选一键高 38px，v1.15.7 就是这样：达到 2.5.8 AA，但低于项目 44px 主要基线，未改（v1.16.1 已改为 44）。
 
 - **Web v1.15.9：SPEC-016 C 期——层级表与动效（2026-11-27）**：P3 第二期。执行记录见 [SPEC-016 §9](docs/specs/SPEC-016-design-system.md)，规则见 CLAUDE.md「层级表与动效时长」。
   - **内容**：全局 z-index 收成 8 个 `--z-*` 令牌，数值不变；新增 `--t-base` 200ms、`--t-move` 250ms（取 sheet 与信息提示原值），其余 5 处时长写 `raw:` 理由；导入分组箭头 120 → 140ms 是唯一时长改动。计划的「两档」做成三档：改两档会改 sheet 进出节奏，收益说不清。新写的减少动效扫描在两引擎都扫出三处漏网——时间分析圆盘键按下缩放、明细与首屏比例条伸缩、导入分组箭头旋转——已关闭。零新增运行时资产、i18n 键、存储键或备份字段。
@@ -145,6 +149,7 @@
 - **其他历史输入／启动异常不合并结案**：P40 已用控制时序复现并修复一条与原 `ui_smoke:293` 起点显示未更新相符的因果链，原失败与早期对照片段证据保留在 [P40](docs/postmortems.md#p40--时间选择器延迟聚焦打断输入webkit-补录起点仍是旧值v171-本地)。原批量失败缺少完整输入事件栈，不能逐次倒推均为此因；更早的起点异常、Chromium 启动超时仍按各自证据保留，不因发布前的全量通过关闭。
 
 - **真机验收待闭合**：自动化与线上桌面检查不代替真机结论；各版按 [真机验收单](docs/device-acceptance.md) 逐项填写，未执行的步骤保持待验，不能由上线代填。
+  - v1.16.1：导入冲突三选一在手机上逐个点得准、系统最大字体下不裁字（[小节](docs/device-acceptance.md#v1161-导入冲突三选一键高-44待真机)）。
   - v1.16.0：空状态提示与 FAB 文字一致、iPhone 存储备份的「✓ 已存储备份」（[小节](docs/device-acceptance.md#v1160-空状态与成功反馈spec-016-d待真机)）。
   - v1.15.9：减少动效下圆盘键、比例条、导入箭头不再动；撤销提示与 FAB、横幅与 sheet 的遮挡关系不变（[小节](docs/device-acceptance.md#v1159-层级与动效spec-016-c待真机)）。
   - v1.15.8：整行动作同高同形、两组并排键、按住变淡（[小节](docs/device-acceptance.md#v1158-按钮组件收敛spec-016-b待真机)）。

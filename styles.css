@@ -2400,7 +2400,8 @@
     }
     .import-conflict-actions button {
       min-width: 0;
-      min-height: 38px;
+      /* v1.16.1：38 → 44（项目主要触控基线），维护者要求；字号放大时照样随内容长高。 */
+      min-height: var(--control-h);
       padding: 5px 7px;
       border: 1px solid var(--border);
       border-radius: var(--r-sm);

@@ -56,7 +56,7 @@
 | `dt-step-btn` | 时间选择 | 时 / 分步进 ▲▼ | 悬停底色 | — | — |
 | `dt-now` | 时间选择 | 桌面日历「现在」 | 悬停底色 | — | — |
 
-分段控件（`.seg`）里的按钮没有自身类：外观由 `.seg button` 与各分段的类（`view-tabs`、`bucket-seg`、`record-mode-seg`、`theme-seg`、`end-mode-seg`、`an-period`、`cfg-bucket-seg`）决定，选中态是 `.active` + `aria-pressed`；`audit_button_inventory` 把只有 `active` 这一状态类的按钮当作分段按钮。导入冲突卡片的「保留本机 / 使用备份 / 合并文字」（`.import-conflict-actions button`，`io_actions.js` 动态创建）同理：无自身类、只切换 `.active`，audit 按此认它。
+分段控件（`.seg`）里的按钮没有自身类：外观由 `.seg button` 与各分段的类（`view-tabs`、`bucket-seg`、`record-mode-seg`、`theme-seg`、`end-mode-seg`、`an-period`、`cfg-bucket-seg`）决定，选中态是 `.active` + `aria-pressed`；`audit_button_inventory` 把只有 `active` 这一状态类的按钮当作分段按钮。导入冲突卡片的「保留本机 / 使用备份 / 合并文字」（`.import-conflict-actions button`，`io_actions.js` 动态创建）同理：无自身类、只切换 `.active`，audit 按此认它；键高 `--control-h`（44，v1.16.1 前写死 38）。
 
 ## 间距
 
