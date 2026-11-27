@@ -458,6 +458,17 @@
       border-top-color: transparent;
       border-bottom-color: var(--text);
     }
+    /* v1.15.7：只给能悬停的精确指针加可交互行的悬停底色（比按下态浅一档）；触屏不吃
+       粘滞悬停。不碰焦点环；正在编辑的行（.sheet-editing）与左滑揭示的轨道不受影响，
+       时间轴行底色保持不透明（左滑时它要盖住下面的轨道）。 */
+    @media (hover: hover) and (pointer: fine) {
+      /* :where 不加特异性：与 .entry[data-action]:active 同级、写在它之前，按下态照样赢。 */
+      .entry[data-action]:where(:not(.sheet-editing)):hover,
+      .sum-row:hover,
+      .sum-row.is-empty:hover { background: color-mix(in srgb, var(--accent) 4%, var(--card)); }
+      .cell-btn:hover { background: color-mix(in srgb, var(--card) 55%, var(--chrome)); }
+      .nav-btn:hover { background: color-mix(in srgb, var(--accent) 8%, var(--chrome)); }
+    }
     @media (hover: hover) and (pointer: fine) {
       button[data-tip][data-tip-ready]:hover::after,
       button[data-tip][data-tip-ready]:hover::before {
@@ -563,11 +574,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      /* v76：与相邻的 .nav-btn 同一条 .date-nav 行，必须同底色——否则三个元素
-         一深一浅比只做半条更显眼。period-label 本身不是按钮，但视觉上是同一条
-         「日期导航」壳的一部分。 */
-      background: var(--chrome);
+      /* v1.15.7：它不是按钮，就不再长得像按钮——v76 让它与两侧 ‹ › 同底色（避免一深
+         一浅），结果三块一样的壳里分不出哪个能点。改为页面底上的标题文字，‹ › 与
+         「回到…」保留 --chrome 壳；不全局改 --chrome。 */
+      background: transparent;
       border: 1px solid transparent;
+      font-weight: 600;
       border-radius: var(--r-ctl);
       color: var(--text);
       font-size: var(--fs-ui-strong);
@@ -1297,10 +1309,28 @@
 
     .tl-head {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
-      gap: var(--sp-2);
+      gap: var(--sp-1) var(--sp-2);
       min-height: 30px;
     }
+    /* v1.15.7：「正在做」条并进时间轴标题行（标题在左、条占余宽），有进行中时列表上移
+       约 26px；没有进行中时这一行与以前相同。标题不换行；事项名至少留 5em，留不下时整条
+       换到标题下一行——第一版按 200px 固定阈值换行，320px 英文只剩「Sy…」两个字母。
+       整条仍是一个按钮。 */
+    .tl-head .tl-label { white-space: nowrap; }
+    .tl-head:has(> .now-strip:not([hidden])) { margin-bottom: var(--sp-2); }
+    .tl-head:has(> .now-strip:not([hidden])) .tl-label { margin-bottom: 0; }
+    /* 基准＝内容宽（标签、时长 nowrap + 事项名 5em），据此决定是否换行；独占一行时
+       min-width:0 允许再收缩——min-width:min-content 会压过 max-width，200% 字号令牌
+       320px 把页面撑到 414px（R06）。 */
+    .tl-head > .now-strip { flex: 1 1 auto; width: auto; min-width: 0; margin: 0; }
+    /* width:0 让它的固有宽度不再是整段不换行文字（否则整条的 min-content 被撑到全文宽，
+       320px 英文横向溢出 106px），只剩 min-width 的 5em；余宽仍由 flex-grow 分给它。 */
+    .tl-head > .now-strip .now-what { width: 0; min-width: 5em; }
+    /* 时长「5h 41m so far」含空格：不钉 nowrap 时最小宽度按可折行算、实际却排成一行，
+       条以为放得下而不换行，320px 英文末尾被裁成「5h 41m so」。 */
+    .now-strip .now-label, .now-strip .now-dur { white-space: nowrap; }
     #timeline { min-height: 160px; }
     html[data-boot="has-entries"] #timeline { min-height: 360px; }
     /* R2+FAB：日视图列表底部预留 ≥72px，让最后一张卡片能滚到 FAB 上方（FAB 固定
@@ -2071,6 +2101,11 @@
     }
     .cell-chevron { color: var(--faint); font-size: var(--fs-input); flex: 0 0 auto; }
     .cell-row .theme-seg { margin-left: auto; }
+    /* v1.15.7：放不下时标题与分段上下排，分段自身仍放不下时按钮折行——200% 字号令牌下
+       320px 曾把「主题」挤成一字一行、分段伸出面板 33–145px。正常字号 320px 英文仍同一行。 */
+    .cell-row { flex-wrap: wrap; }
+    .cell-row > span { flex: 1 0 auto; }
+    .cell-row .theme-seg { flex-wrap: wrap; max-width: 100%; }
     /* v56：编辑 sheet 内的「切一刀」——切分入口从时间轴行内迁到这里（行内逐行常显
        的动作词是列表噪音）。与 cell-danger 同形态、accent 色。 */
     .cell-action {

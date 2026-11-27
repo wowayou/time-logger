@@ -302,6 +302,10 @@ function confirmSegmentLabel(startTs, endTs) {
 export function renderNowStrip(items, isToday, config = loadConfig()) {
   const el = document.getElementById('now-strip');
   if (!el) return;
+  // v1.15.7：它属于时间轴标题行。升级后同一标签页的启动快照（旧版 .app DOM）里它还在
+  // hero 与格言之间，而版本门拒绝快照后 render() 不重建静态壳——在这里归位一次。
+  const head = document.querySelector('.tl-head');
+  if (head && el.parentElement !== head) head.appendChild(el);
   const ongoing = isToday
     ? (items || []).find(it => it.isOngoing && it.e && typeof it.e.what === 'string' && it.e.what.trim() !== '')
     : null;
@@ -543,7 +547,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.15.6';
+export const APP_VERSION = '1.15.7';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};

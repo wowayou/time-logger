@@ -514,8 +514,14 @@ import {
     const inCurrentPeriod = Boolean(todayDate && todayDate >= periodStart && todayDate < periodEnd);
     const periodEl = document.getElementById('period-label');
     const periodText = periodLabel({ short: state.view === 'week' });
+    // v1.15.7：字样跟着视图走（今天 / 本周 / 本月 / 今年），与「回到…」按钮同一套说法；
+    // 此前四个视图都写「今天」，周视图读成「11/23-11/29 今天」。
+    // 显式 t('…')：audit 只能静态追踪字面量键。
+    const badgeText = state.view === 'week' ? t('chrome.badgeWeek')
+      : state.view === 'month' ? t('chrome.badgeMonth')
+        : state.view === 'year' ? t('chrome.badgeYear') : t('chrome.todayBadge');
     periodEl.innerHTML = inCurrentPeriod
-      ? `${periodText} <span class="period-today-badge">${esc(t('chrome.todayBadge'))}</span>`
+      ? `${periodText} <span class="period-today-badge">${esc(badgeText)}</span>`
       : periodText;
     periodEl.setAttribute('aria-label', periodFullLabel());
     // R2+FAB：悬浮「记一条」——只在日视图出现；主文案随计划/记录模式，副文案标注

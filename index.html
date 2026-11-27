@@ -131,12 +131,6 @@
     <div class="ruler-bar"></div>
   </div>
 
-  <!-- v1.4.0「现在」条：仅在日视图看今天、且尾段是一条进行中的已发生记录时，由
-       renderNowStrip 填充并显示「正在做：X · 已 Ymin」，点按直接编辑该段——让应用
-       本身就是那个计时器（R2 方案 1 的最小落地）。静态壳保持空 + hidden，文案由 JS
-       从 src/locales/ 填（同 #motto-line 纪律，不写死任何文案，避免运行时 CJK 字面量）。 -->
-  <button class="now-strip" id="now-strip" type="button" hidden></button>
-
   <!-- v69 阶段格言（C13）：静态壳保持空 + hidden，由 JS 按三态填充（同 #usage-day
        的纪律，不得写死任何文案）。点击打开编辑 sheet。 -->
   <button class="motto-line" id="motto-line" type="button" data-action="open-motto" hidden></button>
@@ -144,6 +138,12 @@
   <div>
     <div class="tl-head">
       <div class="tl-label" id="list-label" data-i18n="list.titleDay">当日时间轴</div>
+      <!-- v1.4.0「现在」条：仅在日视图看今天、且尾段是一条进行中的已发生记录时，由
+           renderNowStrip 填充并显示「正在做：X · 已 Ymin」，点按直接编辑该段。静态壳保持
+           空 + hidden，文案由 JS 从 src/locales/ 填（同 #motto-line 纪律）。v1.15.7 从 hero
+           与格言之间移进时间轴标题行，列表上移约 26px；旧版启动快照里它仍在原处，
+           renderNowStrip 会把它移进来。 -->
+      <button class="now-strip" id="now-strip" type="button" hidden></button>
     </div>
     <div id="timeline"></div>
   </div>
