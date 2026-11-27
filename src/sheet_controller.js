@@ -896,13 +896,14 @@ export function createSheetController(deps) {
     lockBodyForSheet();
     sheet.hidden = false;
     watchSheetClose(sheet);
-    if (mode === 'more' && window.__vvlog) {
-      // P24 取证：真机开「更多」时把分享按钮的自渲染状态打进 HUD——若这里报 hidden=false
+    if (mode === 'backup' && window.__vvlog) {
+      // P24 取证：真机开「备份与导入」时把分享按钮的自渲染状态打进 HUD——若这里报 hidden=false
       // disp=flex 而屏幕上没有，则页面外抑制实锤（cosmetic filter / VPN 过滤），代码侧已尽。
+      // v84 起分享按钮在这一层，不在「更多」。
       const sb = panel.querySelector('#backup-send-btn');
       window.__vvlog(sb
-        ? `more: send-btn hidden=${sb.hasAttribute('hidden')} disp=${getComputedStyle(sb).display} navShare=${typeof navigator.share}`
-        : 'more: send-btn ABSENT');
+        ? `backup: send-btn hidden=${sb.hasAttribute('hidden')} disp=${getComputedStyle(sb).display} navShare=${typeof navigator.share}`
+        : 'backup: send-btn ABSENT');
     }
     if (mode === 'edit') {
       // R3：计划编辑（无 edit-time-section 包装，始终展开）照旧立即挂载；常规编辑
@@ -1163,8 +1164,6 @@ export function createSheetController(deps) {
     });
   }
 
-  // 整层关闭：丢掉二级页返回栈再关。v1.9.0 从时间分析的事项排行跳到某天时用——
-  // 普通 closeForm 会沿栈回到「更多」，主视图虽已切到那天却仍被面板盖住。
   function paintWhatSuggestions(panel, value) {
     const box = panel.querySelector('[data-role="what-suggest"]');
     if (!box) return;
@@ -1390,6 +1389,8 @@ export function createSheetController(deps) {
     else closeAfterRecordWrite(close, beforeData);
   }
 
+  // 整层关闭：丢掉二级页返回栈再关。v1.9.0 从时间分析的事项排行跳到某天时用——
+  // 普通 closeForm 会沿栈回到「更多」，主视图虽已切到那天却仍被面板盖住。
   function closeAllForms() {
     sheetStack = [];
     closeForm();
@@ -1485,7 +1486,7 @@ export function createSheetController(deps) {
     openFormSheet({ mode: 'advanced' });
   }
 
-  // v1.3.0 拨号盘分析：错开主视图，始终锚定「包含今天的当前周/月/年」。
+  // v1.3.0 拨号盘分析；v1.8.4 起锚定打开时主视图所看的日期（未来退回今天），见 openAnalyticsSheet。
   // 模型全由 stats.js 纯逻辑算出，config 由这里注入（模块边界不变）。
   // v1.9.0「全部」：从第一条真实记录到今天，不做对比、趋势与常态，只看总量、事项与累计。
   function analyticsRange(entries, now) {
@@ -2122,15 +2123,15 @@ export function createSheetController(deps) {
     else if (formOvernightContext) refreshOvernightPreview(panel);
   }
 
-  function rememberTag(tag, bucket, entries) {
-    return deps.rememberCustomTagForBucket(tag, safeBucket(bucket), entries);
+  function rememberTag(tag, bucket) {
+    return deps.rememberCustomTagForBucket(tag, safeBucket(bucket));
   }
 
   // 自定义标签与记录是跨两个 localStorage key 的一次用户动作。记录先落库，再记住
   // 标签；若第二步因配额失败，就把记录回滚到写前快照并留在表单里，避免新标签掉进
   // 「未记录」桶。覆盖旧值通常不增加占用，正好是配额已满时最可靠的补偿写。
-  function rememberTagOrRollback(tag, bucket, entries, beforeData, scope, writtenRaw) {
-    const tagWrite = tag ? rememberTag(tag, bucket, entries) : null;
+  function rememberTagOrRollback(tag, bucket, beforeData, scope, writtenRaw) {
+    const tagWrite = tag ? rememberTag(tag, bucket) : null;
     if (!tag || (tagWrite && tagWrite.ok !== false)) return true;
     // 配置写入失败时，只在数据仍是本次写入版本上回滚；无条件 save() 会抹掉
     // 另一标签页在两次写入之间追加的记录。
@@ -2188,7 +2189,7 @@ export function createSheetController(deps) {
       showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm')));
       return;
     }
-    if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
+    if (!rememberTagOrRollback(ctag, formBucket, beforeData, panel, write.raw)) return;
     const staysYesterday = latest.kind === 'overnight-day-end' && startTs < formOvernightContext.midnightTs;
     deps.setSelectedDate(staysYesterday ? formOvernightContext.yesterdayKey : formOvernightContext.todayKey);
     closeAfterNewWrite(beforeData);
@@ -2260,7 +2261,7 @@ export function createSheetController(deps) {
         showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm')));
         return;
       }
-      if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
+      if (!rememberTagOrRollback(ctag, formBucket, beforeData, panel, write.raw)) return;
       deps.setSelectedDate(checked.ts.slice(0, 10));
       closeAfterNewWrite(beforeData, { plan: true });
       return;
@@ -2282,7 +2283,7 @@ export function createSheetController(deps) {
       showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm')));
       return;
     }
-    if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
+    if (!rememberTagOrRollback(ctag, formBucket, beforeData, panel, write.raw)) return;
     deps.setSelectedDate(checked.ts.slice(0, 10));
     closeAfterNewWrite(beforeData);
   }
@@ -2343,7 +2344,7 @@ export function createSheetController(deps) {
       showInlineError(panel, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm')));
       return;
     }
-    if (!rememberTagOrRollback(ctag, formBucket, d.entries, beforeData, panel, write.raw)) return;
+    if (!rememberTagOrRollback(ctag, formBucket, beforeData, panel, write.raw)) return;
     deps.setSelectedDate(startChecked.ts.slice(0, 10));
     closeAfterNewWrite(beforeData);
   }
@@ -2454,7 +2455,7 @@ export function createSheetController(deps) {
         showInlineError(box, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm')));
         return;
       }
-      if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box, write.raw)) return;
+      if (!rememberTagOrRollback(ctag, editBucket, beforeData, box, write.raw)) return;
     } else {
       entry.ts = checked.ts;
       entry.what = what;
@@ -2467,7 +2468,7 @@ export function createSheetController(deps) {
         showInlineError(box, write.message || (write.reason === 'concurrent' ? t('toast.concurrentWrite') : t('form.quotaForm')));
         return;
       }
-      if (!rememberTagOrRollback(ctag, editBucket, d.entries.filter(item => item.id !== id), beforeData, box, write.raw)) return;
+      if (!rememberTagOrRollback(ctag, editBucket, beforeData, box, write.raw)) return;
     }
     deps.setSelectedDate(checked.ts.slice(0, 10));
     closeAfterRecordWrite(closeEditSheet, beforeData);

@@ -291,9 +291,6 @@ export default {
   'io.summaryPlanHead': '## Plans',
   'io.copyFailed': 'Copy failed',
   'io.copied': '✓ Copied',
-  'io.copyJsonLabel': 'Copy JSON backup',
-  'io.copySummaryLabel': 'Copy current view summary',
-  'io.copyBootDiagLabel': 'Copy startup diagnostics',
   'diag.first': 'first',
   'diag.gap': 'gap {value}',
   'diag.swControlled': 'SW controlled {value}',
@@ -318,7 +315,6 @@ export default {
   'diag.launchesOther': '{n} launches',
   'io.backupShareTitle': 'Eigentime full backup {name}',
   'io.saveDone': '✓ Backup saved',
-  'io.saveLabel': 'Save backup',
   'io.saveCheckDownloads': 'Check your downloads to confirm',
   'io.shiftNoMeta': 'This backup has no timezone metadata, so no shift is applied by default. Enter one manually if you need to align the clocks on two devices.',
   'io.shiftBase': 'Source device {source}{zone}, current device {current}.',
@@ -362,7 +358,6 @@ export default {
   'io.retryRead': 'Read again and preview',
   'io.parseFailed': 'Could not parse the file; make sure it is a valid JSON file.',
   'io.shareDone': '✓ Backup shared',
-  'io.shareLabel': 'Share backup',
   'io.downloadDone': '✓ Backup downloaded',
 
   // ---- Hero / timeline / summary (ui.js) ----

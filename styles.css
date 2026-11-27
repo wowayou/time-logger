@@ -650,7 +650,6 @@
 
     /* Chips */
     .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 7px; }
-    .chip-group { display: grid; gap: var(--sp-1); margin-bottom: var(--sp-2); }
     .chip-group-label {
       color: var(--muted);
       font-size: var(--fs-cap);
@@ -1086,30 +1085,9 @@
     .ruler-bar div { transition: flex 0.3s; } /* raw: 比例条随数据伸缩，比表面进出慢一档才看得出变化；减少动效时关闭 */
     .ruler-bar div:first-child { border-radius: var(--r-pill) 0 0 var(--r-pill); }
     .ruler-bar div:last-child { border-radius: 0 var(--r-pill) var(--r-pill) 0; }
-    .ruler-text {
-      font-size: var(--fs-ui);
-      color: var(--muted);
-      display: flex;
-      gap: 14px;
-      flex-wrap: wrap;
-      min-width: 0;
-      font-variant-numeric: tabular-nums;
-    }
-    .ruler-text span {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
     .muted-note {
       color: var(--muted);
       font-size: var(--fs-ui);
-    }
-    .dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      flex-shrink: 0;
     }
 
     /* R4（v47）：日视图结论卡（渲染进 #ruler 容器）——主线净时长唯一大数字。 */
@@ -1892,9 +1870,9 @@
     /* SPEC-012：#info-toast 到达本身要可感知（v73 的「静默」教训之一是它出现得
        太不起眼），加一个克制的淡入+上移入场，和 sheet 的 @starting-style 同一套
        渐进增强写法；.undo-toast 基础规则不动，只有 #info-toast 加这层动效。
-       z-index 提到 .form-sheet（80）之上：导入确认走「更多」下钻返回（v41 既有的
-       returnToMore 导航栈，红线不能改——CLAUDE.md 自测清单 7）时，closeForm() 是
-       同步把 #form-sheet 内容换回「更多」而非真正 hidden，无论 showInfoToast 延迟
+       z-index 提到 .form-sheet（80）之上：导入确认走下钻返回（v41 起的返回导航，
+       v84 起为返回栈 sheetStack，红线不能改——手动检查清单 7）时，closeForm() 是
+       同步把 #form-sheet 内容换回上一层（「备份与导入」）而非真正 hidden，无论 showInfoToast 延迟
        多久，届时 #form-sheet 仍在原 z-index 80 覆盖同一屏幕位置；只有 toast 的
        z-index 高于 form-sheet，它才能在「更多」重新盖住屏幕之后仍然可见（无头探针
        实测坐实：z:70 时 elementFromPoint 命中的是 .more-body 而不是 toast）。仍低于
@@ -2799,13 +2777,6 @@
     .cfg-line .cfg-name {
       flex: 1;
       min-width: 0;
-      background: var(--card);
-      min-height: 40px;
-      padding: 7px 11px;
-    }
-    .cfg-line .cfg-bucket {
-      flex: 0 0 96px;
-      width: 96px;
       background: var(--card);
       min-height: 40px;
       padding: 7px 11px;

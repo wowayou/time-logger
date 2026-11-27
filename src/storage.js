@@ -51,7 +51,6 @@ export const CONFIG_KEY = 'timelog.config';
 export const THEME_KEY = 'timelog.theme';
 export const VIEW_KEY = 'timelog.view';
 export const SELECTED_DATE_KEY = 'timelog.selectedDate';
-export const OPEN_DATE_KEY = 'timelog.openDate';
 export const RECORD_MODE_KEY = 'timelog.recordMode';
 // v1.8.1：日视图时间轴行布局，设备偏好，不进备份。v1.8.2 起为全文 / 单行 / 按时长比例：
 // 「全文」取代 v1.8.1 的「两行」并成为默认（维护者 2026-11-18 选定）。存量的 'double'
@@ -68,18 +67,23 @@ export function normalizeTimelineDensity(value) {
 // v1.13.0：首屏统计卡片的图形——比例条（ratio，默认）或分布图（detail：日 / 周为热力格，
 // 月 / 年为标签环形图）；日周月年共用一个选择。设备偏好，不进备份；只认 'detail'，
 // 缺失或非法＝比例。取代 v1.12.0 的 timelog.dayHeat（时间轴底部热力条开关），旧键在
-// 启动时删除（dropLegacyDayHeatPreference）。
+// 启动时删除（dropLegacyUiPreferences）。
 export const HERO_VISUAL_KEY = 'timelog.heroVisual';
 export const LEGACY_DAY_HEAT_KEY = 'timelog.dayHeat';
+// v1.16.2：「上次打开日」自 v21（2026-06-30）起只写不读——跨日回到今天的读取那时已删，
+// 写入却一直留着。停写，存量键与 dayHeat 一样在启动时删除。
+export const LEGACY_OPEN_DATE_KEY = 'timelog.openDate';
 
 /** @param {string | null | undefined} value @returns {'ratio' | 'detail'} */
 export function normalizeHeroVisual(value) {
   return value === 'detail' ? 'detail' : 'ratio';
 }
 
-/** v1.12.0 遗留的界面偏好已无读者；删不掉（权限、隐私模式）也不影响任何功能。 */
-export function dropLegacyDayHeatPreference() {
-  try { localStorage.removeItem(LEGACY_DAY_HEAT_KEY); } catch {}
+/** 已无读者的旧界面偏好（v1.12.0 的 dayHeat、v21 起只写不读的 openDate）；删不掉（权限、隐私模式）也不影响任何功能。 */
+export function dropLegacyUiPreferences() {
+  for (const key of [LEGACY_DAY_HEAT_KEY, LEGACY_OPEN_DATE_KEY]) {
+    try { localStorage.removeItem(key); } catch {}
+  }
 }
 // SPEC-013：语言偏好。'' / 键缺失＝跟随系统。是**设备偏好不是用户数据**——
 // 不进备份、导入不得改语言（与 timelog.theme 同类）。
@@ -301,7 +305,7 @@ function stripChunkLead(chunk) {
  * @returns {{ items: string[], total: number }} total 为截断前的句数
  */
 export function splitQuoteText(text) {
-  const lines = String(text || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').split('\n');
+  const lines = String(text || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').split('\n');
   const items = [];
   const emit = chunk => {
     const clean = stripChunkLead(chunk.replace(/\s+/g, ' ').trim());
@@ -687,14 +691,6 @@ export function loadConfigSnapshotChecked() {
   return { ok: true, config: normalizeConfig(parseStoredJson(raw)), raw };
 }
 
-export function readConfigRaw() {
-  try {
-    return localStorage.getItem(CONFIG_KEY) || '';
-  } catch {
-    return '';
-  }
-}
-
 export function saveConfig(config) {
   const normalized = normalizeConfig(config);
   try {
@@ -1024,8 +1020,9 @@ export function ensureFirstUsedDate(todayKey, entries = []) {
     if (parseDateKey(stored)) return stored;
   } catch {}
 
-  // 老用户首次升级时用本机现有记录的最早日期初始化；以后只读固定键，导入更早
-  // 的历史数据也不会倒拨“使用第 N 天”。未来计划不应把起点推到今天之后。
+  // 老用户首次升级时用本机现有记录的最早日期初始化；以后只读固定键（导入只经
+  // mergeImportedFirstUsedDate 往更早挪）。未来计划不应把起点推到今天之后。v61 起它
+  // 只作诊断，不再驱动「使用第 N 天」。
   const firstDate = (entries || []).reduce((earliest, entry) => {
     const dateKey = typeof entry?.ts === 'string' ? entry.ts.slice(0, 10) : '';
     if (!parseDateKey(dateKey) || dateKey > todayKey) return earliest;
@@ -1044,9 +1041,9 @@ export function readFirstUsedDate() {
   }
 }
 
-// 完整备份带上起始日，删掉主屏 PWA 重装或换设备后 N 才能接上；否则只能退回
-// 按最早记录日期推导。导入只允许把起点往**更早**挪（N 单调不减），并拒绝未来
-// 日期——规范要求「不因联网、版本更新或导入更早历史而倒拨」，取较早值即满足。
+// 完整备份带上起始日（v60；v61 起只作诊断），删掉主屏 PWA 重装或换设备后才能接上；
+// 否则只能退回按最早记录日期推导。导入只允许把起点往**更早**挪（单调不减），并拒绝
+// 未来日期——取较早值即满足。
 export function mergeImportedFirstUsedDate(importedValue, todayKey) {
   const local = readFirstUsedDate();
   if (!parseDateKey(importedValue) || !parseDateKey(todayKey)) return local;
@@ -1449,9 +1446,12 @@ export function mergeImportedConfig(localConfig, importedConfig) {
   const occupied = new Set([...local.mainline, ...local.chips.map(chip => chip.name)].map(tagKey));
   const mainline = local.mainline.slice();
   const chips = local.chips.map(chip => ({ ...chip }));
+  // 备份带进来的新主线名（本机原本没有同名标签）：只有它们的免确认设置跟着导入。
+  const appendedMainline = new Set();
   imported.mainline.forEach(name => {
     if (occupied.has(tagKey(name))) return;
     occupied.add(tagKey(name));
+    appendedMainline.add(tagKey(name));
     mainline.push(name);
   });
   imported.chips.forEach(chip => {
@@ -1461,9 +1461,13 @@ export function mergeImportedConfig(localConfig, importedConfig) {
   });
   // 格言合并与标签同一精神——本机优先：本机的显式值（含显式隐藏 ''）保留，
   // 只有本机从未设置过时才采用备份里的值。
-  // 主线 longOk 与标签同一精神：并集，但只对最终仍在 mainline 里的名字生效
-  // （normalizeConfig 会再过滤一次）。本机已有的条目不会被备份删掉。
-  const mainlineLongOk = [...new Set([...(local.mainlineLongOk || []), ...(imported.mainlineLongOk || [])])];
+  // 主线 longOk 与标签同一精神——本机同名优先：本机已有的主线名保留本机设置（不被备份
+  // 删掉，也不被备份打开，与 chip 整条取本机同理）；只有备份新带进来的主线名采用备份
+  // 的设置。v1.16.2 前是简单并集，一份备份就能替本机已有的主线打开免确认。
+  const mainlineLongOk = [...new Set([
+    ...(local.mainlineLongOk || []),
+    ...(imported.mainlineLongOk || []).filter(name => appendedMainline.has(tagKey(name)))
+  ])];
   const motto = local.motto !== undefined ? local.motto : imported.motto;
   // 行为开关始终以本机为准：导入是合并，不应让一份备份在本机静默开启提醒。
   // 开启过的设备会显式保存 `longReview:true`；关闭态不写键，保持默认关闭与零迁移。

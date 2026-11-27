@@ -279,9 +279,6 @@ export default {
   'io.summaryPlanHead': '## 计划',
   'io.copyFailed': '复制失败',
   'io.copied': '✓ 已复制',
-  'io.copyJsonLabel': '复制 JSON 备份',
-  'io.copySummaryLabel': '复制当前视图摘要',
-  'io.copyBootDiagLabel': '复制启动诊断',
   'diag.first': '首条',
   'diag.gap': '间隔 {value}',
   'diag.swControlled': 'SW接管 {value}',
@@ -306,7 +303,6 @@ export default {
   'diag.launchesOther': '{n} 次启动',
   'io.backupShareTitle': '时间尺完整备份 {name}',
   'io.saveDone': '✓ 已存储备份',
-  'io.saveLabel': '存储备份',
   'io.saveCheckDownloads': '请在下载项确认',
   'io.shiftNoMeta': '这个备份没有时区元信息，默认不平移；需要对齐双设备壁钟时可手动填写。',
   'io.shiftBase': '源设备 {source}{zone}，当前设备 {current}。',
@@ -350,7 +346,6 @@ export default {
   'io.retryRead': '重新读取并预览',
   'io.parseFailed': '文件解析失败，请确认是有效的 JSON 文件。',
   'io.shareDone': '✓ 已分享备份',
-  'io.shareLabel': '分享备份',
   'io.downloadDone': '✓ 已下载备份',
 
   // ---- hero / 时间轴 / 汇总（ui.js）----

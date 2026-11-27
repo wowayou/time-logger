@@ -550,8 +550,8 @@ function mountDesktopTimePicker(mountEl, initialValue, onChangeCb, { showNow = t
     if (showNow) {
       const nowBtn = document.createElement('button');
       nowBtn.type = 'button'; nowBtn.className = 'dt-now';
-      nowBtn.dataset.act = 'now'; nowBtn.dataset.tip = t('picker.nowAria');
-      nowBtn.setAttribute('aria-label', t('picker.nowAria'));
+      nowBtn.dataset.act = 'now';
+      setButtonTip(nowBtn, t('picker.nowTip'), t('picker.nowAria'));
       nowBtn.textContent = t('picker.now');
       timeDiv.appendChild(nowBtn);
     }

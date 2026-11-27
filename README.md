@@ -2,7 +2,7 @@
 
 > Status: active · 已上线，可日常使用；进度与待办见 [STATUS.md](STATUS.md)
 >
-> Release: v1.16.1（导入冲突三选一键高 44；发布状态见 [STATUS.md](STATUS.md)，适用范围见[真机验收单](docs/device-acceptance.md)）。
+> Release: v1.16.2（本地候选：全项目审查修复，未发布；线上为 v1.16.1。发布状态见 [STATUS.md](STATUS.md)，适用范围见[真机验收单](docs/device-acceptance.md)）。
 >
 > Updated: 2026-11-27
 >
@@ -97,7 +97,7 @@ Web 发布用两个仓库（D12）：本仓 `wowayou/time-logger` 是唯一源�
 
 ## 数据模型
 
-记录在 `localStorage['timelog.v1']`，标签配置在 `timelog.config`，文字轮播句库（若用过）在 `timelog.quotes`。完整备份包含 `entries`、`config`、可选 `meta` 与可选 `quotes`；没有可选字段的旧备份仍可导入，旧版本会忽略 `quotes`。
+记录在 `localStorage['timelog.v1']`，标签配置在 `timelog.config`，文字轮播句库（若用过）在 `timelog.quotes`。完整备份包含 `entries`、`config`、可选 `meta`、可选 `firstUsedDate`（本机首用日，只作诊断）与可选 `quotes`；没有可选字段的旧备份仍可导入，旧版本会忽略 `quotes`。
 
 ```json
 {

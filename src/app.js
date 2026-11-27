@@ -12,7 +12,6 @@ import {
   settlementEndFor as getSettlementEndFor
 } from './entry_model.js';
 import {
-  OPEN_DATE_KEY,
   RECORD_MODE_KEY,
   SELECTED_DATE_KEY,
   THEME_KEY,
@@ -20,7 +19,7 @@ import {
   normalizeTimelineDensity,
   HERO_VISUAL_KEY,
   normalizeHeroVisual,
-  dropLegacyDayHeatPreference,
+  dropLegacyUiPreferences,
   VIEW_KEY,
   appendBootDiagSample,
   ensureFirstUsedDate,
@@ -39,11 +38,9 @@ import {
   readQuotesRaw,
   resolveMottoLine,
   saveQuotesChecked,
-  readConfigRaw,
   readFirstUsedDate,
   rememberCustomTagForBucket,
   setBootDiagEnabled,
-  save,
   saveChecked,
   saveConfigChecked,
   uid,
@@ -922,13 +919,9 @@ import {
     loadConfigSnapshotChecked,
     loadQuotesSnapshotChecked,
     showInfoToast,
-    save,
     saveChecked,
     saveConfigChecked,
-    readConfigRaw,
     rememberCustomTagForBucket,
-    loadQuotes,
-    readQuotesRaw,
     saveQuotesChecked,
     uid,
     defaultFormTs,
@@ -952,10 +945,8 @@ import {
     loadSnapshotChecked,
     loadConfig,
     loadConfigSnapshotChecked,
-    save,
     saveChecked,
     saveConfigChecked,
-    readConfigRaw,
     validateImportData,
     mergeImportedEntries,
     mergeImportedConfig,
@@ -1616,7 +1607,7 @@ import {
     appendBootDiagSample(sample);
   }
 
-  // 开关翻转后经 openMoreSheet 原地重渲染（returnToMore 已验证的重入路径）。
+  // 开关翻转后原地重渲染所在的「高级」页（同一层重渲染，返回栈不动）。
   function toggleBootDiag() {
     setBootDiagEnabled(!readBootDiag().enabled);
     // v84：这个开关现在住在「高级」二级页里——原地重渲染当前那一层，别把用户
@@ -1652,8 +1643,8 @@ import {
     // 结果，覆盖回去以防两者因任何原因不一致。
     document.documentElement.lang = getLocale();
     markBootTrace('init_start');
-    // v1.13.0：v1.12.0 的时间轴底部热力条开关已移除，旧偏好不再有读者。
-    dropLegacyDayHeatPreference();
+    // 已无读者的旧偏好：v1.12.0 的时间轴底部热力条开关（v1.13.0 起）、只写不读的上次打开日（v1.16.2 起）。
+    dropLegacyUiPreferences();
     updateMigrationNotice();
     const today = todayStr();
     // 只做诊断：写下本机首用日备查，不再驱动任何用户可见里程碑。
@@ -1662,7 +1653,6 @@ import {
     const savedDate = parseDateKey(readUiPreference(SELECTED_DATE_KEY));
     state.view = ['day', 'week', 'month', 'year'].includes(savedView) ? savedView : 'day';
     state.selectedDate = savedDate ? localDateKey(savedDate) : today;
-    saveUiPreference(OPEN_DATE_KEY, today);
     persistState();
 
     applyTheme(readUiPreference(THEME_KEY) || 'auto');

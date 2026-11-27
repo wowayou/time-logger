@@ -22,7 +22,9 @@ import {
   loadQuotes,
   previewLocaleDefaultTags,
   readUiPreference,
-  readBootDiag
+  readBootDiag,
+  RESERVED_UNKNOWN_TAG,
+  tagKey
 } from './storage.js';
 
 // SPEC-014 §1.6：隐私政策外链，按当前 locale 分流；绝对 URL——本页可能同时跑在
@@ -50,6 +52,12 @@ export const QUOTE_PACKS = [
 
 export function quotePackPath(id, locale = getLocale()) {
   return `./packs/${id}-${locale}.txt`;
+}
+
+// SPEC-013：保留标签 id 是数据（存储里恒为「未知」），界面上一律显示 tag.unknown——
+// 中文下二者逐字相同，英文显示 Unknown。只用于显示，不得写回存储或拿去查桶。
+export function tagLabel(tag) {
+  return tag === RESERVED_UNKNOWN_TAG ? t('tag.unknown') : tag;
 }
 
 export function esc(s) {
@@ -318,8 +326,8 @@ export function renderNowStrip(items, isToday, config = loadConfig()) {
     el.removeAttribute('aria-label');
     return;
   }
-  const tag = (ongoing.e.tags || [])[0] || t('tag.unknown');
-  const bucket = bucketForTag(tag, config);
+  // 桶按数据里的标签查，不按显示名（英文 Unknown）查。
+  const bucket = bucketForTag((ongoing.e.tags || [])[0] || RESERVED_UNKNOWN_TAG, config);
   const dur = fmtMins(ongoing.mins);
   const what = ongoing.e.what;
   el.hidden = false;
@@ -353,7 +361,7 @@ export function renderTimeline(items, opts = {}) {
     unrecorded: false,
     pendingConfirm: false,
     confirmable: false,
-    tag: (e.tags || [])[0] || t('tag.unknown'),
+    tag: (e.tags || [])[0] || RESERVED_UNKNOWN_TAG,
     endTs: '',
     planned: true
   }));
@@ -385,11 +393,12 @@ export function renderTimeline(items, opts = {}) {
   </div>`;
   const rows = [...allItems].reverse().map(({ e, start, end, mins, isOngoing, unrecorded, pendingConfirm, confirmable, tag, endTs, planned: isPlanned }) => {
     if (isPlanned) {
-      const displayTag = (e.tags || [])[0] || t('tag.unknown');
+      const planTag = (e.tags || [])[0] || RESERVED_UNKNOWN_TAG;
+      const displayTag = tagLabel(planTag);
       const interactiveAttrs = readOnly ? '' : ` data-action="start-edit" role="button" tabindex="0" aria-label="${esc(t('timeline.editPlanAria', { what: e.what || t('timeline.emptyWhat') }))}"`;
       // v1.8.1：有「标记已发生」时不再显示「计划」二字——虚线竖脊与「现在」线上方的位置
       // 已表达，单行等高行里把宽度留给正文；只读页没有动作，仍显示「计划」。读屏名不变。
-      const card = `<div class="entry planned" data-b="${bucketForTag(displayTag, config)}" data-id="${esc(e.id)}" style="--mins:0"${interactiveAttrs}>
+      const card = `<div class="entry planned" data-b="${bucketForTag(planTag, config)}" data-id="${esc(e.id)}" style="--mins:0"${interactiveAttrs}>
         <div class="e-time">${hhmm(e.ts)}</div>
         <div class="e-body">
           <div class="e-what">${esc(e.what || t('timeline.emptyWhat'))}</div>
@@ -422,7 +431,7 @@ export function renderTimeline(items, opts = {}) {
     // Only the live now-segment reads "还没记"; a middle/past placeholder (e.g.
     // left by a smart delete) is honestly just "未记录".
     const activePlaceholder = isPlaceholder && isOngoing;
-    const displayTag = isPlaceholder ? t('timeline.unrecorded') : tag;
+    const displayTag = isPlaceholder ? t('timeline.unrecorded') : tagLabel(tag);
     const bucket = (isPlaceholder || unrecorded) ? 'unrecorded' : bucketForTag(tag, config);
     // v89：待核行**不加**行级 class。竖脊颜色在 v89 起恒等于桶（待核不再冒充未记录），
     // 提醒本身由时长列的「待核 · X」和行内「确认」按钮承担，已经是两个信号；再叠一层行底色
@@ -549,7 +558,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.16.1';
+export const APP_VERSION = '1.16.2';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -575,7 +584,7 @@ function renderDeleteConfirmSheet(opts = {}) {
       <div class="delete-target">
         <div class="delete-range">${esc(range)}</div>
         <div class="delete-what">${esc(entry.what || t('timeline.emptyWhat'))}</div>
-        <div class="delete-tag">#${esc((entry.tags || [])[0] || t('timeline.unrecorded'))}</div>
+        <div class="delete-tag">#${esc(tagLabel((entry.tags || [])[0]) || t('timeline.unrecorded'))}</div>
       </div>
       <div class="delete-result ${resultClass}" role="status">
         <div class="fl-label">${t('delete.resultLabel')}</div>
@@ -1096,7 +1105,7 @@ export function renderFormSheet(opts) {
   const recordModeSeg = isEdit || isHistoryDay || isBackfill || recordModeLocked || isOvernight ? '' : renderRecordModeSeg(recordMode);
   const title = isEdit ? t('form.titleEdit') : (isBackfill ? (isSplit ? t('form.titleSplit') : t('form.titleBackfill')) : (isOvernight ? t('form.titleOvernight') : (isPlan ? t('form.titlePlanShort') : (isToday ? t('form.titleLogToday') : t('form.titleBackfillDay')))));
   const summary = isEdit
-    ? `${hhmm(e.ts)}${tag ? ` · #${esc(tag)}` : ''}`
+    ? `${hhmm(e.ts)}${tag ? ` · #${esc(tagLabel(tag))}` : ''}`
     : (isBackfill ? daySummary : (isOvernight ? t('form.subOvernight') : (isPlan ? daySummary : (isToday ? t('form.whenJustNow') : daySummary))));
   const whatText = isEdit
     ? (esc(e.what) || t('timeline.emptyWhat'))
@@ -1501,18 +1510,14 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
   const entries = opts.entries || [];
   // SPEC-007：签名手法是把日视图的桶色竖脊带进设置行——结构即信息，不用读控件
   // 就知道这行属于哪个桶。data-b 与时间轴同源（styles.css 按它上色）。
-  const countLine = name => {
-    const count = countEntriesWithTag(entries, name);
-    return count ? `<span class="cfg-count">${entriesCountLabel(count)}</span>` : '';
-  };
+  const countLine = count => (count ? `<span class="cfg-count">${entriesCountLabel(count)}</span>` : '');
   // v82：删除只对**零记录**的标签开放——SPEC-007 当初不做删除的理由是「历史记录
   // 会变成孤儿标签」，这个理由在没有任何记录引用它时并不成立（试错建出来的标签
   // 就卡在这里，永远删不掉）。所以右槽二选一：有记录→显示条数（不可删）；
   // 零记录→显示「删除」。判据同一个 countEntriesWithTag，保存时还会按最新
   // load() 复算一次，跨标签页新增的记录能把删除拦下。
-  const countOrDelete = name => {
-    const count = countEntriesWithTag(entries, name);
-    if (count) return countLine(name);
+  const countOrDelete = (name, count) => {
+    if (count) return countLine(count);
     return `<button class="mini-btn cfg-delete" type="button" data-action="cfg-toggle-delete" aria-label="${esc(t('cfg.deleteAria', { name }))}">${t('cfg.delete')}</button>`;
   };
 
@@ -1520,7 +1525,10 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
   // data-original-* 记下打开时的值，chip 面据此判断「改过没有」。
   const mainlineRow = (name, index) => {
     const isCurrent = index === 0;
-    const longOk = (config.mainlineLongOk || []).includes(name);
+    // 按 tagKey 判定，与统计的 longOkForTag 一致：mainlineLongOk 里的拼写可能只差大小写
+    // （导入合并时取并集即可得到）。逐字比较会把它显示成未勾选，保存时再按勾选重建，
+    // 静默关掉豁免。
+    const longOk = (config.mainlineLongOk || []).some(item => tagKey(item) === tagKey(name));
     const count = countEntriesWithTag(entries, name);
     return `<div class="cfg-row${isCurrent ? ' is-current' : ' is-history'}" data-b="job" data-kind="mainline" data-original-name="${esc(name)}" data-original-long-ok="${longOk ? 1 : 0}" data-count="${count}">
       ${cfgChipFace({ name, count, current: isCurrent })}
@@ -1531,7 +1539,7 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
             : `<button class="mini-btn cfg-set-current" type="button" data-action="set-current-mainline" data-name="${esc(name)}" aria-label="${esc(t('cfg.setCurrentAria', { name }))}">${t('cfg.setCurrent')}</button>`}
         </div>
         ${cfgWasLine()}
-        <div class="cfg-sub">${cfgLongOkBox(longOk, config.longReview === true)}${countOrDelete(name)}</div>
+        <div class="cfg-sub">${cfgLongOkBox(longOk, config.longReview === true)}${countOrDelete(name, count)}</div>
       </div>
     </div>`;
   };
@@ -1549,7 +1557,7 @@ function renderConfigSheet(config = loadConfig(), opts = {}) {
           ${cfgBucketSeg(chip.bucket)}
         </div>
         ${cfgWasLine()}
-        <div class="cfg-sub">${cfgLongOkBox(chip.longOk, config.longReview === true)}${countOrDelete(chip.name)}</div>
+        <div class="cfg-sub">${cfgLongOkBox(chip.longOk, config.longReview === true)}${countOrDelete(chip.name, count)}</div>
       </div>
     </div>`;
   };

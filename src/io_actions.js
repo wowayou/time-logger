@@ -5,6 +5,7 @@
 import { formatPercent, sortedEntriesFrom } from './stats.js';
 import { plural, t } from './i18n.js';
 import { fmtDateTime, fmtMins, fmtPlainMins, fmtTs, hhmm, p2 } from './time.js';
+import { tagLabel } from './ui.js';
 
 // SPEC-012：sheet 关闭走 class 驱动的收起动画（sheet_controller.js
 // animateSheetClose），最长 320ms 兜底才真正 hidden。这里的值必须和那个兜底
@@ -23,6 +24,8 @@ function prefersReducedMotion() {
 }
 
 export function createIoActions(deps) {
+  // 每个按钮只留最后一次复位定时器（与时间分析的复制反馈同一纪律，v1.15.6）。
+  const feedbackTimers = new WeakMap();
   let importShiftMinutes = 0;
   let pendingImport = null;
   let importResolutions = {};
@@ -79,7 +82,7 @@ export function createIoActions(deps) {
           return `- ${hhmm(start)} | ${detailDurationLabel(mins, isOngoing, unrecorded, pendingConfirm)} | ${t('timeline.gapWhat')} | #${t('io.noteUnrecorded')}`;
         }
         const safeWhat = mdInline(e.what) || t('io.emptyWhat');
-        const safeTag = mdInline(tag || t('tag.unknown'));
+        const safeTag = mdInline(tagLabel(tag) || t('tag.unknown'));
         return `- ${hhmm(start || e.ts)} | ${detailDurationLabel(mins, isOngoing, unrecorded, pendingConfirm)} | ${safeWhat} | #${safeTag}`;
       });
     }
@@ -99,7 +102,7 @@ export function createIoActions(deps) {
     const day = deps.computeDay();
     return day.planned.map(entry => {
       const safeWhat = mdInline(entry.what) || t('io.emptyWhat');
-      const safeTag = mdInline((entry.tags || [])[0] || t('tag.unknown'));
+      const safeTag = mdInline(tagLabel((entry.tags || [])[0]) || t('tag.unknown'));
       return t('io.planRow', { time: hhmm(entry.ts), what: safeWhat, tag: safeTag });
     });
   }
@@ -141,10 +144,11 @@ export function createIoActions(deps) {
     const labelEl = btn.querySelector('[data-role="cell-label"]') || btn;
     labelEl.textContent = ok ? label : t('io.copyFailed');
     btn.classList.toggle('copied', ok);
-    setTimeout(() => {
+    clearTimeout(feedbackTimers.get(btn));
+    feedbackTimers.set(btn, setTimeout(() => {
       labelEl.textContent = fallbackLabel;
       btn.classList.remove('copied');
-    }, 2500);
+    }, 2500));
   }
 
   function legacyCopy(text) {
@@ -208,11 +212,11 @@ export function createIoActions(deps) {
 
   function copyJSON() {
     const json = JSON.stringify(exportData(), null, 2);
-    copyText(json, document.getElementById('copy-btn'), t('io.copied'), t('io.copyJsonLabel'));
+    copyText(json, document.getElementById('copy-btn'), t('io.copied'), t('more.copyJson'));
   }
 
   function copyCurrentViewSummary() {
-    copyText(buildCurrentViewSummaryMarkdown(), document.getElementById('summary-btn'), t('io.copied'), t('io.copySummaryLabel'));
+    copyText(buildCurrentViewSummaryMarkdown(), document.getElementById('summary-btn'), t('io.copied'), t('more.copySummary'));
   }
 
   function bootDiagTime(epochMs) {
@@ -252,7 +256,7 @@ export function createIoActions(deps) {
       '',
       ...lines
     ].join('\n');
-    copyText(text, document.getElementById('boot-diag-copy-btn'), t('io.copied'), t('io.copyBootDiagLabel'));
+    copyText(text, document.getElementById('boot-diag-copy-btn'), t('io.copied'), t('more.bootDiagCopy'));
   }
 
   function backupArtifact() {
@@ -293,7 +297,7 @@ export function createIoActions(deps) {
     if (prefersSystemFileSave() && canShareFile(artifact.file)) {
       try {
         await navigator.share({ files: [artifact.file], title: t('io.backupShareTitle', { name: artifact.fname }) });
-        setCopyFeedback(btn, true, t('io.saveDone'), t('io.saveLabel'));
+        setCopyFeedback(btn, true, t('io.saveDone'), t('more.save'));
         return;
       } catch (error) {
         // 用户取消代表明确不保存，不能偷偷回退成一个去向不明的浏览器下载。
@@ -301,7 +305,7 @@ export function createIoActions(deps) {
       }
     }
     directDownloadBackup(artifact);
-    setCopyFeedback(btn, true, t('io.saveCheckDownloads'), t('io.saveLabel'));
+    setCopyFeedback(btn, true, t('io.saveCheckDownloads'), t('more.save'));
   }
 
   function parseImportShiftHours(raw) {
@@ -378,7 +382,7 @@ export function createIoActions(deps) {
     const what = document.createElement('div');
     what.className = 'import-conflict-what';
     what.textContent = entry && entry.what ? entry.what : t('io.emptyWhatFull');
-    const tag = entry && Array.isArray(entry.tags) && entry.tags[0] ? entry.tags[0] : t('io.noteUnrecorded');
+    const tag = entry && Array.isArray(entry.tags) && entry.tags[0] ? tagLabel(entry.tags[0]) : t('io.noteUnrecorded');
     const meta = document.createElement('div');
     meta.className = 'import-conflict-meta';
     meta.textContent = t('io.conflictMeta', { ts: entry && entry.ts ? fmtTs(entry.ts) : t('io.unknownTime'), tag, planned: entry && entry.planned ? t('io.plannedSuffix') : '' });
@@ -391,7 +395,7 @@ export function createIoActions(deps) {
     row.className = 'import-item';
     const meta = document.createElement('span');
     meta.className = 'import-item-meta';
-    const tag = entry && Array.isArray(entry.tags) && entry.tags[0] ? entry.tags[0] : t('io.noteUnrecorded');
+    const tag = entry && Array.isArray(entry.tags) && entry.tags[0] ? tagLabel(entry.tags[0]) : t('io.noteUnrecorded');
     meta.textContent = t('io.itemMeta', {
       ts: entry && entry.ts ? fmtTs(entry.ts) : t('io.unknownTime'),
       tag,
@@ -410,7 +414,7 @@ export function createIoActions(deps) {
   // v1.2.1（B）：新增项**不需逐条确认**——它们会随「导入」一次性全部写入。清单
   // 只是可选核对，故在新增组前置一句安心文案，并把展开器做得更轻（去掉主线色
   // 强调边框、标题降为 muted），消除“像一份待办勾选表”的错觉（D13 ③ 只要求
-  // 不**惄悔**改时间线，可见可审计即满足，不需逐条闸）。
+  // 不**悄悄**改时间线，可见可审计即满足，不需逐条闸）。
   function paintImportDetail(plan) {
     const host = document.querySelector('#form-sheet [data-role="import-detail"]');
     if (!host) return;
@@ -738,7 +742,7 @@ export function createIoActions(deps) {
     if (canShareFile(artifact.file)) {
       try {
         await navigator.share({ files: [artifact.file], title: t('io.backupShareTitle', { name: artifact.fname }) });
-        setCopyFeedback(btn, true, t('io.shareDone'), t('io.shareLabel'));
+        setCopyFeedback(btn, true, t('io.shareDone'), t('more.share'));
         return;
       } catch (error) {
         if (isShareCancellation(error)) return;
@@ -746,13 +750,13 @@ export function createIoActions(deps) {
     }
     try {
       await navigator.share({ title: t('io.backupShareTitle', { name: artifact.fname }), text: artifact.json });
-      setCopyFeedback(btn, true, t('io.shareDone'), t('io.shareLabel'));
+      setCopyFeedback(btn, true, t('io.shareDone'), t('more.share'));
       return;
     } catch (error) {
       if (isShareCancellation(error)) return;
     }
     directDownloadBackup(artifact);
-    setCopyFeedback(btn, true, t('io.downloadDone'), t('io.shareLabel'));
+    setCopyFeedback(btn, true, t('io.downloadDone'), t('more.share'));
   }
 
   return {

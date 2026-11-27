@@ -455,6 +455,7 @@ assert(normData.entries.some(e => e.ts === '2026-07-01T12:00' && e.what === '' &
 import { listPlannedEntries, isMilestoneCount, milestoneCrossed, recordedDayCount, recordingMilestones } from './src/stats.js';
 import {
   bucketForTag,
+  longOkForTag,
   mergeImportedConfig,
   mergeImportedEntries,
   migrateEntryTags,
@@ -799,6 +800,16 @@ const mergedConfig = mergeImportedConfig(
 );
 assert(mergedConfig.chips.find(chip => chip.name === '同名').bucket === 'maintain', 'local same-name tag config wins import');
 assert(mergedConfig.mainline.includes('导入主线') && mergedConfig.chips.some(chip => chip.name === '新增'), 'new imported tags append');
+// v1.16.2：主线免确认本机同名优先——备份只能给它新带进来的主线名带上设置，不能替本机已有的
+// 主线（含只差大小写的同名）打开，也不能关掉本机已开的。
+const mergedLongOk = mergeImportedConfig(
+  { version: 1, mainline: ['coding', '本机开着'], mainlineLongOk: ['本机开着'], chips: [] },
+  { version: 1, mainline: ['Coding', '本机开着', '导入新主线'], mainlineLongOk: ['Coding', '导入新主线'], chips: [] }
+);
+assert(JSON.stringify(mergedLongOk.mainline) === JSON.stringify(['coding', '本机开着', '导入新主线']), 'imported mainline appends only new names');
+assert(!longOkForTag('coding', mergedLongOk), 'backup must not turn on longOk for an existing local mainline');
+assert(longOkForTag('本机开着', mergedLongOk), 'local mainline longOk survives import');
+assert(longOkForTag('导入新主线', mergedLongOk), 'newly imported mainline keeps its backup longOk');
 
 const currentImport = { version: 1, entries: [{ id: 'a', ts: '2026-07-09T09:00', what: '已有', tags: ['求职推进'] }] };
 const identicalImport = mergeImportedEntries(currentImport, [{ id: 'a', ts: '2026-07-09T09:00', what: '已有', tags: ['求职推进'] }]);
