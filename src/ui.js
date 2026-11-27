@@ -469,28 +469,34 @@ export function renderSummaryRows(rows) {
   const el = document.getElementById('timeline');
   const html = rows.map(row => {
     const { totals } = row;
-    const attrs = `type="button" data-action="drill" data-date="${esc(row.key)}" data-view="${esc(row.targetView)}" data-tip="${t('summary.drillTip')}" aria-label="${esc(t('summary.drillAria', { label: row.label }))}"`;
+    // v1.15.6：含今天的那一行（周/月→今天，年→本月）带文字标记与 aria-current，无记录也标。
+    const badge = row.current ? (row.targetView === 'month' ? t('summary.thisMonthBadge') : t('chrome.todayBadge')) : '';
+    const aria = badge ? t('summary.drillAriaCurrent', { label: row.label, badge }) : t('summary.drillAria', { label: row.label });
+    const attrs = `type="button" data-action="drill" data-date="${esc(row.key)}" data-view="${esc(row.targetView)}" data-tip="${t('summary.drillTip')}" aria-label="${esc(aria)}"${badge ? ' aria-current="date"' : ''}`;
+    const current = badge ? ' is-current' : '';
+    const name = `<span class="sum-name">${esc(row.label)}</span>${badge ? `<span class="period-today-badge sum-badge">${esc(badge)}</span>` : ''}`;
     // v1.8.0：没有可统计时长的日/月只占一行——不再画空条和一排「0%」。仍是同一个
     // 可下钻按钮，行数与顺序不变。
     if (!totals.total) {
-      return `<button class="sum-row is-empty" ${attrs}>
+      return `<button class="sum-row is-empty${current}" ${attrs}>
       <div class="sum-top">
-        <span class="sum-name">${esc(row.label)}</span>
+        ${name}
         <span class="sum-total">${t('summary.noEntries')}</span>
       </div>
     </button>`;
     }
     const parts = bucketParts(totals);
-    return `<button class="sum-row" ${attrs}>
+    // v1.15.6：有分钟的桶用正文色，恰为 0 分钟的保持灰字——按分钟判，不按显示的百分比。
+    return `<button class="sum-row${current}" ${attrs}>
       <div class="sum-top">
-        <span class="sum-name">${esc(row.label)}</span>
+        ${name}
         <span class="sum-total">${fmtMins(totals.total)}</span>
       </div>
       <div class="ruler-bar">
         ${parts.map(part => `<div style="flex:${part.value};background:var(${part.color})"></div>`).join('')}
       </div>
       <div class="sum-meta">
-        ${parts.map(part => `<span>${part.label} ${part.percent}</span>`).join('')}
+        ${parts.map(part => `<span class="sum-b${part.value > 0 ? '' : ' is-zero'}" data-b="${part.bucket}">${part.label} ${part.percent}</span>`).join('')}
         ${totals.pending ? `<span>${t('hero.pending', { dur: fmtMins(totals.pending) })}</span>` : ''}
       </div>
     </button>`;
@@ -537,7 +543,7 @@ function sheetHead({ title, cancelText, cancelAction, cancelAria, doneText = '',
 const cellChevron = '<span class="cell-chevron" aria-hidden="true">›</span>';
 
 // 与 sw.js CACHE / manifest version 同步（project_audit.py 校验）；真机核对版本用。
-export const APP_VERSION = '1.15.5';
+export const APP_VERSION = '1.15.6';
 
 function renderDeleteConfirmSheet(opts = {}) {
   const plan = opts.deletePlan || {};
@@ -1014,12 +1020,24 @@ function renderAnalyticsPeriodSeg(view) {
 
 // 可刷新部分（区间切换/选键/翻页）包在 [data-role=analytics-content] 里，
 // sheet_controller.refreshAnalytics 只替换它，不重建整张 sheet。
+// v1.15.6：「复制本期摘要」是本期结论的出口，放在结论下、键盘上——v1.3.0 起它是排行之后
+// 的绿色听筒圆钮，像「打电话」不像「复制」，且 390×844 要先滚约 300px 才看得到。它在可
+// 刷新区里，换周期/选键后随内容重建；反馈由 sheet_controller.showAnalyticsCopyStatus 每次
+// 现查节点，不持有旧节点。按钮子元素在无障碍树里是展示性的，读屏反馈走旁边的 status。
+function renderAnalyticsCopy() {
+  return `<div class="an-copy-row">
+      <button class="an-copy" type="button" data-action="analytics-summary" aria-label="${esc(t('analytics.callAria'))}"><span data-role="an-call-label">${esc(t('analytics.call'))}</span></button>
+      <span class="an-copy-status" data-role="an-copy-status" role="status"></span>
+    </div>`;
+}
+
 export function renderAnalyticsContent(model) {
   const keys = analyticsKeys(model);
   return `
     ${renderAnalyticsPeriodSeg(model.view)}
     <div class="an-period-label">${esc(model.periodLabel || '')}</div>
     ${renderAnalyticsDisplay(model, keys)}
+    ${renderAnalyticsCopy()}
     ${renderAnalyticsPad(model, keys)}
     ${renderAnalyticsItems(model)}`;
 }
@@ -1029,12 +1047,6 @@ export function renderAnalyticsSheet(model) {
     ${sheetHead({ title: t('analytics.title'), cancelText: t('analytics.close'), cancelAction: 'close-form', cancelAria: t('analytics.closeAria') })}
     <div class="form-sheet-body analytics-body">
       <div data-role="analytics-content">${renderAnalyticsContent(model)}</div>
-      <div class="an-call-wrap">
-        <button class="an-call" type="button" data-action="analytics-summary" aria-label="${esc(t('analytics.callAria'))}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1l-2.3 2.2z"/></svg>
-        </button>
-        <div class="an-call-label" data-role="an-call-label">${t('analytics.call')}</div>
-      </div>
     </div>`;
 }
 

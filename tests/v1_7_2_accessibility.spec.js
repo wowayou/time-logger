@@ -127,7 +127,13 @@ for (const theme of ['light', 'dark']) {
     });
     await openBackupMenu(page);
     await page.locator('[data-action="open-analytics"]').click();
-    expect((await composedContrast(page.locator('.an-call svg'), { property: 'fill' })).ratio).toBeGreaterThanOrEqual(3);
+    // v1.15.6：排行之后的绿色听筒圆钮（图形 3:1）换成结论下方的「复制本期摘要」文字按钮——
+    // 按正文文字验对比度（按钮底是半透明 accent，合成到卡片上算），热区同样实测。
+    const copy = page.locator('.an-copy');
+    const copyContrast = await composedContrast(copy);
+    expect(copyContrast.ratio).toBeGreaterThanOrEqual(copyContrast.textMinimum);
+    expect(copyContrast.textMinimum).toBe(4.5);
+    expect((await targetHits(copy)).every(point => point.hit)).toBe(true);
     const dots = page.locator('.an-dot');
     await expect(dots).toHaveCount(2);
     for (const dot of await dots.all()) {

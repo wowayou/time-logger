@@ -270,18 +270,23 @@ import {
     const planned = listPlannedEntries(allEntries, state.selectedDate);
     return { timeline, planned, totals: summarizeSegments(segments, config) };
   }
+  // v1.15.6：current 标出含今天的那一行（周/月列日→今天，年列月→本月），只认本地自然日；
+  // 历史周期没有。跨午夜由 dataSignature 里的 today 触发重渲。
   function summaryRows() {
     const { start } = periodRange();
+    const today = todayStr();
     if (state.view === 'week') {
       return Array.from({ length: 7 }, (_, i) => {
         const d = addDays(start, i);
-        return { key: localDateKey(d), label: shortDateLabel(d), rangeStart: d, rangeEnd: addDays(d, 1), targetView: 'day' };
+        const key = localDateKey(d);
+        return { key, label: shortDateLabel(d), rangeStart: d, rangeEnd: addDays(d, 1), targetView: 'day', current: key === today };
       });
     }
     if (state.view === 'month') {
       const rows = [];
       for (let d = new Date(start); d.getMonth() === start.getMonth(); d = addDays(d, 1)) {
-        rows.push({ key: localDateKey(d), label: shortDateLabel(d), rangeStart: new Date(d), rangeEnd: addDays(d, 1), targetView: 'day' });
+        const key = localDateKey(d);
+        rows.push({ key, label: shortDateLabel(d), rangeStart: new Date(d), rangeEnd: addDays(d, 1), targetView: 'day', current: key === today });
       }
       return rows;
     }
@@ -289,9 +294,11 @@ import {
       // 验收指出旧的 t('chrome.monthCell', {n}) 插值在英文侧读成 "Month 1"…
       // "Month 12"；改用真正的月份短名数组（zh 一侧逐字节与旧模板输出相同）。
       const monthShort = tList('date.monthShort');
+      const thisMonth = today.slice(0, 7);
       return Array.from({ length: 12 }, (_, i) => {
         const d = new Date(start.getFullYear(), i, 1);
-        return { key: localDateKey(d), label: monthShort[i] || String(i + 1), rangeStart: d, rangeEnd: addMonths(d, 1), targetView: 'month' };
+        const key = localDateKey(d);
+        return { key, label: monthShort[i] || String(i + 1), rangeStart: d, rangeEnd: addMonths(d, 1), targetView: 'month', current: key.slice(0, 7) === thisMonth };
       });
     }
     return [];

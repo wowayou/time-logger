@@ -413,6 +413,8 @@ export default {
   'timeline.now': 'Now {time}',
   'summary.drillTip': 'Open the detail view for this segment.',
   'summary.drillAria': 'Open detail for {label}',
+  'summary.thisMonthBadge': 'This month',
+  'summary.drillAriaCurrent': 'Open detail for {label} ({badge})',
   'summary.noEntries': 'No entries',
   'summary.empty': 'Nothing to summarize.',
   'bucketHint.maintain': 'Custom tags will be filed under Upkeep; existing tags with the same name keep their bucket.',

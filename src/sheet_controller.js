@@ -1685,8 +1685,7 @@ export function createSheetController(deps) {
   // 本期摘要（「复制本期摘要」键）：本期四桶占比 + Top 标签，纯文本 markdown。
   function copyAnalyticsSummary() {
     const text = analyticsSummaryText(buildAnalyticsModel());
-    const label = document.querySelector('#form-sheet [data-role="an-call-label"]');
-    const done = ok => setAnalyticsCallLabel(label, ok ? t('analytics.copied') : t('analytics.copyFailed'));
+    const done = ok => showAnalyticsCopyStatus(ok ? t('analytics.copied') : t('analytics.copyFailed'));
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(() => done(true)).catch(() => done(legacyAnalyticsCopy(text)));
     } else {
@@ -1694,20 +1693,39 @@ export function createSheetController(deps) {
     }
   }
 
+  // 旧路径要把焦点借给临时 textarea；用完还给原按钮，否则键盘用户的焦点掉到 body、
+  // 跑出 sheet 的焦点圈。
   function legacyAnalyticsCopy(text) {
+    const prev = document.activeElement;
     const ta = document.createElement('textarea');
     ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
     document.body.appendChild(ta); ta.focus(); ta.select();
     let ok = false;
     try { ok = document.execCommand('copy'); } catch {}
     document.body.removeChild(ta);
+    if (prev && prev.isConnected && typeof prev.focus === 'function') prev.focus();
     return ok;
   }
 
-  function setAnalyticsCallLabel(label, text) {
-    if (!label) return;
-    label.textContent = text;
-    setTimeout(() => { label.textContent = t('analytics.call'); }, 2200);
+  // v1.15.6：按钮在可刷新区里，复制后换周期/选键会整块重建——反馈与复位都现查节点，
+  // 不持有旧节点；连点只留最后一次的定时器。按钮文字是看得见的反馈，status 给读屏。
+  let analyticsCopyTimer = 0;
+  function showAnalyticsCopyStatus(text) {
+    const panel = document.querySelector('#form-sheet .form-sheet-panel');
+    if (!panel || panel.dataset.mode !== 'analytics') return;
+    const label = panel.querySelector('[data-role="an-call-label"]');
+    const status = panel.querySelector('[data-role="an-copy-status"]');
+    if (label) label.textContent = text;
+    if (status) status.textContent = text;
+    clearTimeout(analyticsCopyTimer);
+    analyticsCopyTimer = setTimeout(() => {
+      const current = document.querySelector('#form-sheet .form-sheet-panel[data-mode="analytics"]');
+      if (!current) return;
+      const l = current.querySelector('[data-role="an-call-label"]');
+      const st = current.querySelector('[data-role="an-copy-status"]');
+      if (l) l.textContent = t('analytics.call');
+      if (st) st.textContent = '';
+    }, 2200);
   }
 
   function analyticsSummaryText(model) {

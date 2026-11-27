@@ -401,6 +401,8 @@ export default {
   'timeline.now': '现在 {time}',
   'summary.drillTip': '打开这一段的明细视图。',
   'summary.drillAria': '打开 {label} 明细',
+  'summary.thisMonthBadge': '本月',
+  'summary.drillAriaCurrent': '打开 {label}（{badge}）明细',
   'summary.noEntries': '无记录',
   'summary.empty': '没有可显示的汇总。',
   'bucketHint.maintain': '自定义标签将归入「维持」；已有同名标签保持原归类。',

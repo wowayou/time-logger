@@ -58,7 +58,6 @@
     /* === 暗·石墨（默认） === */
     :root {
       --on-accent: #0e0f13;
-      --on-maintain: #0e0f13;
       --on-danger: #0e0f13;
       color-scheme: dark;
       --bg: #0e0f13;
@@ -90,7 +89,6 @@
     @media (prefers-color-scheme: light) {
       :root {
         --on-accent: #ffffff;
-        --on-maintain: #ffffff;
         --on-danger: #ffffff;
         color-scheme: light;
         --bg: #eceef3;
@@ -121,7 +119,6 @@
     /* === 手动覆盖（优先级高于 media query） === */
     html[data-theme="light"] {
       --on-accent: #ffffff;
-      --on-maintain: #ffffff;
       --on-danger: #ffffff;
       color-scheme: light;
       --bg: #eceef3;
@@ -147,7 +144,6 @@
     }
     html[data-theme="dark"] {
       --on-accent: #0e0f13;
-      --on-maintain: #0e0f13;
       --on-danger: #0e0f13;
       color-scheme: dark;
       --bg: #0e0f13;
@@ -2980,6 +2976,10 @@
     }
     .sum-row.is-empty .sum-top { margin-bottom: 0; }
     .sum-row.is-empty .sum-name { color: var(--muted); font-weight: 500; }
+    /* v1.15.6：含今天的行（年视图为本月）在日期后带「今天/本月」字样，靠左跟着日期、
+       总时长仍在右；无记录的行也标。有分钟的桶用正文色，恰为 0 分钟的保持灰字。 */
+    .sum-badge { flex: 0 0 auto; margin-left: 0; margin-inline-end: auto; font-size: var(--fs-cap); }
+    .sum-row:not(.is-empty) .sum-meta .sum-b:not(.is-zero) { color: var(--text); }
     .cell-btn[aria-disabled="true"] {
       opacity: 0.45;
       cursor: not-allowed;
@@ -3058,15 +3058,31 @@
     .an-arrow { min-width: var(--control-h); min-height: var(--control-h); background: none; border: 0; color: var(--muted); font-size: var(--fs-title); cursor: pointer; padding: 2px var(--sp-2); line-height: 1; }
     .an-arrow[disabled] { opacity: 0.3; cursor: default; }
 
-    .an-call-wrap { display: grid; place-items: center; padding: 10px 0 var(--sp-1); }
-    .an-call {
-      width: 60px; height: 60px; border-radius: 50%; background: var(--maintain); border: 0; cursor: pointer;
-      display: grid; place-items: center; box-shadow: var(--shadow-2);
+    /* v1.15.6：「复制本期摘要」普通文字按钮，在本期结论之下、键之上，取代排行之后的
+       绿色听筒圆钮。读屏反馈的 status 视觉隐藏（按钮文字已是看得见的反馈）。 */
+    .an-copy-row { display: flex; justify-content: center; padding: var(--sp-1) 0 var(--sp-2); }
+    .an-copy {
+      min-height: var(--control-h);
+      padding: 0 var(--sp-4);
+      border: none;
+      border-radius: var(--r-pill);
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      color: var(--accent);
+      font-size: var(--fs-ui);
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
     }
-    .an-call svg { width: 27px; height: 27px; fill: var(--on-maintain); }
-    .an-call:active { transform: scale(0.94); }
-    .an-call:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-    .an-call-label { color: var(--muted); font-size: var(--fs-cap); margin-top: 7px; }
+    .an-copy:active { opacity: 0.75; }
+    .an-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .an-copy-status {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
 
     /* v1.10.0「做了什么」联想：正文框下最多三条历史事项，单行省略；没有匹配时 hidden。 */
     .what-suggest { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
