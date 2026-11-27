@@ -2,7 +2,7 @@
 
 > Status: active · 已上线，可日常使用；进度与待办见 [STATUS.md](STATUS.md)
 >
-> Release: v1.16.2（本地候选：全项目审查修复，未发布；线上为 v1.16.1。发布状态见 [STATUS.md](STATUS.md)，适用范围见[真机验收单](docs/device-acceptance.md)）。
+> Release: v1.16.2（全项目审查修复：主线免确认、保留标签显示名、导入合并与清理；发布状态见 [STATUS.md](STATUS.md)，适用范围见[真机验收单](docs/device-acceptance.md)）。
 >
 > Updated: 2026-11-27
 >

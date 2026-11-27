@@ -3,7 +3,7 @@
 > DONE＝已落地且有验证记录；OPEN＝仍需处理或确认；BLOCKED＝缺维护者侧资源。
 > 维护规范见 [CLAUDE.md](CLAUDE.md)，交接须知见 [docs/HANDOFF.md](docs/HANDOFF.md)。本页只留当前结果与未闭合事项，版本细节由 CHANGELOG 保存。
 
-**最新状态：2026-11-27，[v1.16.1](https://github.com/wowayou/time-logger/releases/tag/v1.16.1) 已在主站与旧只读站上线（导入冲突三选一键高 44）。** 运行时来源 `aecabee`；[主站组装](https://github.com/wowayou/time-logger/actions/runs/45980977990)、[部署镜像 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45980996752)、[旧站 Pages](https://github.com/wowayou/time-logger/actions/runs/45980977967) 首轮成功；两站 60/60 与 tag 逐字节一致。同日稍早 v1.15.5–v1.16.0 已发布（设计系统 A–D 完成，E 期真机验收待维护者），七版均未做真机。详见 DONE。
+**最新状态：2026-11-27，[v1.16.2](https://github.com/wowayou/time-logger/releases/tag/v1.16.2) 已在主站与旧只读站上线（全项目审查修复）。** 运行时来源 `8a764bf`；[主站组装](https://github.com/wowayou/time-logger/actions/runs/46016517056)、[部署镜像 Pages](https://github.com/wowayou/time-logger-site/actions/runs/46016539812)、[旧站 Pages](https://github.com/wowayou/time-logger/actions/runs/46016517013) 首轮成功；两站运行时 60/60（各 30）与 tag 逐字节一致，主站六个静态页与源码一致。同日稍早 v1.15.5–v1.16.1 已发布（设计系统 A–D 完成，E 期真机验收待维护者），八版均未做真机。详见 DONE。
 
 **此前（2026-11-26）**：[v1.15.4](https://github.com/wowayou/time-logger/releases/tag/v1.15.4) 已在主站与旧只读站上线，运行时来源 `931057c`，与 RC1 相同。[镜像组装](https://github.com/wowayou/time-logger/actions/runs/45775171681)、[主站 Pages](https://github.com/wowayou/time-logger-site/actions/runs/45775195635) 成功；主站 30/30 运行时清单项与标签逐字节一致，Chromium 已验版本、SW 接管、断网重开、说明问答与返回。S23 实测见[真机验收单](docs/device-acceptance.md)；[#45](https://github.com/wowayou/time-logger/issues/45) 已回复并关闭。
 
@@ -12,6 +12,12 @@
 **发布更新：2026-11-26。Web [v1.15.3](https://github.com/wowayou/time-logger/releases/tag/v1.15.3) 已发布，两站已核对；不含 #45。此前 2026-11-24，Web v1.15.1 已正式发布（tag [v1.15.1](https://github.com/wowayou/time-logger/releases/tag/v1.15.1)，来源 `3b9a4b7`；去掉新建记录的撤销）；同日稍早 Web v1.15.0 已正式发布（tag [v1.15.0](https://github.com/wowayou/time-logger/releases/tag/v1.15.0)，来源 `792bf6f`；新建草稿不丢、保存可撤销、未选标签提示、tooltip 贴边不出界）；同日稍早 Web v1.14.0 已正式发布（tag [v1.14.0](https://github.com/wowayou/time-logger/releases/tag/v1.14.0)，来源 `89b3781`；正文自动选标签 + 连点防穿透）；此前 2026-11-19 Web v1.13.0 已正式发布（tag [v1.13.0](https://github.com/wowayou/time-logger/releases/tag/v1.13.0)，来源 `f9c27d1`；隐私政策同批上线）；此前 v1.12.0（`2f3f832`）已发布；此前 v1.11.0（来源 `9c92743`）已发布；此前 v1.10.0 已正式发布（v1.9.0 先行发布），两站均已部署；tag / Release 为 [v1.9.0](https://github.com/wowayou/time-logger/releases/tag/v1.9.0)（来源 `db62a94`）与 [v1.10.0](https://github.com/wowayou/time-logger/releases/tag/v1.10.0)（来源 `d366841`）。两站运行时与 tag 逐字节一致；两站线上 SW 接管核对通过。真机待验。**
 
 ## DONE
+
+- **Web v1.16.2：全项目审查修复（2026-11-27）**：维护者要求「阅读整个项目，找出坏掉的、前后不一致的、低效的、已经不需要的东西，有把握的直接修，其余列出来给我审」；看过清单后要求待审第 1、2 项按建议做，并「推送并打 tag 发布 v1.16.2」。
+  - **内容**：见 CLAUDE.md 的 v1.16.2 行（①–⑥）。对外表面：中英隐私政策改了 `timelog.openDate` 的说明与「最后更新」日期；应用文案删 5 个逐字重复的复位文字键（中英对等）。零新增运行时资产、存储键或备份字段。
+  - **门禁**：改动前基线完整 UI 1441 passed / 5 skipped / 0 failed（22.7 分钟）。提交前 audit、逻辑 smoke、typecheck、`git diff --check` 通过（退出码逐个核对）；完整 UI **1453 passed / 5 skipped / 0 failed（20.2 分钟，0 重试；多出的 12 条即新用例）**。`tests/v1_16_2_audit_fixes.spec.js` 在 v1.16.1 运行时 5/6 红（临时 worktree、端口 4174），中文哨兵前后都绿；①的实际后果（改一个无关标签名后 `mainlineLongOk` 变空）在 v1.16.1 上单独复现；逻辑 smoke 的导入免确认断言在旧并集逻辑下红。未做真机。
+  - **发布与线上核对**：推送前远端 main 为 `ec393b3`；功能提交 `8a764bf`，tag / [Release](https://github.com/wowayou/time-logger/releases/tag/v1.16.2)；三个 workflow 首轮 success，镜像提交 `publish: v1.16.2 from wowayou/time-logger@8a764bf…`。两站按 `sw.js` FILES 与 tag 逐字节一致 60/60（各 30，`curl` 带 `Cache-Control: no-cache`，未加随机参数）；主站 `/`、`/en/`、两个支持页、两个隐私页与 `site/` 源码逐字节一致，隐私页已含 openDate 新说明。`scripts/check_help_release.mjs` 对两站各跑一次（全新临时 Chromium 上下文）：版本 1.16.2、缓存 `timelog-v1.16.2`、断网重载与说明问答 passed。未测 WebKit 线上与真机。
+  - **审查时列出、仍待维护者决定**：时间分析标签格子按原始拼写分组；分享回退下载的反馈文案；英文编辑页自定义标签框显示「未知」；启动快照每帧写入完整数据原文；`publish-site.yml` 缺超时与并发限制；两个无引用的历史文件（`docs/prototypes/dialpad-analytics.html`、`docs/perf/boot-measure.mjs`）；`?vvdebug=1` 是否保留。
 
 - **Web v1.16.1：导入冲突三选一键高 44（2026-11-27）**：维护者要「冲突按钮改到 44px，跑完直接发版」。来源是 v1.16.0 发版后补截导入页时量到的 38px（见 v1.16.0「发版后补核」③）。规则见 CLAUDE.md「按钮组件清单」末句。
   - **内容**：`.import-conflict-actions button` 的 `min-height` 由写死的 38px 改为 `var(--control-h)`（44）；字号、内边距、三列等宽、选中态不变，字号放大时仍随内容长高。38px 自 v52（2026-07-10）起，达到 2.5.8 AA、低于项目 44 基线。零新增运行时资产、i18n 键、存储键或备份字段；对外表面不涉及。
@@ -127,8 +133,6 @@
 
 ## OPEN
 
-- **v1.16.2 已本地提交、未推送未发布（2026-11-27，全项目审查修复）**：内容见 `CLAUDE.md` 的 v1.16.2 行。中英隐私政策改了 `timelog.openDate` 的说明，发布时主站须随 tag 一起更新并 `curl` 复核隐私页；线上仍是 v1.16.1。审查时列出、尚未处理的项：时间分析标签格子按原始拼写分组、分享回退下载的反馈文案、英文编辑页自定义标签框显示「未知」、启动快照每帧写入完整数据原文、`publish-site.yml` 缺超时与并发限制、两个无引用的历史文件（`docs/prototypes/dialpad-analytics.html`、`docs/perf/boot-measure.mjs`）、`?vvdebug=1` 是否保留——均待维护者决定。
-
 - **v1.15.4（#45 与说明问答）发布前核对**：RC1 双引擎零重试 1355 passed / 5 skipped / 0 failed（12.9 分钟），带数据升级、离线重载通过。S23 安卓独立窗口已验边缘滑回与三键实际按钮；文件选择器退出目标正确，不保证一次返回即退出系统界面。详见[真机验收单](docs/device-acceptance.md)。
 
 - **v1.7.5 发布验证尚有缺口（2026-11-13）**：两站已部署且线上运行时、功能已核对；主站实际 artifact 下载遭遇 TLS 握手超时，未重试，独立归档字节验证未完成。已有镜像 41/41、线上 40/40 字节证据，不能冒充该项完成。旧站 `.gitignore` 本轮为 503，未取得 404 证据；其余四个隐藏探测为 404，实际旧站部署包隐藏元数据文件 0。为遵守失败即停，本轮不再下载/部署，也不使用可选旧站文档刷新；旧站候选状态文档与源码发布回执存在已说明差异。证据见 `memory/2026-11-13-v1.7.5-release/` 及 [发布回执](docs/reviews/2026-11-13-v1.7.5-release.md)。
@@ -152,6 +156,7 @@
 - **其他历史输入／启动异常不合并结案**：P40 已用控制时序复现并修复一条与原 `ui_smoke:293` 起点显示未更新相符的因果链，原失败与早期对照片段证据保留在 [P40](docs/postmortems.md#p40--时间选择器延迟聚焦打断输入webkit-补录起点仍是旧值v171-本地)。原批量失败缺少完整输入事件栈，不能逐次倒推均为此因；更早的起点异常、Chromium 启动超时仍按各自证据保留，不因发布前的全量通过关闭。
 
 - **真机验收待闭合**：自动化与线上桌面检查不代替真机结论；各版按 [真机验收单](docs/device-acceptance.md) 逐项填写，未执行的步骤保持待验，不能由上线代填。
+  - v1.16.2：英文界面保留标签显示 #Unknown、主线免确认勾选保存后保持、备份页连点复制的反馈（[小节](docs/device-acceptance.md#v1162-全项目审查修复待真机)）。
   - v1.16.1：导入冲突三选一在手机上逐个点得准、系统最大字体下不裁字（[小节](docs/device-acceptance.md#v1161-导入冲突三选一键高-44待真机)）。
   - v1.16.0：空状态提示与 FAB 文字一致、iPhone 存储备份的「✓ 已存储备份」（[小节](docs/device-acceptance.md#v1160-空状态与成功反馈spec-016-d待真机)）。
   - v1.15.9：减少动效下圆盘键、比例条、导入箭头不再动；撤销提示与 FAB、横幅与 sheet 的遮挡关系不变（[小节](docs/device-acceptance.md#v1159-层级与动效spec-016-c待真机)）。
